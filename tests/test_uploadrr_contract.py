@@ -347,3 +347,16 @@ def test_a_season_pack_is_sent_as_a_folder():
 ])
 def test_a_movie_or_an_episode_is_not_sent_as_a_folder(kwargs):
     assert "-fd" not in _build(**kwargs)
+
+
+@pytest.mark.parametrize(
+    ("resolution", "con_aviso"),
+    [
+        ("480p", True), ("576i", True), ("540p", True), ("360p", True), ("SD", True), ("576", True),
+        ("720p", False), ("1080p", False), ("2160p", False), ("", False), ("other", False), ("4K", False),
+    ],
+)
+def test_por_debajo_de_720p_pide_el_aviso_de_baja_calidad(resolution, con_aviso):
+    cmd = _build(resolution=resolution)
+    assert ("-avbc" in cmd) is con_aviso
+    assert cmd.count("-avbc") <= 1

@@ -69,7 +69,8 @@ the upload with Uploadrr-EMU (`Kisnov/Uploadrr-EMU`, cloned into the image at `/
   Uploadrr-EMU subprocess. Uploadrr hands that same folder to qBittorrent as the save path, so qBittorrent
   must see it at the same path. `_enlazar` hardlinks and falls back to a symlink across filesystems; keep the
   folder on the media's filesystem (e.g. under `/data`): a symlink only seeds if qBittorrent resolves its target.
-- Contract with Uploadrr-EMU, change both repos together: argv in `services/uploadrr_contract.py`;
+- Contract with Uploadrr-EMU, change both repos together: argv in `services/uploadrr_contract.py` (below 720p it
+  adds `-avbc`, and Uploadrr-EMU puts its `AVISO_BAJA_CALIDAD` notice at the top of the description);
   `config.yaml` keys staged by `uploadrr_config_staging.py` / `uploadrr_yaml.py` and restored from
   `data/config.yaml.bak` after every job, and also at startup and before the next job if one died mid-run
   (hand edits to `config.yaml` don't survive, edit the `.bak`);
