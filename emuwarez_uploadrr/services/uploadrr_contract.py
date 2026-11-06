@@ -162,6 +162,22 @@ def _normalize_resolution(value: str) -> str:
     return "other"
 
 
+# Por debajo de 720p, eMuwarez solo acepta la subida con el aviso de que es temporal: Uploadrr-EMU lo pone arriba de
+# la descripción con -avbc (el texto vive allí, en src/utils/descgen.py::AVISO_BAJA_CALIDAD).
+AVISO_BAJA_CALIDAD_FLAG = "-avbc"
+_ALTURA_MINIMA_SIN_AVISO = 720
+
+
+def pide_aviso_baja_calidad(resolution) -> bool:
+    """Si la resolución es de menos de 720p (480p, 576i, SD…). Vacía o sin número que leer, no: mejor sin aviso
+    que ponérselo a un 1080p."""
+    text = str(resolution or "").strip().lower()
+    if text == "sd":
+        return True
+    m = re.match(r"(\d{3,4})[pi]?$", text)
+    return bool(m) and int(m.group(1)) < _ALTURA_MINIMA_SIN_AVISO
+
+
 def build_uploadrr_emu_command(
     *,
     python_path: str,
@@ -187,6 +203,8 @@ def build_uploadrr_emu_command(
 
     `anonimo` / `personal_release` añaden `-a` / `-pr` (services/opciones_tracker.py decide cuándo).
 
+    Una `resolution` de menos de 720p añade `-avbc` (ver pide_aviso_baja_calidad).
+
     Only accepts prepared_path (or applied_path passed as prepared_path by
     the caller) — there is intentionally no source_path parameter, so the
     original library file can never be passed to this builder by mistake.
@@ -201,9 +219,12 @@ def build_uploadrr_emu_command(
     if tmdb_id:
         cmd += ["-tmdb", str(tmdb_id)]
     cmd += ["-ua", "-c", "tv" if category == "tv" else "movie"]
+    aviso = pide_aviso_baja_calidad(resolution)
     resolution = _normalize_resolution(resolution)
     if resolution:
         cmd += ["-res", resolution]
+    if aviso:
+        cmd.append(AVISO_BAJA_CALIDAD_FLAG)
     # La temporada 0 (especiales) también cuenta: «if season» la perdía.
     if season is not None and season != "":
         cmd += ["-season", _format_season(season)]
