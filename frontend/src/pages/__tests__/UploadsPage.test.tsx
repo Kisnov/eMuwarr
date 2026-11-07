@@ -12,6 +12,7 @@ vi.mock('../../api/uploads', () => ({
   getUploads: vi.fn(), countUploads: vi.fn(), getUploadJob: vi.fn(), startUploadJob: vi.fn(),
   retryUploadJobQueued: vi.fn(), cancelUploadJob: vi.fn(), getUploadJobLogs: vi.fn(), deleteUploadJob: vi.fn(),
   getLote: vi.fn(), cancelarLote: vi.fn(), reintentarLote: vi.fn(), borrarLote: vi.fn(),
+  contarSinTrailer: vi.fn(), marcarTrailerAMano: vi.fn(),
 }))
 vi.mock('../../api/instances', () => ({ getInstances: vi.fn(async () => []) }))
 vi.mock('../../api/seeding', () => ({ getSeeding: vi.fn(async () => null) }))
@@ -21,8 +22,8 @@ vi.mock('../../api/eventos', () => ({
 
 import { suscribirse } from '../../api/eventos'
 import {
-  borrarLote, cancelarLote, cancelUploadJob, countUploads, deleteUploadJob, getLote, getUploadJob, getUploads, reintentarLote,
-  retryUploadJobQueued,
+  borrarLote, cancelarLote, cancelUploadJob, contarSinTrailer, countUploads, deleteUploadJob, getLote, getUploadJob, getUploads,
+  reintentarLote, retryUploadJobQueued,
 } from '../../api/uploads'
 import { ApiClientError } from '../../api/client'
 import { SeccionVisible } from '../../context/SeccionVisible'
@@ -69,6 +70,7 @@ beforeEach(() => {
   vi.mocked(getUploads).mockImplementation(async q => (q?.lote_id ? [TANDA] : [TANDA, LOTE_DE_UNO, SUELTA]))
   vi.mocked(countUploads).mockImplementation(async q => (q?.lote_id ? 1 : 3))
   vi.mocked(getLote).mockResolvedValue(RESUMEN)
+  vi.mocked(contarSinTrailer).mockResolvedValue(0)
 })
 afterEach(async () => {
   await desmontar()
@@ -556,5 +558,45 @@ describe('el lote recién encolado desde Biblioteca', () => {
     await pagina()
     expect(ultimaPeticion()?.lote_id).toBeUndefined()
     expect(sessionStorage.getItem('emuwarez_open_lote')).toBeNull()
+  })
+})
+
+describe('el aviso «Sin trailer»', () => {
+  const SIN = trabajo({
+    id: 11, title: 'Platos Sucios - Temporada 6', media_type: 'season', trailer_estado: 'falta',
+    result_url: 'https://emu-warez.com/torrents/4821',
+  })
+  const CON = trabajo({ id: 12, title: 'Con tráiler', media_type: 'movie', trailer_estado: 'incluido' })
+  const sinTrailerBanner = () => document.querySelector('.sub-trailer-banner')
+
+  it('sin ninguna pendiente no hay banner ni chapa', async () => {
+    vi.mocked(getUploads).mockResolvedValue([CON])
+    await pagina()
+    expect(sinTrailerBanner()).toBeNull()
+    expect(document.querySelector('.sub-trailer-chip')).toBeNull()
+  })
+
+  it('el banner dice cuántas hay y la fila lleva la chapa que abre la edición en eMuwarez', async () => {
+    vi.mocked(getUploads).mockResolvedValue([SIN, CON])
+    vi.mocked(contarSinTrailer).mockResolvedValue(1)
+    await pagina()
+    expect(sinTrailerBanner()?.textContent).toContain('1 subida sin trailer')
+    const chapa = filaDe('Platos Sucios - Temporada 6').querySelector<HTMLAnchorElement>('a.sub-trailer-chip')
+    expect(chapa?.textContent).toContain('Sin trailer')
+    expect(chapa?.href).toBe('https://emu-warez.com/torrents/4821/edit')
+    expect(filaDe('Con tráiler').querySelector('.sub-trailer-chip')).toBeNull()
+  })
+
+  it('«Ver solo estas» pide al servidor solo las que no tienen tráiler, y «Ver todas» lo quita', async () => {
+    vi.mocked(getUploads).mockImplementation(async q => (q?.sin_trailer ? [SIN] : [SIN, CON]))
+    vi.mocked(contarSinTrailer).mockResolvedValue(3)
+    await pagina()
+    expect(sinTrailerBanner()?.textContent).toContain('3 subidas sin trailer')
+    await pulsar(boton('Ver solo estas')!)
+    await esperar(() => ultimaPeticion()?.sin_trailer === true)
+    expect(ultimoRecuento()?.sin_trailer).toBe(true)
+    await esperar(() => document.querySelectorAll('tbody tr').length === 1)
+    await pulsar(boton('Ver todas')!)
+    await esperar(() => !ultimaPeticion()?.sin_trailer)
   })
 })

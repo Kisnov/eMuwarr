@@ -5,8 +5,11 @@
  */
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-vi.mock('../../api/uploads', () => ({ getUploadJobLogs: vi.fn(async () => ({ job_id: 1, logs: [], total: 0, limit: 0, offset: 0 })) }))
-import { getUploadJobLogs } from '../../api/uploads'
+vi.mock('../../api/uploads', () => ({
+  getUploadJobLogs: vi.fn(async () => ({ job_id: 1, logs: [], total: 0, limit: 0, offset: 0 })),
+  marcarTrailerAMano: vi.fn(async () => ({ trailer_estado: 'a_mano' })),
+}))
+import { getUploadJobLogs, marcarTrailerAMano } from '../../api/uploads'
 vi.mock('../../api/eventos', () => ({
   suscribirse: vi.fn(() => () => {}), canalVivo: vi.fn(() => true), observarCanal: vi.fn(() => () => {}),
 }))
@@ -222,5 +225,33 @@ describe('una subida que es parte de un lote', () => {
     await desmontar()
     await montar(pagina({ ...fallida, lote_id: '0123456789ab', lote_total: 1 }))
     expect(texto()).not.toContain('Parte de un lote')
+  })
+})
+
+describe('el aviso «Falta el trailer»', () => {
+  it('una completada sin tráiler lo dice, enlaza a editar el torrent y se puede marcar como añadido', async () => {
+    const onTrailerCambiado = vi.fn()
+    await montar(<UploadJobDetailPage job={{ ...completada, trailer_estado: 'falta' }} seeding={seeding} onTrailerCambiado={onTrailerCambiado} {...manos} />)
+    const aviso = document.querySelector('.dsub-trailer-aviso')
+    expect(aviso?.textContent).toContain('Falta el trailer')
+    const editar = [...aviso!.querySelectorAll('a')].find(a => a.textContent === 'Editar en eMuwarez')
+    expect(editar?.getAttribute('href')).toBe('https://emu-warez.com/torrents/48213/edit')
+    await pulsar(boton('Ya lo he añadido')!)
+    expect(marcarTrailerAMano).toHaveBeenCalledWith(7, true)
+    await esperar(() => onTrailerCambiado.mock.calls.length === 1)
+  })
+
+  it('marcada a mano solo queda una línea para deshacerlo', async () => {
+    await montar(pagina({ ...completada, trailer_estado: 'a_mano' }))
+    expect(document.querySelector('.dsub-trailer-aviso')).toBeNull()
+    expect(texto()).toContain('Tráiler añadido a mano.')
+    await pulsar(boton('Deshacer')!)
+    expect(marcarTrailerAMano).toHaveBeenCalledWith(7, false)
+  })
+
+  it('con el tráiler incluido, o sin comprobar, no dice nada', async () => {
+    await montar(pagina({ ...completada, trailer_estado: 'incluido' }))
+    expect(document.querySelector('.dsub-trailer-aviso')).toBeNull()
+    expect(texto()).not.toContain('Tráiler añadido a mano')
   })
 })

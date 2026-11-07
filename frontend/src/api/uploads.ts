@@ -8,6 +8,7 @@ import type {
   LoteResumen,
   LoteAccionResult,
   LoteBorrarResult,
+  TrailerEstado,
 } from '../types/api'
 import type { NomenclatureFields, TrackRemuxOverride } from './nomenclature'
 import { latestInChain } from '../utils/uploadStatus'
@@ -119,6 +120,8 @@ export interface UploadsQuery {
   hide_preparatory?: boolean
   // Solo las de ese lote, y de cada elemento solo su último intento (el servidor quita los anteriores).
   lote_id?: string
+  // Solo las que salieron sin tráiler y nadie ha marcado todavía como «Ya lo he añadido».
+  sin_trailer?: boolean
 }
 
 function uploadsQueryString(params?: UploadsQuery): string {
@@ -130,6 +133,7 @@ function uploadsQueryString(params?: UploadsQuery): string {
   if (params?.search) qs.set('search', params.search)
   if (params?.library_item_id != null) qs.set('library_item_id', String(params.library_item_id))
   if (params?.lote_id) qs.set('lote_id', params.lote_id)
+  if (params?.sin_trailer) qs.set('sin_trailer', 'true')
   const query = qs.toString()
   return query ? `?${query}` : ''
 }
@@ -141,6 +145,16 @@ export async function getUploads(params?: UploadsQuery): Promise<UploadJob[]> {
 // Cuántas subidas hay con esos filtros, sin el límite de la lista: el «M» de «N de M».
 export async function countUploads(params?: Omit<UploadsQuery, 'limit' | 'offset'>): Promise<number> {
   return (await api.get<{ total: number }>(`/uploads/count${uploadsQueryString(params)}`)).total
+}
+
+// Cuántas subidas esperan a que se les ponga el tráiler a mano: el aviso de arriba de Subidas.
+export async function contarSinTrailer(): Promise<number> {
+  return countUploads({ hide_preparatory: true, sin_trailer: true })
+}
+
+// «Ya lo he añadido»: la subida deja de avisar de que le falta el tráiler. `puesto=false` lo deshace.
+export async function marcarTrailerAMano(jobId: number, puesto = true): Promise<{ trailer_estado: TrailerEstado | null }> {
+  return api.post<{ trailer_estado: TrailerEstado | null }>(`/uploads/${jobId}/trailer-a-mano`, { puesto })
 }
 
 // "Automático": no wizard involved. The job appears immediately in Subidas

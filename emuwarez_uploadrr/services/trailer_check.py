@@ -25,6 +25,13 @@ from typing import Optional
 
 _YOUTUBE_RE = re.compile(r"\[youtube\]\s*([A-Za-z0-9_-]+)\s*\[/youtube\]", re.I)
 
+# upload_jobs.trailer_estado (esquema 54). NULL: no se comprobó, o no se encontró el archivo de descripción.
+TRAILER_INCLUIDO = "incluido"
+# eMuwarez exige el tráiler y la descripción salió sin él: hay que ponerlo a mano editando el torrent.
+TRAILER_FALTA = "falta"
+# El usuario dijo en Subidas que ya lo puso a mano: deja de avisar.
+TRAILER_A_MANO = "a_mano"
+
 
 def _instante(desde) -> Optional[float]:
     """`desde` (el started_at ISO del trabajo) como marca de tiempo; None si no hay."""
@@ -109,3 +116,30 @@ def check_trailer_for_job(uploadrr_path: str, candidate_names: list[str], desde=
         return {"checked": False, "found": False, "url": None}
     url = extract_youtube_trailer_url(desc_file)
     return {"checked": True, "found": bool(url), "url": url}
+
+
+def marcar_trailer_a_mano(job_id: int, puesto: bool = True, conn=None) -> dict:
+    """«Ya lo he añadido» en Subidas: una subida a la que le faltaba el tráiler pasa a 'a_mano' y deja de avisar.
+    Con `puesto=False` se deshace (vuelve a 'falta'). Solo entre esos dos estados: ni inventa que faltaba en una
+    que no se comprobó, ni toca una que ya lo llevaba. {ok, error, trailer_estado}."""
+    from .upload_states import escribir_estado
+    from .upload_execution.comun import _get_db_conn
+
+    propia = conn is None
+    conn = conn or _get_db_conn()
+    try:
+        fila = conn.execute("SELECT trailer_estado FROM upload_jobs WHERE id = ?", (job_id,)).fetchone()
+        if fila is None:
+            return {"ok": False, "error": "not_found", "trailer_estado": None}
+        desde, hacia = (TRAILER_FALTA, TRAILER_A_MANO) if puesto else (TRAILER_A_MANO, TRAILER_FALTA)
+        actual = fila[0]
+        if actual == hacia:
+            return {"ok": True, "error": None, "trailer_estado": actual}
+        if actual != desde:
+            return {"ok": False, "error": "sin_aviso", "trailer_estado": actual}
+        # Por escribir_estado: es el que avisa a la interfaz (subida-estado) para que la lista se ponga al día.
+        escribir_estado(job_id, salvo=(), trailer_estado=hacia, conn=conn)
+        return {"ok": True, "error": None, "trailer_estado": hacia}
+    finally:
+        if propia:
+            conn.close()

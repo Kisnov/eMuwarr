@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
-import { getUploads, countUploads, getUploadJob, startUploadJob, retryUploadJobQueued, cancelUploadJob, getLote } from '../api/uploads'
+import { getUploads, countUploads, contarSinTrailer, getUploadJob, startUploadJob, retryUploadJobQueued, cancelUploadJob, getLote } from '../api/uploads'
 import { useInstancias } from '../hooks/useInstancias'
 import { ApiClientError } from '../api/client'
 import type { UploadJob, InstanceSafeResponse, LoteResumen } from '../types/api'
@@ -31,6 +31,7 @@ import { useAlSalir, useSeccionVisible } from '../context/SeccionVisible'
 import { IconoDesplegar, IconoSubida, IconoTipo } from '../components/Iconos'
 import { Modal } from '../components/Modal'
 import { BannerLote } from '../components/BannerLote'
+import { BannerSinTrailer, ChipSinTrailer, faltaTrailer } from '../components/AvisoTrailer'
 import { FilasVirtuales } from '../components/FilasVirtuales'
 import { UMBRAL_VIRTUAL } from '../utils/ventana'
 
@@ -296,6 +297,7 @@ function JobRow({ job, instances, seeding, onOpen, indent, retryToggle, onCancel
                 <RetryButtonIcon /> {job.retry_count}
               </span>
             )}
+            {!indent && faltaTrailer(job) && <ChipSinTrailer job={job} onAbrir={onOpen} />}
             {job.result_url && (
               <a className="hover-link sub-enlace-emu" href={job.result_url} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()}
                 aria-label="Ver en eMuwarez" {...emuTip}>
@@ -372,6 +374,10 @@ export function UploadsPage({ onNavigate }: { onNavigate?: (page: string) => voi
   // Solo las subidas de un lote (el chip «Lote · N»): lo filtra el servidor, que devuelve el último intento de cada
   // elemento.
   const [loteFiltro, setLoteFiltro] = useState<string | null>(null)
+  // El aviso «Sin trailer»: cuántas esperan que se les ponga a mano (de todas, no solo las cargadas) y si la lista
+  // enseña solo esas (lo filtra el servidor).
+  const [sinTrailer, setSinTrailer] = useState(0)
+  const [soloSinTrailer, setSoloSinTrailer] = useState(false)
   // El resumen de ese lote (contadores y qué se puede hacer): se pide con la lista, en el mismo load().
   const [loteResumen, setLoteResumen] = useState<LoteResumen | null>(null)
   // El lote que el servidor ya no conoce (404): se borraron todas sus subidas, por ejemplo con «Borrar lote».
@@ -429,19 +435,23 @@ export function UploadsPage({ onNavigate }: { onNavigate?: (page: string) => voi
         status: statusFilter === 'running' ? 'running,preparing' : statusFilter || undefined,
         hide_preparatory: true,
         lote_id: loteFiltro ?? undefined,
+        sin_trailer: soloSinTrailer || undefined,
       }
       // Si falla solo el recuento, la lista se enseña igual y el total queda sin conocer.
       // El resumen del lote: un 404 (ya no queda ninguna) lo quita; otro fallo deja el que había.
-      const [data, cuantas, resumen] = await Promise.all([
+      const [data, cuantas, resumen, faltan] = await Promise.all([
         getUploads({ ...filtros, limit: limite }),
         countUploads(filtros).catch(() => null),
         loteFiltro
           ? getLote(loteFiltro).catch(e => (e instanceof ApiClientError && e.status === 404 ? null : undefined))
           : Promise.resolve(null),
+        // Si falla, el aviso se queda como estaba.
+        contarSinTrailer().catch(() => null),
       ])
       if (seq === loadSeqRef.current) {
         setJobs(data)
         setTotal(cuantas)
+        if (faltan != null) setSinTrailer(faltan)
         if (resumen !== undefined) {
           setLoteResumen(resumen)
           setLoteSinSubidas(resumen === null ? loteFiltro : null)
@@ -456,7 +466,7 @@ export function UploadsPage({ onNavigate }: { onNavigate?: (page: string) => voi
       cargasEnVuelo.current--
       if (!opts?.silent) setLoading(false)
     }
-  }, [statusFilter, limite, loteFiltro])
+  }, [statusFilter, limite, loteFiltro, soloSinTrailer])
 
   // El aviso de progreso solo cambia cuánto llevan las vivas: se piden ellas (unos 1,5 kB cada una) y se funden en la
   // lista que hay, en vez de la lista entera y su recuento dos veces por segundo. Qué subidas hay lo trae la recarga
@@ -514,8 +524,13 @@ export function UploadsPage({ onNavigate }: { onNavigate?: (page: string) => voi
     setSearch('')
     setStatusFilter(''); setTypeFilter('')
     setLoteFiltro(null)
+    setSoloSinTrailer(false)
   }
-  const filtrando = !!(search || statusFilter || typeFilter || loteFiltro)
+  const filtrando = !!(search || statusFilter || typeFilter || loteFiltro || soloSinTrailer)
+  // Viendo solo las que no tienen tráiler, cuando ya no queda ninguna se vuelve a la lista entera.
+  useEffect(() => {
+    if (soloSinTrailer && cargado && sinTrailer === 0) setSoloSinTrailer(false)
+  }, [soloSinTrailer, cargado, sinTrailer])
   // Cuántos elementos tiene el lote filtrado: lo dice cualquiera de sus filas (antes de recargar, la del chip pulsado).
   const loteTotal = loteFiltro ? jobs.find(j => j.lote_id === loteFiltro)?.lote_total ?? null : null
   // Solo el del lote que se mira: al cambiar de lote, el anterior no vale hasta que llegue el nuevo.
@@ -722,6 +737,14 @@ export function UploadsPage({ onNavigate }: { onNavigate?: (page: string) => voi
     return () => { alive = false }
   }, [selectedJobId, cargado, seleccionadaEnLista])
   const selectedJob = enLista ?? (jobSuelto?.id === selectedJobId ? jobSuelto : undefined)
+  // «Ya lo he añadido» (o deshacerlo) en el detalle: la lista y el aviso de arriba, al día; y la ficha suelta (una
+  // subida que no está entre las cargadas), pedida otra vez.
+  const recargarTrasTrailer = () => {
+    load({ silent: true })
+    if (jobSuelto && selectedJobId === jobSuelto.id) {
+      getUploadJob(jobSuelto.id!).then(j => setJobSuelto(actual => (actual?.id === j.id ? j : actual))).catch(() => {})
+    }
+  }
 
   // The list row (above) never carries display_title — only the single-job
   // GET computes the canonical "Serie (Año)"-style title, to avoid a
@@ -819,6 +842,7 @@ export function UploadsPage({ onNavigate }: { onNavigate?: (page: string) => voi
           onDelete={j => setDeleteJob(j)}
           onOpenLibraryItem={goToLibraryItem}
           onVerLote={verLote}
+          onTrailerCambiado={recargarTrasTrailer}
           seeding={seeding}
           retryError={retryError ?? cancelError}
         />
@@ -861,6 +885,8 @@ export function UploadsPage({ onNavigate }: { onNavigate?: (page: string) => voi
           <option value="duration_desc">Orden: Duración</option>
         </select>
       </div>
+
+      {!error && <BannerSinTrailer total={sinTrailer} filtrando={soloSinTrailer} onFiltrar={setSoloSinTrailer} />}
 
       {/* Con la lista sin cargar, las acciones del lote no tienen sobre qué actuar. */}
       {loteFiltro && !error && (

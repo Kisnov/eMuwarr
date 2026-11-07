@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 
 DB_FILE = CONFIG_DIR / "emuwarez_uploadrr.db"
 
-SCHEMA_VERSION = 53
+SCHEMA_VERSION = 54
 
 # Phase 10E: canonical settings namespace fix.
 #
@@ -1323,6 +1323,28 @@ def _migrate_upload_jobs_opciones_tracker(conn: sqlite3.Connection) -> None:
                 raise
 
 
+def _migrate_upload_jobs_trailer_estado(conn: sqlite3.Connection) -> None:
+    """Esquema 54: `trailer_estado`, lo que dijo la comprobación del tráiler al terminar la subida (services/
+    trailer_check.py): 'incluido', 'falta' (eMuwarez lo exige y hay que ponerlo a mano) o 'a_mano' (el usuario dijo
+    que ya lo puso). NULL: no se comprobó o no se pudo. Las de antes se deducen de lo que dejaron: el artefacto
+    `trailer_url` o la línea de aviso del registro. Siempre con `IS NULL`: no pisa lo que el usuario marcó."""
+    if "trailer_estado" not in {fila[1] for fila in conn.execute("PRAGMA table_info(upload_jobs)")}:
+        try:
+            conn.execute("ALTER TABLE upload_jobs ADD COLUMN trailer_estado TEXT")
+        except sqlite3.OperationalError:
+            # Solo se calla si la columna ya está (la añadió otro init_db a la vez), no un «database is locked».
+            if "trailer_estado" not in {fila[1] for fila in conn.execute("PRAGMA table_info(upload_jobs)")}:
+                raise
+    conn.execute(
+        "UPDATE upload_jobs SET trailer_estado = 'incluido' WHERE trailer_estado IS NULL AND id IN ("
+        "SELECT upload_job_id FROM upload_artifacts WHERE artifact_type = 'trailer_url')"
+    )
+    conn.execute(
+        "UPDATE upload_jobs SET trailer_estado = 'falta' WHERE trailer_estado IS NULL AND status = 'completed' "
+        "AND id IN (SELECT upload_job_id FROM upload_job_logs WHERE message LIKE 'No se encontró un trailer%')"
+    )
+
+
 def _migrate_imgbox_a_pixhost(conn: sqlite3.Connection) -> None:
     """Esquema 53: imgbox deja de ir siempre el último (lleva meses caído) y pasa a ser un proveedor más, que se puede
     quitar. Quien ya tenía la lista guardada lo tenía de último sin verlo en ella: se cambia por Pixhost, que tampoco
@@ -1931,6 +1953,7 @@ def init_db(conn: Optional[sqlite3.Connection] = None) -> None:
         _migrate_upload_jobs_lote(conn)
         _migrate_upload_jobs_opciones_tracker(conn)
         _migrate_imgbox_a_pixhost(conn)
+        _migrate_upload_jobs_trailer_estado(conn)
         set_state(conn, "schema_version", str(SCHEMA_VERSION))
         conn.commit()
     finally:

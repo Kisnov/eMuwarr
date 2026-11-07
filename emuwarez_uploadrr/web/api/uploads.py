@@ -24,6 +24,7 @@ from ...services.upload_execution import (
 from ...services.subida_pasos import NOMBRES, pasos_de_subida, reanudar_desde, subpasos_que_reutilizaria
 from ...services import lotes
 from ...services.lotes import PATRON_LOTE_ID, contar_por_lote
+from ...services.trailer_check import marcar_trailer_a_mano
 from ...services.upload_queue import get_queue_positions
 from ..dependencies import require_auth
 from ..runtime import _db_path
@@ -33,6 +34,8 @@ from ..schemas import (
     LoteCancelarBody,
     LoteReintentarBody,
     LoteResumen,
+    TrailerAManoBody,
+    TrailerAManoResponse,
     UploadLoteBody,
     UploadLoteResponse,
     OkResponse,
@@ -187,6 +190,8 @@ def _job_to_detail(
         queue_total=queue_total,
         lote_id=j.get("lote_id"),
         lote_total=lote_total if j.get("lote_id") else None,
+        trailer_estado=j.get("trailer_estado"),
+        trailer_url=j.get("trailer_url"),
         nomenclature_snapshot=_extract_json_dict(j, "nomenclature_snapshot_json"),
         remux_snapshot=_extract_json_dict(j, "remux_snapshot_json"),
         checks_snapshot=_extract_json_dict(j, "checks_snapshot_json"),
@@ -300,6 +305,7 @@ def get_uploads(
     library_item_id: int | None = Query(default=None),
     request_item_id: int | None = Query(default=None),
     lote_id: str | None = Query(default=None, pattern=PATRON_LOTE_ID),
+    sin_trailer: bool = Query(default=False),
     current_user: dict = Depends(require_auth),
 ):
     filters = {
@@ -311,6 +317,7 @@ def get_uploads(
         "library_item_id": library_item_id,
         "request_item_id": request_item_id,
         "lote_id": lote_id,
+        "sin_trailer": sin_trailer,
     }
     queue_positions = get_queue_positions()
     with _get_conn() as conn:
@@ -340,6 +347,7 @@ def count_uploads(
     library_item_id: int | None = Query(default=None),
     request_item_id: int | None = Query(default=None),
     lote_id: str | None = Query(default=None, pattern=PATRON_LOTE_ID),
+    sin_trailer: bool = Query(default=False),
     current_user: dict = Depends(require_auth),
 ) -> dict:
     """Cuántas subidas hay con esos filtros, sin el límite de la lista: el «M» de «N de M»."""
@@ -350,6 +358,7 @@ def count_uploads(
         "library_item_id": library_item_id,
         "request_item_id": request_item_id,
         "lote_id": lote_id,
+        "sin_trailer": sin_trailer,
     }
     with _get_conn() as conn:
         return {"total": count_upload_jobs(filters=filters, conn=conn)}
@@ -609,6 +618,21 @@ def cancel_upload(job_id: int, current_user: dict = Depends(require_auth)):
     with _get_conn() as conn:
         result = cancel_upload_job(job_id, conn=conn)
     return result
+
+
+@router.post("/uploads/{job_id}/trailer-a-mano", response_model=TrailerAManoResponse)
+def trailer_a_mano(job_id: int, body: TrailerAManoBody, current_user: dict = Depends(require_auth)):
+    """«Ya lo he añadido»: la subida deja de avisar de que le falta el tráiler (`puesto=false` lo deshace)."""
+    with _get_conn() as conn:
+        result = marcar_trailer_a_mano(job_id, puesto=body.puesto, conn=conn)
+    if not result["ok"]:
+        if result["error"] == "not_found":
+            raise HTTPException(status_code=404, detail={"message": "Subida no encontrada.", "error": "not_found"})
+        raise HTTPException(
+            status_code=409,
+            detail={"message": "Esta subida no tiene ningún aviso de tráiler que marcar.", "error": result["error"]},
+        )
+    return TrailerAManoResponse(trailer_estado=result["trailer_estado"])
 
 
 @router.post("/uploads/{job_id}/delete", response_model=OkResponse)

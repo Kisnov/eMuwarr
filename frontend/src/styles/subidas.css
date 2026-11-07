@@ -807,3 +807,97 @@ input.sub-confirmar.sub-confirmar-ok:not([type="checkbox"]):not([type="radio"]):
     z-index: 1;
   }
 }
+
+/* «Sin trailer» (AvisoTrailer.tsx): eMuwarez exige tráiler y la subida salió sin él. Ámbar de aviso, lleno y con
+   latido, para que no se pierda como el «Requiere Trailer» de la campana; deja de latir con «reducir movimiento». */
+@keyframes sub-trailer-latido {
+  0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--color-warning) 55%, transparent); }
+  50%      { box-shadow: 0 0 10px 1px color-mix(in srgb, var(--color-warning) 55%, transparent); }
+}
+
+.sub-trailer-chip {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 8px;
+  border-radius: var(--radius-badge);
+  border: 1px solid var(--color-warning-soft);
+  background: var(--color-warning);
+  color: var(--bg-base);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+  text-decoration: none;
+  cursor: pointer;
+  animation: sub-trailer-latido 2s ease-in-out infinite;
+}
+
+.sub-trailer-chip:hover,
+.sub-trailer-chip:focus-visible {
+  background: var(--color-warning-soft);
+  color: var(--bg-base);
+  text-decoration: none;
+}
+
+.sub-trailer-banner {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 12px;
+  padding: 12px 16px;
+  border-radius: var(--radius-card);
+  border: 2px solid var(--color-warning);
+  background: color-mix(in srgb, var(--color-warning) 16%, transparent);
+  color: var(--color-warning-pale);
+  font-size: 12.5px;
+  line-height: 1.45;
+  animation: sub-trailer-latido 2.4s ease-in-out infinite;
+}
+
+.sub-trailer-banner-icono {
+  display: inline-flex;
+  flex-shrink: 0;
+  color: var(--color-warning);
+}
+
+.sub-trailer-banner-texto {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+
+.sub-trailer-banner-titulo {
+  font-size: 15px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-warning-soft);
+}
+
+.sub-trailer-banner-boton {
+  flex-shrink: 0;
+  border: 1px solid var(--color-warning);
+  background: var(--color-warning);
+  color: var(--bg-base);
+  font-weight: 700;
+}
+
+.sub-trailer-banner-boton:hover {
+  background: var(--color-warning-soft);
+}
+
+@media (max-width: 760px) {
+  .sub-trailer-banner { flex-wrap: wrap; }
+  .sub-trailer-banner-boton { width: 100%; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sub-trailer-chip,
+  .sub-trailer-banner { animation: none; }
+}

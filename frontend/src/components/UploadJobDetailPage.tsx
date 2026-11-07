@@ -20,6 +20,7 @@ import { formatSecondsHM } from '../utils/uploadStatus'
 import { useRefrescoPorAvisos, AVISOS_SUBIDA, AVISOS_SUBIDA_PROGRESO } from '../hooks/useRefrescoPorAvisos'
 import { IconoDesplegar, IconoTipo } from './Iconos'
 import { Modal } from './Modal'
+import { AvisoTrailerDetalle } from './AvisoTrailer'
 
 // Líneas del registro que se piden al abrir «Actividad», y las que se guardan como mucho en pantalla.
 const LINEAS_INICIALES = 2000
@@ -454,7 +455,7 @@ function PhasesSection({ phases, globalPct, job }: { phases: UploadProgressPhase
   )
 }
 
-export function UploadJobDetailPage({ job, onBack, onStart, onRetry, onCancel, onDelete, onOpenLibraryItem, onVerLote, seeding, retryError }: {
+export function UploadJobDetailPage({ job, onBack, onStart, onRetry, onCancel, onDelete, onOpenLibraryItem, onVerLote, onTrailerCambiado, seeding, retryError }: {
   job: UploadJob
   onBack: () => void
   onStart: (job: UploadJob) => void
@@ -464,6 +465,8 @@ export function UploadJobDetailPage({ job, onBack, onStart, onRetry, onCancel, o
   onOpenLibraryItem?: (id: number) => void
   // «Ver el lote»: Subidas cierra este detalle y filtra la tabla por ese lote.
   onVerLote?: (loteId: string) => void
+  // «Ya lo he añadido» en el aviso del tráiler: Subidas recarga la subida y el aviso de su lista.
+  onTrailerCambiado?: () => void
   seeding: SeedingEstado
   retryError?: string | null
 }) {
@@ -586,6 +589,7 @@ export function UploadJobDetailPage({ job, onBack, onStart, onRetry, onCancel, o
         <FichaPoster url={job.poster_url ? posterUrl(job.poster_url, 'w500') : null} alt={job.title || `Job ${jobId}`} fallbackIcon={mediaIcon} />
 
         <div className="dsub-columna">
+          {completada && <AvisoTrailerDetalle job={job} onCambiado={() => onTrailerCambiado?.()} />}
           <ResultadoSubida
             job={job} seeding={seeding} retryError={retryError}
             onStart={onStart} onRetry={onRetry} onCancel={onCancel} onDelete={onDelete}

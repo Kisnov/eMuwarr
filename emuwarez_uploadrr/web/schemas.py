@@ -1139,6 +1139,10 @@ class UploadJobDetail(BaseModel):
     # El lote o tanda al que pertenece y cuántos elementos tiene (services/lotes.py). None si es suelta.
     lote_id: Optional[str] = None
     lote_total: Optional[int] = None
+    # La comprobación del tráiler al terminar (services/trailer_check.py): 'incluido', 'falta' (eMuwarez lo exige:
+    # hay que ponerlo a mano) o 'a_mano' (el usuario dijo que ya lo puso). None: no se comprobó o no se pudo.
+    trailer_estado: Optional[str] = None
+    trailer_url: Optional[str] = None
     # Read-only snapshots taken at apply time — the nomenclature field
     # breakdown and the applied remux track plan, neither of which survive
     # anywhere else once nomenclature.py/mkv_remux.py return. Backs the job
@@ -1605,3 +1609,12 @@ class WidgetClaveEstado(BaseModel):
 class WidgetClaveGenerada(BaseModel):
     # La única vez que se ve entera: en la base solo queda su hash.
     clave: str
+
+
+class TrailerAManoBody(BaseModel):
+    # False deshace: la subida vuelve a avisar de que le falta el tráiler.
+    puesto: bool = True
+
+
+class TrailerAManoResponse(BaseModel):
+    trailer_estado: Optional[str] = None

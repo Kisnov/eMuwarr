@@ -71,6 +71,10 @@ def _upload_jobs_where(filters: dict) -> tuple[str, list[Any]]:
         conditions.append("request_item_id = ?")
         params.append(request_item_id)
 
+    if filters.get("sin_trailer"):
+        # El aviso de Subidas: las que salieron sin tráiler y nadie ha dicho todavía que lo puso a mano.
+        conditions.append("trailer_estado = 'falta'")
+
     lote_id = filters.get("lote_id")
     if lote_id:
         # Solo la punta de cada cadena: un elemento del lote es su último intento, así que la lista, el «N de M»

@@ -65,9 +65,15 @@ def _check_trailer_and_log(job_id: int) -> None:
     or fails the job either way — just logs to Actividad, and records a
     "trailer_url" artifact when found so _notify_upload_completed() (and the
     job detail page) can tell. See services/trailer_check.py for why reading
-    Uploadrr-EMU's own generated file is a reliable signal, not a guess."""
+    Uploadrr-EMU's own generated file is a reliable signal, not a guess.
+
+    También deja el resultado en `upload_jobs.trailer_estado` ('incluido' o
+    'falta'; nada si no se pudo comprobar): es lo que lee Subidas para el aviso
+    «Sin trailer». Va por escribir_estado, que avisa a la interfaz: el aviso de
+    'completed' ya salió y sin otro la fila no se enteraría hasta recargar."""
     try:
-        from ..trailer_check import check_trailer_for_job
+        from ..upload_states import escribir_estado
+        from ..trailer_check import TRAILER_FALTA, TRAILER_INCLUIDO, check_trailer_for_job
 
         conn = _get_db_conn()
         try:
@@ -86,7 +92,9 @@ def _check_trailer_and_log(job_id: int) -> None:
             if result["found"]:
                 create_upload_artifact(job_id, "trailer_url", name="Trailer", url=result["url"], conn=conn)
                 append_upload_log(job_id, "info", f"Trailer incluido en la descripción: {result['url']}", stream="system", conn=conn)
+                escribir_estado(job_id, salvo=(), trailer_estado=TRAILER_INCLUIDO, trailer_url=result["url"], conn=conn)
             elif result["checked"]:
+                escribir_estado(job_id, salvo=(), trailer_estado=TRAILER_FALTA, conn=conn)
                 append_upload_log(
                     job_id, "warning",
                     "No se encontró un trailer en la descripción generada por Uploadrr "

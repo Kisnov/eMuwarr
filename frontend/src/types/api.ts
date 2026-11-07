@@ -561,6 +561,8 @@ export interface PasoSubida {
   subpasos?: SubpasoSubida[]
 }
 
+export type TrailerEstado = 'incluido' | 'falta' | 'a_mano'
+
 export interface UploadJob {
   id?: number
   library_item_id?: number
@@ -624,6 +626,10 @@ export interface UploadJob {
   // El lote con el que se encoló (una tanda del asistente) y cuántos elementos tiene; null sin lote.
   lote_id?: string | null
   lote_total?: number | null
+  // La comprobación del tráiler al terminar: 'incluido', 'falta' (eMuwarez lo exige y hay que ponerlo a mano) o
+  // 'a_mano' (el usuario dijo que ya lo puso). null: no se comprobó o no se pudo.
+  trailer_estado?: TrailerEstado | null
+  trailer_url?: string | null
   nomenclature_snapshot?: UploadNomenclatureSnapshot | null
   remux_snapshot?: UploadRemuxSnapshot | null
   checks_snapshot?: UploadChecksSnapshot | null
