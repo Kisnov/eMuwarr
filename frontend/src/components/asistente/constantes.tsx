@@ -33,7 +33,7 @@ export const CHECK_STEP_PENDING_LABEL: Record<string, string> = {
 // Where each nomenclature field comes from (shown in the "?" tooltips).
 export const FIELD_INFO = {
   title: 'Viene de Radarr/Sonarr y se traduce al español con TMDb.',
-  year: 'Viene de Radarr/Sonarr.',
+  year: 'Viene de Radarr/Sonarr. En una serie, el año en que empezó la temporada (lo pide eMuwarez), no el de la serie.',
   season_episode: 'Temporada/episodio del release (SxxExx).',
   resolution: 'Viene de Radarr/Sonarr. El botón «Ver MediaInfo» muestra la del archivo real.',
   source: 'Prioridad: 1) nombre del archivo, 2) Radarr/Sonarr, 3) estimado con MediaInfo por bitrate (tamaño/duración) si ninguno de los dos anteriores da un source válido.',

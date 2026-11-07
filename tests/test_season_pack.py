@@ -119,6 +119,26 @@ def test_plan_blocks_on_partial_season(isolated_db, tmp_path):
     conn.close()
 
 
+def test_el_pack_lleva_el_anio_de_estreno_de_la_temporada(isolated_db, tmp_path):
+    # eMuwarez pide el año de la temporada, no el de la serie (One Piece es de 1999).
+    conn = _open(isolated_db)
+    _series_id, season_id = _seed_series_season(conn)
+    for i, fecha in ((1, "2005-03-06"), (2, "2005-03-13")):
+        src = tmp_path / f"S01E0{i}.mkv"
+        src.write_bytes(b"video")
+        ep = _seed_episode(conn, season_id, number=i, title=f"One Piece S01E0{i}", path=str(src),
+                           quality="WEBDL-1080p")
+        conn.execute("UPDATE library_items SET raw_json = ? WHERE id = ?",
+                     (f'{{"episode": {{"airDate": "{fecha}"}}}}', ep))
+    conn.commit()
+
+    plan = build_season_pack_plan(season_id, conn=conn)
+
+    assert plan["season_pack_title"].startswith("One Piece S01 2005 ")
+    assert all(".2005." in ep["proposed_filename"] for ep in plan["episodes"])
+    conn.close()
+
+
 def test_plan_full_season_all_episodes_present(isolated_db, tmp_path):
     conn = _open(isolated_db)
     _series_id, season_id = _seed_series_season(conn)

@@ -36,8 +36,9 @@ _CAMPOS_HUELLA = ("size_bytes", "resolution", "quality", "source", "release_grou
 # Se sube cuando cambian las reglas que construyen la propuesta, para que las
 # guardadas con la regla vieja se rehagan. 2: el proveedor ya no sale de una
 # carpeta de la ruta, solo del nombre del archivo. 3: una pista sin idioma (UND)
-# avisa en vez de bloquear y el nombre sale sin ella.
-_VERSION_REGLAS = 3
+# avisa en vez de bloquear y el nombre sale sin ella. 4: un capítulo lleva el
+# año de estreno de su temporada, no el de la serie (anio_de_temporada).
+_VERSION_REGLAS = 4
 
 
 def _huella(item: dict) -> list:
@@ -69,6 +70,33 @@ def get_library_item_for_nomenclature(item_id: int, conn=None) -> dict | None:
     finally:
         if own:
             conn.close()
+
+
+def anio_de_temporada(item: dict, conn) -> int | None:
+    """El año en que se estrenó la temporada de un capítulo o temporada, o None si no se sabe.
+
+    eMuwarez pide en las series el año de la temporada, no el de la serie: la temporada 17 de una serie de 2000
+    que empezó en 2020 lleva 2020. Sale de la primera fecha de emisión que Sonarr da a los capítulos de esa
+    temporada (`airDate`, la fecha local de la cadena: `airDateUtc` puede caer ya en el año siguiente). Los
+    Especiales (temporada 0) no son una temporada que empiece en un año: None, y el que llama pone el de la serie."""
+    tipo = item.get("item_type")
+    temporada = item.get("season_number")
+    if tipo not in ("season", "episode") or not temporada:
+        return None
+    id_temporada = item.get("id") if tipo == "season" else item.get("parent_id")
+    fecha = ("CASE WHEN json_valid(raw_json) THEN COALESCE(json_extract(raw_json, '$.episode.airDate'), "
+             "json_extract(raw_json, '$.episode.airDateUtc')) END")
+    try:
+        row = conn.execute(
+            f"SELECT MIN({fecha}) FROM library_items "
+            "WHERE item_type = 'episode' AND season_number = ? AND (parent_id = ? OR id = ?)",
+            (temporada, id_temporada, item.get("id")),
+        ).fetchone()
+    except Exception:  # noqa: BLE001 — sin el año de la temporada queda el de la serie
+        logger.debug("No se pudo leer el año de la temporada del item %s", item.get("id"), exc_info=True)
+        return None
+    m = re.match(r"(\d{4})-", str((row[0] if row else None) or ""))
+    return int(m.group(1)) if m and 1900 <= int(m.group(1)) <= 2100 else None
 
 
 # Lo más largo que admite un nombre de fichero o carpeta (ext4, btrfs).
@@ -430,7 +458,7 @@ def build_nomenclature_proposal(
         warnings = list(preconditions["warnings"])
 
         title = item.get("title") or "Sin título"
-        year = item.get("year")
+        year = anio_de_temporada(item, conn) or item.get("year")
         media_type = item.get("item_type") or "movie"
         tmdb_id = item.get("tmdb_id")
         imdb_id = item.get("imdb_id")
