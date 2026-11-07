@@ -38,6 +38,7 @@ from .mkv_remux import opciones_de_idioma
 from .mkv_title import to_filesystem_name
 from .nomenclature import (
     _build_proposed_filename,
+    anio_de_temporada,
     build_nomenclature_proposal,
     tag_por_defecto,
 )
@@ -759,7 +760,8 @@ def build_season_pack_plan(
             (title_override or "").strip()
             or (series or {}).get("title") or season.get("title") or "Serie"
         )
-        year = (series or {}).get("year") or season.get("year")
+        # El año en que empezó ESTA temporada, como pide eMuwarez; sin fechas de emisión, el de la serie.
+        year = anio_de_temporada(season, conn) or (series or {}).get("year") or season.get("year")
 
         all_episodes = _get_season_episodes(season_id, conn=conn)
         available_ids = {

@@ -479,6 +479,7 @@ def build_editable_nomenclature_fields(
             infer_provider_from_item,
             tag_por_defecto,
             aviso_pistas_sin_idioma,
+            anio_de_temporada,
         )
 
         item = get_library_item_for_nomenclature(library_item_id, conn=conn)
@@ -510,7 +511,8 @@ def build_editable_nomenclature_fields(
         # generating the nomenclature no longer blocks on reading the file.
 
         title = item.get("title") or ""
-        year = item.get("year")
+        # En una serie, el año de su temporada (eMuwarez), no el de la serie.
+        year = anio_de_temporada(item, conn) or item.get("year")
         media_type = item.get("item_type") or "movie"
         tmdb_id = item.get("tmdb_id")
         resolution = _infer_resolution_from_item(item)
