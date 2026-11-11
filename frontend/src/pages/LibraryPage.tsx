@@ -91,7 +91,8 @@ const PosterCard = memo(function PosterCard({ item, onSelect, priority, seleccio
   const nombre = tituloDeTarjeta(item)
   return (
     <div
-      className={seleccionado ? 'clickable bib-tarjeta lote-marcada' : 'clickable bib-tarjeta'}
+      className={['clickable bib-tarjeta', seleccionado && 'lote-marcada', !item.poster_url && 'bib-tarjeta-sin-poster']
+        .filter(Boolean).join(' ')}
       onClick={() => onSelect(item)}
     >
       <div className="bib-tarjeta-marco">
