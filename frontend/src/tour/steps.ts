@@ -64,6 +64,14 @@ export const TOUR_STEPS: TourStep[] = [
     description: 'El historial de tus subidas a eMuwarez, con su estado y progreso.',
   },
   {
+    id: 'stats',
+    tab: 'stats',
+    selector: '[data-tour="stats-content"]',
+    title: 'Estadísticas',
+    placement: 'top-center',
+    description: 'Cómo evoluciona tu cuenta de eMuwarez (ratio, subido, bajado y bonus, una instantánea al día) y las cifras de tu biblioteca y tus peticiones.',
+  },
+  {
     id: 'guide',
     tab: 'guide',
     selector: '[data-tour="guide-content"]',

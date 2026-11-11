@@ -41,7 +41,7 @@
 .est-lectura-unica {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px 22px;
+  gap: 4px 24px;
   list-style: none;
   margin: 6px 0 2px;
   padding: 0;

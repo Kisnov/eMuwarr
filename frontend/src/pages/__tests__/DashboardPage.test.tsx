@@ -212,6 +212,10 @@ describe('Panel', () => {
     expect(peticiones[0].textContent).toContain('Película · 1080p WEB-DL · castellano (audio) · 6,0 GB')
     expect(peticiones[0].textContent).toContain('120.000')
     expect(carril('Listo para subir').textContent).toContain('2 peticiones')
+    // Con menos de tres, el carril encoge al contenido y una línea atenuada dice que no hay más (En curso sigue llenando el alto).
+    expect(carril('Listo para subir').classList.contains('panel-carril-encoge')).toBe(true)
+    expect(carril('Listo para subir').querySelector('.panel-carril-nada-mas')?.textContent).toBe('Nada más listo por ahora')
+    expect(carril('En curso').classList.contains('panel-carril-encoge')).toBe(false)
 
     // En curso: la que trabaja antes que la que espera.
     const subidas = [...carril('En curso').querySelectorAll('.upload-row-title')].map(t => t.textContent)
@@ -231,6 +235,20 @@ describe('Panel', () => {
     expect(tarjetas.map(c => (c.querySelector('.stat-card-icon') as HTMLElement).style.color))
       .toEqual(['', 'var(--color-available)', '', '', ''])
     expect(tarjetas.map(c => (c.querySelector('.stat-card-value') as HTMLElement).style.color)).toEqual(['', '', '', '', ''])
+  })
+
+  it('con tres peticiones o más no hay línea «Nada más listo», ni sin ninguna (ahí habla el estado vacío)', async () => {
+    vi.mocked(getDashboardRecommendations).mockResolvedValue({ items: [1, 2, 3].map(n =>
+      rec({ id: n, content_name: `Película ${n} (2020)`, rec_request_id: 10 + n, rec_points: 100 - n })) })
+    await pagina()
+    await esperar(() => filas('Listo para subir').length === 3)
+    expect(carril('Listo para subir').textContent).not.toContain('Nada más listo')
+    await desmontar()
+
+    vi.mocked(getDashboardRecommendations).mockResolvedValue({ items: [] })
+    await pagina()
+    expect(carril('Listo para subir').textContent).toContain('Ninguna petición lista')
+    expect(carril('Listo para subir').textContent).not.toContain('Nada más listo')
   })
 
   it('vacío: la franja sigue con sus cinco tarjetas, a cero', async () => {

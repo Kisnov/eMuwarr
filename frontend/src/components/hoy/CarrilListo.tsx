@@ -115,7 +115,7 @@ export function CarrilListo({ recomendaciones, error, onReintentar, onSubir, onV
 
   return (
     <Carril
-      titulo="Listo para subir" nota={nota} tour="dashboard-ready"
+      titulo="Listo para subir" nota={nota} tour="dashboard-ready" encoge
       accion={seleccion && (seleccionables > 0 || seleccion.activa) && (
         <Tooltip content="Marca varias para subirlas de una vez">
           <button
@@ -165,6 +165,10 @@ export function CarrilListo({ recomendaciones, error, onReintentar, onSubir, onV
               accion={<button type="button" className={`btn ${i === 0 ? 'btn-primary' : 'btn-secondary'} btn-sm`} onClick={() => onSubir(item)}>Subir</button>} />
           ))}
         </ul>
+      )}
+      {/* Con una o dos peticiones el carril encoge al contenido: esta línea dice que no es que falte algo por cargar. */}
+      {peticiones.length > 0 && peticiones.length < 3 && (
+        <p className="panel-carril-nada-mas">Nada más listo por ahora</p>
       )}
 
       {otros > 0 && (

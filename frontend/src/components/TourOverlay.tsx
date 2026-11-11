@@ -53,32 +53,44 @@ function waitForRect(selector: string, onFound: (rect: RectoSinEscalar) => void)
   return () => { cancelled = true }
 }
 
-function placeBubble(rect: RectoSinEscalar | null, placement?: 'top-center', alto = BUBBLE_HEIGHT_GUESS): { top: number; left: number } {
+// Dónde va la burbuja: debajo del objetivo o, si no cabe, encima; si no cabe en ninguno de los dos (un objetivo más alto
+// que media ventana), a su lado; y si tampoco (una ventana estrecha), pegada al borde de la ventana que menos lo tape.
+export function placeBubble(rect: RectoSinEscalar | null, placement?: 'top-center', alto = BUBBLE_HEIGHT_GUESS): { top: number; left: number } {
   if (placement === 'top-center') {
     return { top: BUBBLE_MARGIN + 56, left: anchoVentana() / 2 - BUBBLE_WIDTH / 2 }
   }
   if (!rect) {
     return { top: altoVentana() / 2 - alto / 2, left: anchoVentana() / 2 - BUBBLE_WIDTH / 2 }
   }
+  const ventanaAlto = altoVentana()
+  const ventanaAncho = anchoVentana()
   // Con el alto real de la burbuja: encima del objetivo acaba justo antes de él, y no lo tapa.
-  const spaceBelow = altoVentana() - rect.bottom
+  const spaceBelow = ventanaAlto - rect.bottom
   const spaceAbove = rect.top
   const cabeDebajo = spaceBelow >= alto + 2 * BUBBLE_MARGIN
   const cabeEncima = spaceAbove >= alto + 2 * BUBBLE_MARGIN
-  let top: number
-  if (cabeDebajo || (!cabeEncima && spaceBelow >= spaceAbove)) {
-    top = rect.bottom + BUBBLE_MARGIN
-  } else {
-    top = rect.top - BUBBLE_MARGIN - alto
+  const dentroDeLaVentana = (top: number) => Math.max(BUBBLE_MARGIN, Math.min(top, ventanaAlto - alto - BUBBLE_MARGIN))
+  const izquierdaDe = (left: number) => Math.max(BUBBLE_MARGIN, Math.min(left, ventanaAncho - BUBBLE_WIDTH - BUBBLE_MARGIN))
+
+  if (cabeDebajo || cabeEncima) {
+    const top = cabeDebajo ? rect.bottom + BUBBLE_MARGIN : rect.top - BUBBLE_MARGIN - alto
+    return { top: dentroDeLaVentana(top), left: izquierdaDe(rect.left) }
   }
-  // Si no cabe ni encima ni debajo (un objetivo muy alto), al menos entera dentro de la ventana.
-  top = Math.max(BUBBLE_MARGIN, Math.min(top, altoVentana() - alto - BUBBLE_MARGIN))
-  let left = rect.left
-  if (left + BUBBLE_WIDTH > anchoVentana() - BUBBLE_MARGIN) {
-    left = anchoVentana() - BUBBLE_WIDTH - BUBBLE_MARGIN
+  // Un objetivo muy alto: al lado, a la altura de su parte de arriba, si queda sitio a la derecha o a la izquierda.
+  const cabeDerecha = ventanaAncho - rect.right >= BUBBLE_WIDTH + 2 * BUBBLE_MARGIN
+  const cabeIzquierda = rect.left >= BUBBLE_WIDTH + 2 * BUBBLE_MARGIN
+  if (cabeDerecha || cabeIzquierda) {
+    return {
+      top: dentroDeLaVentana(rect.top),
+      left: cabeDerecha ? rect.right + BUBBLE_MARGIN : rect.left - BUBBLE_MARGIN - BUBBLE_WIDTH,
+    }
   }
-  left = Math.max(BUBBLE_MARGIN, left)
-  return { top, left }
+  // Ni encima, ni debajo, ni al lado (el móvil con un carril alto): la burbuja entera dentro de la ventana, en el borde
+  // que menos tapa del objetivo (si empatan, arriba: el pie del objetivo es lo que se quiere seguir viendo).
+  const solape = (top: number) => Math.max(0, Math.min(top + alto, rect.bottom) - Math.max(top, rect.top))
+  const arriba = BUBBLE_MARGIN
+  const abajo = Math.max(BUBBLE_MARGIN, ventanaAlto - alto - BUBBLE_MARGIN)
+  return { top: solape(arriba) <= solape(abajo) ? arriba : abajo, left: izquierdaDe(rect.left) }
 }
 
 export function TourOverlay({ activePage, navigate }: TourOverlayProps) {
