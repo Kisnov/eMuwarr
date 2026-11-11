@@ -278,8 +278,11 @@ def test_no_se_reutiliza_si_el_original_ha_cambiado_aunque_el_nombre_sea_el_mism
 def test_no_se_reutiliza_si_el_original_se_sustituye_por_otro_del_mismo_tamano(db_conn, tmp_path):
     destino, job, ficheros = _con_anterior(db_conn, tmp_path)
     origen = tmp_path / "origen.mkv"
+    antes = origen.stat().st_mtime_ns
     origen.unlink()
-    origen.write_bytes(b"ORIGINAL")                            # mismo tamaño, otro inodo y otra fecha
+    origen.write_bytes(b"ORIGINAL")                            # mismo tamaño
+    # El sistema puede reusar el inodo y, en el mismo tic del reloj, la fecha: se fuerza otra fecha.
+    os.utime(origen, ns=(antes + 10**9, antes + 10**9))
     _, motivo = uq._motivo_no_reutilizable(job, str(destino), ficheros, False, db_conn)
     assert "ha cambiado" in motivo
 
