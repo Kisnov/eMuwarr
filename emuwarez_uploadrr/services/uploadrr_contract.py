@@ -193,8 +193,12 @@ def build_uploadrr_emu_command(
     reanudar: bool = False,
     anonimo: bool = False,
     personal_release: bool = False,
+    solo_cliente: Optional[int | str] = None,
 ) -> list[str]:
     """Build the real Uploadrr-EMU argv. Always a list[str], never a shell string.
+
+    `solo_cliente` (el id del torrent en eMuwarez) añade `--resume --solo-cliente <id>`: Uploadrr-EMU no sube nada,
+    solo baja el .torrent firmado de ese id y lo vuelve a añadir a qBittorrent, que lo comprueba.
 
     `release_format` is the nomenclature's source code (WEB-DL, BDRemux…), sent as `-t`.
 
@@ -241,8 +245,10 @@ def build_uploadrr_emu_command(
         cmd.append("-a")
     if personal_release:
         cmd.append("-pr")
-    if reanudar:
+    if reanudar or solo_cliente:
         cmd.append("--resume")
+    if solo_cliente:
+        cmd += ["--solo-cliente", str(solo_cliente)]
     return cmd
 
 

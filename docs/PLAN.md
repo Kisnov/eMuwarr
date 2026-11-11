@@ -728,6 +728,14 @@ Hallazgos y maquetas: https://claude.ai/artifact/PjPRTxSfEs3Y8aVtXzN32i
   `globals.css`; Configuración separa sus tarjetas 16 px, como Tareas (se quitan los 20 px que lo pisaban); y se borra
   `nomenclature_check` (solo lo llamaban los tests): de `test_nomenclatura_real.py` quedan los nombres que genera la app.
   El `scrollIntoView` del tour se queda: el tour se hace una vez y desde el PC.
+- **«Reenviar a qBittorrent» (11/11):** una subida completada cuyo torrent no llegó a qBittorrent, o que se borró después, se
+  vuelve a añadir desde el bloque de seeding del detalle (solo si falló la fase «Subida a qBittorrent» o qBittorrent dice
+  «No se encuentra»). Lanza Uploadrr-EMU con el argv de la subida más `--resume --solo-cliente <id>`: baja el .torrent firmado
+  de eMuwarez y lo añade con recheck, sin subir nada. No crea otra fila: el estado va en `upload_jobs.reenvio_qbit_estado`
+  (esquema 55) y el registro en el de la subida, que sigue `completed`. No pasa por «Subidas en paralelo» (dura segundos y
+  la puerta da turno por id). Borrar espera a que termine y un reenvío cortado por un reinicio queda «fallido».
+  **Falta:** fusionar antes `--solo-cliente` en Uploadrr-EMU (sin él `test_contrato_uploadrr_real.py` falla en la CI) y
+  probarlo de verdad en el NAS.
 
 ## Siguiente
 
@@ -757,7 +765,6 @@ probarla, si guardar los `campos` y crear el trabajo van en una sola transacció
 
 - Descartados por Gabriel (11/11): que el filtro «Petición» de Biblioteca cuente la petición heredada (una serie pedida entera se sube
   en season packs, nunca por capítulos) y detectar el toque real con `pointerType` para los objetivos táctiles.
-- Recuperar solo el añadido a qBittorrent de una subida que ya estaba en eMuwarez (necesita un cambio en Uploadrr-EMU, otro repo).
 - Probar en el NAS (`:edge`): el límite compartido entre CLI y servidor (`flock` sobre el volumen de `CONFIG_DIR`), el campo y el enlace de
   qBittorrent, y la subida por lotes (ver «Siguiente»).
 

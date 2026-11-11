@@ -37,6 +37,15 @@ describe('estadoVisible', () => {
     }), null)
     expect(e.tono).toBe('aviso')
     expect(e.motivo).toContain('qBittorrent')
+    expect(e.motivo).not.toContain('Reenviar')
+  })
+
+  it('si se puede reenviar, el aviso nombra «Reenviar a qBittorrent»', () => {
+    const e = estadoVisible(subida({
+      result_url: 'x', puede_reenviar_qbit: true,
+      progress: { global_pct: 100, phases: [{ key: 'qbittorrent_add', label: 'q', status: 'failed', pct: 0 }] },
+    }), null)
+    expect(e.motivo).toContain('«Reenviar a qBittorrent»')
   })
 
   it('una fallida dice en qué paso falló y por qué', () => {

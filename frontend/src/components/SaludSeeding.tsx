@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { reenviarAQbit } from '../api/uploads'
 import type { UploadJob } from '../types/api'
 import type { SeedingEstado } from '../hooks/useSeeding'
 import { formatDateTimeSeconds, formatNumero } from '../utils/format'
@@ -6,6 +7,7 @@ import { copiarTexto } from '../utils/portapapeles'
 import { ExternalLinkButtonIcon } from './DetailCard'
 import { useTooltip } from './Tooltip'
 import { SIN_DATOS_QBIT, claseSeeding, resumenSeeding, seedingDe, textoSubido } from '../utils/seeding'
+import { noLlegoAQbit } from '../utils/estadoDeSubida'
 
 // Solo la subida completada tiene ya su torrent sembrando; las demás no llegaron a subir o están en ello.
 const tieneTorrent = (job: UploadJob) => job.status === 'completed'
@@ -55,15 +57,51 @@ function AccionesQbit({ job, url }: { job: UploadJob; url: string }) {
   )
 }
 
+const AYUDA_REENVIO = 'Ya está en eMuwarez, pero qBittorrent no lo tiene. Vuelve a añadir el torrent de eMuwarez sin '
+  + 'subir nada; qBittorrent comprueba los ficheros antes de sembrar.'
+
 // El bloque completo del detalle de una subida. Pide los datos al entrar (la caché del servidor evita machacar
 // a qBittorrent) y «Actualizar» se salta esa caché.
-export function SeedingBloque({ job, seeding }: { job: UploadJob; seeding: SeedingEstado }) {
+export function SeedingBloque({ job, seeding, onVerRegistro, onReenviado }: {
+  job: UploadJob
+  seeding: SeedingEstado
+  // «Ver registro» tras un reenvío fallido, y la recarga de la subida tras pedir uno.
+  onVerRegistro?: () => void
+  onReenviado?: () => void
+}) {
   const { datos, cargando, cargar } = seeding
   const aplica = tieneTorrent(job)
   useEffect(() => { if (aplica) cargar() }, [aplica, cargar])
+  // «Reenviar a qBittorrent»: `enviando` cubre desde el clic hasta que llega la subida con el estado nuevo.
+  const [enviando, setEnviando] = useState(false)
+  const [errorEnvio, setErrorEnvio] = useState<string | null>(null)
+  const estadoReenvio = job.reenvio_qbit_estado ?? null
+  useEffect(() => { setEnviando(false) }, [job.id, estadoReenvio, job.reenvio_qbit_at])
+  useEffect(() => { setErrorEnvio(null) }, [job.id])
+  // Al terminar bien se vuelve a leer el seeding: el servidor ya olvidó su caché.
+  const estadoAnterior = useRef(estadoReenvio)
+  useEffect(() => {
+    if (estadoAnterior.current !== 'ok' && estadoReenvio === 'ok') cargar()
+    estadoAnterior.current = estadoReenvio
+  }, [estadoReenvio, cargar])
   if (!aplica) return null
   const i = seedingDe(datos, job.id)
   const sinDatos = !datos || !datos.disponible
+  const reenviando = enviando || estadoReenvio === 'en_curso'
+  // Solo cuando hace falta: el añadido a qBittorrent falló, o qBittorrent responde y no tiene el torrent.
+  const ofrecerReenvio = !!job.puede_reenviar_qbit && (noLlegoAQbit(job) || (!sinDatos && (!i || i.estado === 'no_encontrado')))
+  const idAyuda = `reenvio-qbit-${job.id}`
+  const reenviar = async () => {
+    setEnviando(true)
+    setErrorEnvio(null)
+    try {
+      await reenviarAQbit(job.id!)
+      onReenviado?.()
+    } catch (e) {
+      setEnviando(false)
+      setErrorEnvio(e instanceof Error ? e.message : 'No se pudo reenviar a qBittorrent.')
+    }
+  }
   return (
     <div className="dsub-panel" data-testid="seeding-bloque">
       <h2 className="dsub-panel-titulo">
@@ -101,12 +139,34 @@ export function SeedingBloque({ job, seeding }: { job: UploadJob; seeding: Seedi
             sigue en su sitio y que qBittorrent la ve en la misma ruta.
           </p>
         )}
+        {(ofrecerReenvio || reenviando) && <p className="seeding-reenvio" id={idAyuda}>{AYUDA_REENVIO}</p>}
+        <p className="seeding-reenvio" aria-live="polite" data-testid="reenvio-resultado">
+          {reenviando ? null : errorEnvio ? (
+            <span className="seeding-reenvio-error">{errorEnvio}</span>
+          ) : estadoReenvio === 'ok' ? (
+            <span className="seeding-reenvio-ok">
+              Reenviado a qBittorrent{job.reenvio_qbit_at ? ` el ${formatDateTimeSeconds(job.reenvio_qbit_at)}` : ''}: qBittorrent
+              comprobó los ficheros y lo siembra.
+            </span>
+          ) : estadoReenvio === 'fallido' && ofrecerReenvio ? (
+            <>
+              <span className="seeding-reenvio-error">El último reenvío a qBittorrent falló.</span>
+              {onVerRegistro && <button type="button" className="btn btn-ghost btn-sm" onClick={onVerRegistro}>Ver registro</button>}
+            </>
+          ) : null}
+        </p>
         <div className="seeding-pie">
           <span className="sub-muted sub-t11">
             {datos?.actualizado ? `Leído ${formatDateTimeSeconds(datos.actualizado)}` : ''}
           </span>
           <div className="seeding-acciones">
             {datos?.url_publica && <AccionesQbit job={job} url={datos.url_publica} />}
+            {(ofrecerReenvio || reenviando) && (
+              <button type="button" className="btn btn-secondary btn-sm" disabled={reenviando} aria-describedby={idAyuda}
+                onClick={reenviar}>
+                {reenviando ? 'Reenviando…' : 'Reenviar a qBittorrent'}
+              </button>
+            )}
             <button type="button" className="btn btn-secondary btn-sm" disabled={cargando} onClick={() => cargar(true)}>
               Actualizar
             </button>

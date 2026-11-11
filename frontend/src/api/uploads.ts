@@ -157,6 +157,11 @@ export async function marcarTrailerAMano(jobId: number, puesto = true): Promise<
   return api.post<{ trailer_estado: TrailerEstado | null }>(`/uploads/${jobId}/trailer-a-mano`, { puesto })
 }
 
+// «Reenviar a qBittorrent»: vuelve a añadir el torrent de eMuwarez de una subida completada, sin subir nada.
+export async function reenviarAQbit(jobId: number): Promise<{ message: string }> {
+  return api.post<{ message: string }>(`/uploads/${jobId}/reenviar-qbit`)
+}
+
 // "Automático": no wizard involved. The job appears immediately in Subidas
 // as 'staging' ("Preparando") while the server computes nomenclature/remux/
 // checks previews in the background — see services/upload_queue.py.

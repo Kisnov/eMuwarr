@@ -20,6 +20,8 @@ from ...services.upload_execution import (
     retry_upload_job,
     DELETE_CONFIRMATION_TOKEN,
     compute_progress_phase,
+    puede_reenviar_qbit,
+    reenviar_a_qbittorrent,
 )
 from ...services.subida_pasos import NOMBRES, pasos_de_subida, reanudar_desde, subpasos_que_reutilizaria
 from ...services import lotes
@@ -192,6 +194,9 @@ def _job_to_detail(
         lote_total=lote_total if j.get("lote_id") else None,
         trailer_estado=j.get("trailer_estado"),
         trailer_url=j.get("trailer_url"),
+        reenvio_qbit_estado=j.get("reenvio_qbit_estado"),
+        reenvio_qbit_at=j.get("reenvio_qbit_at"),
+        puede_reenviar_qbit=puede_reenviar_qbit(j),
         nomenclature_snapshot=_extract_json_dict(j, "nomenclature_snapshot_json"),
         remux_snapshot=_extract_json_dict(j, "remux_snapshot_json"),
         checks_snapshot=_extract_json_dict(j, "checks_snapshot_json"),
@@ -633,6 +638,17 @@ def trailer_a_mano(job_id: int, body: TrailerAManoBody, current_user: dict = Dep
             detail={"message": "Esta subida no tiene ningún aviso de tráiler que marcar.", "error": result["error"]},
         )
     return TrailerAManoResponse(trailer_estado=result["trailer_estado"])
+
+
+@router.post("/uploads/{job_id}/reenviar-qbit", response_model=OkResponse)
+def reenviar_qbit(job_id: int, current_user: dict = Depends(require_auth)):
+    """«Reenviar a qBittorrent»: vuelve a añadir el torrent de eMuwarez de una subida completada, sin subir nada."""
+    with _get_conn() as conn:
+        result = reenviar_a_qbittorrent(job_id, conn=conn)
+    if not result["ok"]:
+        # El texto tal cual: la interfaz lo enseña junto al botón.
+        raise HTTPException(status_code=404 if result["error"] == "not_found" else 409, detail=result["message"])
+    return OkResponse(message=result["message"])
 
 
 @router.post("/uploads/{job_id}/delete", response_model=OkResponse)

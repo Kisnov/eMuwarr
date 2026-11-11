@@ -106,6 +106,10 @@ from .ciclo_de_vida import (  # noqa: F401
     retry_chain_ids,
     delete_upload_job,
 )
+from .reenvio_qbit import (  # noqa: F401
+    puede_reenviar_qbit,
+    reenviar_a_qbittorrent,
+)
 
 __all__ = [
     "CONFIRMATION_TOKEN",

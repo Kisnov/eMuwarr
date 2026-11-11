@@ -455,7 +455,7 @@ function PhasesSection({ phases, globalPct, job }: { phases: UploadProgressPhase
   )
 }
 
-export function UploadJobDetailPage({ job, onBack, onStart, onRetry, onCancel, onDelete, onOpenLibraryItem, onVerLote, onTrailerCambiado, seeding, retryError }: {
+export function UploadJobDetailPage({ job, onBack, onStart, onRetry, onCancel, onDelete, onOpenLibraryItem, onVerLote, onTrailerCambiado, onReenviado, seeding, retryError }: {
   job: UploadJob
   onBack: () => void
   onStart: (job: UploadJob) => void
@@ -467,6 +467,8 @@ export function UploadJobDetailPage({ job, onBack, onStart, onRetry, onCancel, o
   onVerLote?: (loteId: string) => void
   // «Ya lo he añadido» en el aviso del tráiler: Subidas recarga la subida y el aviso de su lista.
   onTrailerCambiado?: () => void
+  // «Reenviar a qBittorrent» pedido: Subidas recarga la subida.
+  onReenviado?: () => void
   seeding: SeedingEstado
   retryError?: string | null
 }) {
@@ -604,7 +606,7 @@ export function UploadJobDetailPage({ job, onBack, onStart, onRetry, onCancel, o
 
       {/* Seeding y estadísticas del tracker, una junto a otra cuando caben. */}
       <div className="dsub-externos">
-        <SeedingBloque job={job} seeding={seeding} />
+        <SeedingBloque job={job} seeding={seeding} onVerRegistro={() => setShowActividad(true)} onReenviado={onReenviado} />
         <StatsTrackerBloque key={job.id} job={job} />
       </div>
 

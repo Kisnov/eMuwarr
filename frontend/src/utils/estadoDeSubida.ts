@@ -21,6 +21,11 @@ export interface EstadoVisible {
   seeding?: { texto: string; clase: string }
 }
 
+// Llegó a eMuwarez pero el añadido a qBittorrent falló (la fase queda «fallida» aunque la subida esté completada).
+export function noLlegoAQbit(job: UploadJob): boolean {
+  return job.progress?.phases?.some(p => p.key === 'qbittorrent_add' && p.status === 'failed') ?? false
+}
+
 function pasoDe(job: UploadJob, estado: string): string | undefined {
   return job.pasos?.find(p => p.estado === estado)?.nombre
 }
@@ -30,11 +35,12 @@ export function estadoVisible(job: UploadJob, seeding: SeedingResponse | null): 
     case 'completed': {
       const i = seedingDe(seeding, job.id)
       const enQbit = i ? { texto: `${i.etiqueta} en qBittorrent`, clase: claseSeeding(i.estado) } : undefined
-      const sinQbit = job.progress?.phases?.some(p => p.key === 'qbittorrent_add' && p.status === 'failed')
+      const sinQbit = noLlegoAQbit(job)
       const titulo = job.result_url ? 'Subido a eMuwarez' : 'Subida completada'
       if (sinQbit) {
         return { tono: 'aviso', simbolo: '!', titulo, seeding: enQbit,
-          motivo: 'El torrent está en eMuwarez, pero no se pudo añadir a qBittorrent: añádelo a mano para sembrarlo.' }
+          motivo: 'El torrent está en eMuwarez, pero no se pudo añadir a qBittorrent: '
+            + (job.puede_reenviar_qbit ? 'usa «Reenviar a qBittorrent» o añádelo a mano.' : 'añádelo a mano para sembrarlo.') }
       }
       return { tono: 'ok', simbolo: '✓', titulo, seeding: enQbit }
     }

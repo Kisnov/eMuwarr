@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 
 DB_FILE = CONFIG_DIR / "emuwarez_uploadrr.db"
 
-SCHEMA_VERSION = 54
+SCHEMA_VERSION = 55
 
 # Phase 10E: canonical settings namespace fix.
 #
@@ -1345,6 +1345,20 @@ def _migrate_upload_jobs_trailer_estado(conn: sqlite3.Connection) -> None:
     )
 
 
+def _migrate_upload_jobs_reenvio_qbit(conn: sqlite3.Connection) -> None:
+    """Esquema 55: «Reenviar a qBittorrent» (services/upload_execution/reenvio_qbit.py). `reenvio_qbit_estado` es NULL,
+    'en_curso', 'ok' o 'fallido', y `reenvio_qbit_at` cuándo cambió por última vez. El `status` de la subida no cambia."""
+    columnas = {fila[1] for fila in conn.execute("PRAGMA table_info(upload_jobs)")}
+    for nombre in ("reenvio_qbit_estado", "reenvio_qbit_at"):
+        if nombre in columnas:
+            continue
+        try:
+            conn.execute(f"ALTER TABLE upload_jobs ADD COLUMN {nombre} TEXT")
+        except sqlite3.OperationalError:
+            if nombre not in {fila[1] for fila in conn.execute("PRAGMA table_info(upload_jobs)")}:
+                raise
+
+
 def _migrate_imgbox_a_pixhost(conn: sqlite3.Connection) -> None:
     """Esquema 53: imgbox deja de ir siempre el último (lleva meses caído) y pasa a ser un proveedor más, que se puede
     quitar. Quien ya tenía la lista guardada lo tenía de último sin verlo en ella: se cambia por Pixhost, que tampoco
@@ -1954,6 +1968,7 @@ def init_db(conn: Optional[sqlite3.Connection] = None) -> None:
         _migrate_upload_jobs_opciones_tracker(conn)
         _migrate_imgbox_a_pixhost(conn)
         _migrate_upload_jobs_trailer_estado(conn)
+        _migrate_upload_jobs_reenvio_qbit(conn)
         set_state(conn, "schema_version", str(SCHEMA_VERSION))
         conn.commit()
     finally:

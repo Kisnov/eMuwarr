@@ -195,7 +195,7 @@ def validate_upload_job_start(job_id: int, conn=None) -> dict:
             conn.close()
 
 
-def build_uploadrr_execution_command(job: dict, conn=None) -> dict:
+def build_uploadrr_execution_command(job: dict, conn=None, *, solo_cliente: str | None = None) -> dict:
     """Build the actual command list for subprocess. Resolves paths from settings at runtime.
 
     Returns {"executable": str, "args": list[str], "cwd": str, "command_preview": str,
@@ -204,6 +204,8 @@ def build_uploadrr_execution_command(job: dict, conn=None) -> dict:
     For runtime_type=uploadrr_emu (the default), builds the real Uploadrr-EMU
     argv (-tk/-mt/-tmdb/-ua/-c/-res) via uploadrr_contract.py, using only
     prepared_path/applied_path — never the raw job "source_path" field name.
+
+    `solo_cliente`: el id de eMuwarez para «Reenviar a qBittorrent» (ver uploadrr_contract).
     """
     own = conn is None
     conn = conn or _get_db_conn()
@@ -249,6 +251,7 @@ def build_uploadrr_execution_command(job: dict, conn=None) -> dict:
                 # Los decidió el paso que dejó el trabajo en 'ready' (upload_queue._marcar_lista).
                 anonimo=bool(cmd_data.get("anon")),
                 personal_release=bool(cmd_data.get("personal_release")),
+                solo_cliente=solo_cliente,
             )
             executable = full_argv[0]
             args = full_argv[1:]

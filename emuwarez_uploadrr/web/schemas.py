@@ -1143,6 +1143,11 @@ class UploadJobDetail(BaseModel):
     # hay que ponerlo a mano) o 'a_mano' (el usuario dijo que ya lo puso). None: no se comprobó o no se pudo.
     trailer_estado: Optional[str] = None
     trailer_url: Optional[str] = None
+    # «Reenviar a qBittorrent» (services/upload_execution/reenvio_qbit.py): 'en_curso', 'ok', 'fallido' o None, cuándo
+    # cambió, y si ahora se puede (completada, con id de eMuwarez, con sus ficheros y sin otro reenvío en curso).
+    reenvio_qbit_estado: Optional[str] = None
+    reenvio_qbit_at: Optional[str] = None
+    puede_reenviar_qbit: bool = False
     # Read-only snapshots taken at apply time — the nomenclature field
     # breakdown and the applied remux track plan, neither of which survive
     # anywhere else once nomenclature.py/mkv_remux.py return. Backs the job

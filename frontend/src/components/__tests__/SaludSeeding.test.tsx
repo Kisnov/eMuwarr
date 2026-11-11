@@ -2,17 +2,21 @@
 /**
  * La salud del seeding en Subidas: la celda de la lista y el bloque del detalle, con el servidor simulado.
  */
+import { act, useState } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('../../api/seeding', () => ({ getSeeding: vi.fn() }))
+vi.mock('../../api/uploads', () => ({ reenviarAQbit: vi.fn() }))
 
 import { getSeeding, type SeedingItem, type SeedingResponse } from '../../api/seeding'
+import { reenviarAQbit } from '../../api/uploads'
 import { useSeeding } from '../../hooks/useSeeding'
 import type { UploadJob } from '../../types/api'
 import { SeedingBloque, SeedingCelda, nombreDelTorrent } from '../SaludSeeding'
 import { boton, desmontar, esperar, montar, pulsar, texto } from './dom'
 
 const m = vi.mocked(getSeeding)
+const reenviar = vi.mocked(reenviarAQbit)
 
 const subida = (parcial: Partial<UploadJob> = {}): UploadJob => ({ id: 7, status: 'completed', ...parcial }) as UploadJob
 
@@ -25,17 +29,17 @@ function respuesta(item: Partial<SeedingItem> | null, parcial: Partial<SeedingRe
   }
 }
 
-function Pagina({ job }: { job: UploadJob }) {
+function Pagina({ job, onVerRegistro, onReenviado }: { job: UploadJob; onVerRegistro?: () => void; onReenviado?: () => void }) {
   const seeding = useSeeding()
   return (
     <>
       <div data-testid="celda"><SeedingCelda job={job} seeding={seeding} /></div>
-      <SeedingBloque job={job} seeding={seeding} />
+      <SeedingBloque job={job} seeding={seeding} onVerRegistro={onVerRegistro} onReenviado={onReenviado} />
     </>
   )
 }
 
-beforeEach(() => { m.mockReset() })
+beforeEach(() => { m.mockReset(); reenviar.mockReset() })
 afterEach(desmontar)
 
 describe('SaludSeeding', () => {
@@ -173,5 +177,104 @@ describe('SaludSeeding', () => {
     } finally {
       vi.useRealTimers()
     }
+  })
+
+  describe('Reenviar a qBittorrent', () => {
+    const REENVIAR = 'Reenviar a qBittorrent'
+    const noEncontrado = () => respuesta(null, { items: [{ job_id: 7, estado: 'no_encontrado', etiqueta: 'No se encuentra' }] })
+    const qbitFallido = { phases: [{ key: 'qbittorrent_add', label: 'Subida a qBittorrent', status: 'failed', pct: 0 }] } as UploadJob['progress']
+
+    it('sale cuando qBittorrent no tiene el torrent y se puede reenviar, con su ayuda', async () => {
+      m.mockResolvedValue(noEncontrado())
+      await montar(<Pagina job={subida({ puede_reenviar_qbit: true })} />)
+      await esperar(() => boton(REENVIAR))
+      expect(texto()).toContain('Ya está en eMuwarez, pero qBittorrent no lo tiene.')
+      expect(boton(REENVIAR)!.getAttribute('aria-describedby')).toBe('reenvio-qbit-7')
+    })
+
+    it('sale cuando falló el añadido a qBittorrent aunque qBittorrent no responda', async () => {
+      m.mockResolvedValue(respuesta(null, { disponible: false, mensaje: 'No se pudo conectar con qBittorrent' }))
+      await montar(<Pagina job={subida({ puede_reenviar_qbit: true, progress: qbitFallido })} />)
+      await esperar(() => boton(REENVIAR))
+    })
+
+    it('no sale si el torrent está en qBittorrent, si no se puede reenviar o si qBittorrent no responde', async () => {
+      m.mockResolvedValue(respuesta({}))
+      await montar(<Pagina job={subida({ puede_reenviar_qbit: true })} />)
+      await esperar(() => texto().includes('Ratio'))
+      expect(boton(REENVIAR)).toBeUndefined()
+      await desmontar()
+
+      m.mockResolvedValue(noEncontrado())
+      await montar(<Pagina job={subida({ puede_reenviar_qbit: false, progress: qbitFallido })} />)
+      await esperar(() => document.querySelector('[data-testid="celda"]')!.textContent === 'No se encuentra')
+      expect(boton(REENVIAR)).toBeUndefined()
+      await desmontar()
+
+      m.mockResolvedValue(respuesta(null, { disponible: false, mensaje: 'No se pudo conectar con qBittorrent' }))
+      await montar(<Pagina job={subida({ puede_reenviar_qbit: true })} />)
+      await esperar(() => texto().includes('No se pudo conectar con qBittorrent'))
+      expect(boton(REENVIAR)).toBeUndefined()
+      expect(texto()).not.toContain('Ya está en eMuwarez')
+    })
+
+    it('al pulsarlo pide el reenvío, pasa a «Reenviando…» y avisa para recargar la subida', async () => {
+      m.mockResolvedValue(noEncontrado())
+      reenviar.mockResolvedValue({ message: 'Reenviando a qBittorrent.' })
+      const onReenviado = vi.fn()
+      await montar(<Pagina job={subida({ puede_reenviar_qbit: true })} onReenviado={onReenviado} />)
+      await pulsar(await esperar(() => boton(REENVIAR)))
+      expect(reenviar).toHaveBeenCalledWith(7)
+      expect(onReenviado).toHaveBeenCalled()
+      expect(boton('Reenviando…')!.disabled).toBe(true)
+    })
+
+    it('en curso enseña «Reenviando…» deshabilitado aunque ya no se pueda pedir otro', async () => {
+      m.mockResolvedValue(noEncontrado())
+      await montar(<Pagina job={subida({ puede_reenviar_qbit: false, reenvio_qbit_estado: 'en_curso' })} />)
+      const b = await esperar(() => boton('Reenviando…'))
+      expect(b.disabled).toBe(true)
+      expect(boton(REENVIAR)).toBeUndefined()
+    })
+
+    it('un reenvío fallido lo dice y deja abrir el registro', async () => {
+      m.mockResolvedValue(noEncontrado())
+      const onVerRegistro = vi.fn()
+      await montar(<Pagina job={subida({ puede_reenviar_qbit: true, reenvio_qbit_estado: 'fallido' })} onVerRegistro={onVerRegistro} />)
+      await esperar(() => boton(REENVIAR))
+      expect(texto()).toContain('El último reenvío a qBittorrent falló.')
+      await pulsar(boton('Ver registro'))
+      expect(onVerRegistro).toHaveBeenCalled()
+    })
+
+    it('uno bien lo dice y vuelve a leer el seeding al terminar', async () => {
+      m.mockResolvedValue(noEncontrado())
+      let cambiar: (j: UploadJob) => void = () => {}
+      function Cambiante({ inicial }: { inicial: UploadJob }) {
+        const [job, setJob] = useState(inicial)
+        cambiar = setJob
+        return <Pagina job={job} />
+      }
+      const job = subida({ puede_reenviar_qbit: false, reenvio_qbit_estado: 'en_curso' })
+      await montar(<Cambiante inicial={job} />)
+      await esperar(() => boton('Reenviando…') && !boton('Actualizar')!.disabled)
+      const lecturas = m.mock.calls.length
+      m.mockResolvedValue(respuesta({ estado: 'comprobando', etiqueta: 'Comprobando' }))
+      await act(async () => cambiar({ ...job, reenvio_qbit_estado: 'ok', reenvio_qbit_at: '2026-11-11T10:00:00+00:00' }))
+      await esperar(() => document.querySelector('[data-testid="celda"]')!.textContent?.startsWith('Comprobando'))
+      expect(m.mock.calls.length).toBe(lecturas + 1)
+      expect(texto()).toContain('Reenviado a qBittorrent el')
+      expect(boton(REENVIAR)).toBeUndefined()
+      expect(boton('Reenviando…')).toBeUndefined()
+    })
+
+    it('si el servidor no lo acepta enseña su motivo y el botón vuelve', async () => {
+      m.mockResolvedValue(noEncontrado())
+      reenviar.mockRejectedValue(new Error('Los ficheros de la subida ya no están en la carpeta de subidas.'))
+      await montar(<Pagina job={subida({ puede_reenviar_qbit: true })} />)
+      await pulsar(await esperar(() => boton(REENVIAR)))
+      await esperar(() => texto().includes('ya no están en la carpeta de subidas'))
+      expect(boton(REENVIAR)!.disabled).toBe(false)
+    })
   })
 })

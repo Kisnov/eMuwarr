@@ -757,14 +757,21 @@ export function UploadsPage({ onNavigate }: { onNavigate?: (page: string) => voi
     return () => { alive = false }
   }, [selectedJobId, cargado, seleccionadaEnLista])
   const selectedJob = enLista ?? (jobSuelto?.id === selectedJobId ? jobSuelto : undefined)
-  // «Ya lo he añadido» (o deshacerlo) en el detalle: la lista y el aviso de arriba, al día; y la ficha suelta (una
-  // subida que no está entre las cargadas), pedida otra vez.
-  const recargarTrasTrailer = () => {
-    load({ silent: true })
+  const recargarSuelta = () => {
     if (jobSuelto && selectedJobId === jobSuelto.id) {
       getUploadJob(jobSuelto.id!).then(j => setJobSuelto(actual => (actual?.id === j.id ? j : actual))).catch(() => {})
     }
   }
+  // «Ya lo he añadido» (o deshacerlo) o «Reenviar a qBittorrent» en el detalle: la lista y el aviso de arriba, al día;
+  // y la ficha suelta (una subida que no está entre las cargadas), pedida otra vez.
+  const recargarSubida = () => {
+    load({ silent: true })
+    recargarSuelta()
+  }
+  // Los avisos solo recargan la lista: la ficha suelta se pide otra vez cuando cambia (un reenvío que termina).
+  useRefrescoPorAvisos(AVISOS_SUBIDA, recargarSuelta, {
+    cadaSinCanal: 2500, activo: jobSuelto?.reenvio_qbit_estado === 'en_curso', filtro: aviso => aviso.job_id === jobSuelto?.id,
+  })
 
   // The list row (above) never carries display_title — only the single-job
   // GET computes the canonical "Serie (Año)"-style title, to avoid a
@@ -864,7 +871,8 @@ export function UploadsPage({ onNavigate }: { onNavigate?: (page: string) => voi
           onDelete={j => setDeleteJob(j)}
           onOpenLibraryItem={goToLibraryItem}
           onVerLote={verLote}
-          onTrailerCambiado={recargarTrasTrailer}
+          onTrailerCambiado={recargarSubida}
+          onReenviado={recargarSubida}
           seeding={seeding}
           retryError={retryError ?? cancelError}
         />
