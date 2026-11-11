@@ -120,6 +120,16 @@ describe('Peticiones', () => {
     expect(cabeceras()).toContain('Comentarios')
   })
 
+  it('los iconos de votos y comentarios son de trazo, como los demás, no rellenos', async () => {
+    vi.mocked(getRequests).mockResolvedValue({ items: DATOS.map(d => ({ ...d, votes: 3, comments: 1 })), total: DATOS.length } as never)
+    await pagina()
+    for (const clase of ['pet-icono-votos', 'pet-icono-comentarios']) {
+      const icono = document.querySelector(`thead svg.${clase}`)!
+      expect(icono.getAttribute('fill')).toBe('none')
+      expect(icono.getAttribute('stroke')).toBe('currentColor')
+    }
+  })
+
   it('las cabeceras quedan una por columna de la fila, y las de grupo ocupan todo el ancho', async () => {
     await pagina()
     const th = document.querySelector('th.pet-grupo-th')!
