@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import mimetypes
 import os
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -12,6 +13,8 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
+from starlette.datastructures import Headers
+from starlette.staticfiles import NotModifiedResponse
 
 from .api.router import api_router
 from .cabeceras import CabecerasDeSeguridad
@@ -164,7 +167,52 @@ _FRONTEND_DIST = _REPO_ROOT / "frontend" / "dist"
 CACHE_DE_ASSETS = "public, max-age=31536000, immutable"
 
 
+# Junto a cada JS, CSS y SVG de /assets, `npm run build` deja su versión precomprimida (frontend/vite.config.ts): se
+# prefiere brotli y después gzip. Se sirven tal cual, con su Content-Encoding, en vez de comprimir en cada petición
+# (el GZipMiddleware de abajo no toca una respuesta que ya lleva Content-Encoding).
+_VARIANTES_COMPRIMIDAS = (("br", ".br"), ("gzip", ".gz"))
+
+
+def _codificaciones_aceptadas(accept_encoding: str) -> set[str]:
+    """Las codificaciones que el cliente admite (`q=0` es «no la quiero»)."""
+    aceptadas = set()
+    for parte in accept_encoding.split(","):
+        nombre, _, parametros = parte.partition(";")
+        nombre = nombre.strip().lower()
+        q = 1.0
+        for parametro in parametros.split(";"):
+            clave, _, valor = parametro.strip().partition("=")
+            if clave.strip().lower() == "q":
+                try:
+                    q = float(valor)
+                except ValueError:
+                    q = 0.0
+        if nombre and q > 0:
+            aceptadas.add(nombre)
+    return aceptadas
+
+
 class _AssetsInmutables(StaticFiles):
+    def file_response(self, full_path, stat_result, scope, status_code=200):
+        variantes = [(c, f"{full_path}{ext}") for c, ext in _VARIANTES_COMPRIMIDAS if os.path.isfile(f"{full_path}{ext}")]
+        if status_code != 200 or not variantes:
+            return super().file_response(full_path, stat_result, scope, status_code)
+        cabeceras = Headers(scope=scope)
+        aceptadas = _codificaciones_aceptadas(cabeceras.get("accept-encoding", ""))
+        codificacion, ruta = next(((c, r) for c, r in variantes if c in aceptadas), (None, str(full_path)))
+        respuesta = FileResponse(
+            ruta,
+            media_type=mimetypes.guess_type(str(full_path))[0],
+            stat_result=os.stat(ruta) if codificacion else stat_result,
+        )
+        if codificacion:
+            respuesta.headers["Content-Encoding"] = codificacion
+        # La respuesta depende de lo que acepte el cliente: una caché intermedia no debe darle a uno la del otro.
+        respuesta.headers["Vary"] = "Accept-Encoding"
+        if self.is_not_modified(respuesta.headers, cabeceras):
+            return NotModifiedResponse(respuesta.headers)
+        return respuesta
+
     async def get_response(self, path, scope):
         respuesta = await super().get_response(path, scope)
         if respuesta.status_code in (200, 304):

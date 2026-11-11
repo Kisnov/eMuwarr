@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
+import { memo, useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { getUploads, countUploads, contarSinTrailer, getUploadJob, startUploadJob, retryUploadJobQueued, cancelUploadJob, getLote } from '../api/uploads'
 import { useInstancias } from '../hooks/useInstancias'
 import { ApiClientError } from '../api/client'
@@ -22,7 +22,7 @@ import { hayMasPorCargar } from '../utils/paginarSubidas'
 import { CLAVE_ABRIR_LOTE, EVENTO_ABRIR_LOTE, PATRON_LOTE_ID } from '../utils/lote'
 import {
   UPLOAD_TYPE_LABEL, STATUS_CLASS, statusLabel, phaseLabel, currentPhaseInfo,
-  progressCounter, queuedWaitText, formatSecondsHM, ACTIVE_JOB_STATUSES, fundirPorId,
+  progressCounter, queuedWaitText, formatSecondsHM, ACTIVE_JOB_STATUSES, fundirPorId, conservarIguales,
 } from '../utils/uploadStatus'
 import { useSeeding, type SeedingEstado } from '../hooks/useSeeding'
 import { SeedingCelda } from '../components/SaludSeeding'
@@ -210,14 +210,21 @@ function AccionDeFila({ etiqueta, tono, clase, onClick, children }: {
 
 // One table row — used both for the latest attempt in a retry chain (normal
 // row) and for its older attempts (indented/muted, revealed by expanding the
-// chip of retries next to the title). `retryToggle` is only passed on the latest-attempt row.
-function JobRow({ job, instances, seeding, onOpen, indent, retryToggle, onCancel, onRetry, onDelete, onFiltrarLote }: {
+// chip of retries next to the title). `intentosAnteriores` is only passed on the latest-attempt row.
+//
+// Va memorizada: con el progreso real llegando cada medio segundo, solo tiene que repintarse la fila cuya subida
+// cambió. Para que el memo sirva, todas las props son valores o funciones con identidad estable (nada de objetos o
+// flechas hechos en cada pintado del padre): por eso el chip de reintentos son dos valores y `onOpen` recibe el id.
+const JobRow = memo(function JobRow({ job, instances, seeding, onOpen, indent, intentosAnteriores, desplegada, onToggleCadena, onCancel, onRetry, onDelete, onFiltrarLote }: {
   job: UploadJob
   seeding: SeedingEstado
   instances: InstanceSafeResponse[]
-  onOpen: () => void
+  onOpen: (jobId: number) => void
   indent?: boolean
-  retryToggle?: { count: number; expanded: boolean; onClick: () => void }
+  // Cuántos intentos anteriores tiene la cadena y si están desplegados (solo en la fila del último intento).
+  intentosAnteriores?: number
+  desplegada?: boolean
+  onToggleCadena?: (jobId: number) => void
   onCancel: (jobId: number) => void
   onDelete: (job: UploadJob) => void
   onRetry: (job: UploadJob) => void
@@ -231,7 +238,9 @@ function JobRow({ job, instances, seeding, onOpen, indent, retryToggle, onCancel
   const deepLink = buildDeepLink(job, instances)
   const { triggerProps: emuTip, tooltipNode: emuTooltip } = useTooltip(job.result_url ? 'Ver en eMuwarez' : null)
   const { triggerProps: originTip, tooltipNode: originTooltip } = useTooltip(deepLink ? `Abrir en ${job.instance_name ?? job.instance_type}` : null)
-  const retryToggleTip = useTooltip(retryToggle ? (retryToggle.expanded ? 'Ocultar intentos anteriores' : 'Ver intentos anteriores') : null)
+  const hayCadena = !!intentosAnteriores && !!onToggleCadena
+  const retryToggleTip = useTooltip(hayCadena ? (desplegada ? 'Ocultar intentos anteriores' : 'Ver intentos anteriores') : null)
+  const abrir = () => onOpen(job.id!)
   // El chip del lote: solo si el lote tiene más de un elemento (uno que se quedó en uno no agrupa nada), y no en los
   // intentos anteriores, que van debajo de la fila que ya lo lleva.
   const loteId = !indent && job.lote_id && (job.lote_total ?? 0) > 1 ? job.lote_id : null
@@ -260,7 +269,7 @@ function JobRow({ job, instances, seeding, onOpen, indent, retryToggle, onCancel
           </div>
           <div className="sub-titulo-texto">
             {indent && <span className="sub-muted sub-no-encoge">↳</span>}
-            <HoverTitle as="span" className="lib-title-link sub-titulo" href={`/uploads/${job.id}`} onClick={onOpen} tip="Ver progreso / detalle">
+            <HoverTitle as="span" className="lib-title-link sub-titulo" href={`/uploads/${job.id}`} onClick={abrir} tip="Ver progreso / detalle">
               {job.title || '—'}
             </HoverTitle>
             {job.year ? <span className="sub-muted sub-t11 sub-no-encoge sub-anio">({job.year})</span> : null}
@@ -278,26 +287,26 @@ function JobRow({ job, instances, seeding, onOpen, indent, retryToggle, onCancel
                 {loteTip.tooltipNode}
               </button>
             )}
-            {retryToggle && (
+            {hayCadena && (
               <button
                 type="button"
                 className="sub-reintentos-chip sub-toggle-reintentos"
-                aria-expanded={retryToggle.expanded}
-                aria-label={retryToggle.count === 1 ? '1 intento anterior' : `${retryToggle.count} intentos anteriores`}
-                onClick={retryToggle.onClick}
+                aria-expanded={desplegada}
+                aria-label={intentosAnteriores === 1 ? '1 intento anterior' : `${intentosAnteriores} intentos anteriores`}
+                onClick={() => onToggleCadena(job.id!)}
                 {...retryToggleTip.triggerProps}
               >
-                <RetryButtonIcon /> {job.retry_count ?? retryToggle.count}
-                <IconoDesplegar abierto={retryToggle.expanded} size={10} />
+                <RetryButtonIcon /> {job.retry_count ?? intentosAnteriores}
+                <IconoDesplegar abierto={!!desplegada} size={10} />
                 {retryToggleTip.tooltipNode}
               </button>
             )}
-            {!retryToggle && !indent && (job.retry_count ?? 0) > 0 && (
+            {!hayCadena && !indent && (job.retry_count ?? 0) > 0 && (
               <span className="sub-reintentos-chip" title="Intentos anteriores">
                 <RetryButtonIcon /> {job.retry_count}
               </span>
             )}
-            {!indent && faltaTrailer(job) && <ChipSinTrailer job={job} onAbrir={onOpen} />}
+            {!indent && faltaTrailer(job) && <ChipSinTrailer job={job} onAbrir={abrir} />}
             {job.result_url && (
               <a className="hover-link sub-enlace-emu" href={job.result_url} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()}
                 aria-label="Ver en eMuwarez" {...emuTip}>
@@ -354,7 +363,7 @@ function JobRow({ job, instances, seeding, onOpen, indent, retryToggle, onCancel
       </td>
     </tr>
   )
-}
+})
 
 export function UploadsPage({ onNavigate }: { onNavigate?: (page: string) => void } = {}) {
   const [jobs, setJobs] = useState<UploadJob[]>([])
@@ -394,12 +403,13 @@ export function UploadsPage({ onNavigate }: { onNavigate?: (page: string) => voi
   const [cancelError, setCancelError] = useState<string | null>(null)
 
   // Keeps /uploads/:id in sync with whichever job's detail page is open.
-  function openUpload(id: number) {
+  // Con identidad fija (solo toca setters y la URL): las filas memorizadas la reciben como prop.
+  const openUpload = useCallback((id: number) => {
     pushDetailPath('uploads', id)
     setRetryError(null)
     setCancelError(null)
     setSelectedJobId(id)
-  }
+  }, [])
   function closeUpload() {
     closeDetailPath('uploads')
     setRetryError(null)
@@ -449,7 +459,8 @@ export function UploadsPage({ onNavigate }: { onNavigate?: (page: string) => voi
         contarSinTrailer().catch(() => null),
       ])
       if (seq === loadSeqRef.current) {
-        setJobs(data)
+        // Las subidas que no cambiaron conservan su objeto: sus filas no se repintan.
+        setJobs(prev => conservarIguales(prev, data))
         setTotal(cuantas)
         if (faltan != null) setSinTrailer(faltan)
         if (resumen !== undefined) {
@@ -599,7 +610,7 @@ export function UploadsPage({ onNavigate }: { onNavigate?: (page: string) => voi
     }
     window.addEventListener('emuwarez:open-upload', onOpenUpload)
     return () => window.removeEventListener('emuwarez:open-upload', onOpenUpload)
-  }, [])
+  }, [openUpload]) // identidad fija (useCallback sin dependencias): el oyente se pone una sola vez
 
   // Mientras haya algún trabajo vivo (staging/queued/preparing/running), la
   // tabla se mantiene al día. Ahora lo hace el aviso del servidor, y el sondeo
@@ -660,6 +671,15 @@ export function UploadsPage({ onNavigate }: { onNavigate?: (page: string) => voi
     }
   }
 
+  // Cancelar y reintentar leen `jobs` y `load`, que cambian a cada recarga: a las filas memorizadas les llega una
+  // función con identidad fija que llama a la versión del último pintado.
+  const handleCancelRef = useRef(handleCancel)
+  handleCancelRef.current = handleCancel
+  const alCancelar = useCallback((jobId: number) => handleCancelRef.current(jobId), [])
+  const handleRetryRef = useRef(handleRetryQueued)
+  handleRetryRef.current = handleRetryQueued
+  const alReintentar = useCallback((job: UploadJob) => handleRetryRef.current(job), [])
+
   // Same sessionStorage handoff RequestsPage uses to open a specific
   // library item's detail page in Biblioteca.
   const goToLibraryItem = (id: number) => {
@@ -688,13 +708,13 @@ export function UploadsPage({ onNavigate }: { onNavigate?: (page: string) => voi
     }
     return chain // most recent ancestor first, original last
   }
-  const toggleChain = (jobId: number) => {
+  const toggleChain = useCallback((jobId: number) => {
     setExpandedChains(prev => {
       const next = new Set(prev)
       if (next.has(jobId)) next.delete(jobId); else next.add(jobId)
       return next
     })
-  }
+  }, [])
 
   // Client-side filter + sort over the loaded jobs (status stays server-side).
   const visibleJobs = useMemo(() => {
@@ -772,16 +792,18 @@ export function UploadsPage({ onNavigate }: { onNavigate?: (page: string) => voi
         job={job}
         instances={instances}
         seeding={seeding}
-        onOpen={() => openUpload(job.id!)}
-        retryToggle={ancestors.length > 0 ? { count: ancestors.length, expanded, onClick: () => toggleChain(job.id!) } : undefined}
-        onCancel={handleCancel}
+        onOpen={openUpload}
+        intentosAnteriores={ancestors.length > 0 ? ancestors.length : undefined}
+        desplegada={expanded}
+        onToggleCadena={toggleChain}
+        onCancel={alCancelar}
         onDelete={setDeleteJob}
-        onRetry={handleRetryQueued}
+        onRetry={alReintentar}
         // Con la lista ya filtrada por ese lote, el banner lo dice: la chapa en cada fila sobra.
         onFiltrarLote={job.lote_id === loteFiltro ? undefined : setLoteFiltro}
       />,
       ...(expanded ? ancestors.map(a => (
-        <JobRow key={a.id} job={a} instances={instances} seeding={seeding} indent onOpen={() => openUpload(a.id!)} onCancel={handleCancel} onRetry={handleRetryQueued} onDelete={setDeleteJob} />
+        <JobRow key={a.id} job={a} instances={instances} seeding={seeding} indent onOpen={openUpload} onCancel={alCancelar} onRetry={alReintentar} onDelete={setDeleteJob} />
       )) : []),
     ]
   }

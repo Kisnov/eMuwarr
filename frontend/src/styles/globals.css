@@ -16,31 +16,13 @@
    del proyecto para que se vean igual en todos los ordenadores, sin depender de
    ningún CDN. Licencia SIL OFL 1.1, en public/fonts/OFL-*.txt: está en
    public/ para que vaya en la build junto a las fuentes, como pide la licencia. */
+/* Inter es una sola fuente variable (eje de peso 400-700, ~48 kB) en lugar de cuatro ficheros estáticos (~96 kB): mismos
+   trazos y mismos anchos, la mitad de bytes y una petición en vez de cuatro. El 800 que piden unos pocos títulos se
+   queda en el 700, como con los ficheros estáticos (el eje acaba en 700). index.html la precarga. */
 @font-face {
   font-family: "Inter";
-  src: url("../assets/fonts/inter-latin-400-normal.woff2") format("woff2");
-  font-weight: 400;
-  font-style: normal;
-  font-display: swap;
-}
-@font-face {
-  font-family: "Inter";
-  src: url("../assets/fonts/inter-latin-500-normal.woff2") format("woff2");
-  font-weight: 500;
-  font-style: normal;
-  font-display: swap;
-}
-@font-face {
-  font-family: "Inter";
-  src: url("../assets/fonts/inter-latin-600-normal.woff2") format("woff2");
-  font-weight: 600;
-  font-style: normal;
-  font-display: swap;
-}
-@font-face {
-  font-family: "Inter";
-  src: url("../assets/fonts/inter-latin-700-normal.woff2") format("woff2");
-  font-weight: 700 800;
+  src: url("../assets/fonts/inter-latin-wght-normal.woff2") format("woff2");
+  font-weight: 400 700;
   font-style: normal;
   font-display: swap;
 }

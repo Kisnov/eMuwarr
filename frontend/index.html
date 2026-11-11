@@ -16,6 +16,10 @@
          (instead of just favicon links) can also pick up a proper icon/title. -->
     <meta property="og:title" content="eMuwarez Uploadrr" />
     <meta property="og:description" content="Gestión de biblioteca Radarr/Sonarr y peticiones eMuwarez" />
+    <!-- Inter la usa toda la interfaz y, sin esto, el navegador no la pide hasta que React pinta el primer texto
+         (tras bajar y ejecutar el JS): precargada, baja a la vez que él y el texto no salta de la fuente del sistema
+         a Inter. crossorigin es obligatorio en las fuentes aunque sean del mismo origen. -->
+    <link rel="preload" href="/src/assets/fonts/inter-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin />
     <meta property="og:image" content="/android-chrome-512x512.png" />
   </head>
   <body>
