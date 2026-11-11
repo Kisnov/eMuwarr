@@ -231,12 +231,21 @@
 }
 @media (max-width: 640px) {
   .bibdet-rejilla { grid-template-columns: minmax(0, 1fr); }
-  .bibdet-ficha { flex-direction: column; align-items: stretch; gap: 16px; }
+  /* Rejilla de una columna y no flex en columna: con `flex: 1` en las tarjetas (contenedor de inline-size), el flex en
+     columna les daba ~230 px de más de alto vacío (de 324 a 550) antes de la tabla. */
+  .bibdet-ficha { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; }
   .bibdet-tarjetas { min-width: 0; }
   /* El alto del póster llega en línea (DetailPoster): aquí se pisa para que no mida 420 px en un móvil. */
   .bibdet-ficha .detail-poster.detcard-poster { height: auto !important; width: 55%; max-width: 220px; }
   /* Sin póster, el marco vacío ocupaba unos 300 px antes del primer dato. */
   .bibdet-ficha .detail-poster.detcard-poster.sin-poster { display: none; }
+}
+/* Ventana estrecha: la tarjeta de Estado va sola junto al póster y las otras dos bajan tras la tabla de temporadas o
+   capítulos (LibraryDetailPage). Una columna la primera; las de abajo, dos y una columna en el móvil. */
+.bibdet-rejilla.bibdet-rejilla-sola { grid-template-columns: minmax(0, 1fr); }
+.bibdet-rejilla.bibdet-secundarias { grid-template-columns: repeat(2, minmax(0, 1fr)); min-height: 0; margin-top: 16px; flex-shrink: 0; }
+@media (max-width: 640px) {
+  .bibdet-rejilla.bibdet-secundarias { grid-template-columns: minmax(0, 1fr); }
 }
 .bibdet-proveedores { display: inline-flex; flex-wrap: wrap; gap: 6px; }
 /* Con el dedo, la zona de cada proveedor se agranda por fuera (components.css): aquí, con varios en líneas
