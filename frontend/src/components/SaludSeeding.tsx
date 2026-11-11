@@ -145,8 +145,8 @@ export function SeedingBloque({ job, seeding, onVerRegistro, onReenviado }: {
             <span className="seeding-reenvio-error">{errorEnvio}</span>
           ) : estadoReenvio === 'ok' ? (
             <span className="seeding-reenvio-ok">
-              Reenviado a qBittorrent{job.reenvio_qbit_at ? ` el ${formatDateTimeSeconds(job.reenvio_qbit_at)}` : ''}; qBittorrent
-              comprueba los ficheros antes de sembrar.
+              Reenviado a qBittorrent{job.reenvio_qbit_at ? ` el ${formatDateTimeSeconds(job.reenvio_qbit_at)}` : ''}: qBittorrent
+              comprobó los ficheros y lo siembra.
             </span>
           ) : estadoReenvio === 'fallido' && ofrecerReenvio ? (
             <>

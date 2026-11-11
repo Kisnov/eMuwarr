@@ -4,8 +4,8 @@ No crea otra fila (contaría doble en el Panel, el seeding, los reintentos y los
 columnas de la subida original (`reenvio_qbit_estado`, `reenvio_qbit_at`) y escribe en su registro. Su `status`,
 `finished_at`, `result_url`, el tráiler y los avisos no se tocan.
 
-No pasa por «Subidas en paralelo»: dura segundos (un .torrent de eMuwarez y una llamada a qBittorrent, que hace la
-comprobación por su cuenta) y la puerta da turno por id, así que el id de una subida vieja se colaría en la cola.
+No pasa por «Subidas en paralelo»: no sube ni hashea nada aquí (un .torrent de eMuwarez y esperar a que qBittorrent
+compruebe los ficheros) y la puerta da turno por id, así que el id de una subida vieja se colaría en la cola.
 """
 from __future__ import annotations
 
@@ -25,8 +25,8 @@ from .registro import append_upload_log
 from ...integrations.base import texto_de_error
 
 EN_CURSO, OK, FALLIDO = "en_curso", "ok", "fallido"
-# Solo baja un .torrent y se lo da a qBittorrent: si en cinco minutos no ha terminado, no va a terminar.
-_TIMEOUT = 300
+# Uploadrr-EMU espera hasta 30 min a que qBittorrent compruebe los ficheros (un pack grande en disco lento): algo más.
+_TIMEOUT = 35 * 60
 
 
 def _motivo_para_no_reenviar(job: dict | None) -> tuple[str, str] | None:
@@ -136,7 +136,7 @@ def _lanzar(job_id: int, torrent_id: str, cmd: dict, secrets: list[str]) -> tupl
         return FALLIDO, f"Reenvío a qBittorrent fallido: no terminó en {_TIMEOUT} s."
     if codigo != 0:
         return FALLIDO, f"Reenvío a qBittorrent fallido (exit code {codigo}). La subida a eMuwarez sigue igual."
-    return OK, "Reenvío a qBittorrent hecho: qBittorrent comprueba los ficheros antes de sembrar."
+    return OK, "Reenvío a qBittorrent hecho: qBittorrent ha comprobado los ficheros y lo siembra."
 
 
 def _reenviar(job_id: int, torrent_id: str, cmd: dict, secrets: list[str]) -> None:
