@@ -279,7 +279,7 @@
   align-items: flex-start;
   justify-content: center;
   background: var(--bg-base);
-  padding: clamp(24px, 8vh, 72px) 20px 20px;
+  padding: clamp(24px, calc(var(--vh100) * 0.08), 72px) 20px 20px;
 }
 
 .setup-wizard {
@@ -419,7 +419,7 @@
   align-items: flex-start;
   justify-content: center;
   background: var(--bg-base);
-  padding: clamp(24px, 8vh, 72px) 20px 20px;
+  padding: clamp(24px, calc(var(--vh100) * 0.08), 72px) 20px 20px;
 }
 
 /* Fondo, borde, esquinas y sombra de la tarjeta los pone `.hud-app .login-card` (hud-theme.css). */
