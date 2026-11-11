@@ -667,6 +667,23 @@ Hallazgos y maquetas: https://claude.ai/artifact/PjPRTxSfEs3Y8aVtXzN32i
     lector de pantalla, contraste AA medido con herramienta, el detector de `impeccable`, los pasos del asistente con eMuwarez y TMDb
     respondiendo y con `mediainfo` (no está en la demo), una subida y un lote reales en marcha (se simularon).
 
+- **Pendientes de «Aplazado» resueltos en tres PR (11/11, verificados en local, sin CI: no hay minutos):**
+  - #264: fuera `nomenclature_check.check_item`/`count_pending` y lo que se quedaba sin uso. `GET /api/logs?since=<seq>`
+    (cada línea del anillo lleva un `seq` creciente que arranca en la hora en microsegundos) devuelve solo lo nuevo, con `truncated` si
+    había más de `limit`; la pantalla Logs lo usa en su refresco automático y conserva el objeto de las líneas que ya tenía (sin
+    repintado ni salto de foco). Sin `since`, la respuesta es la de siempre más `seq`.
+  - #265: `JobRow` de Subidas memorizado (props estables, `conservarIguales` en la recarga completa; el «hace X» de una fila solo se
+    refresca cuando esa subida cambia); Inter pasa a una sola fuente variable precargada (96,7 kB en 4 peticiones a 48,3 kB en 1,
+    mismo aspecto); `/assets` sale precomprimido (`.br` y `.gz` de `vite.config.ts`, servidos por `_AssetsInmutables`, sin tocar el
+    Dockerfile). Sin probar: el build de Docker (la suite corrió en Python 3.13, la imagen es 3.12) ni la fluidez con una subida real.
+  - #266: ocho retoques de interfaz: punto ámbar de «no responde» en el Panel; «Subida #N» y «Panel» en vez de «Job #» y «dashboard»;
+    Estadísticas con nota y «Reintentar» si falla el resumen y sin salto al cambiar de rango (atenuado con `aria-busy`); Subidas con
+    «Quitar filtro del lote» en un error y «en cola» con punto hueco frente a «cancelada»; una sola regla de «Duración»
+    (`formatElapsed`); `POST /api/setup/providers` para que un asistente recargado en el paso 8 no vuelva al 7; la fila de la Guía en
+    móvil se centra en la pestaña elegida; «Seleccionar» apaga la casilla de lo que no se puede subir (`razonNoMarcable`, con el motivo en
+    `title` y `aria-description`). **Sin ver en navegador:** el atenuado de Estadísticas, el punto hueco, el centrado de la Guía a 390 px
+    y la casilla apagada (en táctil el `title` no se ve).
+
 ## Siguiente
 
 Sin pendientes de la oleada 3 ni de la oleada 4 de funciones. Los tres detalles que salieron de la comprobación del 03/11 están
@@ -695,11 +712,9 @@ probarla, si guardar los `campos` y crear el trabajo van en una sola transacció
 
 - Que el filtro «Petición» de Biblioteca cuente la petición heredada (la celda ya dice «de la serie», #240): `request_id` guarda una
   petición por fila, la que se escribe donde la petición pide.
-- De la revisión con `impeccable` (#241-#244), encajan con el criterio pero no tenían evidencia clara: punto gris de «Sonarr no responde» en
-  la banda, «Job #»/«dashboard» en inglés, carriles del Panel con `70vh` en móvil, paso del tour para Estadísticas, opción activa de la
-  paleta en cian, aviso cuando falla el resumen de Estadísticas y el salto al cambiar de rango; filtro «Parcial» en Estado de Biblioteca
-  (lo calcula la columna, no está en `local_status`: habría que repetirlo en el SQL del listado); marcar como bloqueado en «Seleccionar» lo
-  que no se puede subir; en la Guía móvil, que la fila de secciones se desplace hasta la elegida.
+- De la revisión con `impeccable` (#241-#244), encajan con el criterio pero no tenían evidencia clara: carriles del Panel con `70vh` en
+  móvil, paso del tour para Estadísticas, opción activa de la paleta en cian; filtro «Parcial» en Estado de Biblioteca (lo calcula la
+  columna, no está en `local_status`: habría que repetirlo en el SQL del listado).
 - Objetivos táctiles con `(any-pointer: coarse)` en vez de `(pointer: coarse)` para portátiles táctiles con ratón como puntero principal: es
   un cambio de toda la app (`--tap-min` en `globals.css` y sus usos), no de una pantalla (#242).
 - De polish + adapt + optimize (#249-#254), dudosos, los decide Gabriel:
@@ -713,14 +728,10 @@ probarla, si guardar los `campos` y crear el trabajo van en una sola transacció
   - Configuración: casillas nativas de 15 px frente a los interruptores; el orden de la rejilla cambia con el ancho y no coincide con el
     índice; a 390 px «Backup» queda fuera de las pestañas; Diagnóstico y Backup sin icono en su cabecera; el asistente recargado en el
     paso 8 vuelve al 7 (`handleProviders` no apunta `wizard_step`).
-  - Peticiones y Subidas: iconos rellenos de votos y comentarios frente a los de trazo; dos «Duración» distintas en una subida
-    interrumpida (la de la tabla va de `created_at` a `finished_at`); un error con el filtro de lote puesto no ofrece «Quitar filtro»; chips
-    de grupo en píldora (DESIGN dice 6 px); «Origen» con borde de botón en Subidas y enlace plano en Peticiones; «en cola» y «cancelada»
-    casi del mismo gris en el lote.
-  - Rendimiento: Inter variable o `preload` de las cuatro variantes (96 kB por carga); Logs pide 1000 líneas cada 3 s aunque entre una
-    (un `since` en el backend); precomprimir `/assets` en la imagen en vez de comprimir en cada petición; `JobRow` sin memorizar, así
-    que con progreso real la tabla de Subidas se repinta entera.
-- `nomenclature_check.check_item`/`count_pending` ya solo los llaman los tests (#240): borrarlos o volver a usarlos.
+  - Peticiones y Subidas: iconos rellenos de votos y comentarios frente a los de trazo; chips de grupo en píldora (DESIGN dice 6 px);
+    «Origen» con borde de botón en Subidas y enlace plano en Peticiones.
+- `nomenclature_check.compare` y `evaluate_file` (lo que queda del módulo tras #264) solo los llaman los tests: borrar el módulo entero o
+  volver a usarlo.
 - Recuperar solo el añadido a qBittorrent de una subida que ya estaba en eMuwarez (necesita un cambio en Uploadrr-EMU, otro repo).
 - Probar en el NAS (`:edge`): el límite compartido entre CLI y servidor (`flock` sobre el volumen de `CONFIG_DIR`), el campo y el enlace de
   qBittorrent, y la subida por lotes (ver «Siguiente»).
