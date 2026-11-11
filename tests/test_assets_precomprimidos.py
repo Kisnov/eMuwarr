@@ -115,9 +115,11 @@ def test_sin_accept_encoding_va_el_original_y_la_respuesta_avisa_de_que_varia(as
 
 
 def test_lo_que_no_tiene_variantes_se_sirve_como_antes(assets):
-    estado, cab, cuerpo = pedir(assets, "fuente-abc123.woff2")
+    estado, cab, cuerpo = pedir(assets, "fuente-abc123.woff2", accept_encoding="br, gzip")
     assert estado == 200
     assert cuerpo == FUENTE
+    # font/woff2 aunque el sistema no tenga /etc/mime.types (la imagen): así el GZipMiddleware no la recomprime.
+    assert cab["content-type"] == "font/woff2"
     assert "content-encoding" not in cab
     assert "vary" not in cab
     assert cab["cache-control"] == CACHE_DE_ASSETS
