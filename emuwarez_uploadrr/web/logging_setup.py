@@ -7,6 +7,7 @@ loggers are made to propagate here too, so HTTP access/errors are logged as well
 """
 from __future__ import annotations
 
+import itertools
 import logging
 import sys
 import time
@@ -20,6 +21,12 @@ from .runtime import get_config_dir
 
 _RING_MAX = 5000
 _ring: deque[dict] = deque(maxlen=_RING_MAX)
+
+# Número de orden de cada registro, siempre creciente: es lo que el cliente manda como `since` para pedir solo lo
+# nuevo (el `ts` no sirve: dos registros pueden compartir marca de tiempo). Arranca en la hora en microsegundos, así
+# que tras reiniciar el servidor los números siguen por encima de los que un cliente ya tenía. `next()` sobre un
+# `itertools.count` es atómico en CPython, también con registros desde varios hilos.
+_seq = itertools.count(int(time.time() * 1_000_000))
 
 _LEVEL_ORDER = ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
 
@@ -66,6 +73,7 @@ class RingBufferHandler(logging.Handler):
     def emit(self, record: logging.LogRecord) -> None:
         try:
             _ring.append({
+                "seq": next(_seq),
                 "ts": record.created,
                 "time": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(record.created)),
                 "level": record.levelname,
@@ -87,9 +95,14 @@ def _levels_at_or_above(level: str) -> set[str]:
     return set(_LEVEL_ORDER[_LEVEL_ORDER.index(level):])
 
 
-def get_recent_logs(limit: int = 500, level: Optional[str] = None, search: Optional[str] = None) -> list[dict]:
-    """Return recent log records (newest first), filtered by min level and text."""
+def get_recent_logs(limit: int = 500, level: Optional[str] = None, search: Optional[str] = None,
+                    since: Optional[int] = None) -> list[dict]:
+    """Return recent log records (newest first), filtered by min level and text.
+
+    Con `since`, solo los de número de orden (`seq`) mayor: lo que ha entrado desde la última lectura."""
     items = list(_ring)
+    if since is not None:
+        items = [r for r in items if r["seq"] > since]
     if level:
         wanted = _levels_at_or_above(level)
         items = [r for r in items if r["level"] in wanted]
