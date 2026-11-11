@@ -78,6 +78,20 @@
   min-height: 0;
   margin-bottom: 0;
 }
+/* «Listo para subir» mide lo que mide su contenido y no se estira con «En curso»: con una o dos peticiones no deja
+   un carril vacío. Con muchas, llega al alto de la rejilla y su cuerpo se desplaza por dentro. «En curso» sigue
+   llenando el alto, así que lo de debajo (banda y franja) no se mueve. */
+.panel-carril.panel-carril-encoge {
+  align-self: start;
+  max-height: 100%;
+}
+/* Línea atenuada tras las pocas peticiones listas. */
+.panel-carril-nada-mas {
+  margin: 0;
+  padding: 12px 8px 4px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
 .panel-carril-nota {
   flex-shrink: 0;
   margin-left: 12px;
