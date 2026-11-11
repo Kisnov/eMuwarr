@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import {
   setupAdmin, setupTmdb, setupEmu, setupInstance,
-  setupQbit, setupImghosts, setupComplete,
+  setupQbit, setupProviders, setupImghosts, setupComplete,
 } from '../api/setup'
 import { login } from '../api/auth'
 import { startLibrarySync } from '../api/library'
@@ -503,6 +503,8 @@ export function SetupWizard({ setupStatus, onComplete }: SetupWizardProps) {
 
   const handleProviders = wrap(async () => {
     await updateSettings({ provider_priority_order: nomProviderOrder })
+    // El servidor apunta que este paso está hecho: sin ello, recargar en el de imágenes volvía a este.
+    await setupProviders()
     setStep('imagehosts')
   })
 

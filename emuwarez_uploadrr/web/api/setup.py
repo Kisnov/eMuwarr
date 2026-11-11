@@ -4,6 +4,7 @@ GET  /api/setup/status         — current wizard state (public)
 POST /api/setup/admin          — create first admin user (public — only before admin exists)
 POST /api/setup/tmdb           — TMDb API key (requires auth)
 POST /api/setup/emu            — eMuwarez API key + optional endpoint (requires auth)
+POST /api/setup/providers      — marks the providers step as done (requires auth)
 POST /api/setup/instances      — add Radarr/Sonarr instance (requires auth)
 POST /api/setup/complete       — finalize setup (requires auth)
 """
@@ -109,6 +110,16 @@ def setup_qbit(
         _setup_qbit(conn, body.url, body.username, body.password, body.tag)
         conn.commit()
     return OkResponse(message="Configuración de qBittorrent guardada correctamente")
+
+
+@router.post("/setup/providers", response_model=OkResponse)
+def setup_providers(current_user: dict = Depends(require_auth)) -> OkResponse:
+    """Sin cuerpo: el orden de los proveedores va por PUT /settings; esto solo apunta que el paso está hecho."""
+    from ..services.setup_service import setup_providers as _setup_providers
+    with _get_conn() as conn:
+        _setup_providers(conn)
+        conn.commit()
+    return OkResponse(message="Paso de proveedores guardado correctamente")
 
 
 @router.post("/setup/imghosts", response_model=OkResponse)

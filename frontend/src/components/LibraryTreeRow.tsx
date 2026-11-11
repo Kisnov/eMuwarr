@@ -13,7 +13,7 @@ import { ValueChip, PlainValue, ResolutionValueIcon, SourceValueIcon, SizeValueI
 import { estadoCastellano, CASTELLANO_INFO } from '../utils/castellano'
 import { IconoDesplegar, IconoTipo } from './Iconos'
 import { CasillaLote } from './lote/CasillaLote'
-import { seleccionableEnLote } from '../utils/lote'
+import { razonNoMarcable, seleccionableEnLote } from '../utils/lote'
 
 const NESTED_PAGE_SIZE = 25
 // Seasons per series — well under the API's max limit=500 (a season list
@@ -199,7 +199,7 @@ export const LibraryTreeRow = memo(function LibraryTreeRow({ item, depth, instan
           {/* La sangría depende de la profundidad: se queda en línea. */}
           <div className="bib-titulo-fila" style={{ paddingLeft: indent }}>
             {onAlternar && seleccionableEnLote(item) && (
-              <CasillaLote item={item} seleccionado={seleccionado} bloqueada={loteLleno} onAlternar={onAlternar} />
+              <CasillaLote item={item} seleccionado={seleccionado} bloqueada={loteLleno} motivo={razonNoMarcable(item)} onAlternar={onAlternar} />
             )}
             {canExpand ? (
               // Sin recuadro: el triángulo se ilumina él solo al pasar por

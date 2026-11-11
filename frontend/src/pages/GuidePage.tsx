@@ -727,6 +727,18 @@ export function GuidePage() {
   const cuerpo = useRef<HTMLDivElement>(null)
   const subtitulos = useSubtitulos(cuerpo, openId)
 
+  // Con la fila de secciones desplazable (≤768 px), la elegida se trae al centro de la fila: si llega por el enlace
+  // (?seccion=) o con las flechas, puede estar fuera de la vista. Solo mueve la fila, nunca la página.
+  useEffect(() => {
+    const lista = listaPestanas.current
+    const pestana = lista?.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]')
+    if (!lista || !pestana || lista.scrollWidth <= lista.clientWidth) return
+    const a = pestana.getBoundingClientRect(), fila = lista.getBoundingClientRect()
+    const left = Math.max(0, lista.scrollLeft + (a.left - fila.left) - (lista.clientWidth - a.width) / 2)
+    const reducido = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+    lista.scrollTo?.({ left, behavior: reducido ? 'auto' : 'smooth' })
+  }, [openId])
+
   function elegir(id: string) {
     setOpenId(id)
     cuerpo.current?.scrollTo?.({ top: 0 })

@@ -129,6 +129,48 @@ describe('EstadisticasPage', () => {
     const cifras = [...document.querySelectorAll('.stat-card-value')].map(c => c.textContent)
     expect(cifras).toHaveLength(10)
     expect(cifras.every(c => c === '—')).toBe(true)
+    // Y una nota lo dice, con Reintentar; al llegar las cifras, la nota se va.
+    expect(document.querySelector('.est-aviso')!.textContent).toContain('No se pudieron cargar las cifras de la biblioteca y las peticiones')
+    pedirResumen.mockResolvedValue(resumen())
+    await pulsar(boton('Reintentar'))
+    await esperar(() => document.querySelector('.est-aviso') === null)
+    expect(document.querySelector('.stat-card-value')!.textContent).toBe('51.372')
+  })
+
+  it('sin fallo en las cifras no sale ninguna nota', async () => {
+    pedir.mockResolvedValue({ dias: 90, puntos: [punto('2026-10-01')] })
+    await montar(<EstadisticasPage />)
+    await esperar(() => document.querySelector('svg[role="img"]'))
+    expect(document.querySelector('.est-aviso')).toBeNull()
+  })
+
+  it('al cambiar de rango se conservan los gráficos (atenuados) hasta que llegan los nuevos, sin pasar por «Cargando»', async () => {
+    pedir.mockResolvedValueOnce({ dias: 90, puntos: [punto('2026-10-01'), punto('2026-10-02')] })
+    await montar(<EstadisticasPage />)
+    await esperar(() => document.querySelector('svg[role="img"]'))
+    expect(document.querySelector('.est-cargando')).toBeNull()
+
+    let entregar: (r: { dias: number; puntos: PuntoCuenta[] }) => void = () => {}
+    pedir.mockReturnValueOnce(new Promise(r => { entregar = r }))
+    await pulsar(boton('365 días'))
+    expect(document.querySelectorAll('svg[role="img"]')).toHaveLength(3)
+    expect(document.querySelector('.est-cargando')!.getAttribute('aria-busy')).toBe('true')
+    expect(texto()).not.toContain('Cargando estadísticas')
+    expect(texto()).toContain('de los últimos 90 días')
+
+    await act(async () => { entregar({ dias: 365, puntos: [punto('2026-09-01'), punto('2026-09-02'), punto('2026-09-03')] }) })
+    expect(document.querySelector('.est-cargando')).toBeNull()
+    expect(texto()).toContain('3 de los últimos 365 días')
+  })
+
+  it('si el rango nuevo falla, enseña el error (no los gráficos del rango anterior)', async () => {
+    pedir.mockResolvedValueOnce({ dias: 90, puntos: [punto('2026-10-01'), punto('2026-10-02')] })
+    await montar(<EstadisticasPage />)
+    await esperar(() => document.querySelector('svg[role="img"]'))
+    pedir.mockRejectedValueOnce(new Error('503'))
+    await pulsar(boton('30 días'))
+    await esperar(() => texto().includes('No se pudo cargar la evolución'))
+    expect(document.querySelector('svg[role="img"]')).toBeNull()
   })
 
   it('un día sin cifra sale como raya en la tabla y no rompe la línea del resto', async () => {

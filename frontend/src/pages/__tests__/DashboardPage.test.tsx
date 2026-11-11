@@ -117,6 +117,20 @@ describe('Panel', () => {
     expect(vi.mocked(getUploads).mock.calls.some(([q]) => q?.status === 'queued,staging,preparing,running')).toBe(true)
   })
 
+  it('el texto de cara al usuario va en castellano: una subida sin título es «Subida #N» y el fallo dice «Panel», no «dashboard»', async () => {
+    vi.mocked(getUploads).mockResolvedValue([trabajo({ id: 12, status: 'running', title: undefined, started_at: new Date().toISOString() })])
+    await pagina()
+    await esperar(() => carril('En curso').textContent?.includes('Subida #12'))
+    expect(carril('En curso').textContent).not.toContain('Job')
+    await desmontar()
+
+    vi.mocked(getDashboardSummary).mockRejectedValue(new Error('503'))
+    await montar(<Envoltorio />)
+    await esperar(() => texto().includes('No se pudieron cargar'))
+    expect(texto()).toContain('No se pudieron cargar los datos del Panel')
+    expect(texto()).not.toContain('dashboard')
+  })
+
   it('la vieja que termina fuera de las 100 más nuevas se despide con su estado; la fallida llega con las fallidas', async () => {
     const enCola = Array.from({ length: 100 }, (_, i) =>
       trabajo({ id: 1000 + i, status: 'queued', title: `Cola ${i}`, queue_position: i + 1 }))
@@ -329,6 +343,11 @@ describe('Panel', () => {
     expect(texto()).not.toContain('Configurado')
     expect(banda().querySelector('h2')!.textContent).toBe('Necesita atención 3')
     expect(banda().querySelector('button')).toBeNull()
+    // Una instancia que no responde avisa en ámbar (se recupera sola), no en gris: el gris dice «sin estado».
+    const puntos = [...banda().querySelectorAll('.panel-punto')].map(p => p.className)
+    expect(puntos[0]).toContain('panel-punto-aviso')
+    expect(puntos[0]).not.toContain('panel-punto-apagada')
+    expect(puntos[1]).toContain('panel-punto-mala')
 
     // «Ver motivo» abre esa subida en Subidas.
     const ver = [...banda().querySelectorAll('a[href]')].find(l => l.textContent === 'Ver motivo')!

@@ -5,7 +5,7 @@ import { posterUrl } from '../utils/libraryItem'
 import { formatBytes, formatItemType } from '../utils/format'
 import { IconoTipo } from './Iconos'
 import { CasillaLote } from './lote/CasillaLote'
-import { seleccionableEnLote } from '../utils/lote'
+import { razonNoMarcable, seleccionableEnLote } from '../utils/lote'
 
 // Bigger, Overseerr/Jellyseerr-style poster card for the "Pósters grandes"
 // view — additive alongside the existing small grid, not a replacement.
@@ -49,7 +49,7 @@ export const LargePosterCard = memo(function LargePosterCard({ item, onSelect, p
         {/* El botón de verdad que abre la ficha: se llega con el teclado y el lector dice qué es. */}
         <button type="button" className="poster-grande-abrir" aria-label={`Abrir la ficha de ${item.year ? `${item.title} (${item.year})` : item.title}`} />
         {onToggle && seleccionableEnLote(item) && (
-          <CasillaLote item={item} seleccionado={seleccionado} bloqueada={loteLleno} onAlternar={onToggle} className="lote-casilla-poster" />
+          <CasillaLote item={item} seleccionado={seleccionado} bloqueada={loteLleno} motivo={razonNoMarcable(item)} onAlternar={onToggle} className="lote-casilla-poster" />
         )}
         <div className="poster-grande-estado">
           <PosterStatusIcon status={item.local_status} />

@@ -150,6 +150,37 @@ describe('la casilla en la lista', () => {
     expect(document.querySelector('input[type="checkbox"]')).toBeNull()
   })
 
+  it('lo que no se puede subir sale con la casilla apagada y dice por qué; una serie y lo ya marcado, no', async () => {
+    // Faltante: no está en disco.
+    await fila(elemento(1, { local_status: 'Faltante' }))
+    expect(casilla('Peli 1')!.disabled).toBe(true)
+    expect(document.querySelector('label.lote-casilla')!.getAttribute('title')).toBe('No se puede subir: La película está «Faltante»: no la tienes en disco.')
+    await desmontar()
+    // Sin castellano.
+    await fila(elemento(2, { has_spanish_ok: 0 }))
+    expect(casilla('Peli 2')!.disabled).toBe(true)
+    expect(document.querySelector('label.lote-casilla')!.getAttribute('title')).toContain('No tiene castellano')
+    await desmontar()
+    // Una temporada incompleta (la regla del pack).
+    await fila(elemento(3, { item_type: 'season', title: 'Serie - Temporada 1', local_status: 'Parcial' }))
+    expect(casilla('Serie - Temporada 1')!.disabled).toBe(true)
+    expect(document.querySelector('label.lote-casilla')!.getAttribute('title')).toContain('Temporada incompleta')
+    await desmontar()
+    // Una serie se marca siempre (se cambia por sus temporadas) aunque «no se suba tal cual».
+    await fila(elemento(4, { item_type: 'series', title: 'Serie', local_status: 'Parcial', has_spanish_ok: null }))
+    expect(casilla('Serie')!.disabled).toBe(false)
+    expect(document.querySelector('label.lote-casilla')!.getAttribute('title')).toBeNull()
+    await desmontar()
+    // Una ya marcada se puede desmarcar aunque ahora no se pueda subir.
+    await fila(elemento(5, { local_status: 'Faltante' }), { seleccionado: true })
+    expect(casilla('Peli 5')!.disabled).toBe(false)
+    await desmontar()
+    // Y una que sí se puede, no lleva motivo.
+    await fila(elemento(6))
+    expect(casilla('Peli 6')!.disabled).toBe(false)
+    expect(document.querySelector('label.lote-casilla')!.getAttribute('title')).toBeNull()
+  })
+
   it('sin modo selección no hay casilla', async () => {
     await fila(elemento(1), { onAlternar: undefined })
     expect(document.querySelector('input[type="checkbox"]')).toBeNull()
@@ -169,6 +200,15 @@ describe('la casilla en los pósters grandes', () => {
     // Fuera de la casilla, la tarjeta abre la ficha como siempre.
     await pulsar(document.querySelector('.poster-grande-tarjeta')!)
     expect(onSelect).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('la casilla de los pósters con lo que no se puede subir', () => {
+  it('queda apagada y dice por qué', async () => {
+    const onToggle = vi.fn()
+    await montar(<LargePosterCard item={elemento(1, { local_status: 'Faltante' })} onSelect={vi.fn()} onToggle={onToggle} />)
+    expect(casilla('Peli 1')!.disabled).toBe(true)
+    expect(document.querySelector('label.lote-casilla-poster')!.getAttribute('title')).toContain('no la tienes en disco')
   })
 })
 

@@ -161,6 +161,21 @@ describe('detalle de una subida que no terminó bien', () => {
     expect(celdas('hash_torrent')[5]).not.toBe('—')
   })
 
+  it('una interrumpida sin duración guardada da la misma «Duración» en la tarjeta y en «Progreso global»', async () => {
+    const duracionTarjeta = () => [...document.querySelectorAll('.dsub-dato')]
+      .find(d => d.querySelector('dt')?.textContent === 'Duración')!.querySelector('dd')!.textContent
+    const duracionTabla = () => document.querySelector('tr.dsub-total')!.lastElementChild!.textContent
+    const interrumpida = { ...fallida, duration_seconds: undefined, created_at: hora(-600), started_at: hora(10), finished_at: hora(250) }
+    await montar(pagina(interrumpida))
+    expect(duracionTarjeta()).toBe('4m 0s')
+    expect(duracionTabla()).toBe('4m 0s')
+    await desmontar()
+    // Sin inicio no hay duración: la espera en la cola (de created_at a finished_at) no cuenta, ni en una ni en otra.
+    await montar(pagina({ ...interrumpida, started_at: undefined }))
+    expect(duracionTarjeta()).toBe('—')
+    expect(duracionTabla()).toBe('—')
+  })
+
   it('parada sin que conste en qué paso, lo dice en vez de enseñar cuatro pasos «Pendiente»', async () => {
     const pasos = ['Comprobar y poner el nombre', 'Preparar los ficheros', 'Verificar antes de subir', 'Subir con Uploadrr']
       .map((nombre, i) => ({ clave: `p${i}`, nombre, estado: 'pendiente' }))

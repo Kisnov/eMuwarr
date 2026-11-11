@@ -213,8 +213,14 @@ export function progressCounter(job: UploadJob): string | null {
   return null
 }
 
+// La duración de una subida, la misma en la tarjeta «Duración» y en la fila «Progreso global» de la tabla de fases:
+// la que guardó el servidor (lo que tardó Uploadrr) y, si una subida interrumpida no la guardó, de su inicio a su fin.
+// Sin inicio (nunca llegó a empezar) no hay duración: la espera en la cola no cuenta.
 export function formatElapsed(job: UploadJob): string {
   if (job.duration_seconds != null) return formatSecondsHM(job.duration_seconds)
+  if (job.started_at && job.finished_at) {
+    return formatSecondsHM(Math.max(0, Math.round((parseServerDate(job.finished_at).getTime() - parseServerDate(job.started_at).getTime()) / 1000)))
+  }
   if (job.status === 'running' && job.started_at) {
     const secs = Math.max(0, Math.round((Date.now() - parseServerDate(job.started_at).getTime()) / 1000))
     return formatSecondsHM(secs)

@@ -28,7 +28,7 @@ export function DeleteUploadModal({ job, onClose, onDeleted }: {
   return (
     <Modal titulo="Borrar subida" onClose={onClose} className="delsub-modal">
       <div className="modal-body">
-        <p className="delsub-titulo">{job.title || `Job ${job.id}`}</p>
+        <p className="delsub-titulo">{job.title || `Subida #${job.id}`}</p>
         <div className="delsub-aviso">
           <p className="delsub-aviso-texto">
             Se va a borrar todo el material y todo lo que hay registrado de esta subida: registro de actividad,

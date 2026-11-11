@@ -8,7 +8,7 @@ import type { SetupStatusResponse } from '../../types/api'
 
 vi.mock('../../api/setup', () => ({
   setupAdmin: vi.fn(), setupTmdb: vi.fn(), setupEmu: vi.fn(), setupInstance: vi.fn(),
-  setupQbit: vi.fn(), setupImghosts: vi.fn(), setupComplete: vi.fn(),
+  setupQbit: vi.fn(), setupProviders: vi.fn(), setupImghosts: vi.fn(), setupComplete: vi.fn(),
 }))
 vi.mock('../../api/auth', () => ({ login: vi.fn() }))
 vi.mock('../../api/library', () => ({ startLibrarySync: vi.fn() }))
@@ -18,7 +18,7 @@ vi.mock('../../api/integrationTests', () => ({
   testQbitConnection: vi.fn(), testImghostConnection: vi.fn(),
 }))
 
-import { setupEmu } from '../../api/setup'
+import { setupEmu, setupProviders } from '../../api/setup'
 import { fetchSettings, updateSettings } from '../../api/settings'
 import { testArrConnection, testEmuwarezConnection } from '../../api/integrationTests'
 import { SetupWizard } from '../SetupWizard'
@@ -68,6 +68,7 @@ beforeEach(() => {
   vi.mocked(fetchSettings).mockResolvedValue({ provider_priority_order: [], image_hosts_available: [] } as unknown as Awaited<ReturnType<typeof fetchSettings>>)
   vi.mocked(updateSettings).mockResolvedValue({} as Awaited<ReturnType<typeof updateSettings>>)
   vi.mocked(setupEmu).mockResolvedValue(undefined as unknown as Awaited<ReturnType<typeof setupEmu>>)
+  vi.mocked(setupProviders).mockResolvedValue(undefined as unknown as Awaited<ReturnType<typeof setupProviders>>)
 })
 
 afterEach(async () => {
@@ -164,5 +165,24 @@ describe('Asistente de primera configuración', () => {
     await montar({ ...ESTADO, emu_configured: true, next_step: 'tmdb' })
     expect(titulo()).toContain('TMDb')
     expect(boton('Atrás')).toBeUndefined()
+  })
+
+  it('«Continuar» en proveedores guarda el orden y apunta el paso en el servidor, para que recargar retome en Imágenes', async () => {
+    await montar({ ...ESTADO, emu_configured: true, tmdb_configured: true, next_step: 'providers' })
+    expect(titulo()).toContain('Proveedores de vídeo')
+    await pulsar(boton('Continuar')!)
+    expect(updateSettings).toHaveBeenCalledWith({ provider_priority_order: expect.arrayContaining(['MAX']) })
+    expect(setupProviders).toHaveBeenCalledTimes(1)
+    // El orden se guarda antes de apuntar el paso.
+    expect(vi.mocked(updateSettings).mock.invocationCallOrder[0]).toBeLessThan(vi.mocked(setupProviders).mock.invocationCallOrder[0])
+    expect(titulo()).toContain('Imágenes')
+  })
+
+  it('si el servidor no apunta el paso de proveedores, se queda en él con el error', async () => {
+    vi.mocked(setupProviders).mockRejectedValueOnce(new Error('No se pudo guardar el paso'))
+    await montar({ ...ESTADO, emu_configured: true, tmdb_configured: true, next_step: 'providers' })
+    await pulsar(boton('Continuar')!)
+    expect(titulo()).toContain('Proveedores de vídeo')
+    expect(alertas().join(' ')).toContain('No se pudo guardar el paso')
   })
 })

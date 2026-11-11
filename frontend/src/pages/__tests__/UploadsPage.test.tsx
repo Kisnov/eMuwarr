@@ -111,6 +111,33 @@ describe('el chip del lote', () => {
     expect(banner()).toBeNull()
   })
 
+  it('si la carga falla con el filtro del lote puesto, el error ofrece «Quitar filtro del lote» además de Reintentar', async () => {
+    await pagina()
+    vi.mocked(getUploads).mockImplementation(async q => { if (q?.lote_id) throw new Error('503'); return [TANDA, LOTE_DE_UNO, SUELTA] })
+    await pulsar(chips()[0])
+    await esperar(() => document.querySelector('.empty-state[role="alert"]'))
+    expect(texto()).toContain('Error al cargar los trabajos de subida.')
+    // Con el error, el banner no sale: el filtro solo se puede quitar desde el propio error.
+    expect(banner()).toBeNull()
+    expect(boton('Reintentar')).toBeDefined()
+    await pulsar(boton('Quitar filtro del lote'))
+    await esperar(() => document.querySelectorAll('tbody tr').length === 3)
+    expect(ultimaPeticion()?.lote_id).toBeUndefined()
+    expect(document.querySelector('.empty-state[role="alert"]')).toBeNull()
+  })
+
+  it('un error sin filtro de lote no ofrece quitarlo', async () => {
+    vi.mocked(getUploads).mockRejectedValue(new Error('503'))
+    await montar(
+      <SyncContext.Provider value={{ lastInvalidatedAt: 0, startAllSync: vi.fn(), isAnySyncing: false, todoPendiente: false } as never}>
+        <SeccionVisible visible><UploadsPage onNavigate={vi.fn()} /></SeccionVisible>
+      </SyncContext.Provider>,
+    )
+    await esperar(() => document.querySelector('.empty-state[role="alert"]'))
+    expect(boton('Reintentar')).toBeDefined()
+    expect(boton('Quitar filtro del lote')).toBeUndefined()
+  })
+
   it('con el lote ya sin subidas, el estado vacío lo dice y ofrece «Quitar filtro del lote»', async () => {
     await pagina()
     vi.mocked(getUploads).mockImplementation(async q => (q?.lote_id ? [] : [TANDA, LOTE_DE_UNO, SUELTA]))

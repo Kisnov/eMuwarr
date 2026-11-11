@@ -23,6 +23,12 @@ export async function setupQbit(url: string, username = '', password = '', tag =
   return api.post<OkResponse>('/setup/qbit', { url, username, password, tag })
 }
 
+// Sin cuerpo: el orden de los proveedores va por updateSettings; esto solo apunta que el paso está hecho, para que
+// recargar retome en el siguiente.
+export async function setupProviders(): Promise<OkResponse> {
+  return api.post<OkResponse>('/setup/providers')
+}
+
 export async function setupImghosts(enabled: string[], keys: Record<string, string>): Promise<OkResponse> {
   return api.post<OkResponse>('/setup/imghosts', { enabled, keys })
 }
