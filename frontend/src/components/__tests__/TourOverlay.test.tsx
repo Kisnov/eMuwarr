@@ -140,6 +140,49 @@ describe('TourOverlay: dónde va la burbuja', () => {
     expect(top + 300).toBeLessThanOrEqual(680)
   })
 
+  // jsdom mide 1024×768. El objetivo es una columna alta (más de media ventana) a la izquierda: no cabe la burbuja
+  // (250 px) ni encima ni debajo.
+  const medirObjetivo = (r: { top: number; left: number; right: number; bottom: number }) => {
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
+      const mide = this.dataset?.tour === 'uno'
+      const ancho = r.right - r.left, alto = r.bottom - r.top
+      return { ...r, width: mide ? ancho : 0, height: mide ? alto : 0, x: r.left, y: r.top, toJSON: () => ({}) }
+    })
+    vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockImplementation(function (this: HTMLElement) {
+      return this.classList.contains('tour-bubble') ? 250 : 0
+    })
+  }
+
+  it('junto a un objetivo más alto que media ventana: a su lado, sin taparlo', async () => {
+    medirObjetivo({ top: 80, left: 100, right: 400, bottom: 700 })
+    await abrir()
+    await esperar(() => document.querySelector('.tour-cutout'))
+    const { left, top } = burbuja()!.style
+    // A la derecha del objetivo (400 + 14), a la altura de su parte de arriba y entera en la ventana.
+    expect(parseFloat(left)).toBe(414)
+    expect(parseFloat(top)).toBe(80)
+    expect(parseFloat(top) + 250).toBeLessThanOrEqual(768)
+  })
+
+  it('un objetivo alto pegado a la derecha: la burbuja pasa a su izquierda', async () => {
+    medirObjetivo({ top: 80, left: 600, right: 1000, bottom: 700 })
+    await abrir()
+    await esperar(() => document.querySelector('.tour-cutout'))
+    // 600 - 14 - 340
+    expect(parseFloat(burbuja()!.style.left)).toBe(246)
+  })
+
+  it('sin sitio a los lados (un objetivo de todo el ancho), la burbuja entera dentro de la ventana, en el borde que menos lo tapa', async () => {
+    medirObjetivo({ top: 60, left: 0, right: 1024, bottom: 700 })
+    await abrir()
+    await esperar(() => document.querySelector('.tour-cutout'))
+    const top = parseFloat(burbuja()!.style.top)
+    expect(top).toBeGreaterThanOrEqual(14)
+    expect(top + 250).toBeLessThanOrEqual(768 - 14)
+    // Arriba solapa 250 - 60 + 14 = 204 px; abajo 700 - 504 = 196: abajo tapa menos.
+    expect(top).toBe(504)
+  })
+
   it('los botones: «Cerrar» fantasma (no destruye nada), «Atrás» secundario y solo «Siguiente» principal', async () => {
     await abrir()
     await pulsarBoton('Siguiente')
