@@ -39,7 +39,8 @@ export function estadoVisible(job: UploadJob, seeding: SeedingResponse | null): 
       const titulo = job.result_url ? 'Subido a eMuwarez' : 'Subida completada'
       if (sinQbit) {
         return { tono: 'aviso', simbolo: '!', titulo, seeding: enQbit,
-          motivo: 'El torrent está en eMuwarez, pero no se pudo añadir a qBittorrent: añádelo a mano para sembrarlo.' }
+          motivo: 'El torrent está en eMuwarez, pero no se pudo añadir a qBittorrent: '
+            + (job.puede_reenviar_qbit ? 'usa «Reenviar a qBittorrent» o añádelo a mano.' : 'añádelo a mano para sembrarlo.') }
       }
       return { tono: 'ok', simbolo: '✓', titulo, seeding: enQbit }
     }
