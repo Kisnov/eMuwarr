@@ -91,7 +91,8 @@ const PosterCard = memo(function PosterCard({ item, onSelect, priority, seleccio
   const nombre = tituloDeTarjeta(item)
   return (
     <div
-      className={seleccionado ? 'clickable bib-tarjeta lote-marcada' : 'clickable bib-tarjeta'}
+      className={['clickable bib-tarjeta', seleccionado && 'lote-marcada', !item.poster_url && 'bib-tarjeta-sin-poster']
+        .filter(Boolean).join(' ')}
       onClick={() => onSelect(item)}
     >
       <div className="bib-tarjeta-marco">
@@ -689,7 +690,7 @@ export function LibraryPage({ onNavigate }: { onNavigate?: (page: string) => voi
       <th><HeaderFilter label="Proveedor" value={searchProvider} onChange={setSearchProvider} ocultable options={[
         { value: '', label: 'Todos' }, ...providerOptions.map(p => ({ value: p, label: p })),
       ]} /></th>
-      <th><HeaderFilter label="Fuente" value={searchSource} onChange={setSearchSource} ocultable options={[
+      <th><HeaderFilter label="Source" value={searchSource} onChange={setSearchSource} ocultable options={[
         { value: '', label: 'Todos' }, ...sourceOptions.map(s => ({ value: s, label: s })),
       ]} /></th>
       <th><HeaderFilter label="Grupo" value={searchGroup} onChange={setSearchGroup} ocultable options={[

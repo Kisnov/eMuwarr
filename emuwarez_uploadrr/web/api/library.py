@@ -385,7 +385,8 @@ def library_list(
             )
             # Recortando después, el total sale de contar lo que queda.
             total = 0 if recorta_despues else count_library(
-                conn, request=request_status, item_type=item_type, parent_id=parent_id, **filtros_sql)
+                conn, request=request_status, item_type=item_type, parent_id=parent_id,
+                ignore_specials=ignora_especiales, **filtros_sql)
             rollups = {}
             if filtra_lo_que_se_ve:
                 rollups = rollups_de(rows)

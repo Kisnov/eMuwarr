@@ -178,10 +178,10 @@ describe('Columnas de la lista', () => {
     await pagina()
     const nombres = cabeceras().map(th => th.textContent?.replace(/[▾▼▲]/g, '').trim())
     expect(nombres).toEqual([
-      'TítuloTipo', 'Origen', 'Estado', 'Petición', 'Resolución', 'Proveedor', 'Fuente', 'Grupo',
+      'TítuloTipo', 'Origen', 'Estado', 'Petición', 'Resolución', 'Proveedor', 'Source', 'Grupo',
       'Español', 'eMuwarez', 'Tamaño', 'Acciones',
     ])
-    for (const col of ['Origen', 'Resolución', 'Proveedor', 'Fuente', 'Grupo']) {
+    for (const col of ['Origen', 'Resolución', 'Proveedor', 'Source', 'Grupo']) {
       const th = cabeceras().find(c => c.textContent?.includes(col))!
       expect(th.querySelectorAll('.hf-trigger')).toHaveLength(1)
     }
@@ -196,5 +196,19 @@ describe('Columnas de la lista', () => {
     await pulsar(th.querySelector('.hf-trigger')!)
     expect(document.body.textContent).toContain('Desmarcar todo')
     expect(cabeceras()[0].querySelectorAll('.hf-trigger')).toHaveLength(1)
+  })
+})
+
+describe('Pósters sin imagen', () => {
+  it('la tarjeta sin póster lo marca para que el nombre salga una sola vez (el del marco)', async () => {
+    vi.mocked(getLibrary).mockImplementation(async () => (
+      { items: [{ ...DUNE, poster_url: '/dune.jpg' }, ALIEN], total: 2, archivos: 2 } as never))
+    await pagina('grid')
+    const tarjetas = [...document.querySelectorAll('.bib-tarjeta')]
+    const de = (titulo: string) => tarjetas.find(t => t.textContent?.includes(titulo))!
+    expect(de('Alien').classList.contains('bib-tarjeta-sin-poster')).toBe(true)
+    expect(de('Alien').querySelector('.bib-tarjeta-sin-nombre')?.textContent).toBe('Alien')
+    expect(de('Dune').classList.contains('bib-tarjeta-sin-poster')).toBe(false)
+    expect(de('Dune').querySelector('.bib-tarjeta-sin-nombre')).toBeNull()
   })
 })

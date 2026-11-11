@@ -22,6 +22,7 @@ import {
   FolderIcon, CalendarValueIcon,
 } from './DetailCard'
 import { IconoTipo } from './Iconos'
+import { useCoincide } from '../hooks/useCoincide'
 import { Modal } from './Modal'
 
 // Full dedicated detail page (Radarr/Sonarr-style) — replaces the old small
@@ -35,6 +36,9 @@ import { Modal } from './Modal'
 const ALTO_FICHA = 420
 // Relleno, separación entre filas y bajo el título de cada tarjeta (los de Card, algo más ceñidos).
 const TARJETA = { padding: '17px 18px', gap: 8, titleGap: 11 }
+// Hasta aquí (el corte del móvil de la ficha) una serie o temporada pone su tabla antes de las tarjetas secundarias:
+// con las tres apiladas, «Temporadas» empezaba tras ~1200 px de tarjetas.
+export const CONSULTA_FICHA_ESTRECHA = '(max-width: 760px)'
 
 // Un dato técnico: en su ficha con el icono, o un guion si no se sabe. Una ficha vacía («▭ —») pesaba más que el dato.
 function DatoTecnico({ icono, valor, titulo }: { icono: React.ReactNode; valor: string | null | undefined; titulo?: string }) {
@@ -82,6 +86,7 @@ export function LibraryDetailPage({ item, instances, onBack, onSelect, onAction,
   // querrías tener que volver a plegarlo en cada salto.
   const [fichaPlegada, setFichaPlegada] = useState(false)
   const tieneTabla = item.item_type === 'series' || item.item_type === 'season'
+  const secundariasAbajo = useCoincide(CONSULTA_FICHA_ESTRECHA) && tieneTabla
   const originTip = useTooltip(deepLink ? `Abrir en ${item.instance_name ?? item.instance_type}` : null)
 
   useEffect(() => {
@@ -106,6 +111,95 @@ export function LibraryDetailPage({ item, instances, onBack, onSelect, onAction,
     loadAncestors()
     return () => { alive = false }
   }, [item.id, item.item_type, item.parent_id])
+
+  // Las dos tarjetas que no hacen falta para elegir qué subir. En una ventana estrecha bajan de la ficha al final
+  // de la página (tras la tabla de temporadas o capítulos); en una ancha van junto a la de Estado.
+  const tarjetasSecundarias = (
+    <>
+      {/* En una serie o temporada, el valor de la fila solo está
+          relleno cuando TODOS los capítulos coinciden: es la señal que
+          usa la regla del pack. Para enseñar es pobre (una temporada
+          con x264 y x265 salía con un guion), así que la ficha usa la
+          suma de lo que hay debajo: "x264, x265". */}
+      <Card title="Información técnica" icon={<TechInfoCardIcon />} {...TARJETA}>
+        <FieldRow label="Resolución" help={rollupHelp}>
+          <DatoTecnico icono={<ResolutionValueIcon />} valor={item.rollup_all?.resolution || item.resolution} />
+        </FieldRow>
+        <FieldRow label="Proveedor" help={rollupHelp}>
+          {/* Con varios proveedores bajo una temporada se pinta uno por
+              cada uno, cada cual con su icono y su nombre completo: es
+              el mismo control que con uno solo, repetido. */}
+          {item.providers_all?.length
+            ? <span className="bibdet-proveedores">
+                {item.providers_all.map(p => (
+                  <ValueChip key={p.code} linkable><ProviderTag code={p.code} label={p.label} /></ValueChip>
+                ))}
+              </span>
+            : item.provider
+            ? <ValueChip linkable><ProviderTag code={item.provider} label={item.provider_label} /></ValueChip>
+            : <span className="muted">—</span>}
+        </FieldRow>
+        <FieldRow label="Source" help={rollupHelp}>
+          <DatoTecnico icono={<SourceValueIcon />} valor={item.rollup_all?.source || item.source} />
+        </FieldRow>
+        {/* No lleva `help`: a diferencia del resto, aquí salen los de todos los capítulos, no solo si coinciden. */}
+        <FieldRow label="Grupo">
+          <GruposDeRelease grupos={gruposDeRelease(item)} />
+        </FieldRow>
+        <FieldRow label="Códec de vídeo" help={rollupHelp}>
+          <DatoTecnico icono={<VideoCodecValueIcon />} valor={item.rollup_all?.video_codec || item.video_codec} />
+        </FieldRow>
+        <FieldRow label="Códec de audio" help={rollupHelp}>
+          <DatoTecnico icono={<AudioCodecValueIcon />} valor={item.rollup_all?.audio_codec || item.audio_codec} />
+        </FieldRow>
+        {/* These two are the only fields that can carry a dozen values
+            (a multi-language release), so they're the ones the card's
+            width truncates — the tooltip is where the full list stays
+            reachable. */}
+        <FieldRow label="Idiomas de audio" help={rollupHelp}>
+          <DatoTecnico icono={<LanguageValueIcon />} valor={item.rollup_all?.audio_languages || item.audio_languages}
+            titulo={item.rollup_all?.audio_languages || item.audio_languages || undefined} />
+        </FieldRow>
+        <FieldRow label="Subtítulos" help={rollupHelp}>
+          <DatoTecnico icono={<SubtitleValueIcon />} valor={item.rollup_all?.subtitle_languages || item.subtitle_languages}
+            titulo={item.rollup_all?.subtitle_languages || item.subtitle_languages || undefined} />
+        </FieldRow>
+        <FieldRow label="Tamaño">
+          <DatoTecnico icono={<SizeValueIcon />} valor={item.size_bytes ? formatBytes(item.size_bytes) : null} />
+        </FieldRow>
+      </Card>
+
+      <Card title="Identificadores externos" icon={<ExternalIdsCardIcon />} {...TARJETA}>
+        <FieldRow label="TMDb">
+          {item.tmdb_id ? <ValueChip linkable={Boolean(idVerifyUrl('tmdb', item.tmdb_id, isTv))}><ExternalIdLink id={item.tmdb_id} href={idVerifyUrl('tmdb', item.tmdb_id, isTv)} label="TMDb" /></ValueChip> : <span className="muted">—</span>}
+        </FieldRow>
+        <FieldRow label="IMDb">
+          {item.imdb_id ? <ValueChip linkable={Boolean(idVerifyUrl('imdb', item.imdb_id, isTv))}><ExternalIdLink id={item.imdb_id} href={idVerifyUrl('imdb', item.imdb_id, isTv)} label="IMDb" /></ValueChip> : <span className="muted">—</span>}
+        </FieldRow>
+        {/* TVDB y TVmaze son bases de SERIES: Radarr no trae ninguno de
+            los dos para una película, así que serían un "—" fijo y no se
+            muestran. TVmaze lo da Sonarr en su payload (tvMazeId) y lo
+            trae el 96% de las series.
+
+            No se añade tvRageId, que Sonarr también manda: solo lo trae
+            la mitad, y sus fichas devuelven 404 (comprobado con dos ids
+            reales), así que el enlace no llevaría a ninguna parte. */}
+        {item.item_type !== 'movie' && (
+          <>
+            <FieldRow label="TVDB">
+              {item.tvdb_id ? <ValueChip linkable={Boolean(idVerifyUrl('tvdb', item.tvdb_id, isTv))}><ExternalIdLink id={item.tvdb_id} href={idVerifyUrl('tvdb', item.tvdb_id, isTv)} label="TVDB" /></ValueChip> : <span className="muted">—</span>}
+            </FieldRow>
+            <FieldRow label="TVmaze">
+              {item.tvmaze_id ? <ValueChip linkable={Boolean(idVerifyUrl('tvmaze', item.tvmaze_id, isTv))}><ExternalIdLink id={item.tvmaze_id} href={idVerifyUrl('tvmaze', item.tvmaze_id, isTv)} label="TVmaze" /></ValueChip> : <span className="muted">—</span>}
+            </FieldRow>
+          </>
+        )}
+        <FieldRow label="MAL">
+          {item.mal_id ? <ValueChip linkable={Boolean(idVerifyUrl('mal', item.mal_id, isTv))}><ExternalIdLink id={item.mal_id} href={idVerifyUrl('mal', item.mal_id, isTv)} label="MAL" /></ValueChip> : <span className="muted">—</span>}
+        </FieldRow>
+      </Card>
+    </>
+  )
 
   return (
     <div className="bibdet-pagina">
@@ -149,7 +243,7 @@ export function LibraryDetailPage({ item, instances, onBack, onSelect, onAction,
         />
 
         <div className="bibdet-tarjetas">
-          <div className="bibdet-rejilla">
+          <div className={`bibdet-rejilla${secundariasAbajo ? ' bibdet-rejilla-sola' : ''}`}>
             <Card title="Estado de la biblioteca" icon={<StatusCardIcon />} {...TARJETA}>
               <FieldRow label="Tipo">
                 <ValueChip><ValueIcon><TypeValueIcon /></ValueIcon><span className="txt">{formatItemType(item.item_type)}</span></ValueChip>
@@ -186,88 +280,7 @@ export function LibraryDetailPage({ item, instances, onBack, onSelect, onAction,
               </FieldRow>
             </Card>
 
-            {/* En una serie o temporada, el valor de la fila solo está
-                relleno cuando TODOS los capítulos coinciden: es la señal que
-                usa la regla del pack. Para enseñar es pobre (una temporada
-                con x264 y x265 salía con un guion), así que la ficha usa la
-                suma de lo que hay debajo: "x264, x265". */}
-            <Card title="Información técnica" icon={<TechInfoCardIcon />} {...TARJETA}>
-              <FieldRow label="Resolución" help={rollupHelp}>
-                <DatoTecnico icono={<ResolutionValueIcon />} valor={item.rollup_all?.resolution || item.resolution} />
-              </FieldRow>
-              <FieldRow label="Proveedor" help={rollupHelp}>
-                {/* Con varios proveedores bajo una temporada se pinta uno por
-                    cada uno, cada cual con su icono y su nombre completo: es
-                    el mismo control que con uno solo, repetido. */}
-                {item.providers_all?.length
-                  ? <span className="bibdet-proveedores">
-                      {item.providers_all.map(p => (
-                        <ValueChip key={p.code} linkable><ProviderTag code={p.code} label={p.label} /></ValueChip>
-                      ))}
-                    </span>
-                  : item.provider
-                  ? <ValueChip linkable><ProviderTag code={item.provider} label={item.provider_label} /></ValueChip>
-                  : <span className="muted">—</span>}
-              </FieldRow>
-              <FieldRow label="Source" help={rollupHelp}>
-                <DatoTecnico icono={<SourceValueIcon />} valor={item.rollup_all?.source || item.source} />
-              </FieldRow>
-              {/* No lleva `help`: a diferencia del resto, aquí salen los de todos los capítulos, no solo si coinciden. */}
-              <FieldRow label="Grupo">
-                <GruposDeRelease grupos={gruposDeRelease(item)} />
-              </FieldRow>
-              <FieldRow label="Códec de vídeo" help={rollupHelp}>
-                <DatoTecnico icono={<VideoCodecValueIcon />} valor={item.rollup_all?.video_codec || item.video_codec} />
-              </FieldRow>
-              <FieldRow label="Códec de audio" help={rollupHelp}>
-                <DatoTecnico icono={<AudioCodecValueIcon />} valor={item.rollup_all?.audio_codec || item.audio_codec} />
-              </FieldRow>
-              {/* These two are the only fields that can carry a dozen values
-                  (a multi-language release), so they're the ones the card's
-                  width truncates — the tooltip is where the full list stays
-                  reachable. */}
-              <FieldRow label="Idiomas de audio" help={rollupHelp}>
-                <DatoTecnico icono={<LanguageValueIcon />} valor={item.rollup_all?.audio_languages || item.audio_languages}
-                  titulo={item.rollup_all?.audio_languages || item.audio_languages || undefined} />
-              </FieldRow>
-              <FieldRow label="Subtítulos" help={rollupHelp}>
-                <DatoTecnico icono={<SubtitleValueIcon />} valor={item.rollup_all?.subtitle_languages || item.subtitle_languages}
-                  titulo={item.rollup_all?.subtitle_languages || item.subtitle_languages || undefined} />
-              </FieldRow>
-              <FieldRow label="Tamaño">
-                <DatoTecnico icono={<SizeValueIcon />} valor={item.size_bytes ? formatBytes(item.size_bytes) : null} />
-              </FieldRow>
-            </Card>
-
-            <Card title="Identificadores externos" icon={<ExternalIdsCardIcon />} {...TARJETA}>
-              <FieldRow label="TMDb">
-                {item.tmdb_id ? <ValueChip linkable={Boolean(idVerifyUrl('tmdb', item.tmdb_id, isTv))}><ExternalIdLink id={item.tmdb_id} href={idVerifyUrl('tmdb', item.tmdb_id, isTv)} label="TMDb" /></ValueChip> : <span className="muted">—</span>}
-              </FieldRow>
-              <FieldRow label="IMDb">
-                {item.imdb_id ? <ValueChip linkable={Boolean(idVerifyUrl('imdb', item.imdb_id, isTv))}><ExternalIdLink id={item.imdb_id} href={idVerifyUrl('imdb', item.imdb_id, isTv)} label="IMDb" /></ValueChip> : <span className="muted">—</span>}
-              </FieldRow>
-              {/* TVDB y TVmaze son bases de SERIES: Radarr no trae ninguno de
-                  los dos para una película, así que serían un "—" fijo y no se
-                  muestran. TVmaze lo da Sonarr en su payload (tvMazeId) y lo
-                  trae el 96% de las series.
-
-                  No se añade tvRageId, que Sonarr también manda: solo lo trae
-                  la mitad, y sus fichas devuelven 404 (comprobado con dos ids
-                  reales), así que el enlace no llevaría a ninguna parte. */}
-              {item.item_type !== 'movie' && (
-                <>
-                  <FieldRow label="TVDB">
-                    {item.tvdb_id ? <ValueChip linkable={Boolean(idVerifyUrl('tvdb', item.tvdb_id, isTv))}><ExternalIdLink id={item.tvdb_id} href={idVerifyUrl('tvdb', item.tvdb_id, isTv)} label="TVDB" /></ValueChip> : <span className="muted">—</span>}
-                  </FieldRow>
-                  <FieldRow label="TVmaze">
-                    {item.tvmaze_id ? <ValueChip linkable={Boolean(idVerifyUrl('tvmaze', item.tvmaze_id, isTv))}><ExternalIdLink id={item.tvmaze_id} href={idVerifyUrl('tvmaze', item.tvmaze_id, isTv)} label="TVmaze" /></ValueChip> : <span className="muted">—</span>}
-                  </FieldRow>
-                </>
-              )}
-              <FieldRow label="MAL">
-                {item.mal_id ? <ValueChip linkable={Boolean(idVerifyUrl('mal', item.mal_id, isTv))}><ExternalIdLink id={item.mal_id} href={idVerifyUrl('mal', item.mal_id, isTv)} label="MAL" /></ValueChip> : <span className="muted">—</span>}
-              </FieldRow>
-            </Card>
+            {!secundariasAbajo && tarjetasSecundarias}
           </div>
         </div>
       </div>
@@ -291,6 +304,8 @@ export function LibraryDetailPage({ item, instances, onBack, onSelect, onAction,
         <LibraryChildrenSection parentId={item.id} childType="episode" title="Capítulos" instances={instances} onSelect={onSelect} onAction={onAction}
           fichaPlegada={fichaPlegada} onAlternarFicha={() => setFichaPlegada(v => !v)} />
       )}
+
+      {secundariasAbajo && !fichaPlegada && <div className="bibdet-rejilla bibdet-secundarias">{tarjetasSecundarias}</div>}
     </div>
   )
 }

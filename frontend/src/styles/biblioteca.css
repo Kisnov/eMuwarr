@@ -294,6 +294,9 @@
 .bib-tarjeta-abrir:focus-visible .bib-tarjeta-pie { opacity: 1; }
 /* Sin ratón no hay hover: el nombre se queda a la vista. */
 @media (hover: none) { .bib-tarjeta-pie { opacity: 1; } }
+/* Sin póster el nombre ya sale en el marco (bib-tarjeta-sin-nombre): el del pie, al pasar el ratón o siempre en táctil,
+   lo repetía. El pie se queda con el tipo y el año, y el botón sigue llevando el nombre para el lector de pantalla. */
+.bib-tarjeta-sin-poster .bib-tarjeta-titulo { display: none; }
 .bib-tarjeta-titulo {
   font-size: 12.5px;
   font-weight: 600;
