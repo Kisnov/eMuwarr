@@ -11,6 +11,7 @@ import {
 import { formatBytes, formatDate } from '../../utils/format'
 import { useSettingsMessage } from './mensajes'
 import { CabeceraTarjeta } from './CabeceraTarjeta'
+import { IconoArchivo, IconoGuardar, IconoRestaurar } from '../../components/Iconos'
 
 const TIPO_COPIA: Record<BackupInfo['tipo'], string> = { manual: 'Manual', automatica: 'Automática', subida: 'Subida' }
 
@@ -95,6 +96,7 @@ export function BackupTab({ status, onRefresh }: { status: MaintenanceStatus | n
     <div className="aj-col-16">
       <div className="placeholder-card">
         <CabeceraTarjeta
+          icono={<IconoGuardar size={18} />}
           titulo="Crear backup"
           descripcion={<>
             Crea un archivo <code>.tar.gz</code> del directorio de configuración, sin las claves: las API keys, la
@@ -108,7 +110,7 @@ export function BackupTab({ status, onRefresh }: { status: MaintenanceStatus | n
       </div>
 
       <div className="placeholder-card">
-        <CabeceraTarjeta titulo={`Backups existentes (${status?.backups_count ?? backups.length})`} />
+        <CabeceraTarjeta icono={<IconoArchivo size={18} />} titulo={`Backups existentes (${status?.backups_count ?? backups.length})`} />
         {backupDir && (
           <p className="aj-sec-12 aj-m-0-10">
             Ubicación: <code>{backupDir}</code>
@@ -172,6 +174,7 @@ export function BackupTab({ status, onRefresh }: { status: MaintenanceStatus | n
 
       <div className="placeholder-card">
         <CabeceraTarjeta
+          icono={<IconoRestaurar size={18} />}
           titulo="Restaurar backup"
           descripcion={<>
             Elige uno de los backups existentes en <code>{backupDir || '…'}</code>. Las claves que el backup no

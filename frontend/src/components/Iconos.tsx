@@ -141,3 +141,32 @@ export function IconoOjo({ tachado, ...props }: IconoProps & { tachado?: boolean
 export function IconoAyuda(props: IconoProps) {
   return <Svg {...props}><circle cx="12" cy="12" r="10" /><path d="M9.1 9a2.9 2.9 0 0 1 5.7 1c0 1.9-2.7 2-2.8 3.8M12 17.2h.01" /></Svg>
 }
+
+/** Las cabeceras de las tarjetas de Diagnóstico y Backup (Configuración): el mismo trazo que el resto. */
+export function IconoBaseDatos(props: IconoProps) {
+  return <Svg {...props}><ellipse cx="12" cy="5" rx="8" ry="3" /><path d="M4 5v14c0 1.7 3.6 3 8 3s8-1.3 8-3V5" /><path d="M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3" /></Svg>
+}
+
+export function IconoVersion(props: IconoProps) {
+  return <Svg {...props}><circle cx="12" cy="12" r="10" /><path d="m16 12-4-4-4 4M12 16V8" /></Svg>
+}
+
+export function IconoCarpeta(props: IconoProps) {
+  return <Svg {...props}><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z" /></Svg>
+}
+
+export function IconoRutas(props: IconoProps) {
+  return <Svg {...props}><path d="M8 3 4 7l4 4M4 7h16M16 21l4-4-4-4M20 17H4" /></Svg>
+}
+
+export function IconoGuardar(props: IconoProps) {
+  return <Svg {...props}><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" /><path d="M17 21v-8H7v8M7 3v5h8" /></Svg>
+}
+
+export function IconoArchivo(props: IconoProps) {
+  return <Svg {...props}><rect x="2" y="3" width="20" height="5" rx="1" /><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8M10 12h4" /></Svg>
+}
+
+export function IconoRestaurar(props: IconoProps) {
+  return <Svg {...props}><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" /><path d="M3 3v5h5" /></Svg>
+}

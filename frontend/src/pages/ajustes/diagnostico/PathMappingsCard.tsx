@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useUnsavedGuard } from '../../../utils/unsavedGuard'
 import { fetchSettings, updateSettings } from '../../../api/settings'
 import { useTooltip } from '../../../components/Tooltip'
-import { IconoCerrar } from '../../../components/Iconos'
+import { IconoCerrar, IconoRutas } from '../../../components/Iconos'
 import { useSettingsMessageAdapter } from '../mensajes'
 import { CabeceraTarjeta } from '../CabeceraTarjeta'
 import { ErrorDeCarga } from '../ErrorDeCarga'
@@ -68,6 +68,7 @@ export function PathMappingsCard() {
   return (
     <div className="placeholder-card">
       <CabeceraTarjeta
+        icono={<IconoRutas size={18} />}
         titulo="Mapeo de rutas (biblioteca remota)"
         descripcion="Traduce la ruta que reporta Radarr/Sonarr a la ruta donde la app alcanza el archivo (monta la biblioteca por SSHFS/NFS/SMB donde quieras). Se aplica al leer MediaInfo, verificar y subir. Sin reglas, no cambia nada."
       />
