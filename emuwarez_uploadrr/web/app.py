@@ -166,6 +166,10 @@ _FRONTEND_DIST = _REPO_ROOT / "frontend" / "dist"
 # /assets lleva el hash del contenido en el nombre: se cachea un año sin revalidar (index.html va con no-cache).
 CACHE_DE_ASSETS = "public, max-age=31536000, immutable"
 
+# La imagen (python:3.12-slim, sin /etc/mime.types) no conoce .woff2: las fuentes saldrían como octet-stream y el
+# GZipMiddleware, que deja estar font/woff2, las recomprimiría en cada petición.
+mimetypes.add_type("font/woff2", ".woff2")
+
 
 # Junto a cada JS, CSS y SVG de /assets, `npm run build` deja su versión precomprimida (frontend/vite.config.ts): se
 # prefiere brotli y después gzip. Se sirven tal cual, con su Content-Encoding, en vez de comprimir en cada petición

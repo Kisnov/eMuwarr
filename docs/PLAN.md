@@ -719,6 +719,10 @@ Hallazgos y maquetas: https://claude.ai/artifact/PjPRTxSfEs3Y8aVtXzN32i
     el siguiente cambio una fila que ya se había movido arrancaba desde donde estaba antes del primer movimiento y saltaba hacia atrás una o
     dos filas. Se nota más con una lista larga (vídeo, 11 filas) que con una corta (imágenes). Medido con Playwright arrastrando despacio: de 5
     saltos de más de 30 px a 0. Test `SortableList: el deslizamiento de las filas`.
+- **Fase de pruebas de `master` tras #272 (11/11):** la suite del backend en `python:3.12-slim` (la base de la imagen) falló en
+  `test_assets_precomprimidos`: sin `/etc/mime.types`, Python 3.12 no conoce `.woff2`, así que las fuentes salían como
+  `application/octet-stream` y el `GZipMiddleware` las recomprimía en cada petición (lo que #265 quería evitar). En la CI (Ubuntu) pasaba.
+  `web/app.py` registra `font/woff2`; el test pide la fuente con `Accept-Encoding` y comprueba el tipo.
 - **Pendientes pequeños decididos por Gabriel (11/11):** el asistente y el login acotan su margen de arriba con
   `calc(var(--vh100) * 0.08)` en vez de `8vh`, y `test_frontend_css_sin_vh.py` (antes `…_panel_sin_vh.py`) vigila todas las hojas salvo
   `globals.css`; Configuración separa sus tarjetas 16 px, como Tareas (se quitan los 20 px que lo pisaban); y se borra
