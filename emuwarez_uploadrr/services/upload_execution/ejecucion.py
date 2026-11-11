@@ -9,6 +9,7 @@ import threading
 import time
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Callable
 
 from ..subida_pasos import leer_subpasos, subpaso_de_linea
 from ..upload_result_parser import classify_upload_result
@@ -142,37 +143,13 @@ def _run_uploadrr_subprocess_body(job_id: int, cmd: dict, secrets: list[str]) ->
             _cancelado()
             return
 
-        env = {k: v for k, v in os.environ.items()}
-
-        # Sesión propia: Cancelar y el timeout señalan el grupo entero (Uploadrr,
-        # mkbrr, ffmpeg…) y no solo el PID de Python.
-        # Lanzar y apuntar, bajo el candado con que se apaga el servidor: una vez
-        # empezado el apagado no se lanza otro, y ninguno se escapa de la lista.
-        with _PROCESOS_LOCK:
-            # La bandera vive en procesos (la pone detener_procesos_en_marcha): se lee por el módulo, no por copia.
-            if procesos._apagando:
-                raise RuntimeError("El servidor se está apagando; no se lanza Uploadrr.")
-            proc = subprocess.Popen(
-                [executable] + args,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                stdin=subprocess.DEVNULL,
-                text=True,
-                errors="replace",
-                cwd=cwd if os.path.isdir(cwd) else None,
-                env=env,
-                start_new_session=True,
-            )
-            _PROCESOS[job_id] = proc
+        proc = _lanzar_uploadrr(job_id, [executable] + args, cwd)
 
         if not _avanzar_job(job_id, "running", process_id=proc.pid):
             # Cancelar llegó entre medias y no vio el proceso: se detiene aquí.
             append_upload_log(job_id, "info", "Subida cancelada al arrancar; se detiene Uploadrr.", stream="system")
             _detener_proceso(proc)
         append_upload_log(job_id, "info", f"PID: {proc.pid}", stream="system")
-
-        stdout_lines: list[str] = []
-        stderr_lines: list[str] = []
 
         progress_lock = threading.Lock()
         progress_state = {"phase": None, "pct": 0, "last_sig": None, "qbittorrent_add_failed": False}
@@ -245,58 +222,20 @@ def _run_uploadrr_subprocess_body(job_id: int, cmd: dict, secrets: list[str]) ->
                 crudo = json.dumps(subpasos_hechos)
             _avanzar_job(job_id, "running", pasos_uploadrr_json=crudo)
 
-        def _read_stream(stream, level, stream_name, buf):
-            for line in stream:
-                line = line.rstrip("\n")
-                safe_line = redact_secrets(line, secrets)
-                buf.append(safe_line)
-                # Si guardar la línea falla (base bloqueada, disco lleno) se
-                # sigue leyendo: sin nadie vaciando la tubería, Uploadrr se
-                # queda bloqueado escribiendo hasta el timeout.
-                try:
-                    append_upload_log(job_id, level, safe_line, stream=stream_name)
-                except Exception:
-                    logger.exception("Subida %s: no se pudo registrar una línea de %s", job_id, stream_name)
-                try:
-                    # La línea sin redactar: un secreto que coincida con una palabra de las marcas las rompería.
-                    # Lo que se registra de ella se redacta allí.
-                    _track_uploadrr_progress(line)
-                except Exception:
-                    logger.exception("Subida %s: no se pudo actualizar el progreso", job_id)
-                try:
-                    _apuntar_subpaso(line)
-                except Exception:
-                    logger.exception("Subida %s: no se pudo apuntar el paso que terminó Uploadrr", job_id)
+        def _procesar_linea(line: str) -> None:
+            try:
+                # La línea sin redactar: un secreto que coincida con una palabra de las marcas las rompería.
+                # Lo que se registra de ella se redacta allí.
+                _track_uploadrr_progress(line)
+            except Exception:
+                logger.exception("Subida %s: no se pudo actualizar el progreso", job_id)
+            try:
+                _apuntar_subpaso(line)
+            except Exception:
+                logger.exception("Subida %s: no se pudo apuntar el paso que terminó Uploadrr", job_id)
 
-        t_out = threading.Thread(
-            target=_read_stream,
-            args=(proc.stdout, "info", "stdout", stdout_lines),
-            daemon=True,
-        )
-        t_err = threading.Thread(
-            target=_read_stream,
-            args=(proc.stderr, "warning", "stderr", stderr_lines),
-            daemon=True,
-        )
-        t_out.start()
-        t_err.start()
-        # El resultado lo decide el código de salida, no el fin de las tuberías:
-        # un hijo de Uploadrr (mkbrr, ffmpeg…) que las herede las mantiene
-        # abiertas aunque Uploadrr ya haya salido, y esperarlas daba por fallida
-        # una subida buena tras el timeout.
-        timed_out = False
-        try:
-            returncode = proc.wait(timeout=timeout)
-        except subprocess.TimeoutExpired:
-            timed_out = True
-            returncode = _terminar_y_esperar(proc)
-        limite = time.monotonic() + _GRACIA_LECTORES
-        for t in (t_out, t_err):
-            t.join(timeout=max(0, limite - time.monotonic()))
-        if t_out.is_alive() or t_err.is_alive():
-            _senalar_grupo(proc, signal.SIGKILL)  # lo que quede vivo en el grupo
-            t_out.join(timeout=5)
-            t_err.join(timeout=5)
+        returncode, timed_out, stdout_lines, stderr_lines = _leer_y_esperar(
+            job_id, proc, timeout, secrets, _procesar_linea)
 
         if timed_out:
             finished_dt = datetime.now(timezone.utc)
@@ -441,12 +380,102 @@ def _run_uploadrr_subprocess_body(job_id: int, cmd: dict, secrets: list[str]) ->
         logger.error("Subida fallida (job %s): excepción inesperada: %s", job_id, msg)
         _notify_upload_failed(job_id, msg)
     finally:
-        with _PROCESOS_LOCK:
-            _PROCESOS.pop(job_id, None)
-        if proc is not None and proc.poll() is None:
-            # Se salió por una excepción con Uploadrr aún vivo: no se deja suelto.
-            _senalar_grupo(proc, signal.SIGKILL)
+        _soltar_proceso(job_id, proc)
         _release_staged_config(job_id, staged_config_path)
+
+
+def _lanzar_uploadrr(job_id: int, argv: list[str], cwd: str) -> subprocess.Popen:
+    """Lanza Uploadrr-EMU en su propia sesión y lo apunta en _PROCESOS (la subida y el reenvío a qBittorrent)."""
+    env = {k: v for k, v in os.environ.items()}
+
+    # Sesión propia: Cancelar y el timeout señalan el grupo entero (Uploadrr,
+    # mkbrr, ffmpeg…) y no solo el PID de Python.
+    # Lanzar y apuntar, bajo el candado con que se apaga el servidor: una vez
+    # empezado el apagado no se lanza otro, y ninguno se escapa de la lista.
+    with _PROCESOS_LOCK:
+        # La bandera vive en procesos (la pone detener_procesos_en_marcha): se lee por el módulo, no por copia.
+        if procesos._apagando:
+            raise RuntimeError("El servidor se está apagando; no se lanza Uploadrr.")
+        proc = subprocess.Popen(
+            argv,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            stdin=subprocess.DEVNULL,
+            text=True,
+            errors="replace",
+            cwd=cwd if os.path.isdir(cwd) else None,
+            env=env,
+            start_new_session=True,
+        )
+        _PROCESOS[job_id] = proc
+    return proc
+
+
+def _leer_y_esperar(
+    job_id: int,
+    proc: subprocess.Popen,
+    timeout: int | None,
+    secrets: list[str],
+    procesar: Callable[[str], None],
+) -> tuple[int, bool, list[str], list[str]]:
+    """Registra en el job cada línea redactada, pasa la cruda a `procesar` (que no debe lanzar) y espera a que salga.
+    Devuelve (código de salida, si se pasó del timeout, líneas de stdout, líneas de stderr)."""
+    stdout_lines: list[str] = []
+    stderr_lines: list[str] = []
+
+    def _read_stream(stream, level, stream_name, buf):
+        for line in stream:
+            line = line.rstrip("\n")
+            safe_line = redact_secrets(line, secrets)
+            buf.append(safe_line)
+            # Si guardar la línea falla (base bloqueada, disco lleno) se
+            # sigue leyendo: sin nadie vaciando la tubería, Uploadrr se
+            # queda bloqueado escribiendo hasta el timeout.
+            try:
+                append_upload_log(job_id, level, safe_line, stream=stream_name)
+            except Exception:
+                logger.exception("Subida %s: no se pudo registrar una línea de %s", job_id, stream_name)
+            procesar(line)
+
+    t_out = threading.Thread(
+        target=_read_stream,
+        args=(proc.stdout, "info", "stdout", stdout_lines),
+        daemon=True,
+    )
+    t_err = threading.Thread(
+        target=_read_stream,
+        args=(proc.stderr, "warning", "stderr", stderr_lines),
+        daemon=True,
+    )
+    t_out.start()
+    t_err.start()
+    # El resultado lo decide el código de salida, no el fin de las tuberías:
+    # un hijo de Uploadrr (mkbrr, ffmpeg…) que las herede las mantiene
+    # abiertas aunque Uploadrr ya haya salido, y esperarlas daba por fallida
+    # una subida buena tras el timeout.
+    timed_out = False
+    try:
+        returncode = proc.wait(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        timed_out = True
+        returncode = _terminar_y_esperar(proc)
+    limite = time.monotonic() + _GRACIA_LECTORES
+    for t in (t_out, t_err):
+        t.join(timeout=max(0, limite - time.monotonic()))
+    if t_out.is_alive() or t_err.is_alive():
+        _senalar_grupo(proc, signal.SIGKILL)  # lo que quede vivo en el grupo
+        t_out.join(timeout=5)
+        t_err.join(timeout=5)
+    return returncode, timed_out, stdout_lines, stderr_lines
+
+
+def _soltar_proceso(job_id: int, proc: subprocess.Popen | None) -> None:
+    """Lo quita de _PROCESOS y, si sigue vivo, mata su grupo."""
+    with _PROCESOS_LOCK:
+        _PROCESOS.pop(job_id, None)
+    if proc is not None and proc.poll() is None:
+        # Se salió por una excepción con Uploadrr aún vivo: no se deja suelto.
+        _senalar_grupo(proc, signal.SIGKILL)
 
 
 def start_upload_job(
