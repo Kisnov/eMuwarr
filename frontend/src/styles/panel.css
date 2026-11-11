@@ -478,8 +478,10 @@
     min-height: 0;
     grid-template-columns: minmax(0, 1fr);
   }
+  /* Uno bajo otro, cada carril llega al 70 % de la ventana visible. `--vh100` y no `vh` a pelo: la interfaz se escala
+     (`--ui-scale`) y en el móvil `vh` ignora la barra de direcciones. */
   .upload-panel.panel-bloque {
-    max-height: 70vh;
+    max-height: calc(var(--vh100) * 0.7);
   }
   /* Con tan poco ancho, «Subir» baja bajo el texto en vez de comérselo (el grupo y los idiomas se cortaban). */
   .panel-item { flex-wrap: wrap; }
