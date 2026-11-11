@@ -9,7 +9,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   latestInChain, phaseLabel, formatSecondsHM, currentPhaseInfo,
-  ACTIVE_JOB_STATUSES, statusLabel, queuedWaitText, fundirPorId,
+  ACTIVE_JOB_STATUSES, statusLabel, queuedWaitText, fundirPorId, conservarIguales,
 } from '../uploadStatus'
 import type { UploadJob, UploadProgressPhase } from '../../types/api'
 
@@ -169,5 +169,32 @@ describe('fundir el progreso de las vivas', () => {
     expect(fundirPorId(lista, [])).toBe(lista)
     // La misma subida, recién parseada pero sin cambios: tampoco.
     expect(fundirPorId(lista, [job({ id: 2 })])).toBe(lista)
+  })
+})
+
+describe('conservar las subidas que no cambian al recargar', () => {
+  it('reutiliza el objeto de cada subida igual y toma el nuevo de la que cambió', () => {
+    const previa = [job({ id: 3, status: 'running', title: 'A' }), job({ id: 2 }), job({ id: 1 })]
+    const nuevas = [job({ id: 3, status: 'running', title: 'A al 60 %' }), job({ id: 2 }), job({ id: 1 })]
+    const r = conservarIguales(previa, nuevas)
+    expect(r[0]).toBe(nuevas[0])
+    expect(r[1]).toBe(previa[1])
+    expect(r[2]).toBe(previa[2])
+  })
+
+  it('si la lista entera es igual, devuelve la misma', () => {
+    const previa = [job({ id: 2 }), job({ id: 1 })]
+    expect(conservarIguales(previa, [job({ id: 2 }), job({ id: 1 })])).toBe(previa)
+  })
+
+  it('una subida nueva, una que desaparece o otro orden cuentan como cambio', () => {
+    const previa = [job({ id: 2 }), job({ id: 1 })]
+    const conNueva = conservarIguales(previa, [job({ id: 3 }), job({ id: 2 }), job({ id: 1 })])
+    expect(conNueva.map(j => j.id)).toEqual([3, 2, 1])
+    expect(conNueva[1]).toBe(previa[0])
+    expect(conservarIguales(previa, [job({ id: 2 })])).toHaveLength(1)
+    const otroOrden = conservarIguales(previa, [job({ id: 1 }), job({ id: 2 })])
+    expect(otroOrden.map(j => j.id)).toEqual([1, 2])
+    expect(otroOrden[0]).toBe(previa[1])
   })
 })

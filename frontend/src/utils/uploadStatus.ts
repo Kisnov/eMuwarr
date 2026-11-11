@@ -79,6 +79,26 @@ export function fundirPorId(lista: UploadJob[], nuevas: readonly UploadJob[]): U
   return cambia ? fundida : lista
 }
 
+/**
+ * La lista recién pedida, pero conservando el objeto de cada subida que no ha cambiado respecto a la que ya hay en
+ * pantalla (misma `id`, mismo contenido). Cada recarga completa trae objetos nuevos aunque casi todos digan lo mismo; con
+ * la misma identidad, las filas memorizadas de Subidas no se repintan. Si la lista entera es igual (mismo orden y
+ * mismas filas), devuelve la misma.
+ */
+export function conservarIguales(previa: UploadJob[], nuevas: UploadJob[]): UploadJob[] {
+  const porId = new Map<number, UploadJob>()
+  for (const j of previa) if (j.id != null) porId.set(j.id, j)
+  let cambia = nuevas.length !== previa.length
+  const resultado = nuevas.map((n, i) => {
+    const antes = n.id != null ? porId.get(n.id) : undefined
+    const igual = antes !== undefined && JSON.stringify(antes) === JSON.stringify(n)
+    const elegida = igual ? antes : n
+    if (elegida !== previa[i]) cambia = true
+    return elegida
+  })
+  return cambia ? resultado : previa
+}
+
 // The tip of a retry chain: the job nobody else's retry_of_job_id points at.
 // Given ALL jobs for one library item (any order), returns the one that
 // represents "the current state of this item's upload" — used both by the

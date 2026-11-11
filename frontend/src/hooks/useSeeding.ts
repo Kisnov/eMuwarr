@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { getSeeding, type SeedingResponse } from '../api/seeding'
 
 export interface SeedingEstado {
@@ -30,5 +30,6 @@ export function useSeeding(): SeedingEstado {
     return () => { vivo.current = false }
   }, [cargar])
 
-  return { datos, cargando, cargar }
+  // Misma identidad mientras no cambie nada: las filas memorizadas de Subidas lo reciben como prop.
+  return useMemo(() => ({ datos, cargando, cargar }), [datos, cargando, cargar])
 }
