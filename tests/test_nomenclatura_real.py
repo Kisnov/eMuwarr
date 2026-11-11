@@ -1,18 +1,9 @@
-"""El nombre que genera la app, sobre MKV de verdad, y lo que dice de él
-Comprobar nomenclatura.
-
-Antes había dos constructores: el de la subida y el del comprobador, y cada
-uno daba un nombre distinto para el mismo fichero (4K, SD, mudo, tres audios…).
-El comprobador marcaba "No adaptada" justo los ficheros que la app acababa de
-renombrar. Ahora el comprobador llama al generador; estas pruebas fijan además
-qué nombre sale en cada caso.
-"""
+"""El nombre que genera la app, sobre MKV de verdad: qué nombre sale en cada caso (4K, SD, mudo, tres audios…)."""
 from __future__ import annotations
 
 import pytest
 
 from emuwarez_uploadrr.database import connect, init_db
-from emuwarez_uploadrr.services import nomenclature_check as nc
 from emuwarez_uploadrr.services.nomenclature import build_nomenclature_proposal
 
 from .mkv_sinteticos import hacer_mkv, requiere_herramientas
@@ -51,12 +42,6 @@ def _renombrar_como_la_app(conn, item: dict) -> str:
     return prop["proposed_torrent_name"]
 
 
-def _veredicto(conn, item_id: int) -> dict:
-    """Lo que dice el comprobador del fichero tal como está ahora en la base (tras renombrarlo)."""
-    fila = dict(conn.execute("SELECT * FROM library_items WHERE id = ?", (item_id,)).fetchone())
-    return nc.evaluate_file(conn, fila)
-
-
 CASOS = {
     "uhd": (dict(ancho=3840, alto=2160, audios=({"lang": "es"}, {"lang": "en"})),
             "Pelicula 2024 2160p 4K UHD WEB-DL x264 DUAL DD 5.1-EMUWAREZ"),
@@ -74,7 +59,7 @@ CASOS = {
 
 
 @pytest.mark.parametrize("caso", sorted(CASOS))
-def test_el_comprobador_acepta_lo_que_genera_la_app(caso, conn, tmp_path):
+def test_el_nombre_que_genera_la_app(caso, conn, tmp_path):
     opciones, esperado = CASOS[caso]
     carpeta = tmp_path / caso
     carpeta.mkdir()
@@ -83,8 +68,6 @@ def test_el_comprobador_acepta_lo_que_genera_la_app(caso, conn, tmp_path):
     item = _fila(conn, title="Pelicula", year=2024, path=str(ruta), resolution=resolucion)
 
     assert _renombrar_como_la_app(conn, item) == esperado
-    veredicto = _veredicto(conn, item["id"])
-    assert veredicto["status"] == nc.STATUS_CORRECT, veredicto["diff"]
 
 
 def test_un_especial_conserva_su_S00(conn, tmp_path):
@@ -96,17 +79,6 @@ def test_un_especial_conserva_su_S00(conn, tmp_path):
                season_number=0, episode_number=5, year=2020, path=str(ruta))
 
     assert _renombrar_como_la_app(conn, ep).startswith("Serie S00E05 2020 ")
-    assert _veredicto(conn, ep["id"])["status"] == nc.STATUS_CORRECT
-
-
-def test_un_nombre_mal_puesto_dice_que_falta(conn, tmp_path):
-    ruta = hacer_mkv(tmp_path / "Pelicula.2024.1080p.WEB-DL.x264.DD.5.1-GRUPO.mkv",
-                     ancho=3840, alto=2160, audios=({"lang": "es"},))
-    item = _fila(conn, title="Pelicula", year=2024, path=str(ruta), resolution="2160p")
-    r = _veredicto(conn, item["id"])
-    assert r["status"] == nc.STATUS_NOT_ADAPTED
-    # Alineado por tokens: lo que falta se nombra, sin desplazar el resto.
-    assert r["diff"] == ["'1080p' ≠ esperado '2160p'", "falta '4K'", "falta 'UHD'", "falta 'ESP'"]
 
 
 # --- Idiomas: un solo traductor para el nombre, la biblioteca y las pistas ----

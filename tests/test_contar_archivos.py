@@ -60,7 +60,7 @@ def test_lo_que_no_tienes_no_cuenta(conn):
 
 @pytest.mark.parametrize("estado", ["Disponible", "Subiendo", "Subido"])
 def test_subirlo_no_deja_de_ser_tuyo(conn, estado):
-    """Mismo criterio que nomenclature_check y emu_catalog: subir un archivo
+    """Mismo criterio que emu_catalog: subir un archivo
     no lo borra del disco."""
     _meter(conn, "movie", estado)
     assert contar_archivos(conn) == 1
