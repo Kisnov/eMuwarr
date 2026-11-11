@@ -69,7 +69,7 @@ export function EstadisticasPage() {
   const [tactil] = useState(() => window.matchMedia?.('(hover: none)').matches ?? false)
 
   return (
-    <div className="est-pagina">
+    <div className="est-pagina" data-tour="stats-content">
       <div className="page-header">
         <div>
           <h1 className="page-title">Estadísticas</h1>

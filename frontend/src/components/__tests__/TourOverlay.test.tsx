@@ -203,4 +203,11 @@ describe('pasos del tour según la pantalla', () => {
     expect(movil.every(s => !s.selector.includes('sidebar'))).toBe(true)
     expect(movil.length).toBe(TOUR_STEPS.length - 1)
   })
+
+  it('Estadísticas tiene su paso, en el orden del menú (tras Subidas, antes de la Guía) y también en el móvil', () => {
+    const ids = TOUR_STEPS.map(s => s.id)
+    expect(ids.indexOf('stats')).toBe(ids.indexOf('uploads') + 1)
+    expect(ids.indexOf('guide')).toBe(ids.indexOf('stats') + 1)
+    expect(pasosDelTour(true).some(s => s.id === 'stats')).toBe(true)
+  })
 })

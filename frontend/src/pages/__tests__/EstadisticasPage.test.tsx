@@ -15,6 +15,7 @@ import { SeccionVisible } from '../../context/SeccionVisible'
 import { SyncContext } from '../../context/SyncContext'
 import type { DashboardSummaryResponse, PuntoCuenta } from '../../types/api'
 import { boton, desmontar, esperar, montar, pulsar, texto } from '../../components/__tests__/dom'
+import { TOUR_STEPS } from '../../tour/steps'
 import { EstadisticasPage } from '../EstadisticasPage'
 
 const pedir = vi.mocked(getEstadisticasCuenta)
@@ -39,6 +40,14 @@ beforeEach(() => {
 afterEach(desmontar)
 
 describe('EstadisticasPage', () => {
+  it('lleva el objetivo del paso «Estadísticas» del tour', async () => {
+    pedir.mockResolvedValue({ dias: 90, puntos: [] })
+    await montar(<EstadisticasPage />)
+    const paso = TOUR_STEPS.find(p => p.id === 'stats')!
+    expect(paso.tab).toBe('stats')
+    expect(document.querySelectorAll(paso.selector)).toHaveLength(1)
+  })
+
   it('con datos pinta los tres gráficos accesibles y la tabla con cifras es-ES', async () => {
     pedir.mockResolvedValue({ dias: 90, puntos: [punto('2026-10-01'), punto('2026-10-02', { ratio: 4.25 })] })
     await montar(<EstadisticasPage />)
