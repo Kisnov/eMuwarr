@@ -468,6 +468,18 @@ def reconcile_interrupted_jobs(conn=None) -> int:
                 logger.warning("No se pudo registrar el log del job %s", row["id"], exc_info=True)
         if rows:
             logger.info("Reconciliados %d job(s) interrumpidos al arrancar", len(rows))
+        # Un reenvío a qBittorrent que murió con el proceso: falla el reenvío, la subida sigue como estaba.
+        reenvios = conn.execute("SELECT id FROM upload_jobs WHERE reenvio_qbit_estado = 'en_curso'").fetchall()
+        conn.execute("UPDATE upload_jobs SET reenvio_qbit_estado = 'fallido', reenvio_qbit_at = ? "
+                     "WHERE reenvio_qbit_estado = 'en_curso'", (_now_iso(),))
+        conn.commit()
+        for row in reenvios:
+            try:
+                from .upload_execution import append_upload_log
+                append_upload_log(row["id"], "error", "La aplicación se detuvo durante el reenvío a qBittorrent; "
+                                  "queda como fallido.", stream="system")
+            except Exception:
+                logger.warning("No se pudo registrar el log del job %s", row["id"], exc_info=True)
         return len(rows)
     except Exception:
         logger.warning("No se pudieron reconciliar los jobs interrumpidos", exc_info=True)

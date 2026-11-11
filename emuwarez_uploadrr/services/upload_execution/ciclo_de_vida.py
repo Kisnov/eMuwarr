@@ -392,6 +392,17 @@ def delete_upload_job(job_id: int, confirmation: str | None = None, conn=None) -
                            f"canceladas o fallidas (status={estados}).",
                 "job_id": job_id,
             }
+        # Un reenvío a qBittorrent en marcha escribe en su registro y en su fila.
+        if conn.execute(
+            f"SELECT 1 FROM upload_jobs WHERE id IN ({','.join('?' * len(chain))}) AND reenvio_qbit_estado = 'en_curso'",
+            chain,
+        ).fetchone():
+            return {
+                "ok": False,
+                "error": "reenvio_en_curso",
+                "message": "Se está reenviando a qBittorrent; espera a que termine para borrarla.",
+                "job_id": job_id,
+            }
 
         # Las carpetas de enlaces de los packs, antes de perder sus rutas. Solo
         # borra enlaces: los ficheros de verdad siguen en la carpeta de Sonarr,

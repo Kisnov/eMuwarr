@@ -630,6 +630,11 @@ export interface UploadJob {
   // 'a_mano' (el usuario dijo que ya lo puso). null: no se comprobó o no se pudo.
   trailer_estado?: TrailerEstado | null
   trailer_url?: string | null
+  // «Reenviar a qBittorrent»: cómo fue el último reenvío y cuándo, y si ahora se puede (completada, con id de
+  // eMuwarez, con sus ficheros y sin otro en curso).
+  reenvio_qbit_estado?: 'en_curso' | 'ok' | 'fallido' | null
+  reenvio_qbit_at?: string | null
+  puede_reenviar_qbit?: boolean
   nomenclature_snapshot?: UploadNomenclatureSnapshot | null
   remux_snapshot?: UploadRemuxSnapshot | null
   checks_snapshot?: UploadChecksSnapshot | null

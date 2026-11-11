@@ -109,6 +109,12 @@ def test_las_banderas_llegan_con_el_nombre_que_lee_uploadrr(parser_uploadrr):
     assert (ns.anon, ns.personalrelease, ns.resume, ns.aviso_baja_calidad) == (False, False, False, False)
 
 
+def test_reenviar_a_qbittorrent_llega_como_solo_cliente_con_resume(parser_uploadrr):
+    ns = _parsear(parser_uploadrr, _cmd(solo_cliente="4242"))
+    assert (ns.solo_cliente, ns.resume) == (4242, True)
+    assert _parsear(parser_uploadrr, _cmd()).solo_cliente is None
+
+
 def _choices(parser: argparse.ArgumentParser, opcion: str) -> set[str]:
     (accion,) = [a for a in parser._actions if opcion in a.option_strings]
     return set(accion.choices)
