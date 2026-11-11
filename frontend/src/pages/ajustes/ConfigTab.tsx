@@ -15,6 +15,7 @@ import { ProveedoresVideoCard } from './config/ProveedoresVideoCard'
 import { ProveedoresImagenesCard } from './config/ProveedoresImagenesCard'
 import { BibliotecaCard } from './config/BibliotecaCard'
 import { OtrosCard } from './config/OtrosCard'
+import { desplazarAlContenedor } from '../../utils/desplazar'
 
 // Lo que falta por configurar y lo que más se toca va primero: eMuwarez y TMDb son imprescindibles y, sin clave, salían
 // por debajo de la primera pantalla, detrás de Cuenta y Sesiones. `palabras` son términos que el buscador también acepta
@@ -87,7 +88,7 @@ function ConfigFormulario({ form }: { form: ConfigForm }) {
     const campo = nodo?.closest<HTMLElement>('.form-group') ?? nodo
     if (!campo) return
     campo.classList.add('aj-coincide')
-    campo.scrollIntoView?.({ block: 'nearest' })
+    desplazarAlContenedor(campo, { block: 'nearest' })
     return () => campo.classList.remove('aj-coincide')
   }, [consulta, coinciden])
 
@@ -106,7 +107,9 @@ function ConfigFormulario({ form }: { form: ConfigForm }) {
       const el = raiz.current?.querySelector<HTMLElement>(`[data-seccion="${id}"]`)
       if (!el) return
       const reducido = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
-      el.scrollIntoView?.({ behavior: reducido ? 'auto' : 'smooth', block: 'start' })
+      // Solo se mueve el contenedor de la página: scrollIntoView desplazaba también la ventana en el móvil y dejaba
+      // la mitad de abajo en blanco (ver utils/desplazar).
+      desplazarAlContenedor(el, { behavior: reducido ? 'auto' : 'smooth', block: 'start' })
       el.focus({ preventScroll: true })
       setResaltada(id)
     })

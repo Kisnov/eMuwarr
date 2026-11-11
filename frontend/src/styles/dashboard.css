@@ -509,24 +509,21 @@
    tarjetas, y la lista de proveedores de vídeo (ver más abajo) perdía hasta
    el 76%. Ahora la única barra de scroll de esta pestaña es la de la página
    entera, igual que en las otras cuatro (ver SettingsPage()).
-   Una rejilla, no `columns`: con columnas CSS las tarjetas se reparten de
-   arriba abajo columna a columna, y la que abría la segunda cambiaba con el
-   ancho (a 1440 px, junto a eMuwarez salía «Otros», la sexta del índice). En
-   rejilla el orden es el del DOM, que es el del índice, a cualquier ancho:
-   de izquierda a derecha y por filas, y una sola columna si no caben dos.
-   Cada tarjeta lleva su alto; las columnas no se igualan. El número de
-   columnas lo da el ancho disponible (300px como mínimo por tarjeta, máximo
-   cuatro): con la ventana estrecha, cuatro columnas de ~190px dejaban los
-   títulos partidos en tres líneas. */
+   Columnas CSS, no rejilla: cada tarjeta se coloca justo debajo de la anterior de su columna, sin huecos aunque
+   unas midan mucho más que otras. Con rejilla las filas se igualaban al alto de la tarjeta más alta y quedaban
+   espacios en blanco (p. ej. bajo TMDb y qBittorrent, junto a los proveedores de vídeo). Contrapartida: las tarjetas
+   se reparten de arriba abajo columna a columna, así que el orden de lectura no es el del índice. El número de
+   columnas lo da el ancho disponible (300px como mínimo por tarjeta, máximo cuatro). */
 .settings-config-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(max(300px, calc((100% - 48px) / 4)), 1fr));
+  columns: 4 300px;
   column-gap: 16px;
-  align-items: start;
 }
+.settings-config-grid > .aj-seccion,
 .settings-config-grid > .placeholder-card {
   /* Que una tarjeta no se parta entre dos columnas. */
   break-inside: avoid;
+}
+.settings-config-grid > .placeholder-card {
   margin-bottom: 16px;
 }
 
@@ -570,17 +567,31 @@
   gap: 8px;
 }
 
-/* Proveedores de vídeo / de imágenes: con la tarjeta creciendo con el
-   contenido (arriba), ya no hace falta anclar "Añadir" abajo ni capar la
-   lista a unas pocas filas con su propio scroll — eso era lo que escondía la
-   mayoría de la lista de proveedores de vídeo. Solo dentro de esta pestaña:
-   el mismo picker en el asistente de subida (SetupWizard) sigue con su
-   comportamiento de siempre, capado y con scroll propio, que ahí sí tiene
-   sentido (un paso de un asistente, no una tarjeta que crece). */
+/* Proveedores de vídeo / de imágenes: la lista no crece con cada proveedor (con once o más la tarjeta se hacía
+   enorme y empujaba a las demás): enseña unas cuatro filas y media y se desplaza por dentro. La media fila de
+   abajo avisa de que hay más. Solo dentro de esta pestaña; el mismo picker en el asistente de primera
+   configuración (SetupWizard) sigue con su comportamiento de siempre. */
 .settings-config-grid .provider-card__list {
+  /* Alto de una fila con su hueco: la de vídeo (nombre y quitar) y la de imágenes (con insignia y botón Probar). */
+  --alto-fila-proveedor: 44px;
   flex: initial;
   min-height: 0;
-  overflow-y: visible;
+  max-height: calc(var(--alto-fila-proveedor) * 4.5);
+  overflow-y: auto;
+  /* Al llegar al final de la lista no arrastra a la página. */
+  overscroll-behavior: contain;
+  /* Sitio para la sombra de la fila arrastrada y el foco, que si no se recortan en el borde del desplazamiento. */
+  padding: 2px 4px 2px 2px;
+  margin: -2px -4px -2px -2px;
+}
+.settings-config-grid .provider-card__list--imagenes {
+  --alto-fila-proveedor: 50px;
+}
+/* Con el dedo cada fila lleva sus flechas de subir y bajar, a tamaño de toque. */
+@media (pointer: coarse) {
+  .settings-config-grid .provider-card__list {
+    --alto-fila-proveedor: calc(var(--tap-min) + 26px);
+  }
 }
 .settings-config-grid .provider-card__add-btn,
 .wizard-card .provider-card__add-btn {

@@ -51,6 +51,7 @@ import { CasillaLote } from '../components/lote/CasillaLote'
 import { SubidaPorLotesModal } from '../components/lote/SubidaPorLotesModal'
 import { useSeleccionLote } from '../hooks/useSeleccionLote'
 import { entradaDePeticion, peticionSeleccionableEnLote, type EntradaLote } from '../utils/lote'
+import { desplazarAlContenedor } from '../utils/desplazar'
 
 // Fallback for "Consultar en eMuwarez" while we don't have the exact
 // per-request URL yet — points at the general requests listing instead of
@@ -741,7 +742,7 @@ export function RequestsPage({ onNavigate }: { onNavigate?: (page: string) => vo
   // cabecera puede moverse unos píxeles, así que se vuelve a llevar a su sitio dos fotogramas después.
   const irAlGrupo = (id: GrupoPeticion) => {
     alternarGrupo(id, false)
-    const llevar = () => document.getElementById(`pet-grupo-${id}`)?.scrollIntoView?.({ block: 'start' })
+    const llevar = () => desplazarAlContenedor(document.getElementById(`pet-grupo-${id}`), { block: 'start' })
     requestAnimationFrame(() => {
       llevar()
       requestAnimationFrame(() => requestAnimationFrame(llevar))

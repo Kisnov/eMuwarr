@@ -7,6 +7,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { CheckStatusIcon } from '../components/DetailCard'
+import { desplazarAlContenedor } from '../utils/desplazar'
 
 function Mono({ children }: { children: React.ReactNode }) {
   return (
@@ -764,7 +765,7 @@ export function GuidePage() {
 
   function saltarA(id: string) {
     const reducido = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
-    document.getElementById(id)?.scrollIntoView({ behavior: reducido ? 'auto' : 'smooth', block: 'start' })
+    desplazarAlContenedor(document.getElementById(id), { behavior: reducido ? 'auto' : 'smooth', block: 'start' })
   }
 
   return (

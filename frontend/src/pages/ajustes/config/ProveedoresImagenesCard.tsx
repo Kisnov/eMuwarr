@@ -138,7 +138,7 @@ export function ProveedoresImagenesCard({ form }: { form: ConfigForm }) {
         return (
           <>
           <div className="provider-card__body">
-            <div className="provider-card__list">
+            <div className="provider-card__list provider-card__list--imagenes">
               <div className="aj-col-8">
                 <SortableList etiqueta={id => metaOf(id)?.label ?? id} ids={configuredIds} onChange={setImgEnabled} gap={8} renderRow={fila} />
                 {configuredIds.length === 0 && (

@@ -4,6 +4,9 @@
   display: flex;
   height: var(--vh100);
   overflow: hidden;
+  /* `clip` no deja ni que un scrollIntoView() lo desplace (un marco con `hidden` sí se puede mover por código): en el
+     móvil la aplicación subía y por debajo quedaba el fondo vacío. Si el navegador no conoce `clip`, vale `hidden`. */
+  overflow: clip;
 }
 
 /* Enlace «Saltar al contenido»: invisible hasta que el teclado le da el foco, y entonces lo primero de la ventana. */
