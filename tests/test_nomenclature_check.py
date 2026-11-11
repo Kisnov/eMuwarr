@@ -1,8 +1,8 @@
-"""MediaInfo-based nomenclature check: pure comparison + DB rollup/pending.
+"""MediaInfo-based nomenclature check: pure comparison + DB rollup.
 
 The MediaInfo read itself needs real files + the `mediainfo` binary, so it is
 not exercised here; we cover the deterministic pieces: token comparison,
-group/provider handling, pending counting and the season/series rollup.
+group/provider handling and the season/series rollup.
 """
 from __future__ import annotations
 
@@ -57,16 +57,6 @@ def _add(conn, **kw):
     return cur.lastrowid
 
 
-def test_count_pending_only_available_unchecked():
-    conn = _conn()
-    season = _add(conn, item_type="season", title="S1", local_status="Disponible", path=None)
-    _add(conn, parent_id=season, title="E1", path="/x/e1.mkv", nomenclature_status="No comprobada")
-    _add(conn, parent_id=season, title="E2", path="/x/e2.mkv", nomenclature_status="Correcta")
-    _add(conn, parent_id=season, title="E3", path=None, local_status="Ausente", nomenclature_status="N/A")
-    pending, available, seasons = nc.count_pending(conn, season, "season")
-    assert (pending, available) == (1, 2)  # E3 missing → not available
-
-
 def test_rollup_unchecked_when_any_pending():
     from emuwarez_uploadrr.web.api.library import _nomenclature_rollup
     conn = _conn()
@@ -101,29 +91,3 @@ def test_rollup_na_when_no_available_files():
     season = _add(conn, item_type="season", title="S1", path=None)
     _add(conn, parent_id=season, title="E1", path=None, local_status="Ausente", nomenclature_status="N/A")
     assert _nomenclature_rollup(conn, season, "season") == "N/A"
-
-
-def test_check_item_skips_unavailable():
-    # No available files → nothing checked, no MediaInfo invoked.
-    conn = _conn()
-    season = _add(conn, item_type="season", title="S1", path=None)
-    _add(conn, parent_id=season, title="E1", path=None, local_status="Ausente", nomenclature_status="N/A")
-    summary = nc.check_item(conn, season)
-    assert summary["attempted"] == 0
-    assert summary["evaluated"] == 0
-    assert summary["errors"] == 0
-
-
-def test_check_item_reports_unreadable_file_as_error():
-    # A file that can't be read counts as an error, not evaluated, and the
-    # item stays 'No comprobada' (never wrongly 'No adaptada').
-    conn = _conn()
-    mid = _add(conn, item_type="movie", title="Peli", local_status="Disponible",
-               path="/no/such/file.mkv", nomenclature_status="No comprobada")
-    summary = nc.check_item(conn, mid)
-    assert summary["attempted"] == 1
-    assert summary["evaluated"] == 0
-    assert summary["errors"] == 1
-    assert summary["error_detail"]
-    status = conn.execute("SELECT nomenclature_status FROM library_items WHERE id = ?", (mid,)).fetchone()[0]
-    assert status == "No comprobada"

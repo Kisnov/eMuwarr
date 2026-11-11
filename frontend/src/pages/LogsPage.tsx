@@ -4,7 +4,7 @@ import { EmptyState } from '../components/EmptyState'
 import { useSeccionVisible } from '../context/SeccionVisible'
 import { IconoDocumento } from '../components/Iconos'
 import {
-  clavesDeLineas, reutilizarLineas, textoDeLinea, trocearPorBusqueda, diaDeLinea, horaDeLinea,
+  clavesDeLineas, reutilizarLineas, sumarLineasNuevas, textoDeLinea, trocearPorBusqueda, diaDeLinea, horaDeLinea,
 } from '../utils/logs'
 
 const LEVELS = ['', 'DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL']
@@ -13,6 +13,8 @@ const NIVEL_CLASE: Record<string, string> = {
 }
 // Cuánto dura el «Copiado» antes de volver a «Copiar».
 const AVISO_COPIADO_MS = 1800
+// Cuántas líneas se piden y se guardan.
+const LIMITE_LINEAS = 1000
 
 // Una línea del registro. Memoizada: con mil líneas, repintarlas todas cada 3 segundos para dejarlas igual era lo que
 // más costaba de esta pantalla. Con la línea abierta el mensaje se parte en varias líneas; cerrada, se recorta.
@@ -61,6 +63,9 @@ const Linea = memo(function Linea({ linea, id, abierta, enfocable, busqueda, onA
 
 export function LogsPage() {
   const [items, setItems] = useState<LogEntry[]>([])
+  // Las líneas que se ven ahora mismo, para que una lectura se sume a ellas sin depender del momento del repintado.
+  const itemsRef = useRef<LogEntry[]>(items)
+  itemsRef.current = items
   const listaRef = useRef<HTMLDivElement>(null)
   // Si el foco estaba en una línea de la lista justo antes de aplicar un refresco (lo mira `load`).
   const focoEnLista = useRef(false)
@@ -84,16 +89,36 @@ export function LogsPage() {
 
   // Solo cuenta la última petición: cambiar el nivel con una en vuelo no deja las líneas del nivel anterior.
   const ultimaCarga = useRef(0)
-  const load = useCallback(async () => {
+  // Con qué filtros se leyó la lista que se ve y cuál es su línea más nueva: el refresco automático pide solo lo
+  // posterior (`since`) con esos mismos filtros, no los que se estén tecleando.
+  const lectura = useRef<{ level: string; search: string; desde: number } | null>(null)
+  // `completa`: leer la lista entera con los filtros de ahora. Sin ella (refresco automático) se pide solo lo nuevo, y si
+  // aún no hay una lectura de partida se hace completa.
+  const load = useCallback(async (completa = true) => {
     const esta = ++ultimaCarga.current
     enCurso.current = true
+    if (completa) lectura.current = null
     try {
-      const r = await getLogs({ limit: 1000, level: level || undefined, search: searchRef.current.trim() || undefined })
+      const previa = completa ? null : lectura.current
+      const filtros = previa ?? { level, search: searchRef.current.trim() }
+      const r = await getLogs({
+        limit: LIMITE_LINEAS,
+        level: filtros.level || undefined,
+        search: filtros.search || undefined,
+        since: previa?.desde,
+      })
       if (esta !== ultimaCarga.current) return
       // Si no ha entrado nada, se deja la lista como está: no se repintan mil filas para nada. Si ha entrado algo, las
       // que ya estaban conservan su objeto y solo se pintan las nuevas.
       focoEnLista.current = !!listaRef.current?.contains(document.activeElement)
-      setItems(previas => reutilizarLineas(previas, r.items))
+      // Un `truncated` es que han entrado más de las que caben: lo recibido es la lista entera, no un añadido.
+      const soloNuevas = previa !== null && !r.truncated
+      const sig = soloNuevas
+        ? sumarLineasNuevas(itemsRef.current, r.items, LIMITE_LINEAS)
+        : reutilizarLineas(itemsRef.current, r.items)
+      const masNueva = sig[0]?.seq
+      lectura.current = masNueva === undefined ? null : { ...filtros, desde: masNueva }
+      setItems(sig)
       setError(null)
     } catch {
       if (esta === ultimaCarga.current) setError('No se pudieron cargar los logs')
@@ -122,7 +147,7 @@ export function LogsPage() {
   const logsALaVista = useSeccionVisible()
   useEffect(() => {
     if (!auto || !logsALaVista) return
-    const t = setInterval(() => { if (!enCurso.current) load() }, 3000)
+    const t = setInterval(() => { if (!enCurso.current) void load(false) }, 3000)
     return () => clearInterval(t)
   }, [auto, load, logsALaVista])
 
@@ -224,7 +249,7 @@ export function LogsPage() {
         <select className="form-input form-select lg-nivel-filtro" aria-label="Nivel mínimo" value={level} onChange={e => setLevel(e.target.value)}>
           {LEVELS.map(l => <option key={l} value={l}>{l ? `Nivel: ${l}+` : 'Nivel: Todos'}</option>)}
         </select>
-        <button className="btn btn-secondary btn-sm" onClick={() => load()}>Refrescar</button>
+        <button className="btn btn-secondary btn-sm" onClick={() => void load()}>Refrescar</button>
         <label className="checkbox-label lg-auto">
           <input type="checkbox" checked={auto} onChange={e => setAuto(e.target.checked)} /> Auto (3s)
         </label>

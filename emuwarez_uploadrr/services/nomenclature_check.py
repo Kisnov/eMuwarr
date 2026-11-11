@@ -4,33 +4,24 @@ Radarr/Sonarr only expose a *summary* mediaInfo (one audio codec/channels, not
 per-track), so the exact eMuwarez name — which needs the per-track audio —
 can only be built by reading MediaInfo from the actual file. This module:
 
-  1. needs a MediaInfo read of the file (or it counts as an error),
+  1. needs a MediaInfo read of the file (if not, `evaluate_file` raises),
   2. builds the expected file name with the SAME generator the upload uses
      (nomenclature.build_nomenclature_proposal), so the two can't disagree,
   3. compares it to the real file name, ignoring the group after the last '-',
-  4. yields 'Correcta' / 'No adaptada' + a per-token diff for the UI.
+  4. yields 'Correcta' / 'No adaptada' + a per-token diff.
 
-States: 'No comprobada' (default, MediaInfo not run) · 'No adaptada' (checked,
-does not comply) · 'Correcta' (checked, complies) · 'N/A' (no file).
-Only DISPONIBLE + 'No comprobada' items are checked (unless force=True); the
-sync resets a checked item back to 'No comprobada' when its file changes.
+Hoy solo lo ejercitan los tests (`evaluate_file`, `compare`): la app ya no tiene un
+recorrido por temporadas o series que lo llame.
 """
 from __future__ import annotations
 
 import difflib
 import os
-from typing import Optional
 
 from .mkv_title import to_filesystem_name
-from ..integrations.base import texto_de_error
 
-STATUS_UNCHECKED = "No comprobada"
 STATUS_CORRECT = "Correcta"
 STATUS_NOT_ADAPTED = "No adaptada"
-STATUS_NA = "N/A"
-
-# Local statuses that mean the file is on disk (i.e. checkable).
-_AVAILABLE = {"Disponible", "Subido", "Subiendo"}
 
 
 def _strip_group(core_dotted: str) -> str:
@@ -96,102 +87,7 @@ def compare(actual_filename: str, exp_core: str) -> tuple[bool, list[str]]:
     return False, diff or ["El nombre no coincide con el esperado"]
 
 
-# --- DB-facing service ------------------------------------------------------
-
-def _leaf_episodes(conn, item_id: int, item_type: str) -> list[dict]:
-    """Real files under a rollup (a season's episodes, a series' episodes)."""
-    if item_type == "movie":
-        return [dict(r) for r in conn.execute("SELECT * FROM library_items WHERE id = ?", (item_id,))]
-    if item_type == "episode":
-        return [dict(r) for r in conn.execute("SELECT * FROM library_items WHERE id = ?", (item_id,))]
-    if item_type == "season":
-        return [dict(r) for r in conn.execute(
-            "SELECT * FROM library_items WHERE parent_id = ? AND item_type = 'episode'", (item_id,))]
-    if item_type == "series":
-        return [dict(r) for r in conn.execute(
-            "SELECT e.* FROM library_items e JOIN library_items se ON e.parent_id = se.id "
-            "WHERE se.parent_id = ? AND e.item_type = 'episode'", (item_id,))]
-    return []
-
-
-def _is_available(item: dict) -> bool:
-    return (item.get("local_status") or "") in _AVAILABLE and bool(item.get("path"))
-
-
-def count_pending(conn, item_id: int, item_type: str) -> tuple[int, int, int]:
-    """(pending, available_total, seasons) for the confirmation message.
-    pending = available files still 'No comprobada'."""
-    eps = _leaf_episodes(conn, item_id, item_type)
-    avail = [e for e in eps if _is_available(e)]
-    pending = sum(1 for e in avail if (e.get("nomenclature_status") or STATUS_UNCHECKED) == STATUS_UNCHECKED)
-    seasons = 0
-    if item_type == "series":
-        seasons = conn.execute(
-            "SELECT COUNT(*) FROM library_items WHERE parent_id = ? AND item_type = 'season'", (item_id,)
-        ).fetchone()[0]
-    return pending, len(avail), seasons
-
-
-def _store_result(conn, item_id: int, status: str, expected: Optional[str]) -> None:
-    conn.execute(
-        "UPDATE library_items SET nomenclature_status = ?, nomenclature_expected = ?, "
-        "nomenclature_checked_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-        (status, expected, item_id),
-    )
-
-
-def check_one(conn, item: dict) -> dict:
-    """Evaluate a single leaf item (movie/episode) and persist. Returns the
-    result dict. Skips (returns status) non-available items."""
-    if not _is_available(item):
-        return {"id": item["id"], "status": item.get("nomenclature_status") or STATUS_NA, "skipped": True}
-    res = evaluate_file(conn, item)
-    _store_result(conn, item["id"], res["status"], res.get("expected"))
-    res["id"] = item["id"]
-    return res
-
-
-def check_item(conn, item_id: int, *, force: bool = False) -> dict:
-    """Check a leaf, a season (all its episodes) or a series (all episodes).
-    Only 'No comprobada' available files are checked unless force=True.
-
-    Returns {attempted, evaluated, correct, not_adapted, errors, error_detail,
-    results}. A file whose MediaInfo can't be read (not accessible, no
-    `mediainfo` binary) is counted as an *error*, NOT as evaluated — its status
-    stays 'No comprobada' so it isn't wrongly marked 'No adaptada'."""
-    row = conn.execute("SELECT * FROM library_items WHERE id = ?", (item_id,)).fetchone()
-    if not row:
-        return {"error": "not found"}
-    item = dict(row)
-    eps = _leaf_episodes(conn, item_id, item["item_type"])
-    targets = [e for e in eps if _is_available(e) and
-               (force or (e.get("nomenclature_status") or STATUS_UNCHECKED) == STATUS_UNCHECKED)]
-    results, correct, not_adapted, errors = [], 0, 0, 0
-    error_detail = None
-    for e in targets:
-        try:
-            r = check_one(conn, e)
-        except Exception as exc:  # MediaInfo unreadable, etc. — leave unchecked
-            r = {"id": e["id"], "status": STATUS_UNCHECKED, "error": texto_de_error(exc)}
-        results.append(r)
-        if r.get("status") == STATUS_CORRECT:
-            correct += 1
-        elif r.get("status") == STATUS_NOT_ADAPTED:
-            not_adapted += 1
-        if r.get("error"):
-            errors += 1
-            error_detail = error_detail or r["error"]
-    conn.commit()
-    return {
-        "attempted": len(targets),
-        "evaluated": correct + not_adapted,
-        "correct": correct,
-        "not_adapted": not_adapted,
-        "errors": errors,
-        "error_detail": error_detail,
-        "results": results,
-    }
-
+# --- Veredicto de un fichero --------------------------------------------------
 
 def evaluate_file(conn, item: dict) -> dict:
     """El veredicto para un elemento: {status, expected, actual, diff}.

@@ -48,6 +48,16 @@ export function reutilizarLineas(previas: readonly LogEntry[], nuevas: LogEntry[
   })
 }
 
+/**
+ * Suma las líneas que acaban de entrar (de la más nueva a la más vieja, como todo el registro) a las que ya había, sin
+ * pasar de `limite`. Las que ya estaban conservan su objeto, así que `memo` no repinta ninguna; si no entra nada,
+ * devuelve la misma lista (React no repinta).
+ */
+export function sumarLineasNuevas(previas: readonly LogEntry[], nuevas: readonly LogEntry[], limite: number): LogEntry[] {
+  if (nuevas.length === 0) return previas as LogEntry[]
+  return [...nuevas, ...previas].slice(0, limite)
+}
+
 /** La línea como texto plano, lista para pegar en un mensaje o un informe. */
 export function textoDeLinea(l: LogEntry): string {
   return `${l.time} ${l.level} ${l.logger} ${l.message}`

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { LogEntry } from '../../api/logs'
 import {
-  clavesDeLineas, diaDeLinea, horaDeLinea, mismasLineas, reutilizarLineas, textoDeLinea, trocearPorBusqueda,
+  clavesDeLineas, diaDeLinea, horaDeLinea, mismasLineas, reutilizarLineas, sumarLineasNuevas, textoDeLinea, trocearPorBusqueda,
 } from '../logs'
 
 function linea(extra: Partial<LogEntry> = {}): LogEntry {
@@ -74,6 +74,28 @@ describe('Logs: reutilizar las líneas de la lectura anterior', () => {
     const r = reutilizarLineas(previas, nuevas)
     expect(r[1]).toBe(previas[0])
     expect(r[2]).toBe(previas[1])
+  })
+})
+
+describe('Logs: sumar lo que acaba de entrar', () => {
+  it('pone las nuevas delante y las que ya estaban conservan su objeto', () => {
+    const previas = [linea({ ts: 2, message: 'b' }), linea({ ts: 1, message: 'a' })]
+    const nuevas = [linea({ ts: 4, message: 'd' }), linea({ ts: 3, message: 'c' })]
+    const r = sumarLineasNuevas(previas, nuevas, 1000)
+    expect(r.map(l => l.message)).toEqual(['d', 'c', 'b', 'a'])
+    expect(r[2]).toBe(previas[0])
+    expect(r[3]).toBe(previas[1])
+  })
+
+  it('sin nada nuevo devuelve la misma lista', () => {
+    const previas = [linea({ ts: 1 })]
+    expect(sumarLineasNuevas(previas, [], 1000)).toBe(previas)
+  })
+
+  it('no pasa del límite: se van las más viejas', () => {
+    const previas = [linea({ ts: 2, message: 'b' }), linea({ ts: 1, message: 'a' })]
+    const r = sumarLineasNuevas(previas, [linea({ ts: 3, message: 'c' })], 2)
+    expect(r.map(l => l.message)).toEqual(['c', 'b'])
   })
 })
 
