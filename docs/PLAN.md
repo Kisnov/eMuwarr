@@ -686,7 +686,7 @@ Hallazgos y maquetas: https://claude.ai/artifact/PjPRTxSfEs3Y8aVtXzN32i
 - **Segunda onada de decisiones de diseño (11/11, #268-#270, verificadas en local; la CI no tiene minutos):** Gabriel delegó los «dudosos» del
   PLAN; cada decisión es un commit, así que se revierte por separado.
   - #268, Panel, tour y espacios: «Listo para subir» encoge al contenido y, con una o dos peticiones, dice «Nada más listo por ahora»
-    (`70vh` pasa a `calc(var(--vh100) * 0.7)`, vigilado por `test_frontend_panel_sin_vh.py`); la burbuja del tour va al lado, o dentro de la
+    (`70vh` pasa a `calc(var(--vh100) * 0.7)`, vigilado por `test_frontend_css_sin_vh.py`); la burbuja del tour va al lado, o dentro de la
     ventana, si no cabe encima ni debajo, y hay un paso de Estadísticas; la opción activa de la paleta va en cian suave sin resplandor;
     espacios a la escala (14→16 en la banda de atención, 12→16 en la franja del Panel, 22→24 en la leyenda de Estadísticas).
   - #269, Configuración y Peticiones: casillas propias de 16 px (siguen siendo casillas: son listas de selección múltiple); la rejilla de
@@ -723,6 +723,11 @@ Hallazgos y maquetas: https://claude.ai/artifact/PjPRTxSfEs3Y8aVtXzN32i
   `test_assets_precomprimidos`: sin `/etc/mime.types`, Python 3.12 no conoce `.woff2`, así que las fuentes salían como
   `application/octet-stream` y el `GZipMiddleware` las recomprimía en cada petición (lo que #265 quería evitar). En la CI (Ubuntu) pasaba.
   `web/app.py` registra `font/woff2`; el test pide la fuente con `Accept-Encoding` y comprueba el tipo.
+- **Pendientes pequeños decididos por Gabriel (11/11):** el asistente y el login acotan su margen de arriba con
+  `calc(var(--vh100) * 0.08)` en vez de `8vh`, y `test_frontend_css_sin_vh.py` (antes `…_panel_sin_vh.py`) vigila todas las hojas salvo
+  `globals.css`; Configuración separa sus tarjetas 16 px, como Tareas (se quitan los 20 px que lo pisaban); y se borra
+  `nomenclature_check` (solo lo llamaban los tests): de `test_nomenclatura_real.py` quedan los nombres que genera la app.
+  El `scrollIntoView` del tour se queda: el tour se hace una vez y desde el PC.
 
 ## Siguiente
 
@@ -750,15 +755,8 @@ probarla, si guardar los `campos` y crear el trabajo van en una sola transacció
 
 ## Aplazado / ideas
 
-- Que el filtro «Petición» de Biblioteca cuente la petición heredada (la celda ya dice «de la serie», #240): `request_id` guarda una
-  petición por fila, la que se escribe donde la petición pide. Una serie pedida entera marcaría todos sus capítulos «Compatible».
-- Objetivos táctiles con `(any-pointer: coarse)`: se probó en #269 y se descartó (ver «Hecho»). Si se quiere, lo limpio es detectar el toque
-  real con `pointerType` en el primer `pointerdown` y activar las reglas táctiles por una clase, no por una consulta de medios.
-- Pendientes pequeños de la pasada de espacios y alturas (#268, #269): dos `clamp(24px, 8vh, 72px)` con `vh` a pelo en `dashboard.css`
-  (líneas ~282 y ~422, no los cubre `test_frontend_panel_sin_vh.py`), y el hueco de 20 px entre tarjetas de Configuración frente a 16 en
-  Tareas.
-- `nomenclature_check.compare` y `evaluate_file` (lo que queda del módulo tras #264) solo los llaman los tests: borrar el módulo entero o
-  volver a usarlo.
+- Descartados por Gabriel (11/11): que el filtro «Petición» de Biblioteca cuente la petición heredada (una serie pedida entera se sube
+  en season packs, nunca por capítulos) y detectar el toque real con `pointerType` para los objetivos táctiles.
 - Recuperar solo el añadido a qBittorrent de una subida que ya estaba en eMuwarez (necesita un cambio en Uploadrr-EMU, otro repo).
 - Probar en el NAS (`:edge`): el límite compartido entre CLI y servidor (`flock` sobre el volumen de `CONFIG_DIR`), el campo y el enlace de
   qBittorrent, y la subida por lotes (ver «Siguiente»).

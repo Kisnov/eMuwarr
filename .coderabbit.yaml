@@ -65,10 +65,10 @@ reviews:
         capítulo correctos. season_number 0 sin capítulo es la serie entera salvo que el nombre diga Especiales.
         La API de eMuwarez admite 30 llamadas por minuto compartidas con Uploadrr-EMU; nada de borrar el catálogo ni
         las peticiones con un recorrido incompleto.
-    - path: "emuwarez_uploadrr/services/{emu_format,media_info_service,nomenclature_check,season_pack}.py"
+    - path: "emuwarez_uploadrr/services/{emu_format,media_info_service,season_pack}.py"
       instructions: |
         Un solo constructor de nombres y un solo resolvedor de idiomas (es-419, es-MX, es-AR, es-US y "Latino" son
-        LAT). El comprobador de nomenclatura llama al generador; no se duplica la lógica.
+        LAT); no se duplica la lógica.
     - path: "frontend/src/**"
       instructions: |
         Textos de la interfaz en castellano. Nada de `setInterval` nuevos (el servidor avisa por /api/eventos; lo vigila

@@ -418,8 +418,8 @@ def count_library(
     return int(row[0]) if row else 0
 
 
-# Los estados en que el archivo está EN TU DISCO. Mismo criterio que usan
-# nomenclature_check y emu_catalog: "Subiendo" y "Subido" siguen siendo tuyos,
+# Los estados en que el archivo está EN TU DISCO. Mismo criterio que usa
+# emu_catalog: "Subiendo" y "Subido" siguen siendo tuyos,
 # subirlo no lo borra.
 TIENES_EL_ARCHIVO = ("Disponible", "Subiendo", "Subido")
 
