@@ -902,7 +902,8 @@ export function UploadsPage({ onNavigate }: { onNavigate?: (page: string) => voi
       )}
 
       {/* Ver RequestsPage: solo bloquea si no hay nada que enseñar todavía. */}
-      {loading && jobs.length === 0 && !filtrando ? <LoadingState label="Cargando Subidas…" /> : error ? <ErrorState message={error} onRetry={load} /> : jobs.length === 0 && !filtrando ? (
+      {loading && jobs.length === 0 && !filtrando ? <LoadingState label="Cargando Subidas…" /> : error ? <ErrorState message={error} onRetry={load}
+        extra={loteFiltro ? <button className="btn btn-secondary btn-sm" onClick={() => setLoteFiltro(null)}>Quitar filtro del lote</button> : undefined} /> : jobs.length === 0 && !filtrando ? (
         <EmptyState
           icon={<IconoSubida />}
           title="Sin subidas"

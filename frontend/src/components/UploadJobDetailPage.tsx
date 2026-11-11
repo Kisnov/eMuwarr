@@ -16,7 +16,7 @@ import { ResultadoSubida, type Consulta } from './detalle-subida/ResultadoSubida
 import { DondeSeFueElTiempo } from './detalle-subida/DondeSeFueElTiempo'
 import { RemuxTable } from './asistente/RemuxTable'
 import { EpisodeAccordionRow } from './asistente/Capitulos'
-import { formatSecondsHM } from '../utils/uploadStatus'
+import { formatElapsed, formatSecondsHM } from '../utils/uploadStatus'
 import { useRefrescoPorAvisos, AVISOS_SUBIDA, AVISOS_SUBIDA_PROGRESO } from '../hooks/useRefrescoPorAvisos'
 import { IconoDesplegar, IconoTipo } from './Iconos'
 import { Modal } from './Modal'
@@ -447,7 +447,7 @@ function PhasesSection({ phases, globalPct, job }: { phases: UploadProgressPhase
             <td><ProgressCell pct={globalPct} bold /></td>
             <td className="dsub-fecha dsub-b700">{formatDate(job.started_at ?? job.created_at ?? null)}</td>
             <td className="dsub-fecha dsub-b700">{job.finished_at ? formatDate(job.finished_at) : '—'}</td>
-            <td className="dsub-num dsub-b700">{formatPhaseDuration(job.started_at ?? job.created_at, job.finished_at)}</td>
+            <td className="dsub-num dsub-b700">{formatElapsed(job)}</td>
           </tr>
         </tbody>
       </table>
@@ -580,13 +580,13 @@ export function UploadJobDetailPage({ job, onBack, onStart, onRetry, onCancel, o
 
       <div className="dsub-titulo-caja">
         <DetailTitle>
-          <h1 className="dsub-h1"><DetailTitleText title={job.display_title || job.title || `Job ${jobId}`} /></h1>
+          <h1 className="dsub-h1"><DetailTitleText title={job.display_title || job.title || `Subida #${jobId}`} /></h1>
           {isRunning && <span className="sub-en-vivo"><span aria-hidden="true">●</span> en vivo</span>}
         </DetailTitle>
       </div>
 
       <div className="dsub-cuerpo">
-        <FichaPoster url={job.poster_url ? posterUrl(job.poster_url, 'w500') : null} alt={job.title || `Job ${jobId}`} fallbackIcon={mediaIcon} />
+        <FichaPoster url={job.poster_url ? posterUrl(job.poster_url, 'w500') : null} alt={job.title || `Subida #${jobId}`} fallbackIcon={mediaIcon} />
 
         <div className="dsub-columna">
           {completada && <AvisoTrailerDetalle job={job} onCambiado={() => onTrailerCambiado?.()} />}

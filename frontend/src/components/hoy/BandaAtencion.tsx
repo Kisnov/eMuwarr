@@ -3,7 +3,7 @@ import type { AvisoHoy } from '../../utils/hoy'
 import { HoverTitle } from '../Tooltip'
 
 const PUNTO: Record<AvisoHoy['tipo'], string> = {
-  instancia: 'panel-punto-apagada',
+  instancia: 'panel-punto-aviso',
   subida: 'panel-punto-mala',
   version: 'panel-punto-aviso',
   mas: 'panel-punto-mala',

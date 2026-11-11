@@ -111,6 +111,32 @@ def test_recargar_tras_tmdb_retoma_los_pasos_opcionales(client, auth_headers):
     assert client.get("/api/setup/status").json()["next_step"] == "complete"
 
 
+def test_recargar_tras_proveedores_retoma_en_imagenes_y_no_vuelve_a_proveedores(client, auth_headers):
+    """«Continuar» en proveedores apunta el paso: recargar en el de imágenes (paso 8) no puede volver al 7."""
+    _hasta_tmdb(client, auth_headers)
+    client.post("/api/setup/qbit", json={"url": ""}, headers=auth_headers)
+    assert client.get("/api/setup/status").json()["next_step"] == "providers"
+
+    resp = client.post("/api/setup/providers", headers=auth_headers)
+    assert resp.status_code == 200
+    assert client.get("/api/setup/status").json()["next_step"] == "imagehosts"
+
+    # Repetir el paso (volver «Atrás» y «Continuar» otra vez) tampoco hace retroceder.
+    client.post("/api/setup/qbit", json={"url": ""}, headers=auth_headers)
+    client.post("/api/setup/providers", headers=auth_headers)
+    assert client.get("/api/setup/status").json()["next_step"] == "imagehosts"
+
+    client.post("/api/setup/imghosts", json={"enabled": [], "keys": {}}, headers=auth_headers)
+    assert client.get("/api/setup/status").json()["next_step"] == "complete"
+    # Un paso apuntado antes no adelanta al siguiente: «proveedores» ya hecho no pisa «complete».
+    client.post("/api/setup/providers", headers=auth_headers)
+    assert client.get("/api/setup/status").json()["next_step"] == "complete"
+
+
+def test_apuntar_proveedores_requiere_sesion(client):
+    assert client.post("/api/setup/providers").status_code in (401, 403)
+
+
 def test_recargar_sin_instancias_tampoco_vuelve_al_paso_de_instancias(client, auth_headers):
     """Las instancias se pueden saltar: tras TMDb la recarga retoma el paso
     apuntado, no el de instancias."""

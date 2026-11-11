@@ -209,7 +209,10 @@
   background: var(--sub-lote-color);
 }
 
-.sub-lote-contador-en_cola, .sub-lote-tramo-en_cola { --sub-lote-color: var(--text-muted); }
+.sub-lote-contador-en_cola, .sub-lote-tramo-en_cola { --sub-lote-color: var(--text-secondary); }
+/* «En cola» (aún no ha empezado) va hueca; «cancelada» (terminó sin subir) llena: los dos son grises y solo el relleno los separa. */
+.sub-lote-contador-en_cola .sub-lote-punto { background: transparent; box-shadow: inset 0 0 0 1.5px var(--sub-lote-color); }
+.sub-lote-tramo-en_cola { background: transparent; box-shadow: inset 0 0 0 1px var(--sub-lote-color); }
 .sub-lote-contador-en_marcha, .sub-lote-tramo-en_marcha { --sub-lote-color: var(--text-accent); }
 .sub-lote-contador-completadas, .sub-lote-tramo-completadas { --sub-lote-color: var(--color-available); }
 .sub-lote-contador-fallidas, .sub-lote-tramo-fallidas { --sub-lote-color: var(--color-error); }

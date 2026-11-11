@@ -210,7 +210,7 @@ export function DashboardPage({ onNavigate }: DashboardPageProps = {}) {
     ])
     if (s.status === 'fulfilled') setSummary(s.value)
     else {
-      setDataError('No se pudieron cargar los datos del dashboard')
+      setDataError('No se pudieron cargar los datos del Panel')
     }
     if (la.status === 'fulfilled') { setRecommendations(la.value.items); setRecsError(null) }
     else setRecsError('No se pudieron cargar las peticiones y recomendaciones. Se vuelve a intentar sola cada 15 segundos.')
@@ -262,7 +262,7 @@ export function DashboardPage({ onNavigate }: DashboardPageProps = {}) {
   useEffect(() => suscribirse('tarea-terminada', () => { void loadData() }), [loadData])
 
   if (loadingData && !summary) return <LoadingState label="Cargando Panel…" />
-  if (!summary) return <ErrorState message={dataError ?? 'No se pudieron cargar los datos del dashboard'} onRetry={loadData} />
+  if (!summary) return <ErrorState message={dataError ?? 'No se pudieron cargar los datos del Panel'} onRetry={loadData} />
 
   const s = summary
   const reparto = repartirRecomendaciones(recommendations)

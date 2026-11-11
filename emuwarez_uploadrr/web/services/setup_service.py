@@ -144,6 +144,12 @@ def setup_qbit(
         set_setting(conn, "qbit.password", password)
 
 
+def setup_providers(conn: sqlite3.Connection) -> None:
+    """Apunta que el paso de proveedores de metadatos está hecho (el orden se guarda aparte, con PUT /settings), para
+    que una recarga retome en el de imágenes y no vuelva a este."""
+    _avanzar_paso(conn, "imagehosts")
+
+
 def setup_imghosts(
     conn: sqlite3.Connection,
     enabled: Optional[list] = None,

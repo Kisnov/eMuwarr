@@ -33,15 +33,21 @@ export function EstadisticasPage() {
   const [resumen, setResumen] = useState<DashboardSummaryResponse | null>(null)
   const [dias, setDias] = useState(90)
   const [intento, setIntento] = useState(0)
+  const [intentoResumen, setIntentoResumen] = useState(0)
+  const [resumenFallo, setResumenFallo] = useState(false)
   const [resultado, setResultado] = useState<Resultado | null>(null)
 
-  // Si falla, se quedan las cifras de la vez anterior (o ninguna): la evolución de la cuenta es lo que da la página.
+  // Si falla, se quedan las cifras de la vez anterior (o ninguna) y una nota lo dice: la evolución de la cuenta es lo que
+  // da la página, así que no la tapa.
   useEffect(() => {
     if (!seVe) return
     let vigente = true
-    getDashboardSummary().then(r => { if (vigente) setResumen(r) }, () => { /* sin cifras arriba */ })
+    getDashboardSummary().then(
+      r => { if (vigente) { setResumen(r); setResumenFallo(false) } },
+      () => { if (vigente) setResumenFallo(true) },
+    )
     return () => { vigente = false }
-  }, [seVe])
+  }, [seVe, intentoResumen])
 
   useEffect(() => {
     if (!seVe) return
@@ -53,7 +59,12 @@ export function EstadisticasPage() {
     return () => { vigente = false }
   }, [seVe, dias, intento])
 
+  // Al cambiar de rango se queda lo que había (atenuado) hasta que llegan los datos nuevos: si no, los gráficos
+  // desaparecen, la página se acorta y el contenido salta. Tras un error o la primera carga no hay nada que conservar.
+  const enCurso = resultado !== null && resultado.dias !== dias
+  const sinMostrar = resultado === null || (enCurso && resultado.error !== null)
   const puntos = resultado?.puntos ?? []
+  const diasMostrados = resultado?.dias ?? dias
   // Sin hover (una pantalla táctil) el gráfico se lee con el dedo, no con el ratón.
   const [tactil] = useState(() => window.matchMedia?.('(hover: none)').matches ?? false)
 
@@ -77,8 +88,14 @@ export function EstadisticasPage() {
       {/* Las tarjetas están desde el principio (con «—» hasta que llegan las cifras): si entraran después, empujarían
           hacia abajo lo que ya se ve. */}
       <TarjetasDelPanel resumen={resumen} />
+      {resumenFallo && (
+        <p className="est-nota est-aviso" role="status">
+          No se pudieron cargar las cifras de la biblioteca y las peticiones{resumen ? '; se enseñan las de la última vez' : ''}.{' '}
+          <button type="button" className="btn btn-ghost btn-sm" onClick={() => setIntentoResumen(n => n + 1)}>Reintentar</button>
+        </p>
+      )}
 
-      {resultado === null || resultado.dias !== dias ? (
+      {sinMostrar ? (
         <LoadingState label="Cargando estadísticas…" />
       ) : resultado.error ? (
         <ErrorState message={resultado.error} onRetry={() => { setResultado(null); setIntento(n => n + 1) }} />
@@ -88,12 +105,12 @@ export function EstadisticasPage() {
           body="Se empieza a guardar hoy: la primera instantánea sale en cuanto se lea tu perfil de eMuwarez (hace falta su API key en Configuración)."
         />
       ) : (
-        <>
+        <div className={enCurso ? 'est-cargando' : undefined} aria-busy={enCurso}>
           {puntos.length === 1 ? (
             <p className="est-nota" role="status">Solo hay un día guardado: la línea aparecerá a partir de mañana.</p>
           ) : (
             <p className="est-nota">
-              {puntos.length} de los últimos {dias} días tienen instantánea. {tactil
+              {puntos.length} de los últimos {diasMostrados} días tienen instantánea. {tactil
                 ? 'Toca o desliza el dedo por un gráfico para ver cada día.'
                 : 'Pasa el ratón por un gráfico, o enfócalo y usa las flechas, para ver cada día.'}
             </p>
@@ -136,7 +153,7 @@ export function EstadisticasPage() {
             </table>
             </div>
           </details>
-        </>
+        </div>
       )}
     </div>
   )

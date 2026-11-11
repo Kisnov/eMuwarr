@@ -33,7 +33,7 @@ import { BarraLote } from '../components/lote/BarraLote'
 import { CasillaLote } from '../components/lote/CasillaLote'
 import { SubidaPorLotesModal } from '../components/lote/SubidaPorLotesModal'
 import { useSeleccionLote } from '../hooks/useSeleccionLote'
-import { seleccionableEnLote, type EntradaLote } from '../utils/lote'
+import { razonNoMarcable, seleccionableEnLote, type EntradaLote } from '../utils/lote'
 import {
   cargarVistas, conVista, persistirVistas, sinVista, ORDEN_POR_DEFECTO, type FiltrosDeVista, type VistaGuardada,
 } from '../utils/vistasBiblioteca'
@@ -122,7 +122,7 @@ const PosterCard = memo(function PosterCard({ item, onSelect, priority, seleccio
           </span>
         </button>
         {onToggle && seleccionableEnLote(item) && (
-          <CasillaLote item={item} seleccionado={seleccionado} bloqueada={loteLleno} onAlternar={onToggle} className="lote-casilla-poster" />
+          <CasillaLote item={item} seleccionado={seleccionado} bloqueada={loteLleno} motivo={razonNoMarcable(item)} onAlternar={onToggle} className="lote-casilla-poster" />
         )}
         <div className="bib-tarjeta-estado">
           <PosterStatusIcon status={item.local_status} />

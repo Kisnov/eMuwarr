@@ -7,6 +7,9 @@
 .stat-card-ayuda { cursor: help; }
 .est-rangos { display: flex; gap: 6px; }
 .est-nota { color: var(--text-secondary); font-size: 13px; margin: 0 0 12px; text-wrap: pretty; }
+.est-nota.est-aviso { color: var(--color-warning); }
+/* Al cambiar de rango se conserva lo que había, atenuado, hasta que llegan los datos: así la página no se acorta ni salta. */
+.est-cargando { opacity: .55; transition: opacity .15s; }
 
 .est-rejilla-graficos {
   display: grid;

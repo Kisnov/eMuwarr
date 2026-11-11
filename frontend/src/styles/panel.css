@@ -267,7 +267,6 @@
   border-radius: 50%;
   flex-shrink: 0;
 }
-.panel-punto-apagada { background: var(--color-neutral); }
 .panel-punto-mala { background: var(--color-error); }
 .panel-punto-aviso { background: var(--color-warning); }
 .panel-aviso-titulo { font-size: 13px; font-weight: 500; overflow-wrap: anywhere; }

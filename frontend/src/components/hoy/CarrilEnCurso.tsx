@@ -39,7 +39,7 @@ function FilaSubida({ job, yendose = false, onOpen }: {
       <Cartel url={job.poster_url} serie={job.media_type === 'series' || job.media_type === 'episode'} />
       <div className="panel-fila-texto">
         <div className="panel-fila-titulo">
-          <span className="upload-row-title">{job.title ?? `Job #${job.id}`}</span>
+          <span className="upload-row-title">{job.title ?? `Subida #${job.id}`}</span>
           {(totalElapsedText || terminada) && (
             <span className="panel-fila-tiempo">
               {totalElapsedText ?? timeAgo(job.finished_at ?? job.updated_at)}

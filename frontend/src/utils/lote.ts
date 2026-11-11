@@ -114,6 +114,14 @@ export function razonNoSubible(item: LibraryItemResponse): string | null {
 }
 
 /**
+ * Por qué una casilla de Biblioteca no se puede marcar, o null si se puede: lo que `razonNoSubible` ya dice, salvo la
+ * serie, que sí se marca (se cambia por sus temporadas, y las que no se pueden subir las dice el primer paso del lote).
+ */
+export function razonNoMarcable(item: LibraryItemResponse): string | null {
+  return item.item_type === 'series' ? null : razonNoSubible(item)
+}
+
+/**
  * Lo que entra en «Subir por lotes»: el elemento de Biblioteca y, desde el Panel, la petición que cubre y su alcance
  * (como la preselección del asistente: `season` y, si la petición es de un capítulo, `episode`). Desde Biblioteca
  * solo va `item`.
