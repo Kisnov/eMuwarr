@@ -178,10 +178,10 @@ describe('Columnas de la lista', () => {
     await pagina()
     const nombres = cabeceras().map(th => th.textContent?.replace(/[▾▼▲]/g, '').trim())
     expect(nombres).toEqual([
-      'TítuloTipo', 'Origen', 'Estado', 'Petición', 'Resolución', 'Proveedor', 'Fuente', 'Grupo',
+      'TítuloTipo', 'Origen', 'Estado', 'Petición', 'Resolución', 'Proveedor', 'Source', 'Grupo',
       'Español', 'eMuwarez', 'Tamaño', 'Acciones',
     ])
-    for (const col of ['Origen', 'Resolución', 'Proveedor', 'Fuente', 'Grupo']) {
+    for (const col of ['Origen', 'Resolución', 'Proveedor', 'Source', 'Grupo']) {
       const th = cabeceras().find(c => c.textContent?.includes(col))!
       expect(th.querySelectorAll('.hf-trigger')).toHaveLength(1)
     }

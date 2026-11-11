@@ -87,7 +87,7 @@ describe('LibraryTreeRow', () => {
     expect(c[1].textContent).toBe('Radarr 4K')           // Origen
     expect(c[4].textContent).toBe('1080p')               // Resolución
     expect(c[5].textContent).toBe('NF')                  // Proveedor
-    expect(c[6].textContent).toBe('WEB-DL')              // Fuente
+    expect(c[6].textContent).toBe('WEB-DL')              // Source
     expect(c[7].textContent).toBe('FLUX')                // Grupo
   })
 

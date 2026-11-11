@@ -689,7 +689,7 @@ export function LibraryPage({ onNavigate }: { onNavigate?: (page: string) => voi
       <th><HeaderFilter label="Proveedor" value={searchProvider} onChange={setSearchProvider} ocultable options={[
         { value: '', label: 'Todos' }, ...providerOptions.map(p => ({ value: p, label: p })),
       ]} /></th>
-      <th><HeaderFilter label="Fuente" value={searchSource} onChange={setSearchSource} ocultable options={[
+      <th><HeaderFilter label="Source" value={searchSource} onChange={setSearchSource} ocultable options={[
         { value: '', label: 'Todos' }, ...sourceOptions.map(s => ({ value: s, label: s })),
       ]} /></th>
       <th><HeaderFilter label="Grupo" value={searchGroup} onChange={setSearchGroup} ocultable options={[
