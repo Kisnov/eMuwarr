@@ -4,7 +4,7 @@ from __future__ import annotations
 import time
 
 
-from .rollups import _provider_label
+from .rollups import _provider_label, estado_local_sql
 
 
 def library_filter_values(conn) -> dict:
@@ -52,8 +52,12 @@ def library_filter_values(conn) -> dict:
     types = [r[0] for r in conn.execute(
         "SELECT DISTINCT item_type FROM library_items WHERE item_type IS NOT NULL ORDER BY item_type"
     ).fetchall()]
+    # Los que enseña la columna Estado, no los guardados: «Parcial» solo existe como resumen de una serie o
+    # temporada, y es lo que el filtro Estado tiene que poder elegir (ver rollups.estado_local_sql).
+    from ..settings import leer_ajuste
+    estado = estado_local_sql(leer_ajuste(conn, "series_ignore_specials"))
     statuses = [r[0] for r in conn.execute(
-        "SELECT DISTINCT local_status FROM library_items WHERE local_status IS NOT NULL ORDER BY local_status"
+        f"SELECT DISTINCT {estado} AS estado FROM library_items WHERE estado IS NOT NULL ORDER BY estado"
     ).fetchall()]
     request_statuses = [r[0] for r in conn.execute(
         "SELECT DISTINCT request_status FROM library_items WHERE request_status IS NOT NULL ORDER BY request_status"

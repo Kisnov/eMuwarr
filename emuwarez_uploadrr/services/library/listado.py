@@ -8,7 +8,7 @@ from typing import Optional, Sequence, Union
 
 from ...models import LocalStatus
 
-from .rollups import _provider_label, _specials_clause
+from .rollups import _provider_label, _specials_clause, estado_local_sql
 
 
 # ---------------------------------------------------------------------------
@@ -91,17 +91,23 @@ def _build_library_filter(
     parent_id: Optional[int] = None,
     search: Optional[str] = None,
     spanish: Filtro = None,
+    ignore_specials: bool = True,
 ) -> tuple[list[str], list]:
     """Shared WHERE-clause builder for list_library()/count_library() — used
     to be duplicated (and count_library() silently dropped request/
     nomenclature/origin, making its `total` wrong once those filters were
-    used), now both always apply the exact same filters."""
+    used), now both always apply the exact same filters.
+
+    El Estado filtra por lo que enseña la columna, no por el guardado: una
+    serie o temporada con capítulos enseña el resumen de ellos, incluido
+    «Parcial», que no se guarda en ninguna fila (ver rollups.estado_local_sql).
+    `ignore_specials` decide si ese resumen de una serie cuenta la temporada 0."""
     where = []
     params: list = []
     estados: list = []
     for v in _valores(status):
         estados.extend(_MISSING_STATUSES if v == NOT_AVAILABLE_STATUS_FILTER else [v])
-    _en("local_status", list(dict.fromkeys(estados)), where, params)
+    _en(estado_local_sql(ignore_specials), list(dict.fromkeys(estados)), where, params)
     _en("request_status", _valores(request), where, params)
     _en("nomenclature_status", _valores(nomenclature), where, params)
     _en("item_type", _valores(item_type), where, params)
@@ -235,7 +241,7 @@ def list_library(
     where, params = _build_library_filter(
         status=status, request=request, nomenclature=nomenclature,
         item_type=item_type, origin=origin, instance_id=instance_id,
-        parent_id=parent_id, search=search, spanish=spanish,
+        parent_id=parent_id, search=search, spanish=spanish, ignore_specials=ignore_specials,
     )
     # Recorte previo para filtrar_por_lo_que_se_ve: en películas y capítulos la
     # columna es su propio valor, así que los que no cumplen ni se leen. Series
@@ -312,7 +318,7 @@ def list_library_agrupada(
     filas de la página. Devuelve la página y el total."""
     where, params = _build_library_filter(
         status=status, request=request, nomenclature=nomenclature, origin=origin,
-        instance_id=instance_id, search=search, spanish=spanish,
+        instance_id=instance_id, search=search, spanish=spanish, ignore_specials=ignore_specials,
     )
     # Ignorando especiales, la fila de la serie no los cuenta: no la traen.
     if ignore_specials:
@@ -398,11 +404,12 @@ def count_library(
     parent_id: Optional[int] = None,
     search: Optional[str] = None,
     spanish: Filtro = None,
+    ignore_specials: bool = True,
 ) -> int:
     where, params = _build_library_filter(
         status=status, request=request, nomenclature=nomenclature,
         item_type=item_type, origin=origin, instance_id=instance_id,
-        parent_id=parent_id, search=search, spanish=spanish,
+        parent_id=parent_id, search=search, spanish=spanish, ignore_specials=ignore_specials,
     )
     sql = "SELECT COUNT(*) FROM library_items"
     if where:

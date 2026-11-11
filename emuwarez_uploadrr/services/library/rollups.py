@@ -213,6 +213,31 @@ def _local_status_rollup(conn, item_id: int, item_type: str, ignore_specials: bo
     return "Parcial"
 
 
+def estado_local_sql(ignore_specials: bool) -> str:
+    """El Estado que enseña la columna de Biblioteca, como expresión SQL de una fila de `library_items`.
+
+    Repite `_aggregate_local_status` (la regla de `_batch_rollups`, que es la que pinta la lista): una
+    temporada o serie con capítulos no enseña su estado guardado sino el de sus capítulos (Disponible si todos
+    lo están, Faltante si ninguno, Parcial si hay mezcla); sin capítulos, el suyo. Películas y capítulos, el
+    suyo. El filtro Estado usa esta expresión para devolver justo lo que dice la celda; si cambia una regla,
+    cambia la otra (tests/test_filtro_estado_parcial.py las cruza)."""
+    disponible = LocalStatus.AVAILABLE.value
+    resumen = (
+        f"CASE WHEN COUNT(*) = 0 THEN NULL"
+        f" WHEN COUNT(CASE WHEN e.local_status = '{disponible}' THEN 1 END) = COUNT(*) THEN '{disponible}'"
+        f" WHEN COUNT(CASE WHEN e.local_status = '{disponible}' THEN 1 END) = 0 THEN '{LocalStatus.MISSING.value}'"
+        f" ELSE '{LocalStatus.PARTIAL.value}' END")
+    return f"""COALESCE(CASE library_items.item_type
+    WHEN 'season' THEN (
+        SELECT {resumen} FROM library_items e
+         WHERE e.parent_id = library_items.id AND e.item_type = 'episode')
+    WHEN 'series' THEN (
+        SELECT {resumen} FROM library_items e
+          JOIN library_items se ON e.parent_id = se.id
+         WHERE se.parent_id = library_items.id AND e.item_type = 'episode'{_specials_clause("se", ignore_specials)})
+END, library_items.local_status)"""
+
+
 def _size_rollup(conn, item_id: int, item_type: str, ignore_specials: bool = False) -> Optional[int]:
     """Total size of a Season/Series as the sum of its episodes' file sizes —
     season/series rows have no file of their own, so their size only makes

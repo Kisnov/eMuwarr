@@ -108,6 +108,7 @@ from .rollups import (  # noqa: F401
     _specials_clause,
     _nomenclature_rollup,
     _local_status_rollup,
+    estado_local_sql,
     _size_rollup,
     _rollup_path,
     _child_quality_rollup,
