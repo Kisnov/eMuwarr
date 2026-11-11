@@ -683,6 +683,25 @@ Hallazgos y maquetas: https://claude.ai/artifact/PjPRTxSfEs3Y8aVtXzN32i
     móvil se centra en la pestaña elegida; «Seleccionar» apaga la casilla de lo que no se puede subir (`razonNoMarcable`, con el motivo en
     `title` y `aria-description`). **Sin ver en navegador:** el atenuado de Estadísticas, el punto hueco, el centrado de la Guía a 390 px
     y la casilla apagada (en táctil el `title` no se ve).
+- **Segunda onada de decisiones de diseño (11/11, #268-#270, verificadas en local; la CI no tiene minutos):** Gabriel delegó los «dudosos» del
+  PLAN; cada decisión es un commit, así que se revierte por separado.
+  - #268, Panel, tour y espacios: «Listo para subir» encoge al contenido y, con una o dos peticiones, dice «Nada más listo por ahora»
+    (`70vh` pasa a `calc(var(--vh100) * 0.7)`, vigilado por `test_frontend_panel_sin_vh.py`); la burbuja del tour va al lado, o dentro de la
+    ventana, si no cabe encima ni debajo, y hay un paso de Estadísticas; la opción activa de la paleta va en cian suave sin resplandor;
+    espacios a la escala (14→16 en la banda de atención, 12→16 en la franja del Panel, 22→24 en la leyenda de Estadísticas).
+  - #269, Configuración y Peticiones: casillas propias de 16 px (siguen siendo casillas: son listas de selección múltiple); la rejilla de
+    Configuración sigue el orden del índice a cualquier ancho (contrapartida: las filas no igualan alto y queda hueco bajo la tarjeta más
+    baja); a 390 px «Backup» asoma en la fila de pestañas y Diagnóstico y Backup llevan icono; iconos de votos y comentarios de trazo; chips de
+    grupo a 6 px. Descartados: «Origen» plano en Subidas (ya se comporta como en Peticiones: ficha con borde si abre algo, etiqueta plana si
+    no) y `(any-pointer: coarse)` (en un portátil táctil con ratón engorda la UI y las reglas `(pointer: coarse)` también esconden el asa
+    de arrastre y la pista de Ctrl+K). El paso 8 del asistente ya estaba arreglado en #266.
+  - #270, Biblioteca: «Source» en toda la UI (era «Fuente» solo en tres sitios; se siguió la mayoría); filtro «Parcial» en Estado, con
+    `rollups.estado_local_sql` repitiendo en SQL la regla de la columna (efecto: «Disponible» ya no devuelve series que la celda dice
+    «Parcial»); en móvil (≤760 px) la ficha de una serie o temporada pone «Temporadas» antes de las tarjetas técnicas (`useCoincide`, se
+    reordena el DOM para no romper la tabulación); los pósters sin imagen enseñan el título una sola vez. Descartado: el alto de la lista en
+    móvil (a 390×844 ya ocupa todo el alto sin doble scroll; ganar más exige mover el scroll de la tabla virtualizada).
+  - **Sin ver:** móvil y táctil reales, lector de pantalla, Firefox y Safari, las casillas fuera de Peticiones, Logs, Tareas y Biblioteca,
+    Subidas con datos reales y una biblioteca grande con el filtro «Parcial».
 
 ## Siguiente
 
@@ -711,25 +730,12 @@ probarla, si guardar los `campos` y crear el trabajo van en una sola transacció
 ## Aplazado / ideas
 
 - Que el filtro «Petición» de Biblioteca cuente la petición heredada (la celda ya dice «de la serie», #240): `request_id` guarda una
-  petición por fila, la que se escribe donde la petición pide.
-- De la revisión con `impeccable` (#241-#244), encajan con el criterio pero no tenían evidencia clara: carriles del Panel con `70vh` en
-  móvil, paso del tour para Estadísticas, opción activa de la paleta en cian; filtro «Parcial» en Estado de Biblioteca (lo calcula la
-  columna, no está en `local_status`: habría que repetirlo en el SQL del listado).
-- Objetivos táctiles con `(any-pointer: coarse)` en vez de `(pointer: coarse)` para portátiles táctiles con ratón como puntero principal: es
-  un cambio de toda la app (`--tap-min` en `globals.css` y sus usos), no de una pantalla (#242).
-- De polish + adapt + optimize (#249-#254), dudosos, los decide Gabriel:
-  - Ritmo de espacios fuera de la escala de 4/8: 14 px en `.panel-atencion`, 22 en la leyenda de Estadísticas, 20 entre tarjetas de
-    Configuración frente a 16 en Tareas, 12 frente a 16 entre el Panel y Estadísticas.
-  - Panel: «Listo para subir» con una o dos peticiones deja ~400 px de carril vacío (encoger al contenido o una línea «Nada más listo»);
-    la burbuja del tour tapa el pie de un objetivo más alto que media ventana.
-  - Biblioteca: «Source» (ficha, asistente) frente a «Fuente» (tablas): elegir una; en móvil la lista es un scroll de 490 px dentro de una
-    página fija; en la ficha de una serie en móvil, «Temporadas» empieza tras ~1200 px de tarjetas; en pósters sin imagen, el título sale
-    dos veces con `hover: none`.
-  - Configuración: casillas nativas de 15 px frente a los interruptores; el orden de la rejilla cambia con el ancho y no coincide con el
-    índice; a 390 px «Backup» queda fuera de las pestañas; Diagnóstico y Backup sin icono en su cabecera; el asistente recargado en el
-    paso 8 vuelve al 7 (`handleProviders` no apunta `wizard_step`).
-  - Peticiones y Subidas: iconos rellenos de votos y comentarios frente a los de trazo; chips de grupo en píldora (DESIGN dice 6 px);
-    «Origen» con borde de botón en Subidas y enlace plano en Peticiones.
+  petición por fila, la que se escribe donde la petición pide. Una serie pedida entera marcaría todos sus capítulos «Compatible».
+- Objetivos táctiles con `(any-pointer: coarse)`: se probó en #269 y se descartó (ver «Hecho»). Si se quiere, lo limpio es detectar el toque
+  real con `pointerType` en el primer `pointerdown` y activar las reglas táctiles por una clase, no por una consulta de medios.
+- Pendientes pequeños de la pasada de espacios y alturas (#268, #269): dos `clamp(24px, 8vh, 72px)` con `vh` a pelo en `dashboard.css`
+  (líneas ~282 y ~422, no los cubre `test_frontend_panel_sin_vh.py`), y el hueco de 20 px entre tarjetas de Configuración frente a 16 en
+  Tareas.
 - `nomenclature_check.compare` y `evaluate_file` (lo que queda del módulo tras #264) solo los llaman los tests: borrar el módulo entero o
   volver a usarlo.
 - Recuperar solo el añadido a qBittorrent de una subida que ya estaba en eMuwarez (necesita un cambio en Uploadrr-EMU, otro repo).
