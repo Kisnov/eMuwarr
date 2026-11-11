@@ -133,7 +133,7 @@
   align-items: center;
   gap: 8px;
   padding: 5px 12px 5px 10px;
-  border-radius: 999px;
+  border-radius: var(--radius-badge);
   border: 1px solid var(--border-input);
   background: var(--bg-card);
   color: var(--text-primary);
