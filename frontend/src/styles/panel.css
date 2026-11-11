@@ -209,11 +209,11 @@
    en dos columnas a su derecha: así la banda mide dos filas de avisos y no tres. */
 .panel-atencion {
   flex-shrink: 0;
-  margin-bottom: 14px;
-  padding: 8px 14px;
+  margin-bottom: 16px;
+  padding: 8px 16px;
   display: grid;
   grid-template-columns: 150px minmax(0, 1fr);
-  column-gap: 14px;
+  column-gap: 16px;
   align-items: start;
   background: var(--bg-card);
   border: 1px solid var(--color-warning);
@@ -223,7 +223,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-bottom: 10px;
+  margin-bottom: 16px;
   padding: 2px 0;
   font-size: 12px;
   color: var(--text-muted);
