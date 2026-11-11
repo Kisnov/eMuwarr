@@ -22,7 +22,7 @@
   background: color-mix(in srgb, var(--bg-surface) 80%, transparent);
 }
 .poster-grande-marco > .checkbox-label.lote-casilla-poster { top: 10px; left: 10px; }
-/* Con el dedo, la casilla (15×15 en la lista, 23×23 en los pósters) es la acción principal del modo y se quedaba
+/* Con el dedo, la casilla (16×16 en la lista, 24×24 en los pósters) es la acción principal del modo y se quedaba
    corta. En la lista crece a --tap-min a lo ancho, con un margen negativo a lo alto para que la fila no crezca; en
    los pósters la zona se agranda por fuera (::before), sin cambiar el recuadro. */
 @media (pointer: coarse) {
@@ -30,12 +30,12 @@
     justify-content: center;
     min-width: var(--tap-min);
     min-height: var(--tap-min);
-    margin-block: calc((15px - var(--tap-min)) / 2);
+    margin-block: calc((16px - var(--tap-min)) / 2);
   }
   .checkbox-label.lote-casilla-poster::before {
     content: "";
     position: absolute;
-    inset: calc((23px - var(--tap-min)) / 2);
+    inset: calc((24px - var(--tap-min)) / 2);
   }
 }
 /* Marcada: un contorno hacia dentro, que no cambia el tamaño de la tarjeta. */

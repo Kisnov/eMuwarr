@@ -122,22 +122,22 @@ const SORT_OPTIONS = [
 
 const fmtNum = (n: number | null | undefined) => formatNumero(n)
 
-// Inline SVG icons for the votes/comments/points columns — emoji (👍💬🪙)
-// render as bare white outlines on some systems, so use real vector icons.
-// La moneda de los puntos es IconoPuntos (Iconos.tsx): la comparte el Panel.
+// Iconos de las columnas de votos y comentarios: de trazo, como el resto de la app y como los mismos valores en el
+// detalle de la petición (los emoji 👍💬 se pintaban como un contorno blanco en algunos sistemas, y los rellenos de
+// antes no casaban con ellos). La moneda de los puntos es IconoPuntos (Iconos.tsx): la comparte el Panel.
 // El color, de los tokens (pet-icono-*).
 function Svg({ children, clase }: { children: React.ReactNode; clase: string }) {
   return (
-    <svg viewBox="0 0 24 24" width={15} height={15} fill="currentColor" className={`pet-svg-medio ${clase}`} aria-hidden="true">
+    <svg viewBox="0 0 24 24" width={15} height={15} fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" className={`pet-svg-medio ${clase}`} aria-hidden="true">
       {children}
     </svg>
   )
 }
 const VotesIcon = () => (
-  <Svg clase="pet-icono-votos"><path d="M2 21h4V9H2v12zM23 10c0-1.1-.9-2-2-2h-6.31l.95-4.57.03-.32c0-.41-.17-.79-.44-1.06L14.17 1 7.59 7.59C7.22 7.95 7 8.45 7 9v10c0 1.1.9 2 2 2h9c.83 0 1.54-.5 1.84-1.22l3.02-7.05c.09-.23.14-.47.14-.73v-2z"/></Svg>
+  <Svg clase="pet-icono-votos"><path d="M7 10v12" /><path d="M15 5.88 14 10h5.83a2 2 0 0 1 1.92 2.56l-2.33 8A2 2 0 0 1 17.5 22H4a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2h2.76a2 2 0 0 0 1.79-1.11L12 2h0a3.13 3.13 0 0 1 3 3.88Z" /></Svg>
 )
 const CommentsIcon = () => (
-  <Svg clase="pet-icono-comentarios"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z"/></Svg>
+  <Svg clase="pet-icono-comentarios"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" /></Svg>
 )
 
 // Author cell — your own requests (author === emu.username) show in green + "(Yo)".

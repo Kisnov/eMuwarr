@@ -603,10 +603,59 @@ optgroup {
   cursor: pointer;
 }
 
-.checkbox-label input[type="checkbox"] {
-  width: 15px;
-  height: 15px;
-  accent-color: var(--text-accent);
+/* La casilla de una lista de varias opciones (los interruptores `role="switch"` son de Configuración y llevan lo
+   suyo, `.aj-interruptor__control`). Propia y no la nativa: la nativa salía azul de sistema, de 15 px y sin relación
+   con el HUD. Mismo vocabulario que el interruptor: pozo oscuro con borde, y cian cuando está marcada. El foco es el
+   anillo global (globals.css); la zona de toque en táctil la pone la etiqueta (`.checkbox-label`, más abajo). */
+input[type="checkbox"]:not([role="switch"]) {
+  appearance: none;
+  position: relative;
+  flex-shrink: 0;
+  box-sizing: border-box;
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  /* El borde en el gris atenuado (el mínimo legible del sistema), no en --border-input: ese es casi invisible sobre
+     un póster o una fila y la casilla vacía no se distinguía. */
+  border: 1px solid var(--text-muted);
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--overlay-light) 8%, transparent);
+  cursor: pointer;
+  transition: background-color 0.15s, border-color 0.15s;
+}
+input[type="checkbox"]:not([role="switch"]):hover:not(:disabled) {
+  border-color: var(--hud-cyan, var(--color-focus));
+}
+input[type="checkbox"]:not([role="switch"]):checked {
+  background: color-mix(in srgb, var(--hud-cyan, var(--color-focus)) 30%, transparent);
+  border-color: var(--hud-cyan, var(--color-focus));
+}
+/* La marca: una «V» de dos bordes, sin imagen. */
+input[type="checkbox"]:not([role="switch"]):checked::after {
+  content: "";
+  position: absolute;
+  left: 4.5px;
+  top: 1.5px;
+  width: 4px;
+  height: 8px;
+  border: solid var(--text-on-color);
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+input[type="checkbox"]:not([role="switch"]):disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+/* Dentro de una etiqueta deshabilitada ya se atenúa la etiqueta entera (regla de abajo): no se atenúa dos veces. */
+.checkbox-label:has(input:disabled) input,
+.asist-casilla:has(input:disabled) input {
+  opacity: 1;
+}
+/* Con el dedo, la etiqueta entera es la zona de toque. */
+@media (pointer: coarse) {
+  .checkbox-label:not(.lote-casilla) {
+    min-height: var(--tap-min);
+  }
 }
 /* Deshabilitada, la etiqueta entera al 45 %: con el texto en su color normal parecía que se podía marcar. */
 .checkbox-label:has(input:disabled),
@@ -1158,11 +1207,6 @@ optgroup {
 }
 .hf-option.hf-check input {
   flex-shrink: 0;
-  width: 14px;
-  height: 14px;
-  margin: 0;
-  accent-color: var(--text-accent);
-  cursor: pointer;
 }
 
 /* Column-header (Excel-style) filter menu options. */

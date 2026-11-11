@@ -509,7 +509,7 @@
 
 /* Con el índice al lado sobra menos ancho: tarjetas de 340px como mínimo, para que no se aprieten (filas truncadas). */
 .aj-config .settings-config-grid {
-  columns: 4 340px;
+  grid-template-columns: repeat(auto-fill, minmax(max(340px, calc((100% - 60px) / 4)), 1fr));
 }
 
 .aj-config__vacio {
@@ -1175,15 +1175,18 @@ fieldset.aj-grupo-eventos {
   }
   .aj-tabs__lista {
     width: 100%;
+    gap: 0;
     overflow-x: auto;
     scrollbar-width: none;
     /* Se desvanece por la derecha: avisa de que hay más pestañas al desplazar. */
     -webkit-mask-image: linear-gradient(to right, black 85%, transparent);
     mask-image: linear-gradient(to right, black 85%, transparent);
   }
+  /* Las cuatro pestañas miden ~390 px con este relleno: a 390 de ancho Backup asoma por el borde (con 14 px de
+     relleno quedaba fuera de la vista y nada decía que existía) y la fila se desplaza hasta ella. */
   .hud-app .aj-tab {
     flex-shrink: 0;
-    padding: 10px 14px;
+    padding: 10px 11px;
   }
   .aj-mensaje {
     flex-basis: 100%;
@@ -1300,10 +1303,11 @@ fieldset.aj-grupo-eventos {
   }
 }
 
-/* En táctil, los enlaces del índice, la ✕ de los proveedores (aquí y en el asistente) y el ojo de las claves llegan
+/* En táctil, las pestañas, los enlaces del índice, la ✕ de los proveedores (aquí y en el asistente) y el ojo de las claves llegan
    al tamaño mínimo de toque; el campo de la clave deja sitio al ojo más grande. */
 @media (pointer: coarse) {
-  .aj-indice__enlace {
+  .aj-indice__enlace,
+  .hud-app .aj-tab {
     min-height: var(--tap-min);
   }
   .hud-app .aj-ghost-muted,

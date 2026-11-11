@@ -4,6 +4,7 @@ import { VersionCard } from './diagnostico/VersionCard'
 import { DatabaseActions } from './diagnostico/DatabaseActions'
 import { PathMappingsCard } from './diagnostico/PathMappingsCard'
 import { CabeceraTarjeta } from './CabeceraTarjeta'
+import { IconoBaseDatos, IconoCarpeta } from '../../components/Iconos'
 
 export function DiagnosticsTab({ status, onRefresh }: { status: MaintenanceStatus | null; onRefresh: () => void }) {
   const db = status?.database
@@ -11,7 +12,7 @@ export function DiagnosticsTab({ status, onRefresh }: { status: MaintenanceStatu
     <div className="aj-col-16">
       <VersionCard />
       <div className="placeholder-card">
-        <CabeceraTarjeta titulo="Base de datos" />
+        <CabeceraTarjeta icono={<IconoBaseDatos size={18} />} titulo="Base de datos" />
         {!db ? (
           <p className="aj-sec-13">Cargando…</p>
         ) : !db.ok ? (
@@ -39,7 +40,7 @@ export function DiagnosticsTab({ status, onRefresh }: { status: MaintenanceStatu
         <DatabaseActions onRefresh={onRefresh} />
       </div>
       <div className="placeholder-card">
-        <CabeceraTarjeta titulo="Inventario de configuración" />
+        <CabeceraTarjeta icono={<IconoCarpeta size={18} />} titulo="Inventario de configuración" />
         {!status ? (
           <p className="aj-sec-13">Cargando…</p>
         ) : (

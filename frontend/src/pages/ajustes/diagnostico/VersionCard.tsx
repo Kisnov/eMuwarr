@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { getVersionInfo, type VersionInfo } from '../../../api/maintenance'
 import { HoverTitle } from '../../../components/Tooltip'
+import { IconoVersion } from '../../../components/Iconos'
 import { useSettingsMessage } from '../mensajes'
 import { CabeceraTarjeta } from '../CabeceraTarjeta'
 
@@ -56,6 +57,7 @@ export function VersionCard() {
   return (
     <div className="placeholder-card">
       <CabeceraTarjeta
+        icono={<IconoVersion size={18} />}
         titulo="Versión"
         lateral={(
           <button className="btn btn-secondary btn-sm" type="button"
