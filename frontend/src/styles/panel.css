@@ -291,7 +291,7 @@
   flex-shrink: 0;
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 12px;
+  gap: 16px;
 }
 .panel-franja .stat-card { align-items: center; gap: 10px; padding: 8px 12px; }
 .panel-franja .stat-card-icon { width: 32px; height: 32px; }
@@ -515,7 +515,8 @@
 
 /* Muy estrecho (el móvil): la franja de dos en dos y la última a todo el ancho. */
 @container panel (max-width: 560px) {
-  .panel-franja { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  /* Dos columnas: 12 px, como las tarjetas de Estadísticas a ≤640 px. */
+  .panel-franja { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
   .panel-franja .stat-card,
   .panel-franja .stat-card:nth-child(n + 4) { grid-column: auto; }
   .panel-franja .stat-card:last-child { grid-column: 1 / -1; }
