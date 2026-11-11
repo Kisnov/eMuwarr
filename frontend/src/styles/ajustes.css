@@ -509,7 +509,7 @@
 
 /* Con el índice al lado sobra menos ancho: tarjetas de 340px como mínimo, para que no se aprieten (filas truncadas). */
 .aj-config .settings-config-grid {
-  grid-template-columns: repeat(auto-fill, minmax(max(340px, calc((100% - 60px) / 4)), 1fr));
+  columns: 4 340px;
 }
 
 .aj-config__vacio {

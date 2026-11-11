@@ -690,8 +690,7 @@ Hallazgos y maquetas: https://claude.ai/artifact/PjPRTxSfEs3Y8aVtXzN32i
     ventana, si no cabe encima ni debajo, y hay un paso de Estadísticas; la opción activa de la paleta va en cian suave sin resplandor;
     espacios a la escala (14→16 en la banda de atención, 12→16 en la franja del Panel, 22→24 en la leyenda de Estadísticas).
   - #269, Configuración y Peticiones: casillas propias de 16 px (siguen siendo casillas: son listas de selección múltiple); la rejilla de
-    Configuración sigue el orden del índice a cualquier ancho (contrapartida: las filas no igualan alto y queda hueco bajo la tarjeta más
-    baja); a 390 px «Backup» asoma en la fila de pestañas y Diagnóstico y Backup llevan icono; iconos de votos y comentarios de trazo; chips de
+    Configuración seguía el orden del índice (revertido: dejaba huecos, ver más abajo); a 390 px «Backup» asoma en la fila de pestañas y Diagnóstico y Backup llevan icono; iconos de votos y comentarios de trazo; chips de
     grupo a 6 px. Descartados: «Origen» plano en Subidas (ya se comporta como en Peticiones: ficha con borde si abre algo, etiqueta plana si
     no) y `(any-pointer: coarse)` (en un portátil táctil con ratón engorda la UI y las reglas `(pointer: coarse)` también esconden el asa
     de arrastre y la pista de Ctrl+K). El paso 8 del asistente ya estaba arreglado en #266.
@@ -702,6 +701,24 @@ Hallazgos y maquetas: https://claude.ai/artifact/PjPRTxSfEs3Y8aVtXzN32i
     móvil (a 390×844 ya ocupa todo el alto sin doble scroll; ganar más exige mover el scroll de la tabla virtualizada).
   - **Sin ver:** móvil y táctil reales, lector de pantalla, Firefox y Safari, las casillas fuera de Peticiones, Logs, Tareas y Biblioteca,
     Subidas con datos reales y una biblioteca grande con el filtro «Parcial».
+- **Configuración sin huecos, listas de proveedores con alto y salto a una sección en el móvil (11/11, tras probar #268-#270 en el móvil y el PC):**
+  - **Columnas CSS otra vez** (`.settings-config-grid`: `columns: 4 300px`, 340 con el índice al lado) en vez de la rejilla de #269: con la
+    rejilla cada fila medía lo que la tarjeta más alta y quedaban huecos en blanco entre filas. Se pierde lo que #269 buscaba (que el orden
+    de lectura sea el del índice: las tarjetas se reparten por columnas). Cada tarjeta es un `.aj-seccion` con `break-inside: avoid`.
+  - Las listas de proveedores de vídeo y de imágenes de Configuración enseñan unas 4,5 filas y se desplazan por dentro
+    (`--alto-fila-proveedor`: 44 px la de vídeo, 50 la de imágenes y `--tap-min + 26` con el dedo), con `overscroll-behavior: contain`. El
+    asistente de primera configuración sigue como estaba.
+  - **El error del móvil** («al saltar a una sección de Configuración la aplicación se corta por abajo y solo se usa la zona visible»):
+    `scrollIntoView()` desplazaba también `.app-shell` (`overflow: hidden` se puede mover por código): reproducido con Chromium emulando un iPhone
+    con la interfaz al 50 %, `.app-shell` acababa con `scrollTop` de 940 px. Ahora `utils/desplazar.ts` (`desplazarAlContenedor`) mide con
+    `medir()` y mueve solo el contenedor que se desplaza (`.aj-cuerpo`, el panel de la Guía…); lo usan el índice de Configuración, el foco al
+    primer error, la Guía y «ir al grupo» de Peticiones. Además `.app-shell { overflow: clip }`. **No se ha podido probar en Safari de verdad**
+    (solo hay Chromium): el síntoma se reprodujo y desaparece en Chromium, y la causa (`overflow: hidden` desplazable por código) es la misma
+    en WebKit. Siguen con `scrollIntoView` el paso del tour (`TourOverlay`), la paleta (`nearest` dentro de su lista) y la fila de pestañas.
+  - **Reordenar proveedores** (`SortableList`): la referencia de posición de las filas se medía después de aplicarles el translate, así que en
+    el siguiente cambio una fila que ya se había movido arrancaba desde donde estaba antes del primer movimiento y saltaba hacia atrás una o
+    dos filas. Se nota más con una lista larga (vídeo, 11 filas) que con una corta (imágenes). Medido con Playwright arrastrando despacio: de 5
+    saltos de más de 30 px a 0. Test `SortableList: el deslizamiento de las filas`.
 
 ## Siguiente
 

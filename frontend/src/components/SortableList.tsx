@@ -94,16 +94,25 @@ export function SortableList({ ids, onChange, renderRow, gap = 6, etiqueta = id 
   useLayoutEffect(() => {
     const orderChanged = prevIds.current.length !== ids.length
       || prevIds.current.some((v, i) => v !== ids[i])
+    // Si queda un deslizamiento anterior a medias, se quita antes de medir: la posición de cada fila tiene que ser
+    // la de su sitio en la lista, sin ningún translate puesto. Medirla después de aplicar el translate de ESTE
+    // reordenado (como se hacía) dejaba como referencia el sitio de antes del movimiento, y en el siguiente cambio
+    // la fila arrancaba desde ahí: saltaba hacia atrás una o dos filas antes de deslizarse.
+    if (orderChanged) {
+      nodeRefs.current.forEach(node => { node.style.transition = 'none'; node.style.transform = '' })
+    }
+    const ahora = new Map<string, RectoSinEscalar>()
+    nodeRefs.current.forEach((node, id) => ahora.set(id, medir(node)))
     if (orderChanged) {
       nodeRefs.current.forEach((node, id) => {
         const prev = prevRects.current.get(id)
-        if (prev) {
+        const actual = ahora.get(id)
+        if (prev && actual) {
           // En espacio sin escalar: dy sale de aquí para meterse en un
           // translateY(px), y el zoom del body lo volvería a escalar, así que
           // las filas se pasarían de largo. Ver utils/uiScale.
-          const dy = prev.top - medir(node).top
+          const dy = prev.top - actual.top
           if (dy) {
-            node.style.transition = 'none'
             node.style.transform = `translateY(${dy}px)`
             requestAnimationFrame(() => {
               node.style.transition = `transform ${FLIP_MS}ms ease`
@@ -113,11 +122,9 @@ export function SortableList({ ids, onChange, renderRow, gap = 6, etiqueta = id 
         }
       })
     }
-    // Always refresh the baseline so the next reorder measures from where the
-    // rows currently are (even after a plain layout shift).
-    const map = new Map<string, RectoSinEscalar>()
-    nodeRefs.current.forEach((node, id) => map.set(id, medir(node)))
-    prevRects.current = map
+    // Siempre se renueva la referencia (también tras un simple cambio de maquetación) con las posiciones de la
+    // lista, no con las del deslizamiento que acaba de empezar.
+    prevRects.current = ahora
     prevIds.current = ids
     if (enfocar.current) {
       const { id, selector, otro } = enfocar.current

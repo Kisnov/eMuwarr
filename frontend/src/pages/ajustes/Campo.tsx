@@ -2,6 +2,7 @@ import { useId, type ReactNode } from 'react'
 import type { IntegrationTestResult } from '../../api/integrationTests'
 import { testResultLabel } from '../../utils/integrationResult'
 import { IconoAviso } from '../../components/Iconos'
+import { desplazarAlContenedor } from '../../utils/desplazar'
 
 // Lo que el control de dentro tiene que llevar para quedar ligado a su etiqueta, su ayuda y su error.
 export interface PropsDeControl {
@@ -103,6 +104,6 @@ export function enfocarPrimerError(raiz: string) {
   requestAnimationFrame(() => {
     const campo = document.querySelector<HTMLElement>(`${raiz} [aria-invalid="true"]`)
     campo?.focus()
-    campo?.scrollIntoView?.({ block: 'center', behavior: 'auto' })
+    desplazarAlContenedor(campo, { block: 'center', behavior: 'auto' })
   })
 }
