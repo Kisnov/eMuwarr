@@ -88,7 +88,7 @@ export function seleccionableEnLote(item: LibraryItemResponse): boolean {
  * Por qué un elemento no puede entrar en un lote, o null si puede. Una temporada, si no se puede subir como pack
  * (la regla de `seasonNotReadyReason`). Una película o un capítulo, la regla de `episodeNotReadyReason`
  * (utils/libraryItem.ts: en disco y con castellano), pero con su propio texto, que aquel habla de «el capítulo».
- * Una serie no entra tal cual: se cambia por sus temporadas (`expandirSeleccion`).
+ * Una serie no entra tal cual: se cambia por sus temporadas.
  */
 export function razonNoSubible(item: LibraryItemResponse): string | null {
   if (item.item_type === 'series') return 'Una serie se sube por temporadas.'
@@ -185,14 +185,6 @@ export function expandirEntradas(
   }
   // Dos peticiones sobre lo mismo que falta darían el mismo aviso dos veces.
   return { elementos, peticiones, avisos: [...new Set(avisos)] }
-}
-
-/** `expandirEntradas` de una selección de Biblioteca (sin peticiones ni alcance). */
-export function expandirSeleccion(
-  seleccion: readonly LibraryItemResponse[],
-  temporadasDe: ReadonlyMap<number, readonly LibraryItemResponse[]>,
-): LibraryItemResponse[] {
-  return expandirEntradas(seleccion.map(item => ({ item })), temporadasDe).elementos
 }
 
 /**

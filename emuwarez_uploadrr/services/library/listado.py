@@ -486,14 +486,6 @@ def update_request_status(
     conn.commit()
 
 
-def mark_nomenclature(conn: sqlite3.Connection, library_item_id: int, status: str) -> None:
-    conn.execute(
-        "UPDATE library_items SET nomenclature_status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-        (status, library_item_id),
-    )
-    conn.commit()
-
-
 def list_library_diagnostics(
     *, status: str | None = None, search: str | None = None,
     limit: int = 50, offset: int = 0, conn,

@@ -23,13 +23,6 @@ from .comandos.web import (
 )
 from .comandos.mantenimiento import cmd_demo, cmd_maintenance
 
-MODERN_COMMANDS = {
-    "instances", "sync", "library",
-    "requests", "missing", "upload", "tasks", "logs",
-    "db", "web", "nomenclature", "maintenance", "arr",
-    "demo", "mkv-title",
-}
-
 
 def modern_main(argv: Optional[list[str]] = None) -> int:
     parser = build_parser()

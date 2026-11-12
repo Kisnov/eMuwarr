@@ -388,7 +388,6 @@ Implementado en Fase 10E — Corrección del contrato Uploadrr-EMU y preflight s
 - Preflight expone campos nuevos: `runtime_type`, `contract_valid`, `contract_errors`, `contract_warnings`, `can_execute` (siempre `false` en esta fase), `requires_confirmation`, `safe_to_execute` (siempre `false` en esta fase — la ejecución real queda para la Fase 10F).
 - Frontend: `UploadPreflightModal` muestra el runtime activo y, si el contrato Uploadrr-EMU no es válido, la lista de errores/avisos específicos (p. ej. `python_path` o script no encontrados, ruta fuera de `allowed_roots`).
 - **No se ejecutó Uploadrr real, no se subió ningún torrent, no se tocó `Uploadrr/`.** 59 tests nuevos (`test_uploadrr_contract`, `test_uploadrr_settings_namespace`, `test_uploadrr_emu_preflight`, `test_uploadrr_config_staging`). Total: 911 tests.
-- Detalle completo: `docs/codex_phase_10e_uploadrr_emu_contract_fix_report.md`.
 
 Implementado en Fase 10F — Ejecución controlada de Uploadrr-EMU, settings de runtime y UI de progreso:
 
@@ -401,7 +400,6 @@ Implementado en Fase 10F — Ejecución controlada de Uploadrr-EMU, settings de 
 - **Docker**: `data/` y `tmp/` de Uploadrr-EMU ahora se montan por separado en `rw` (ver sección "Configuración de Uploadrr" más abajo); el código sigue en `:ro`. Uploadrr-EMU sigue sin vendorizarse en la imagen.
 - **CLI**: nuevo alias `upload status <job_id>` (equivalente a `upload job <job_id>`). El resto de subcomandos (`preflight`/`start --dry-run|--apply --confirm`/`logs`/`cancel`/`retry`) ya existían y ahora usan el runner fake en tests.
 - **No se ejecutó Uploadrr real en ningún momento, no se subió ningún torrent real, no se tocó `Uploadrr/`.** 64 tests nuevos (58 en `test_uploadrr_emu_execution`/`test_uploadrr_emu_fake_runner`/`test_uploadrr_runtime_settings_api`/`test_uploadrr_config_staging_execution`/`test_uploadrr_progress_logs`/`test_uploadrr_cli_execution` + 6 ampliando `test_docker_e2e_script.py`). Total: 975 tests.
-- Detalle completo: `docs/codex_phase_10f_controlled_uploadrr_emu_execution_report.md`.
 
 Pendiente para fases posteriores:
 

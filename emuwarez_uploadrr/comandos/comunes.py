@@ -6,7 +6,6 @@ from typing import Any, Optional
 
 from ..database import connect, init_db
 from ..models import LocalStatus, NomenclatureStatus, RequestStatus
-from ..services import library as library_service
 
 
 def _print_table(headers: list[str], rows: list[list[Any]]) -> None:
@@ -78,12 +77,3 @@ def _open_conn(args) -> Any:
     return conn
 
 
-def _target_to_path(conn, target: str) -> str:
-    if target.isdigit():
-        item = library_service.get_library_item(conn, int(target))
-        if not item:
-            raise SystemExit(f"No existe LibraryItem con ID {target}")
-        if not item.get("path"):
-            raise SystemExit(f"El item {target} no tiene ruta local utilizable")
-        return str(item["path"])
-    return target

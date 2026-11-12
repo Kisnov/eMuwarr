@@ -7,7 +7,7 @@ import type { LibraryItemResponse } from '../../types/api'
 import type { DashboardRecommendationItem } from '../../api/dashboard'
 import {
   MAX_ELEMENTOS_LOTE, PATRON_LOTE_ID, claveDelPanel, entradaDePeticion, entradaDelPanel, expandirEntradas,
-  expandirSeleccion, marcadaPorDefecto, nombresRepetidos, nuevoLoteId, peticionSeleccionableEnLote, razonNoSubible,
+  marcadaPorDefecto, nombresRepetidos, nuevoLoteId, peticionSeleccionableEnLote, razonNoSubible,
   seleccionableEnLote, conAvisoDeLote, loteDeNotificacion,
 } from '../lote'
 
@@ -98,30 +98,6 @@ describe('seleccionableEnLote', () => {
     expect(seleccionableEnLote(pelicula({ item_type: 'series' }))).toBe(true)
     expect(seleccionableEnLote(pelicula({ item_type: 'season' }))).toBe(true)
     expect(seleccionableEnLote(pelicula({ item_type: 'episode' }))).toBe(false)
-  })
-})
-
-describe('expandirSeleccion', () => {
-  const de = (id: number, item_type: string, parcial: Partial<LibraryItemResponse> = {}) =>
-    pelicula({ id, item_type, title: `#${id}`, ...parcial })
-  const T = (id: number, serie: number, n: number) => de(id, 'season', { parent_id: serie, season_number: n })
-
-  it('cambia cada serie por sus temporadas, en orden de temporada y en el orden en que se marcó', () => {
-    const fuera = expandirSeleccion(
-      [de(1, 'movie'), de(10, 'series'), de(2, 'movie')],
-      new Map([[10, [T(12, 10, 2), T(11, 10, 1)]]]),
-    )
-    expect(fuera.map(e => e.id)).toEqual([1, 11, 12, 2])
-  })
-
-  it('una temporada marcada sola y por su serie sale una vez, donde aparece primero', () => {
-    const temporadas = new Map([[10, [T(11, 10, 1), T(12, 10, 2)]]])
-    expect(expandirSeleccion([T(12, 10, 2), de(10, 'series')], temporadas).map(e => e.id)).toEqual([12, 11])
-    expect(expandirSeleccion([de(10, 'series'), T(12, 10, 2)], temporadas).map(e => e.id)).toEqual([11, 12])
-  })
-
-  it('una serie sin temporadas cargadas no aporta nada', () => {
-    expect(expandirSeleccion([de(10, 'series'), de(1, 'movie')], new Map()).map(e => e.id)).toEqual([1])
   })
 })
 

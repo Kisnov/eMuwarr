@@ -773,6 +773,29 @@ def test_stage_uploadrr_config_forces_keep_quiet_off(tmp_path, monkeypatch):
     assert get_block_key(read_config_lines(config), "AUTO", "keep_quiet") == "false"
 
 
+def test_la_firma_de_serie_anterior_pasa_a_la_actual_y_una_propia_no_se_toca():
+    from emuwarez_uploadrr.services.uploadrr_config_staging import FIRMA_ACTUAL, FIRMA_ANTERIOR, stage_firma_actual
+    propia = '  anon_signature: "[img]https://ejemplo.test/mia.png[/img]"'
+    staged, _ = stage_firma_actual([
+        "SIGNATURES:", f'  signature: "[img=400]{FIRMA_ANTERIOR}[/img]"',
+        f'  pr_signature: "[b]Personal Release[/b][img=400]{FIRMA_ANTERIOR}[/img]"', propia])
+    assert staged[1] == f'  signature: "[img=400]{FIRMA_ACTUAL}[/img]"'
+    assert FIRMA_ACTUAL in staged[2] and FIRMA_ANTERIOR not in staged[2]
+    assert staged[3] == propia
+
+
+def test_al_preparar_la_subida_la_firma_de_serie_queda_al_dia(tmp_path, monkeypatch):
+    from emuwarez_uploadrr.services.upload_execution import config as ue
+    from emuwarez_uploadrr.services.uploadrr_config_staging import FIRMA_ACTUAL, FIRMA_ANTERIOR
+    config = tmp_path / "Uploadrr" / "data" / "config.yaml"
+    config.parent.mkdir(parents=True)
+    config.write_text(f'SIGNATURES:\n  signature: "[img=400]{FIRMA_ANTERIOR}[/img]"\n', encoding="utf-8")
+    monkeypatch.setattr(ue, "append_upload_log", lambda *a, **k: None)
+    ue._stage_uploadrr_config(1, str(tmp_path / "Uploadrr"))
+    texto = config.read_text(encoding="utf-8")
+    assert FIRMA_ACTUAL in texto and FIRMA_ANTERIOR not in texto
+
+
 def test_stage_anon_off_neutralises_the_config_so_only_the_flag_decides():
     from emuwarez_uploadrr.services.uploadrr_config_staging import stage_anon_off
     from emuwarez_uploadrr.services.uploadrr_yaml import get_block_key, get_emu_anon

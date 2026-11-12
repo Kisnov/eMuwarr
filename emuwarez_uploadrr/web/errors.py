@@ -9,21 +9,6 @@ from fastapi.responses import JSONResponse
 from ..integrations.base import texto_de_error
 
 
-class AppError(Exception):
-    def __init__(self, message: str, status_code: int = 500, detail: str | None = None):
-        super().__init__(message)
-        self.message = message
-        self.status_code = status_code
-        self.detail = detail
-
-
-async def app_error_handler(request: Request, exc: AppError) -> JSONResponse:
-    return JSONResponse(
-        status_code=exc.status_code,
-        content={"error": exc.message, "detail": exc.detail, "status_code": exc.status_code},
-    )
-
-
 # Pydantic repite en cada error el valor recibido (`input`) y, a veces, la excepción que lo
 # provocó (`ctx`). En esta API ese valor puede ser una URL con la clave en la query, una API
 # key, un token o una contraseña: el 422 los devolvería a quien los escribió y quedarían en
