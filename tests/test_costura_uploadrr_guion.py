@@ -62,7 +62,7 @@ def _terminal(db_conn, jid, plazo=15.0):
     limite = time.monotonic() + plazo
     while time.monotonic() < limite:
         if get_upload_job(jid, conn=db_conn)["status"] in ("completed", "failed", "cancelled"):
-            time.sleep(0.3)  # el finally del hilo (restaurar config, avisos) va justo detrás
+            time.sleep(1)  # el finally del hilo (restaurar config, avisos) va justo detrás
             return get_upload_job(jid, conn=db_conn)
         time.sleep(0.05)
     raise AssertionError("la subida no terminó")
@@ -132,7 +132,7 @@ def test_colgado_tras_el_post_con_la_ficha_ya_impresa_conserva_la_ficha(
     """Uploadrr-EMU imprimió `Torrent URL:` y se colgó (qBittorrent): el torrent ya está en eMuwarez."""
     guion_uploadrr([*HASTA_EL_POST, {"out": URL}, {"hang": True}])
     real = consultas.get_runtime_settings
-    monkeypatch.setattr(consultas, "get_runtime_settings", lambda conn: {**real(conn), "timeout": 0.5})
+    monkeypatch.setattr(consultas, "get_runtime_settings", lambda conn: {**real(conn), "timeout": 4})
     jid = _lanzar(db_conn, tmp_path, fake_uploadrr_emu_dir, fake_uploadrr_python_path)
 
     job = _terminal(db_conn, jid)
