@@ -751,3 +751,23 @@ def test_escribir_el_config_conserva_su_modo_y_lo_crea_privado(tmp_path):
         assert (estado / "config.yaml").stat().st_mode & 0o777 == 0o640
     finally:
         os.umask(anterior)
+
+
+def test_stage_keep_quiet_off_replaces_a_true_and_creates_a_missing_key():
+    from emuwarez_uploadrr.services.uploadrr_config_staging import stage_keep_quiet_off
+    from emuwarez_uploadrr.services.uploadrr_yaml import get_block_key
+    staged, _ = stage_keep_quiet_off(["AUTO:", "  keep_quiet: true # silencio"])
+    assert get_block_key(staged, "AUTO", "keep_quiet") == "false"
+    staged, _ = stage_keep_quiet_off(["DEFAULT:", "  tmdb: x"])
+    assert get_block_key(staged, "AUTO", "keep_quiet") == "false"
+
+
+def test_stage_uploadrr_config_forces_keep_quiet_off(tmp_path, monkeypatch):
+    from emuwarez_uploadrr.services.upload_execution import config as ue
+    from emuwarez_uploadrr.services.uploadrr_yaml import get_block_key
+    config = tmp_path / "Uploadrr" / "data" / "config.yaml"
+    config.parent.mkdir(parents=True)
+    config.write_text("AUTO:\n  keep_quiet: true\n", encoding="utf-8")
+    monkeypatch.setattr(ue, "append_upload_log", lambda *a, **k: None)
+    ue._stage_uploadrr_config(1, str(tmp_path / "Uploadrr"))
+    assert get_block_key(read_config_lines(config), "AUTO", "keep_quiet") == "false"
