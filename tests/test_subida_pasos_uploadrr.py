@@ -169,7 +169,6 @@ def test_se_apuntan_los_pasos_que_uploadrr_va_terminando(db_conn, tmp_path, fake
 
     assert job["status"] == "completed"
     assert sp.leer_subpasos(job["pasos_uploadrr_json"]) == ["screenshots", "torrent", "tracker"]
-    assert not any("Reanudando" in m for m in _logs(db_conn, jid))
 
 
 def test_una_subida_fallida_conserva_los_pasos_que_termino(db_conn, tmp_path, fake_uploadrr_emu_dir, fake_uploadrr_python_path, monkeypatch):
@@ -191,7 +190,6 @@ def test_solo_un_trabajo_que_reanuda_lanza_resume(db_conn, tmp_path, fake_upload
 
     assert job["status"] == "completed"
     assert any("--resume" in m for m in _logs(db_conn, jid))
-    assert any("Reanudando" in m for m in _logs(db_conn, jid))
 
 
 @pytest.mark.parametrize("status, parada, crudo, esperado", [

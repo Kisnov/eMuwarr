@@ -121,7 +121,7 @@ def test_upload_job_logs_visible_during_and_after_fake_run(
     assert resp.status_code == 200
     data = resp.json()
     messages = [entry["message"] for entry in data["logs"]]
-    assert any("Torrent creado correctamente" in m for m in messages)
+    assert any("Torrent uploaded successfully" in m for m in messages)
 
     detail_resp = client.get(f"/api/uploads/{jid}", headers=auth_headers)
     assert detail_resp.json()["progress_phase"] == "succeeded"

@@ -33,8 +33,8 @@ def test_accepts_real_emu_flags_and_succeeds(tmp_path):
         "-ua", "-c", "movie", "-res", "1080p",
     ])
     assert result.returncode == 0
-    assert "[EMU] Preparando subida" in result.stdout
-    assert "[EMU] Torrent creado correctamente" in result.stdout
+    assert "No dupes found" in result.stdout
+    assert "Torrent uploaded successfully" in result.stdout
     assert "URL:" in result.stdout
 
 
