@@ -47,7 +47,9 @@ export function estadoVisible(job: UploadJob, seeding: SeedingResponse | null): 
     case 'failed': {
       const paso = pasoDe(job, 'fallido')
       return { tono: 'error', simbolo: '✕', titulo: paso ? `Falló en «${paso}»` : 'La subida falló',
-        motivo: job.error_message || undefined }
+        motivo: job.puede_reenviar_qbit
+          ? 'El torrent ya está en eMuwarez: usa «Reenviar a qBittorrent» para sembrarlo.'
+          : job.error_message || undefined }
     }
     case 'cancelled': {
       const paso = pasoDe(job, 'cancelado')

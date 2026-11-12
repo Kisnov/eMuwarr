@@ -53,6 +53,11 @@ describe('estadoVisible', () => {
     expect(e).toMatchObject({ tono: 'error', titulo: 'Falló en «Subir con Uploadrr»', motivo: 'Sin espacio en disco' })
   })
 
+  it('una fallida con el torrent ya en eMuwarez manda a reenviarlo, no a reintentar', () => {
+    const e = estadoVisible(subida({ status: 'failed', error_message: 'Puedes reintentar', puede_reenviar_qbit: true }), null)
+    expect(e.motivo).toContain('Reenviar a qBittorrent')
+  })
+
   it('una fallida sin paso conocido sigue diciendo que falló', () => {
     expect(estadoVisible(subida({ status: 'failed' }), null).titulo).toBe('La subida falló')
   })

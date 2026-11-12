@@ -9,8 +9,8 @@ import { useTooltip } from './Tooltip'
 import { SIN_DATOS_QBIT, claseSeeding, resumenSeeding, seedingDe, textoSubido } from '../utils/seeding'
 import { noLlegoAQbit } from '../utils/estadoDeSubida'
 
-// Solo la subida completada tiene ya su torrent sembrando; las demás no llegaron a subir o están en ello.
-const tieneTorrent = (job: UploadJob) => job.status === 'completed'
+// La completada tiene su torrent sembrando; la que falló con el torrent ya en eMuwarez se puede reenviar.
+const tieneTorrent = (job: UploadJob) => job.status === 'completed' || !!job.puede_reenviar_qbit
 
 // La columna «Seeding» de la lista de Subidas.
 export function SeedingCelda({ job, seeding }: { job: UploadJob; seeding: SeedingEstado }) {
