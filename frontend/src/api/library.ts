@@ -1,5 +1,5 @@
 import { api } from './client'
-import type { LibraryListResponse, LibraryItemResponse, SyncResponse } from '../types/api'
+import type { LibraryListResponse, LibraryItemResponse } from '../types/api'
 import type { EstadoCastellano } from '../utils/castellano'
 
 // Los filtros de columna admiten varios valores: viajan como parámetro repetido.
@@ -110,10 +110,6 @@ export async function getLibraryFilterOptions(): Promise<LibraryFilterOptions> {
   return api.get<LibraryFilterOptions>('/library/filter-options')
 }
 
-export async function syncAll(include_episodes = true): Promise<SyncResponse> {
-  return api.post<SyncResponse>('/sync', { include_episodes })
-}
-
 export async function startLibrarySync(include_episodes = true): Promise<{ status: string }> {
   return api.post<{ status: string }>('/library/sync-start', { include_episodes })
 }
@@ -145,13 +141,6 @@ export interface EmuSyncStatus {
   full_can_sync: boolean
   full_wait_seconds: number
   last_full_sync_at: string | null
-}
-
-export interface EmuSyncResult {
-  status: string
-  torrents: number
-  items: number
-  wait_seconds?: number
 }
 
 export async function getEmuSyncStatus(): Promise<EmuSyncStatus> {
