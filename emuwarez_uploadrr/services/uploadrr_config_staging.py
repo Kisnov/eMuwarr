@@ -188,6 +188,20 @@ def stage_per_episode_screens(lines: list[str], all_episodes: bool) -> tuple[lis
     return staged, set_block_key(staged, "SCREENS", "per_episode", "0")
 
 
+def stage_keep_quiet_off(lines: list[str]) -> tuple[list[str], str]:
+    """Stage AUTO.keep_quiet a false: a true silencia el progreso, `Added to:` y los avisos de qBittorrent que la app lee."""
+    staged = list(lines)
+    return staged, set_block_key(staged, "AUTO", "keep_quiet", "false")
+
+
+def stage_anon_off(lines: list[str]) -> tuple[list[str], str]:
+    """Stage TRACKERS.EMU.anon y DEFAULT.always_anon a false: Uploadrr-EMU los une con `-a` en un OR,
+    así que solo el flag de la subida decide si es anónima."""
+    staged = list(lines)
+    set_emu_config(staged, anon=False)
+    return staged, set_block_key(staged, "DEFAULT", "always_anon", "false")
+
+
 def stage_image_hosts(
     lines: list[str], *, img_hosts: Optional[list[str]] = None, api_keys: Optional[dict[str, str]] = None,
 ) -> tuple[list[str], str]:
@@ -359,6 +373,8 @@ __all__ = [
     "stage_tmdb_key",
     "stage_emu_config",
     "stage_add_logo",
+    "stage_anon_off",
+    "stage_keep_quiet_off",
     "stage_per_episode_screens",
     "stage_blu_api_off",
     "stage_image_hosts",
