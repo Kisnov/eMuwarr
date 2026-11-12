@@ -1231,7 +1231,7 @@ def _migrate_request_items_last_seen(conn: sqlite3.Connection) -> None:
         pass
 
 
-def _migrate_request_items_aviso_pendiente(conn: sqlite3.Connection) -> None:
+def _migrate_request_items_aviso_pendiente(conn: sqlite3.Connection, activar_evento: bool = True) -> None:
     """Esquema 49: las peticiones que la sincronización vio por primera vez y aún no se han mirado para avisar de
     «nueva y lista para subir». Una columna y no una clave de app_state para que sobreviva a una sincronización
     que se corta a medias, y para que el aviso salga una sola vez por petición. Las que ya hay no avisan."""
@@ -1241,7 +1241,8 @@ def _migrate_request_items_aviso_pendiente(conn: sqlite3.Connection) -> None:
         # Solo se calla si la columna ya está (la añadió otro init_db a la vez), no un «database is locked».
         if "aviso_pendiente" not in {fila[1] for fila in conn.execute("PRAGMA table_info(request_items)")}:
             raise
-    _activar_evento_en_la_campana(conn, "request_new_ready")  # quien ya guardó sus eventos no se queda sin el nuevo
+    if activar_evento:
+        _activar_evento_en_la_campana(conn, "request_new_ready")  # quien ya guardó sus eventos no se queda sin el nuevo
 
 
 def _migrate_library_items_last_seen(conn: sqlite3.Connection) -> None:
@@ -1363,7 +1364,7 @@ def _migrate_imgbox_a_pixhost(conn: sqlite3.Connection) -> None:
     """Esquema 53: imgbox deja de ir siempre el último (lleva meses caído) y pasa a ser un proveedor más, que se puede
     quitar. Quien ya tenía la lista guardada lo tenía de último sin verlo en ella: se cambia por Pixhost, que tampoco
     pide clave, para que su orden siga terminando en un proveedor sin clave. Sin lista guardada no se toca nada:
-    image_hosts.get_enabled_hosts ya da Pixhost de primeras. Solo pasa una vez (va con el salto de esquema), así
+    image_hosts.get_enabled_hosts ya da Pixhost de primeras. Solo pasa al cruzar el esquema 53 (init_db), así
     que lo que el usuario quite después se queda quitado."""
     fila = conn.execute("SELECT value FROM settings WHERE key = 'imghost.enabled'").fetchone()
     if fila is None:
@@ -1742,6 +1743,9 @@ def init_db(conn: Optional[sqlite3.Connection] = None) -> None:
             )
         if version is not None:
             _copia_antes_de_migrar(conn, version)
+        # Las migraciones que cambian ajustes solo corren al cruzar su esquema: repetidas en cada salto deshacían
+        # lo que el usuario había cambiado después.
+        desde = version or 0
         conn.executescript(
             """
             CREATE TABLE IF NOT EXISTS app_state (
@@ -1931,7 +1935,8 @@ def init_db(conn: Optional[sqlite3.Connection] = None) -> None:
         _migrate_notifications_table(conn)
         _migrate_emu_catalog(conn)
         _migrate_tmdb_title_cache(conn)
-        _migrate_ui_recibe_aviso_de_version(conn)
+        if desde < 38:
+            _migrate_ui_recibe_aviso_de_version(conn)
         _migrate_library_items_track_remux(conn)
         _migrate_upload_jobs_queue(conn)
         _migrate_upload_jobs_snapshots(conn)
@@ -1961,12 +1966,13 @@ def init_db(conn: Optional[sqlite3.Connection] = None) -> None:
         _migrate_scheduled_tasks_run_at(conn)
         _migrate_upload_jobs_pasos(conn)
         _migrate_quitar_registro_arr(conn)
-        _migrate_request_items_aviso_pendiente(conn)
+        _migrate_request_items_aviso_pendiente(conn, activar_evento=desde < 49)
         _migrate_perfil_historial(conn)
         _migrate_upload_jobs_pasos_uploadrr(conn)
         _migrate_upload_jobs_lote(conn)
         _migrate_upload_jobs_opciones_tracker(conn)
-        _migrate_imgbox_a_pixhost(conn)
+        if desde < 53:
+            _migrate_imgbox_a_pixhost(conn)
         _migrate_upload_jobs_trailer_estado(conn)
         _migrate_upload_jobs_reenvio_qbit(conn)
         set_state(conn, "schema_version", str(SCHEMA_VERSION))

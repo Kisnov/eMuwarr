@@ -56,6 +56,25 @@ def test_migration_swaps_the_hidden_imgbox_for_pixhost(db_conn):
     assert ih.get_enabled_hosts(db_conn) == ["pixhost"]
 
 
+def test_un_salto_de_esquema_posterior_no_vuelve_a_poner_pixhost(isolated_db):
+    """init_db repetía todas las migraciones en cada salto: quien quitaba Pixhost lo recuperaba en cada versión."""
+    import json
+    from emuwarez_uploadrr.database import SCHEMA_VERSION, connect, init_db, olvidar_esquema, set_state
+    from emuwarez_uploadrr.services.settings import set_setting
+    olvidar_esquema()
+    conn = connect(isolated_db / "emuwarez_uploadrr.db")
+    init_db(conn)
+    set_setting(conn, "imghost.enabled", json.dumps(["imgbb"]))
+    set_setting(conn, "notify.ui.events", "upload_completed")
+    set_state(conn, "schema_version", str(SCHEMA_VERSION - 1))
+    conn.commit()
+    olvidar_esquema()
+    init_db(conn)
+    assert ih.get_enabled_hosts(conn) == ["imgbb"]
+    assert conn.execute("SELECT value FROM settings WHERE key = 'notify.ui.events'").fetchone()[0] == "upload_completed"
+    conn.close()
+
+
 def test_migration_leaves_a_fresh_install_alone(db_conn):
     from emuwarez_uploadrr.database import _migrate_imgbox_a_pixhost
     from emuwarez_uploadrr.services.settings import setting_exists
