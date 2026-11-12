@@ -751,3 +751,75 @@ def test_escribir_el_config_conserva_su_modo_y_lo_crea_privado(tmp_path):
         assert (estado / "config.yaml").stat().st_mode & 0o777 == 0o640
     finally:
         os.umask(anterior)
+
+
+def test_stage_keep_quiet_off_replaces_a_true_and_creates_a_missing_key():
+    from emuwarez_uploadrr.services.uploadrr_config_staging import stage_keep_quiet_off
+    from emuwarez_uploadrr.services.uploadrr_yaml import get_block_key
+    staged, _ = stage_keep_quiet_off(["AUTO:", "  keep_quiet: true # silencio"])
+    assert get_block_key(staged, "AUTO", "keep_quiet") == "false"
+    staged, _ = stage_keep_quiet_off(["DEFAULT:", "  tmdb: x"])
+    assert get_block_key(staged, "AUTO", "keep_quiet") == "false"
+
+
+def test_stage_uploadrr_config_forces_keep_quiet_off(tmp_path, monkeypatch):
+    from emuwarez_uploadrr.services.upload_execution import config as ue
+    from emuwarez_uploadrr.services.uploadrr_yaml import get_block_key
+    config = tmp_path / "Uploadrr" / "data" / "config.yaml"
+    config.parent.mkdir(parents=True)
+    config.write_text("AUTO:\n  keep_quiet: true\n", encoding="utf-8")
+    monkeypatch.setattr(ue, "append_upload_log", lambda *a, **k: None)
+    ue._stage_uploadrr_config(1, str(tmp_path / "Uploadrr"))
+    assert get_block_key(read_config_lines(config), "AUTO", "keep_quiet") == "false"
+
+
+def test_stage_anon_off_neutralises_the_config_so_only_the_flag_decides():
+    from emuwarez_uploadrr.services.uploadrr_config_staging import stage_anon_off
+    from emuwarez_uploadrr.services.uploadrr_yaml import get_block_key, get_emu_anon
+    lines = ["DEFAULT:", "  always_anon: true", "TRACKERS:", "  EMU:", "    api_key: k", "    anon: true"]
+    staged, _ = stage_anon_off(lines)
+    assert get_block_key(staged, "DEFAULT", "always_anon") == "false"
+    assert get_emu_anon(staged) is False
+    assert "    api_key: k" in staged
+    staged, _ = stage_anon_off(["DEFAULT:", "  tmdb: x"])
+    assert get_block_key(staged, "DEFAULT", "always_anon") == "false"
+    assert get_emu_anon(staged) is False
+
+
+def test_stage_uploadrr_config_forces_anonymity_off(tmp_path, monkeypatch):
+    from emuwarez_uploadrr.services.upload_execution import config as ue
+    from emuwarez_uploadrr.services.uploadrr_yaml import get_block_key, get_emu_anon
+    config = tmp_path / "Uploadrr" / "data" / "config.yaml"
+    config.parent.mkdir(parents=True)
+    config.write_text("DEFAULT:\n  always_anon: true\nTRACKERS:\n  EMU:\n    anon: true\n", encoding="utf-8")
+    monkeypatch.setattr(ue, "append_upload_log", lambda *a, **k: None)
+    ue._stage_uploadrr_config(1, str(tmp_path / "Uploadrr"))
+    lines = read_config_lines(config)
+    assert get_block_key(lines, "DEFAULT", "always_anon") == "false"
+    assert get_emu_anon(lines) is False
+
+
+def test_qbit_configurado_es_la_misma_condicion_para_probar_y_stagear():
+    from emuwarez_uploadrr.integrations.qbittorrent import qbit_configurado
+    assert qbit_configurado("http://qbit:8080", None)
+    assert qbit_configurado("", "http://qui/proxy/k")
+    assert not qbit_configurado("  ", None)
+    assert not qbit_configurado(None, "")
+
+
+def test_stage_uploadrr_config_stages_qbit_with_only_the_url(tmp_path, monkeypatch):
+    from emuwarez_uploadrr.database import connect, init_db
+    from emuwarez_uploadrr.services.upload_execution import config as ue
+    from emuwarez_uploadrr.services.settings import set_setting
+    from emuwarez_uploadrr.services.uploadrr_yaml import get_block_key
+    config = tmp_path / "Uploadrr" / "data" / "config.yaml"
+    config.parent.mkdir(parents=True)
+    config.write_text("DEFAULT:\n  default_torrent_client: watch\n", encoding="utf-8")
+    monkeypatch.setattr(ue, "append_upload_log", lambda *a, **k: None)
+    conn = connect()
+    init_db(conn)
+    set_setting(conn, "qbit.url", "http://qbit.local:8080")
+    conn.commit()
+    conn.close()
+    ue._stage_uploadrr_config(1, str(tmp_path / "Uploadrr"))
+    assert get_block_key(read_config_lines(config), "DEFAULT", "default_torrent_client") == QBIT_CLIENT_KEY
