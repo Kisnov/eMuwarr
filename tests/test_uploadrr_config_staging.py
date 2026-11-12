@@ -771,3 +771,29 @@ def test_stage_uploadrr_config_forces_keep_quiet_off(tmp_path, monkeypatch):
     monkeypatch.setattr(ue, "append_upload_log", lambda *a, **k: None)
     ue._stage_uploadrr_config(1, str(tmp_path / "Uploadrr"))
     assert get_block_key(read_config_lines(config), "AUTO", "keep_quiet") == "false"
+
+
+def test_stage_anon_off_neutralises_the_config_so_only_the_flag_decides():
+    from emuwarez_uploadrr.services.uploadrr_config_staging import stage_anon_off
+    from emuwarez_uploadrr.services.uploadrr_yaml import get_block_key, get_emu_anon
+    lines = ["DEFAULT:", "  always_anon: true", "TRACKERS:", "  EMU:", "    api_key: k", "    anon: true"]
+    staged, _ = stage_anon_off(lines)
+    assert get_block_key(staged, "DEFAULT", "always_anon") == "false"
+    assert get_emu_anon(staged) is False
+    assert "    api_key: k" in staged
+    staged, _ = stage_anon_off(["DEFAULT:", "  tmdb: x"])
+    assert get_block_key(staged, "DEFAULT", "always_anon") == "false"
+    assert get_emu_anon(staged) is False
+
+
+def test_stage_uploadrr_config_forces_anonymity_off(tmp_path, monkeypatch):
+    from emuwarez_uploadrr.services.upload_execution import config as ue
+    from emuwarez_uploadrr.services.uploadrr_yaml import get_block_key, get_emu_anon
+    config = tmp_path / "Uploadrr" / "data" / "config.yaml"
+    config.parent.mkdir(parents=True)
+    config.write_text("DEFAULT:\n  always_anon: true\nTRACKERS:\n  EMU:\n    anon: true\n", encoding="utf-8")
+    monkeypatch.setattr(ue, "append_upload_log", lambda *a, **k: None)
+    ue._stage_uploadrr_config(1, str(tmp_path / "Uploadrr"))
+    lines = read_config_lines(config)
+    assert get_block_key(lines, "DEFAULT", "always_anon") == "false"
+    assert get_emu_anon(lines) is False

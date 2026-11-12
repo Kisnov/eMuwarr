@@ -10,6 +10,7 @@ from ..settings import leer_ajuste
 from ..image_hosts import fallback_order, get_host_key
 from ..uploadrr_config_staging import (
     SCREENS_API_KEY_HOSTS,
+    stage_anon_off,
     backup_config,
     default_uploadrr_config_path,
     read_baseline_lines,
@@ -96,6 +97,7 @@ def _stage_uploadrr_config(job_id: int, cwd: str) -> Path | None:
         lines, _msg = stage_per_episode_screens(lines, per_episode_screens)
         lines, _msg = stage_blu_api_off(lines)
         lines, _msg = stage_keep_quiet_off(lines)
+        lines, _msg = stage_anon_off(lines)
         changed = True
         # Siempre hay al menos uno (ver arriba): esto es lo que hace que la
         # preferencia del usuario (p. ej. Pixhost) llegue de verdad a Uploadrr-EMU
