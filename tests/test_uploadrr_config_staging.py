@@ -797,3 +797,29 @@ def test_stage_uploadrr_config_forces_anonymity_off(tmp_path, monkeypatch):
     lines = read_config_lines(config)
     assert get_block_key(lines, "DEFAULT", "always_anon") == "false"
     assert get_emu_anon(lines) is False
+
+
+def test_qbit_configurado_es_la_misma_condicion_para_probar_y_stagear():
+    from emuwarez_uploadrr.integrations.qbittorrent import qbit_configurado
+    assert qbit_configurado("http://qbit:8080", None)
+    assert qbit_configurado("", "http://qui/proxy/k")
+    assert not qbit_configurado("  ", None)
+    assert not qbit_configurado(None, "")
+
+
+def test_stage_uploadrr_config_stages_qbit_with_only_the_url(tmp_path, monkeypatch):
+    from emuwarez_uploadrr.database import connect, init_db
+    from emuwarez_uploadrr.services.upload_execution import config as ue
+    from emuwarez_uploadrr.services.settings import set_setting
+    from emuwarez_uploadrr.services.uploadrr_yaml import get_block_key
+    config = tmp_path / "Uploadrr" / "data" / "config.yaml"
+    config.parent.mkdir(parents=True)
+    config.write_text("DEFAULT:\n  default_torrent_client: watch\n", encoding="utf-8")
+    monkeypatch.setattr(ue, "append_upload_log", lambda *a, **k: None)
+    conn = connect()
+    init_db(conn)
+    set_setting(conn, "qbit.url", "http://qbit.local:8080")
+    conn.commit()
+    conn.close()
+    ue._stage_uploadrr_config(1, str(tmp_path / "Uploadrr"))
+    assert get_block_key(read_config_lines(config), "DEFAULT", "default_torrent_client") == QBIT_CLIENT_KEY

@@ -6,6 +6,7 @@ from pathlib import Path
 
 from ...database import get_setting_canonical
 from ...integrations.base import texto_de_error
+from ...integrations.qbittorrent import qbit_configurado
 from ..settings import leer_ajuste
 from ..image_hosts import fallback_order, get_host_key
 from ..uploadrr_config_staging import (
@@ -104,7 +105,7 @@ def _stage_uploadrr_config(job_id: int, cwd: str) -> Path | None:
         # en vez de que use el orden de img_hosts de su propio config.yaml.
         lines, _msg = stage_image_hosts(lines, img_hosts=img_hosts, api_keys=img_api_keys)
         changed = True
-        if (qbit_url and qbit_username and qbit_password) or qbit_qui:
+        if qbit_configurado(qbit_url, qbit_qui):
             # Without this, Uploadrr-EMU falls back to whatever
             # DEFAULT.default_torrent_client its own config.yaml ships with
             # (confirmed: "watch", not "qbit") — the job finishes

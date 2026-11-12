@@ -11,6 +11,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable
 
+from ...database import get_setting_canonical
+from ...integrations.qbittorrent import qbit_configurado
 from ..subida_pasos import leer_subpasos, subpaso_de_linea
 from ..upload_result_parser import classify_upload_result
 from ..uploadrr_contract import RUNTIME_EMU, get_runtime_settings
@@ -152,7 +154,8 @@ def _run_uploadrr_subprocess_body(job_id: int, cmd: dict, secrets: list[str]) ->
         append_upload_log(job_id, "info", f"PID: {proc.pid}", stream="system")
 
         progress_lock = threading.Lock()
-        progress_state = {"phase": None, "pct": 0, "last_sig": None, "qbittorrent_add_failed": False}
+        progress_state = {"phase": None, "pct": 0, "last_sig": None, "qbittorrent_add_failed": False,
+                          "qbittorrent_added": False}
 
         def _track_uploadrr_progress(line: str) -> None:
             parsed = parse_uploadrr_progress(line)
@@ -173,6 +176,7 @@ def _run_uploadrr_subprocess_body(job_id: int, cmd: dict, secrets: list[str]) ->
                         progress_state["qbittorrent_add_failed"] = True
                     elif ok_state is True:
                         progress_state["qbittorrent_add_failed"] = False
+                        progress_state["qbittorrent_added"] = True
             advance_running_phase(job_id, phase_key, pct)
             # Distinct, clearly-flagged line beyond the raw stdout passthrough
             # already captured above — otherwise this only shows up as one
@@ -269,6 +273,9 @@ def _run_uploadrr_subprocess_body(job_id: int, cmd: dict, secrets: list[str]) ->
                 (_now(), job_id),
             )
             conn.commit()
+            hay_qbit = qbit_configurado(
+                get_setting_canonical(conn, "qbit.url"), get_setting_canonical(conn, "qbit.qui_proxy_url"),
+            )
         finally:
             conn.close()
 
@@ -311,6 +318,15 @@ def _run_uploadrr_subprocess_body(job_id: int, cmd: dict, secrets: list[str]) ->
             # Y si falló se guarda como fallida: si no, se quedaba «En curso» con la duración contando.
             if progress_state.get("qbittorrent_add_failed"):
                 mark_phase_failed(job_id, "qbittorrent_add")
+            elif hay_qbit and not progress_state["qbittorrent_added"]:
+                # Con qBittorrent configurado y sin `Added to:` no se añadió nada: sigue disponible «Reenviar».
+                mark_phase_failed(job_id, "qbittorrent_add")
+                append_upload_log(
+                    job_id, "error",
+                    "qBittorrent: Uploadrr-EMU terminó sin confirmar que el torrent se añadiera. Revisa qBittorrent. "
+                    "La subida a eMuwarez sí se completó.",
+                    stream="system",
+                )
             else:
                 mark_phase_done(job_id, "qbittorrent_add")
             append_upload_log(

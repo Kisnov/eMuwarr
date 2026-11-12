@@ -1000,3 +1000,36 @@ def test_collect_secrets_tapa_la_clave_de_qui_sin_host_y_las_de_imagenes(db_conn
     limpia = redact_secrets(linea, _collect_secrets(db_conn))
     assert "clave0de0qui" not in limpia and "clave0de0lensdump" not in limpia
     assert limpia.startswith("Torrent client add failed:")
+
+
+def _lanzar_sin_added_to(db_conn, tmp_path, configurar_qbit):
+    from emuwarez_uploadrr.services.settings import set_setting
+    if configurar_qbit:
+        set_setting(db_conn, "qbit.url", "http://qbit.local:8080")
+        db_conn.commit()
+    src = tmp_path / "movie.mkv"
+    src.write_bytes(b"\x00" * 10)
+    jid = _insert_job(db_conn, source_path=str(src))
+    mock_proc = _make_mock_proc(returncode=0, stdout_lines=["Torrent uploaded successfully"])
+    with patch("subprocess.Popen", return_value=mock_proc):
+        from emuwarez_uploadrr.services.upload_execution import _run_uploadrr_subprocess
+        _run_uploadrr_subprocess(
+            jid,
+            {"executable": "/usr/bin/python3", "args": ["/fake/upload.py", str(src)],
+             "cwd": str(tmp_path), "command_preview": "python3 upload.py movie.mkv"},
+            [],
+        )
+    state = json.loads(db_conn.execute("SELECT progress_json FROM upload_jobs WHERE id=?", (jid,)).fetchone()[0])
+    return jid, {p["key"]: p for p in state["phases"]}["qbittorrent_add"]["status"]
+
+
+def test_run_subprocess_qbittorrent_configured_without_added_to_marks_failed(db_conn, tmp_path):
+    jid, fase = _lanzar_sin_added_to(db_conn, tmp_path, True)
+    assert get_upload_job(jid, conn=db_conn)["status"] == "completed"
+    assert fase == "failed"
+    assert any("sin confirmar" in log["message"] for log in get_upload_job_logs(jid, conn=db_conn)["logs"])
+
+
+def test_run_subprocess_qbittorrent_not_configured_still_marks_done(db_conn, tmp_path):
+    _jid, fase = _lanzar_sin_added_to(db_conn, tmp_path, False)
+    assert fase == "done"

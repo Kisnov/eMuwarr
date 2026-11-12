@@ -106,6 +106,7 @@ def run_upload_checks(conn: sqlite3.Connection, item_id: int, *, scope: str = "a
     from .image_hosts import fallback_order, get_host_key, test_image_host, host_meta
     from .uploadrr_contract import get_runtime_settings
     from ..database import get_setting_canonical
+    from ..integrations.qbittorrent import qbit_configurado
 
     checks: list[dict] = []
     # El nombre del torrent de un pack listo (el `season_pack_title` del plan),
@@ -332,8 +333,7 @@ def run_upload_checks(conn: sqlite3.Connection, item_id: int, *, scope: str = "a
         return done()
 
     # 3. qBittorrent — WebUI login; skipped (yellow) when it isn't configured.
-    configurado = get_setting_canonical(conn, "qbit.url") or get_setting_canonical(conn, "qbit.qui_proxy_url")
-    if not (configurado and configurado.strip()):
+    if not qbit_configurado(get_setting_canonical(conn, "qbit.url"), get_setting_canonical(conn, "qbit.qui_proxy_url")):
         add_skip("qbittorrent", "qBittorrent sin configurar (se omite)",
                  "Configúralo en Ajustes para sembrar automáticamente tras subir")
     else:
