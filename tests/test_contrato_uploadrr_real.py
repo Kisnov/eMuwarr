@@ -45,7 +45,8 @@ def _carpeta_uploadrr(tmp_path_factory) -> Path | None:
 
 
 @pytest.fixture(scope="module")
-def parser_uploadrr(tmp_path_factory) -> argparse.ArgumentParser:
+def args_uploadrr(tmp_path_factory):
+    """El módulo `src/args.py` real de Uploadrr-EMU."""
     carpeta = _carpeta_uploadrr(tmp_path_factory)
     if carpeta is None:
         motivo = "No se pudo conseguir Uploadrr-EMU (ni UPLOADRR_EMU_DIR, ni /opt/Uploadrr, ni git clone)."
@@ -63,7 +64,12 @@ def parser_uploadrr(tmp_path_factory) -> argparse.ArgumentParser:
         spec = importlib.util.spec_from_file_location("_uploadrr_args_real", carpeta / "src" / "args.py")
         modulo = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(modulo)
-    return modulo.build_parser({})
+    return modulo
+
+
+@pytest.fixture(scope="module")
+def parser_uploadrr(args_uploadrr) -> argparse.ArgumentParser:
+    return args_uploadrr.build_parser({})
 
 
 def _parsear(parser: argparse.ArgumentParser, argv: list[str]) -> argparse.Namespace:
@@ -124,3 +130,43 @@ def test_cada_resolucion_y_tipo_que_puede_mandar_la_app_existe_en_uploadrr(parse
     assert _UPLOADRR_RES_CHOICES <= _choices(parser_uploadrr, "-res")
     assert set(_UPLOADRR_TYPES.values()) <= _choices(parser_uploadrr, "-t")
     assert {"movie", "tv"} <= _choices(parser_uploadrr, "-c")
+
+
+def _meta_como_upload_py(args, parser, argv: list[str]) -> dict:
+    """Lo que upload.py hace con el argv: agrupa por ruta, lo parsea y lo pasa por normalize_args y apply_special_logic."""
+    items, global_argv = args.group_args_by_path(argv)
+    assert items == [([], str(Path(argv[0]).resolve()))], "la ruta tiene que ser el primer elemento y la única"
+    ns = parser.parse_args(global_argv)
+    args.enforce_global_only(ns, is_global=True, parser=parser)
+    return args.apply_special_logic(args.normalize_args(ns))
+
+
+# Cada campo con su valor Y su tipo: `manual_name` como lista rompería la comparación con el nombre del tracker.
+_BASE = {"manual_name": "Peli.2024.1080p.WEB-DL", "trackers": ["EMU"], "unattended": True, "tmdb_manual": "603",
+         "manual_type": "webdl", "torrent_creation": "mkbrr"}
+
+
+@pytest.mark.parametrize(
+    "cambios, esperado, ausentes",
+    [
+        ({}, {**_BASE, "category": "MOVIE", "resolution": "1080p"}, ("anon", "resume", "aviso_baja_calidad", "solo_cliente")),
+        (dict(category="tv", season=1, episode=5),
+         {**_BASE, "category": "TV", "manual_season": "S01", "manual_episode": "E05"}, ("anon", "resume")),
+        (dict(category="tv", season=2, resolution="480p", anonimo=True, reanudar=True),
+         {**_BASE, "category": "TV", "resolution": "480p", "manual_season": "S02", "anon": True, "resume": True,
+          "aviso_baja_calidad": True, "full_dir": True}, ("manual_episode", "solo_cliente")),
+        (dict(solo_cliente="4242"), {**_BASE, "category": "MOVIE", "resume": True, "solo_cliente": 4242}, ("anon",)),
+    ],
+    ids=["pelicula", "capitulo", "pack-480p-anonimo-resume", "solo-cliente"],
+)
+def test_el_comando_de_la_app_llega_a_la_meta_con_el_tipo_y_valor_que_espera_uploadrr(
+        args_uploadrr, parser_uploadrr, tmp_path, cambios, esperado, ausentes):
+    archivo = tmp_path / "Peli.2024.1080p.WEB-DL.mkv"
+    archivo.write_bytes(b"x")
+
+    meta = _meta_como_upload_py(args_uploadrr, parser_uploadrr, _cmd(prepared_path=str(archivo), **cambios))
+
+    for clave, valor in esperado.items():
+        assert meta[clave] == valor and type(meta[clave]) is type(valor), (clave, meta.get(clave))
+    for clave in ausentes:
+        assert not meta.get(clave), (clave, meta.get(clave))
