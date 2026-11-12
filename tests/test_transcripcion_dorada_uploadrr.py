@@ -17,6 +17,9 @@ from emuwarez_uploadrr.services.uploadrr_progress import PHASE_KEY_ALIASES, RUNN
 
 CARPETA = Path(__file__).parent / "fixtures" / "golden_uploadrr"
 TRANSCRIPCIONES = sorted(CARPETA.glob("*.txt"))
+# Las que acaban en fallo (duplicado, exit 1) se prueban aparte: no llegan al torrent ni a la subida.
+FALLIDAS = [r for r in TRANSCRIPCIONES if "duplicado" in r.name]
+EXITOSAS = [r for r in TRANSCRIPCIONES if r not in FALLIDAS]
 
 
 def _lineas(ruta: Path) -> list[str]:
@@ -28,7 +31,26 @@ def test_hay_transcripciones_doradas():
     pytest.skip("tests/fixtures/golden_uploadrr/ no tiene ningún .txt todavía (la transcripción real de Uploadrr-EMU)")
 
 
-@pytest.mark.parametrize("ruta", TRANSCRIPCIONES, ids=lambda r: r.name)
+@pytest.mark.parametrize("ruta", FALLIDAS, ids=lambda r: r.name)
+def test_un_duplicado_llega_a_la_fase_de_duplicados_y_no_pasa_de_ahi(ruta):
+    lineas = _lineas(ruta)
+    claves = {r[0] for r in map(parse_uploadrr_progress, lineas) if r}
+    assert "duplicates" in claves
+    assert not claves & {"torrent_create", "uploading_emu", "qbittorrent_add"}, sorted(claves)
+    assert [p for p in map(sp.subpaso_de_linea, lineas) if p] == []
+
+    resultado = classify_upload_result(chr(10).join(lineas), "", 1)
+    assert resultado["status"] == "failed"
+    assert resultado["result_url"] is None and resultado["torrent_id"] is None
+
+
+@pytest.mark.parametrize("ruta", FALLIDAS, ids=lambda r: r.name)
+def test_un_duplicado_se_le_dice_al_usuario_como_duplicado(ruta):
+    resultado = classify_upload_result(ruta.read_text(encoding="utf-8"), "", 1)
+    assert "duplic" in resultado["error_summary"].lower(), resultado["error_summary"]
+
+
+@pytest.mark.parametrize("ruta", EXITOSAS, ids=lambda r: r.name)
 def test_las_fases_avanzan_en_orden_y_llegan_a_la_creacion_del_torrent(ruta):
     vistas: list[tuple[str, str]] = []  # (clave cruda, fase mostrada)
     for linea in _lineas(ruta):
@@ -45,7 +67,7 @@ def test_las_fases_avanzan_en_orden_y_llegan_a_la_creacion_del_torrent(ruta):
         assert esperada in claves, f"{esperada} nunca se reconoce; claves vistas: {sorted(claves)}"
 
 
-@pytest.mark.parametrize("ruta", TRANSCRIPCIONES, ids=lambda r: r.name)
+@pytest.mark.parametrize("ruta", EXITOSAS, ids=lambda r: r.name)
 def test_los_pasos_y_la_ficha_se_reconocen(ruta):
     lineas = _lineas(ruta)
     pasos = [p for p in (sp.subpaso_de_linea(ln) for ln in lineas) if p]
@@ -58,7 +80,7 @@ def test_los_pasos_y_la_ficha_se_reconocen(ruta):
     assert resultado["result_url"].endswith(f"/torrents/{resultado['torrent_id']}")
 
 
-@pytest.mark.parametrize("ruta", TRANSCRIPCIONES, ids=lambda r: r.name)
+@pytest.mark.parametrize("ruta", EXITOSAS, ids=lambda r: r.name)
 def test_se_ve_que_qbittorrent_lo_añadio(ruta):
     assert any(ln.strip().startswith("Added to:") for ln in _lineas(ruta))
 
