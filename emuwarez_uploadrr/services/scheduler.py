@@ -418,10 +418,13 @@ def run_scheduled_task(conn: sqlite3.Connection, task_key: str, *, manual: bool 
         status, summary = "failed", texto_de_error(exc)
 
     task = get_scheduled_task(conn, task_key) or task  # el horario pudo cambiar mientras corría
-    if status == "busy":  # una subida en marcha: se reintenta en el siguiente tick en vez de esperar al intervalo
-        status, next_run_at = "skipped", _now().isoformat()
-    else:
-        next_run_at = _proxima_ejecucion(task, _now()).isoformat()
+    if status == "busy":
+        # Una subida en marcha: se reintenta en el siguiente tick, sin tocar la última ejecución ni avisar cada minuto.
+        next_run_at = _now().isoformat()
+        conn.execute("UPDATE scheduled_tasks SET next_run_at = ? WHERE task_key = ?", (next_run_at, task_key))
+        conn.commit()
+        return {"task_key": task_key, "status": "skipped", "summary": summary, "next_run_at": next_run_at}
+    next_run_at = _proxima_ejecucion(task, _now()).isoformat()
     conn.execute(
         """UPDATE scheduled_tasks
            SET last_run_at = ?, last_status = ?, last_summary = ?, next_run_at = ?, updated_at = CURRENT_TIMESTAMP

@@ -250,6 +250,7 @@ def test_full_catalog_sync_skipped_while_uploading_then_runs_next_tick(isolated_
             run = run_scheduled_task(conn, TASK_EMU_CATALOG_FULL)
             assert (run["status"], "subida en marcha" in run["summary"]) == ("skipped", True)
             hilo.assert_not_called()  # no descargó nada
+            assert get_scheduled_task(conn, TASK_EMU_CATALOG_FULL)["last_run_at"] is None  # ni cuenta como ejecución
             assert TASK_EMU_CATALOG_FULL in claim_due_tasks(conn)  # y se reintenta en el siguiente tick
 
             conn.execute("UPDATE upload_jobs SET status = 'completed'")
