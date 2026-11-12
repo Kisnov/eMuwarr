@@ -192,6 +192,12 @@ describe('SaludSeeding', () => {
       expect(boton(REENVIAR)!.getAttribute('aria-describedby')).toBe('reenvio-qbit-7')
     })
 
+    it('sale también en la que falló con el torrent ya en eMuwarez', async () => {
+      m.mockResolvedValue(noEncontrado())
+      await montar(<Pagina job={subida({ status: 'failed', puede_reenviar_qbit: true })} />)
+      await esperar(() => boton(REENVIAR))
+    })
+
     it('sale cuando falló el añadido a qBittorrent aunque qBittorrent no responda', async () => {
       m.mockResolvedValue(respuesta(null, { disponible: false, mensaje: 'No se pudo conectar con qBittorrent' }))
       await montar(<Pagina job={subida({ puede_reenviar_qbit: true, progress: qbitFallido })} />)

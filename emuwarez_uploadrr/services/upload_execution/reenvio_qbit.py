@@ -14,6 +14,7 @@ import threading
 
 from .. import seeding_qbit
 from ..eventos import EVENTO_SUBIDA_ESTADO, publicar
+from ..upload_states import RETRYABLE_STATUSES
 from ..uploadrr_contract import RUNTIME_EMU, get_runtime_settings
 from ..uploadrr_progress import parse_uploadrr_progress
 from .comun import QBIT_AÑADIDO, _collect_secrets, _get_db_conn, _now, logger, redact_secrets
@@ -33,8 +34,9 @@ def _motivo_para_no_reenviar(job: dict | None) -> tuple[str, str] | None:
     """(error, mensaje) si esa subida no se puede reenviar; None si se puede."""
     if not job:
         return "not_found", "Subida no encontrada."
-    if job.get("status") != "completed":
-        return "invalid_status", "Solo se reenvía a qBittorrent una subida completada."
+    # También la que falló o se canceló con el torrent ya en eMuwarez: reintentarla chocaría con ese torrent.
+    if job.get("status") != "completed" and not (job.get("status") in RETRYABLE_STATUSES and job.get("torrent_subido")):
+        return "invalid_status", "Solo se reenvía a qBittorrent una subida que ya está en eMuwarez."
     if not job.get("result_torrent_id"):
         return "sin_torrent_id", "La subida no tiene apuntado el id de su torrent en eMuwarez."
     if not job.get("prepared_path") or not os.path.exists(job["prepared_path"]):
@@ -50,8 +52,8 @@ def puede_reenviar_qbit(job: dict) -> bool:
 
 def _escribir_estado(job_id: int, estado: str, *, solo_si_libre: bool = False, conn=None) -> bool:
     """El único sitio que escribe `reenvio_qbit_estado` (salvo el arranque, ver reconcile_interrupted_jobs).
-    `solo_si_libre` lo toma solo si la subida sigue completada y no hay otro reenvío en curso."""
-    condicion = " AND status = 'completed' AND reenvio_qbit_estado IS NOT 'en_curso'" if solo_si_libre else ""
+    `solo_si_libre` lo toma solo si la subida sigue terminada y no hay otro reenvío en curso."""
+    condicion = " AND status IN ('completed', 'failed', 'cancelled') AND reenvio_qbit_estado IS NOT 'en_curso'" if solo_si_libre else ""
     propia = conn is None
     conn = conn or _get_db_conn()
     try:

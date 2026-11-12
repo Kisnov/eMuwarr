@@ -163,6 +163,29 @@ def test_se_puede_reenviar_una_completada_con_id_y_ficheros(db_conn, tmp_path, u
     assert puede_reenviar_qbit(get_upload_job(_job(db_conn, tmp_path))) is True
 
 
+@pytest.mark.parametrize("status", ["failed", "cancelled"])
+def test_se_puede_reenviar_la_que_fallo_con_el_torrent_ya_en_emuwarez(db_conn, tmp_path, uploadrr, status):
+    """Un reinicio o un corte tras «Torrent URL:» la dejaba fallida sin salida: reintentarla choca con su propio torrent."""
+    jid = _job(db_conn, tmp_path, status=status)
+    db_conn.execute("UPDATE upload_jobs SET torrent_subido = 1 WHERE id = ?", (jid,))
+    db_conn.commit()
+    assert puede_reenviar_qbit(get_upload_job(jid)) is True
+    with patch(POPEN, return_value=_proc(0)):
+        assert reenviar_a_qbittorrent(jid, wait=True)["ok"] is True
+    despues = _fila(db_conn, jid)
+    assert (despues["status"], despues["reenvio_qbit_estado"]) == (status, "ok")
+
+
+def test_al_arrancar_la_interrumpida_con_el_torrent_subido_no_dice_que_se_reintente(db_conn, tmp_path, uploadrr):
+    jid = _job(db_conn, tmp_path, status="running")
+    db_conn.execute("UPDATE upload_jobs SET torrent_subido = 1 WHERE id = ?", (jid,))
+    db_conn.commit()
+    reconcile_interrupted_jobs()
+    fila = _fila(db_conn, jid)
+    assert fila["status"] == "failed" and "Reenviar a qBittorrent" in fila["error_message"]
+    assert puede_reenviar_qbit(get_upload_job(jid)) is True
+
+
 # ---------------------------------------------------------------------------
 # Bien y mal, con el subproceso simulado
 # ---------------------------------------------------------------------------
@@ -301,4 +324,4 @@ def test_la_api_dice_404_y_409(client, auth_headers, db_conn, tmp_path, uploadrr
     assert client.post("/api/uploads/999/reenviar-qbit", headers=auth_headers).status_code == 404
     jid = _job(db_conn, tmp_path, status="failed")
     resp = client.post(f"/api/uploads/{jid}/reenviar-qbit", headers=auth_headers)
-    assert resp.status_code == 409 and resp.json()["detail"] == "Solo se reenvía a qBittorrent una subida completada."
+    assert resp.status_code == 409 and resp.json()["detail"] == "Solo se reenvía a qBittorrent una subida que ya está en eMuwarez."
