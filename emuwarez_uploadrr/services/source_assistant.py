@@ -448,12 +448,6 @@ def build_title_options(spanish: str | None, english: str | None) -> list[dict]:
     return options
 
 
-def _resolve_series_title(item: dict, conn) -> str | None:
-    """The series title for an episode/season row (see _resolve_series_row)."""
-    row = _resolve_series_row(item, conn)
-    return row.get("title") if row else None
-
-
 def build_editable_nomenclature_fields(
     library_item_id: int, conn=None,
     source_override: str | None = None, provider_override: str | None = None,

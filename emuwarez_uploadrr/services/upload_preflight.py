@@ -11,7 +11,7 @@ import os
 from datetime import datetime, timezone
 from pathlib import Path
 
-from ..database import connect, row_to_dict, rows_to_dicts, get_setting_canonical
+from ..database import connect, row_to_dict, get_setting_canonical
 from .filesystem_safety import safe_stat
 from .uploadrr_contract import (
     DEFAULT_UPLOADRR_PATH,
@@ -363,25 +363,3 @@ def save_upload_job_preflight(data: dict, conn=None) -> dict:
             conn.close()
 
 
-def get_upload_job(job_id: int, conn=None) -> dict | None:
-    own = conn is None
-    conn = conn or connect()
-    try:
-        row = conn.execute("SELECT * FROM upload_jobs WHERE id = ?", (job_id,)).fetchone()
-        return row_to_dict(row)
-    finally:
-        if own:
-            conn.close()
-
-
-def list_upload_jobs(filters: dict | None = None, conn=None) -> list[dict]:
-    own = conn is None
-    conn = conn or connect()
-    try:
-        rows = conn.execute(
-            "SELECT * FROM upload_jobs ORDER BY created_at DESC LIMIT 100"
-        ).fetchall()
-        return rows_to_dicts(rows)
-    finally:
-        if own:
-            conn.close()

@@ -72,7 +72,6 @@ from .listado import (  # noqa: F401
     list_missing,
     count_missing,
     update_request_status,
-    mark_nomenclature,
     list_library_diagnostics,
     list_missing_diagnostics,
 )

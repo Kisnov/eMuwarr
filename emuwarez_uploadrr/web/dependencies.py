@@ -49,21 +49,6 @@ def _resolve_token(authorization: Optional[str]) -> Optional[str]:
     return parts[1].strip() or None
 
 
-def get_current_user(
-    authorization: Annotated[Optional[str], Header()] = None,
-) -> Optional[dict]:
-    """Return the authenticated user dict, or None if no valid token."""
-    token = _resolve_token(authorization)
-    if not token:
-        return None
-    try:
-        from .services.auth_service import get_user_by_token
-        with db(_db_path()) as conn:
-            return get_user_by_token(conn, token)
-    except Exception:
-        return None
-
-
 def require_auth(
     authorization: Annotated[Optional[str], Header()] = None,
 ) -> dict:

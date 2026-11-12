@@ -19,6 +19,3 @@ class Budget:
 
     def remaining(self) -> float:
         return max(0.0, self.total_s - self.elapsed())
-
-    def exhausted(self) -> bool:
-        return self.remaining() <= 0

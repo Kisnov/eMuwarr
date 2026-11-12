@@ -7,8 +7,6 @@ from emuwarez_uploadrr.services.upload_preflight import (
     build_upload_preflight,
     validate_upload_preconditions,
     build_uploadrr_command_preview,
-    list_upload_jobs,
-    get_upload_job,
 )
 
 
@@ -103,28 +101,6 @@ def test_build_preflight_creates_job(db_conn):
     assert result["status"] in ("ready", "blocked")
     assert result.get("job") is not None
     assert result["job"].get("id") is not None
-
-
-def test_list_upload_jobs_empty(db_conn):
-    result = list_upload_jobs(conn=db_conn)
-    assert isinstance(result, list)
-    assert len(result) == 0
-
-
-def test_list_upload_jobs_after_preflight(db_conn):
-    item_id = _insert_item(db_conn)
-    build_upload_preflight(item_id, conn=db_conn)
-    jobs = list_upload_jobs(conn=db_conn)
-    assert len(jobs) >= 1
-
-
-def test_get_upload_job(db_conn):
-    item_id = _insert_item(db_conn)
-    result = build_upload_preflight(item_id, conn=db_conn)
-    job_id = result["job"]["id"]
-    job = get_upload_job(job_id, conn=db_conn)
-    assert job is not None
-    assert job["id"] == job_id
 
 
 def test_no_subprocess_execution(monkeypatch):

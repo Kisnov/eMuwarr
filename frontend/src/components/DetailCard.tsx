@@ -269,11 +269,6 @@ export function RequestCardIcon() {
   )
 }
 
-// "Tiempos" — a clock.
-export function ClockCardIcon() {
-  return <Icon><circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" /></Icon>
-}
-
 // --- Action-button icons (currentColor — inherit the button's own text color) ---
 
 export function UploadButtonIcon() {
@@ -396,21 +391,6 @@ export function ThumbsUpValueIcon() {
 
 export function CommentValueIcon() {
   return <Icon size={14}><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" /></Icon>
-}
-
-export function ProgressValueIcon() {
-  return <Icon size={14}><polyline points="2 12 7 12 9 6 13 18 15 12 22 12" /></Icon>
-}
-
-// "Nomenclatura" (Subidas) — a pencil, for the generated/editable name.
-export function NomenclatureValueIcon() {
-  return <Icon size={14}><path d="M12 20h9" /><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" /></Icon>
-}
-
-// "Verificación pre-subida" (Subidas) — same checkmark-in-clipboard as
-// Sidebar's "Tareas" nav icon, for consistency (both are "checks passed").
-export function ChecksValueIcon() {
-  return <Icon size={14}><path d="M9 11l3 3L22 4" /><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" /></Icon>
 }
 
 // "Actividad" (Subidas) — same document-with-lines as Sidebar's "Logs" nav icon.

@@ -280,34 +280,9 @@ class SetupInstanceRequest(BaseModel):
 # Settings / secrets
 # ---------------------------------------------------------------------------
 
-class SecretStatusField(BaseModel):
-    configured: bool
-    masked_value: Optional[str] = None
-
-
-class SettingsStatusResponse(BaseModel):
-    tmdb: SecretStatusField
-    emu_api_key: SecretStatusField
-    emu_endpoint: SecretStatusField
-    uploadrr_path: SecretStatusField
-
-
 # ---------------------------------------------------------------------------
 # Instance response
 # ---------------------------------------------------------------------------
-
-class InstanceResponse(BaseModel):
-    id: int
-    type: str
-    name: str
-    url: str
-    enabled: bool
-    is_4k: bool = False
-    is_anime: bool = False
-    last_test_status: Optional[str] = None
-    last_test_at: Optional[str] = None
-    created_at: str
-
 
 # ---------------------------------------------------------------------------
 # Instances
@@ -943,19 +918,6 @@ class RequestSyncBody(BaseModel):
 # Generic
 # ---------------------------------------------------------------------------
 
-class ApiPlaceholderResponse(BaseModel):
-    implemented: bool = False
-    phase: str = "future"
-    message: str = "Endpoint reservado para fase posterior"
-    endpoint: Optional[str] = None
-
-
-class ErrorResponse(BaseModel):
-    error: str
-    detail: Optional[str] = None
-    status_code: int
-
-
 class OkResponse(BaseModel):
     ok: bool = True
     message: str
@@ -1219,14 +1181,6 @@ class UploadRetryRequest(BaseModel):
 
 class UploadDeleteRequest(BaseModel):
     confirmation: Optional[str] = None
-
-
-class DashboardSummaryResponseV2(DashboardSummaryResponse):
-    uploads_ready: int = 0
-    uploads_running: int = 0
-    uploads_completed: int = 0
-    uploads_failed: int = 0
-    last_upload_at: Optional[str] = None
 
 
 # ---------------------------------------------------------------------------

@@ -125,12 +125,6 @@ def sonarr_get_series(instance: dict) -> list[dict]:
     return data if isinstance(data, list) else []
 
 
-def sonarr_get_episodes(instance: dict, series_id: Optional[int] = None) -> list[dict]:
-    params = {"seriesId": series_id} if series_id is not None else None
-    data = _get(instance, "episode", params)
-    return data if isinstance(data, list) else []
-
-
 def sonarr_get_queue(instance: dict) -> list[dict]:
     return todas_las_paginas(
         lambda pagina, tamano: _get(instance, "queue", {"page": pagina, "pageSize": tamano, "includeSeries": "false"}),
@@ -140,11 +134,6 @@ def sonarr_get_queue(instance: dict) -> list[dict]:
 
 def sonarr_get_history(instance: dict, page_size: int = 50) -> list[dict]:
     return registros_de(_get(instance, "history", {"pageSize": page_size}), "El historial de Sonarr")
-
-
-def sonarr_get_root_folders(instance: dict) -> list[dict]:
-    data = _get(instance, "rootfolder")
-    return data if isinstance(data, list) else []
 
 
 def sonarr_get_quality_profiles(instance: dict) -> list[dict]:
