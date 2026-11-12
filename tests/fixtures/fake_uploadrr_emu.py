@@ -18,6 +18,8 @@ Failure/slowness simulation (for exercising cancel/timeout/failed paths):
   FAKE_UPLOADRR_SLEEP=N       same as --fake-sleep (env fallback)
   FAKE_UPLOADRR_FAIL_EARLY=1  exit 1 before any `Step done:` line
   FAKE_UPLOADRR_LINES=N       print N more stdout lines (enough to fill the pipe)
+  --eventos F                 (como el Uploadrr-EMU real) escribe en F los eventos JSON Lines del contrato; el flujo fijo
+                              emite la secuencia real de una subida buena (o `resultado` de fallo con --fake-fail)
   FAKE_UPLOADRR_GRANDCHILD=F  start a child that keeps stdout/stderr open for 60 s
                               (like mkbrr/ffmpeg) and write its pid to file F
 
@@ -29,6 +31,8 @@ Modo con guion (casos que el flujo fijo no puede simular):
                               {"sleep": 0.1}     espera esos segundos
                               {"wait_for": "P"}  espera a que exista el fichero P (la señal la da el test)
                               {"touch": "P"}     crea el fichero P (avisa al test de que se ha llegado ahí)
+                              {"evento": {...}}  añade ese evento (con `v` y `ts` si faltan) al fichero de --eventos
+                              {"evento_raw": "t"} añade ese texto tal cual al fichero de --eventos (línea rota, basura)
                               {"exit": N}        sale ya con ese código
                               {"kill": 9}        se mata a sí mismo con esa señal (sale con -9, como un OOM-kill)
                               {"hang": true}     no sale nunca (hasta que lo maten)
@@ -44,11 +48,26 @@ import sys
 import time
 
 
-def _correr_guion(ruta: str) -> int:
+def _escribir_evento(ruta: str | None, evento: dict | None = None, *, crudo: str | None = None) -> None:
+    """Añade una línea de evento al fichero de --eventos (si lo hay), como hace el Uploadrr-EMU real."""
+    if not ruta:
+        return
+    with open(ruta, "a", encoding="utf-8", newline="\n") as f:
+        if crudo is not None:
+            f.write(crudo)
+        else:
+            f.write(json.dumps({"v": 1, "ts": "1970-01-01T00:00:00.000Z", **evento}, ensure_ascii=False) + "\n")
+
+
+def _correr_guion(ruta: str, eventos: str | None = None) -> int:
     with open(ruta, encoding="utf-8") as f:
         pasos = json.load(f)
     for paso in pasos:
-        if "out" in paso:
+        if "evento" in paso:
+            _escribir_evento(eventos, paso["evento"])
+        elif "evento_raw" in paso:
+            _escribir_evento(eventos, crudo=paso["evento_raw"])
+        elif "out" in paso:
             print(paso["out"], flush=True)
         elif "err" in paso:
             print(paso["err"], file=sys.stderr, flush=True)
@@ -88,6 +107,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("-t", dest="release_type", default=None)
     parser.add_argument("-fd", dest="full_dir", action="store_true")
     parser.add_argument("--resume", "-rs", dest="resume", action="store_true")
+    parser.add_argument("--eventos", dest="eventos", default=None)
     parser.add_argument("--fake-fail", dest="fake_fail", action="store_true")
     parser.add_argument("--fake-sleep", dest="fake_sleep", type=float, default=None)
     args, _unknown = parser.parse_known_args(argv)
@@ -112,32 +132,61 @@ def main(argv: list[str] | None = None) -> int:
             time.sleep(sleep_s)
 
     if os.environ.get("FAKE_UPLOADRR_SCRIPT"):
-        return _correr_guion(os.environ["FAKE_UPLOADRR_SCRIPT"])
+        return _correr_guion(os.environ["FAKE_UPLOADRR_SCRIPT"], args.eventos)
 
+    def ev(nombre: str, **campos) -> None:
+        _escribir_evento(args.eventos, {"ev": nombre, **campos})
+
+    def fase(clave: str, estado: str, **campos) -> None:
+        ev("fase", clave=clave, estado=estado, **campos)
+
+    ev("inicio", uuid=os.path.basename(args.path), modo="subida", reanuda=bool(args.resume))
     if os.environ.get("FAKE_UPLOADRR_FAIL_EARLY") == "1":
         print("[EMU] ERROR: fallo simulado antes de terminar ningún paso", file=sys.stderr, flush=True)
+        ev("resultado", ok=False, codigo="excepcion", detalle="RuntimeError")
         return 1
+    fase("analisis", "empieza")
+    fase("analisis", "hecha")
+    fase("duplicados", "empieza")
 
     # Las líneas son las del Uploadrr-EMU real, copiadas literales: src/trackers/UNIT3D.py, src/utils/checks.py,
     # src/utils/meta.py (Step done), src/utils/upload.py, src/clients.py.
     emit("Searching for existing torrents on EMU...")
     emit("No dupes found")
+    fase("duplicados", "hecha")
     # Las líneas fijas con que el Uploadrr-EMU real (upload.py) dice que ha terminado un paso.
+    fase("capturas", "empieza")
+    fase("subida_capturas", "empieza")
+    fase("subida_capturas", "hecha")
     print("Step done: screenshots", flush=True)
+    ev("paso_hecho", paso="screenshots")
+    fase("capturas", "hecha")
+    fase("torrent", "empieza")
     print("Step done: torrent", flush=True)
+    ev("paso_hecho", paso="torrent")
+    fase("torrent", "hecha")
+    fase("subida", "empieza")
     emit("Uploading to EMU")
     for i in range(int(os.environ.get("FAKE_UPLOADRR_LINES", "0") or 0)):
         print(f"[EMU] hashing {i:06d} " + "." * 80)
 
     if fail:
         print("[EMU] ERROR: fallo simulado durante la subida (--fake-fail)", file=sys.stderr, flush=True)
+        fase("subida", "fallida")
+        ev("resultado", ok=False, codigo="rechazado", detalle="EMU Rejected Upload")
         return 1
 
     # La línea fija que imprime el Uploadrr-EMU real (src/trackers/UNIT3D.py), antes del aviso de éxito.
     print("Torrent URL: https://fake-emu.invalid.test/torrents/999999", flush=True)
+    ev("subido", torrent_id=999999, url="https://fake-emu.invalid.test/torrents/999999")
     emit("Torrent uploaded successfully!")
+    fase("subida", "hecha")
+    fase("cliente", "empieza")
     emit("Adding and rechecking torrent")
     emit("Added to: /downloads/fake")
+    fase("cliente", "hecha")
+    ev("cliente", ok=True, cliente="qbit", ruta="/downloads/fake")
+    ev("resultado", ok=True, codigo="subido")
     return 0
 
 

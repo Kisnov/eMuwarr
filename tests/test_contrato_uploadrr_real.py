@@ -121,6 +121,21 @@ def test_reenviar_a_qbittorrent_llega_como_solo_cliente_con_resume(parser_upload
     assert _parsear(parser_uploadrr, _cmd()).solo_cliente is None
 
 
+def test_el_flag_de_eventos_llega_como_global_con_la_ruta_absoluta(parser_uploadrr, args_uploadrr, tmp_path):
+    archivo = tmp_path / "Peli.2024.1080p.WEB-DL.mkv"
+    archivo.write_bytes(b"x")
+    destino = str(tmp_path / "eventos" / "7.jsonl")
+    for cambios in ({}, dict(solo_cliente="4242"), dict(category="tv", season=1, anonimo=True, reanudar=True)):
+        argv = _cmd(prepared_path=str(archivo), eventos=destino, **cambios)
+        items, globales = args_uploadrr.group_args_by_path(argv)
+        # Va con las banderas globales, no con las del ítem: si no, Uploadrr-EMU la rechaza con args_invalidos.
+        assert items == [([], str(archivo.resolve()))] and "--eventos" in globales
+        ns = parser_uploadrr.parse_args(globales)
+        args_uploadrr.enforce_global_only(ns, is_global=True, parser=parser_uploadrr)
+        assert ns.eventos == destino
+    assert _parsear(parser_uploadrr, _cmd()).eventos is None
+
+
 def _choices(parser: argparse.ArgumentParser, opcion: str) -> set[str]:
     (accion,) = [a for a in parser._actions if opcion in a.option_strings]
     return set(accion.choices)
