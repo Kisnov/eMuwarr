@@ -16,8 +16,11 @@ from .. import seeding_qbit
 from ..eventos import EVENTO_SUBIDA_ESTADO, publicar
 from ..upload_states import RETRYABLE_STATUSES
 from ..uploadrr_contract import RUNTIME_EMU, get_runtime_settings
+from ..uploadrr_eventos import (
+    EstadoEventos, SeguidorEventos, borrar_fichero, mensaje_de_fallo, preparar_fichero,
+)
 from ..uploadrr_progress import parse_uploadrr_progress
-from .comun import QBIT_AÑADIDO, _collect_secrets, _get_db_conn, _now, logger, redact_secrets
+from .comun import QBIT_AÑADIDO, _collect_secrets, _get_db_conn, _now, logger, mensaje_qbit_fallo, redact_secrets
 from .config import _acquire_staged_config, _release_staged_config
 from .consultas import build_uploadrr_execution_command, get_upload_job
 from .ejecucion import _lanzar_uploadrr, _leer_y_esperar, _soltar_proceso
@@ -125,17 +128,47 @@ def _lanzar(job_id: int, torrent_id: str, cmd: dict, secrets: list[str]) -> tupl
     cwd = cmd.get("cwd") or "."
     config = None
     proc = None
+    eventos_ruta = cmd.get("eventos")
+    estado = EstadoEventos() if eventos_ruta else None
+    seguidor = SeguidorEventos(eventos_ruta, lambda ev: _con_evento(ev)) if eventos_ruta else None
+
+    def _con_evento(ev: dict) -> None:
+        for efecto in estado.aplicar(ev):
+            if efecto[0] == "qbit_ok":
+                append_upload_log(job_id, "info", QBIT_AÑADIDO, stream="system")
+            elif efecto[0] == "qbit_fallo":
+                append_upload_log(job_id, "error", mensaje_qbit_fallo(efecto[1]), stream="system")
+
+    def _con_linea(linea: str) -> None:
+        # Con eventos el texto solo se registra (ver _run_uploadrr_subprocess_body).
+        if estado is not None and estado.inicio is None:
+            seguidor.leer()
+        if estado is None or estado.inicio is None:
+            _avisar_de_qbit(job_id, linea, secrets)
+
     try:
         if os.path.isdir(cwd):
             config = _acquire_staged_config(job_id, cwd)
+        if eventos_ruta and not preparar_fichero(eventos_ruta):
+            estado = seguidor = None  # sin fichero limpio, por texto
         proc = _lanzar_uploadrr(job_id, [cmd["executable"]] + cmd["args"], cwd)
         codigo, sin_tiempo, _out, _err = _leer_y_esperar(
-            job_id, proc, _TIMEOUT, secrets, lambda linea: _avisar_de_qbit(job_id, linea, secrets))
+            job_id, proc, _TIMEOUT, secrets, _con_linea, seguidor=seguidor)
     finally:
         _soltar_proceso(job_id, proc)
         _release_staged_config(job_id, config)
+        borrar_fichero(eventos_ruta)
     if sin_tiempo:
         return FALLIDO, f"Reenvío a qBittorrent fallido: no terminó en {_TIMEOUT} s."
+    if estado is not None and estado.inicio is not None:
+        r = estado.resultado
+        if r is not None and r["ok"] and codigo == 0:
+            return OK, "Reenvío a qBittorrent hecho: qBittorrent ha comprobado los ficheros y lo siembra."
+        if r is None or r["ok"]:
+            motivo = "murió sin dar un resultado" if r is None else "dijo que fue bien pero salió con error"
+            return FALLIDO, (f"Reenvío a qBittorrent fallido (exit code {codigo}): Uploadrr-EMU {motivo}. "
+                             "La subida a eMuwarez sigue igual.")
+        return FALLIDO, f"Reenvío a qBittorrent fallido: {mensaje_de_fallo(r)}. La subida a eMuwarez sigue igual."
     if codigo != 0:
         return FALLIDO, f"Reenvío a qBittorrent fallido (exit code {codigo}). La subida a eMuwarez sigue igual."
     return OK, "Reenvío a qBittorrent hecho: qBittorrent ha comprobado los ficheros y lo siembra."

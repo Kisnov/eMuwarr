@@ -8,6 +8,7 @@ from typing import Any
 
 from ...database import get_setting_canonical, row_to_dict, rows_to_dicts
 from ..upload_states import PREPARATORY_STATUSES
+from ..uploadrr_eventos import admite_eventos, ruta_eventos
 from ..uploadrr_contract import (
     RUNTIME_EMU,
     build_uploadrr_emu_command,
@@ -234,6 +235,11 @@ def build_uploadrr_execution_command(job: dict, conn=None, *, solo_cliente: str 
         season = cmd_data.get("season")
         episode = cmd_data.get("episode")
 
+        # Los eventos solo si el checkout de Uploadrr-EMU los admite (trae su contrato); si no, se lanza como siempre.
+        eventos = None
+        if runtime["runtime_type"] == RUNTIME_EMU and job.get("id") and admite_eventos(uploadrr_path):
+            eventos = str(ruta_eventos(job["id"], reenvio=bool(solo_cliente)))
+
         if runtime["runtime_type"] == RUNTIME_EMU:
             python_path = runtime["python_path"] or sys.executable
             full_argv = build_uploadrr_emu_command(
@@ -252,6 +258,7 @@ def build_uploadrr_execution_command(job: dict, conn=None, *, solo_cliente: str 
                 anonimo=bool(cmd_data.get("anon")),
                 personal_release=bool(cmd_data.get("personal_release")),
                 solo_cliente=solo_cliente,
+                eventos=eventos,
             )
             executable = full_argv[0]
             args = full_argv[1:]
@@ -275,6 +282,7 @@ def build_uploadrr_execution_command(job: dict, conn=None, *, solo_cliente: str 
             "source_path": active_path,
             "timeout": runtime["timeout"],
             "runtime_type": runtime["runtime_type"],
+            "eventos": eventos,
         }
     finally:
         if own:

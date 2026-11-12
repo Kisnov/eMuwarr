@@ -6,7 +6,9 @@ Una subida completada cuyo torrent no llegó a qBittorrent (o se borró después
 from __future__ import annotations
 
 import json
+import shutil
 import time
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -27,6 +29,7 @@ from emuwarez_uploadrr.services.upload_execution import (
     reenviar_a_qbittorrent,
 )
 from emuwarez_uploadrr.services.upload_execution import reenvio_qbit
+from emuwarez_uploadrr.services.upload_execution.comun import QBIT_LOGIN_INCORRECTO
 from emuwarez_uploadrr.services.upload_queue import reconcile_interrupted_jobs
 from emuwarez_uploadrr.services.uploadrr_contract import build_uploadrr_emu_command
 
@@ -325,3 +328,84 @@ def test_la_api_dice_404_y_409(client, auth_headers, db_conn, tmp_path, uploadrr
     jid = _job(db_conn, tmp_path, status="failed")
     resp = client.post(f"/api/uploads/{jid}/reenviar-qbit", headers=auth_headers)
     assert resp.status_code == 409 and resp.json()["detail"] == "Solo se reenvía a qBittorrent una subida que ya está en eMuwarez."
+
+
+# ---------------------------------------------------------------------------
+# Con eventos (`--eventos`): deciden ellos, el texto solo se registra
+# ---------------------------------------------------------------------------
+
+CONTRATO = Path(__file__).parent / "fixtures" / "contrato_eventos.json"
+
+
+def _proc_con_eventos(eventos_escritos, returncode=0, stdout=()):
+    """Un Popen simulado que, al lanzarse, escribe esos eventos en el fichero de `--eventos` de su argv."""
+    def lanzar(argv, **_kw):
+        ruta = argv[argv.index("--eventos") + 1]
+        with open(ruta, "a", encoding="utf-8") as f:
+            for ev in eventos_escritos:
+                f.write(json.dumps({"v": 1, "ts": "1970-01-01T00:00:00.000Z", **ev}) + chr(10))
+        return _proc(returncode, stdout)
+    return lanzar
+
+
+INICIO_SC = {"ev": "inicio", "uuid": "Peli.mkv", "modo": "solo_cliente", "reanuda": True}
+
+
+def test_reenvio_con_eventos_bien(db_conn, tmp_path, uploadrr, avisos, monkeypatch):
+    shutil.copy(CONTRATO, uploadrr / "contrato_eventos.json")
+    jid = _job(db_conn, tmp_path)
+    _qbit_fallido(jid)
+    monkeypatch.setattr(seeding_qbit, "_cache", ("huella", 0.0, [], ""))
+    eventos_ok = [INICIO_SC, {"ev": "fase", "clave": "cliente", "estado": "empieza"},
+                  {"ev": "fase", "clave": "cliente", "estado": "hecha"},
+                  {"ev": "cliente", "ok": True, "cliente": "qbit", "ruta": "/d"},
+                  {"ev": "resultado", "ok": True, "codigo": "cliente_ok"}]
+    # El texto no dice nada de «Added to:»: con eventos lo que cuenta es `cliente_ok`.
+    with patch(POPEN, side_effect=_proc_con_eventos(eventos_ok)) as popen:
+        assert reenviar_a_qbittorrent(jid, wait=True)["ok"] is True
+
+    argv = popen.call_args.args[0]
+    assert argv[-5:-2] == ["--resume", "--solo-cliente", "4242"] and argv[-2] == "--eventos"
+    assert Path(argv[-1]).name == f"{jid}-reenvio.jsonl" and not Path(argv[-1]).exists()
+    assert _fila(db_conn, jid)["reenvio_qbit_estado"] == "ok"
+    assert _fase(jid, "qbittorrent_add") == "done"
+    mensajes = _mensajes(jid)
+    assert QBIT_AÑADIDO in mensajes and mensajes[-1].startswith("Reenvío a qBittorrent hecho")
+
+
+@pytest.mark.parametrize("returncode, texto", [(1, ""), (0, "Added to: /d")])
+def test_reenvio_con_eventos_fallido(db_conn, tmp_path, uploadrr, avisos, returncode, texto):
+    """`cliente_fallido` manda aunque el texto dijera «Added to:» o el exit fuera 0."""
+    shutil.copy(CONTRATO, uploadrr / "contrato_eventos.json")
+    jid = _job(db_conn, tmp_path)
+    _qbit_fallido(jid)
+    eventos_mal = [INICIO_SC, {"ev": "fase", "clave": "cliente", "estado": "empieza"},
+                   {"ev": "fase", "clave": "cliente", "estado": "fallida"},
+                   {"ev": "cliente", "ok": False, "cliente": "qbit", "motivo": "login"},
+                   {"ev": "resultado", "ok": False, "codigo": "cliente_fallido", "detalle": "credenciales incorrectas"}]
+    with patch(POPEN, side_effect=_proc_con_eventos(eventos_mal, returncode, [texto + chr(10)] if texto else [])):
+        reenviar_a_qbittorrent(jid, wait=True)
+
+    despues = _fila(db_conn, jid)
+    assert despues["reenvio_qbit_estado"] == "fallido" and despues["status"] == "completed"
+    assert _fase(jid, "qbittorrent_add") == "failed"
+    mensajes = _mensajes(jid)
+    assert QBIT_LOGIN_INCORRECTO in mensajes and QBIT_AÑADIDO not in mensajes
+    assert "credenciales incorrectas" in mensajes[-1] and mensajes[-1].startswith("Reenvío a qBittorrent fallido")
+
+
+def test_reenvio_con_eventos_sin_resultado_es_fallido(db_conn, tmp_path, uploadrr, avisos):
+    shutil.copy(CONTRATO, uploadrr / "contrato_eventos.json")
+    jid = _job(db_conn, tmp_path)
+    with patch(POPEN, side_effect=_proc_con_eventos([INICIO_SC], returncode=0)):
+        reenviar_a_qbittorrent(jid, wait=True)
+    assert _fila(db_conn, jid)["reenvio_qbit_estado"] == "fallido"
+    assert "murió sin dar un resultado" in _mensajes(jid)[-1]
+
+
+def test_reenvio_con_contrato_pero_sin_eventos_lee_el_texto(db_conn, tmp_path, uploadrr, avisos):
+    shutil.copy(CONTRATO, uploadrr / "contrato_eventos.json")
+    jid = _job(db_conn, tmp_path)
+    with patch(POPEN, return_value=_proc(0, ["Added to: qbit" + chr(10)])):
+        reenviar_a_qbittorrent(jid, wait=True)
+    assert _fila(db_conn, jid)["reenvio_qbit_estado"] == "ok" and QBIT_AÑADIDO in _mensajes(jid)

@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 
 from ...database import connect, get_setting_canonical, init_db
 from ...integrations.base import tapar_claves
+from ..uploadrr_eventos import MOTIVOS_CLIENTE
 
 
 logger = logging.getLogger("emuwarez.upload")
@@ -14,6 +15,28 @@ CONFIRMATION_TOKEN = "INICIAR_UPLOADRR"
 DELETE_CONFIRMATION_TOKEN = "BORRAR_SUBIDA"
 # Queda en los logs del job; al escribirla, append_upload_log marca `torrent_subido` para no borrar lo que siembra qBittorrent.
 QBIT_AÑADIDO = "qBittorrent: torrent añadido correctamente."
+# Lo que se le dice al usuario cuando el torrent no entra en qBittorrent (lo dicen igual el texto y los eventos de Uploadrr-EMU).
+QBIT_SIN_TORRENT_FIRMADO = (
+    "qBittorrent: no se añadió ningún torrent porque no se pudo descargar el .torrent firmado "
+    "desde eMuwarez justo después de subir (ver la línea \"Torrent upload succeeded, but failed to...\" más arriba). "
+    "La subida a eMuwarez sí se completó."
+)
+QBIT_LOGIN_INCORRECTO = (
+    "qBittorrent: no se pudo añadir el torrent (credenciales incorrectas). "
+    "Revisa la configuración de qBittorrent en Ajustes."
+)
+
+
+def mensaje_qbit_fallo(motivo: str | None) -> str:
+    """Lo que ve el usuario cuando Uploadrr-EMU dice (evento `cliente`, ok:false) por qué el torrent no entró en qBittorrent."""
+    if motivo == "login":
+        return QBIT_LOGIN_INCORRECTO
+    if motivo == "sin_torrent":
+        return QBIT_SIN_TORRENT_FIRMADO
+    texto = MOTIVOS_CLIENTE.get(motivo or "") or f"motivo «{motivo}»"
+    return f"qBittorrent: falló al añadir o etiquetar el torrent ({texto}). Revisa qBittorrent. La subida a eMuwarez sí se completó."
+
+
 # Phase 10F: approximate progress phases surfaced to the UI (string label
 # only). Numeric per-phase percentages are tracked separately in
 # upload_jobs.progress_json — see mark_phase_done/update_phase_progress below

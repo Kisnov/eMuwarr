@@ -17,6 +17,8 @@ from emuwarez_uploadrr.services.uploadrr_progress import PHASE_KEY_ALIASES, RUNN
 
 CARPETA = Path(__file__).parent / "fixtures" / "golden_uploadrr"
 TRANSCRIPCIONES = sorted(CARPETA.glob("*.txt"))
+# Las de eventos (.jsonl) las prueba test_eventos_uploadrr.py; aquí solo se comprueba que son las de Uploadrr-EMU.
+COPIAS = TRANSCRIPCIONES + sorted(CARPETA.glob("*.jsonl"))
 # Las que acaban en fallo (duplicado, exit 1) se prueban aparte: no llegan al torrent ni a la subida.
 FALLIDAS = [r for r in TRANSCRIPCIONES if "duplicado" in r.name]
 EXITOSAS = [r for r in TRANSCRIPCIONES if r not in FALLIDAS]
@@ -85,17 +87,35 @@ def test_se_ve_que_qbittorrent_lo_añadio(ruta):
     assert any(ln.strip().startswith("Added to:") for ln in _lineas(ruta))
 
 
-@pytest.mark.parametrize("ruta", TRANSCRIPCIONES, ids=lambda r: r.name)
-def test_la_copia_dorada_es_la_de_uploadrr_emu(ruta):
-    """La copia es la misma que Uploadrr-EMU genera y guarda en su `tests/`; sin su repo a mano se salta."""
+def _carpeta_de_uploadrr_emu() -> Path | None:
     for candidata in (os.environ.get("UPLOADRR_EMU_DIR"), "/opt/Uploadrr"):
         if candidata and (Path(candidata) / "tests").is_dir():
-            originales = list((Path(candidata) / "tests").rglob(ruta.name))
-            break
-    else:
+            return Path(candidata)
+    return None
+
+
+@pytest.mark.parametrize("ruta", COPIAS, ids=lambda r: r.name)
+def test_la_copia_dorada_es_la_de_uploadrr_emu(ruta):
+    """La copia es la misma que Uploadrr-EMU genera y guarda en su `tests/`; sin su repo a mano se salta."""
+    carpeta = _carpeta_de_uploadrr_emu()
+    if carpeta is None:
         pytest.skip("Sin UPLOADRR_EMU_DIR ni /opt/Uploadrr no se puede comparar con la transcripción de Uploadrr-EMU")
+    originales = list((carpeta / "tests").rglob(ruta.name))
     if not originales:
         pytest.skip(f"Uploadrr-EMU no tiene tests/**/{ruta.name} todavía")
     original = originales[0].read_bytes().replace(b"\r\n", b"\n")
     assert ruta.read_bytes().replace(b"\r\n", b"\n") == original, (
         f"{ruta.name} difiere de {originales[0]}: copia la de Uploadrr-EMU (la suya manda)")
+
+
+def test_el_contrato_de_eventos_es_el_de_uploadrr_emu():
+    """`tests/fixtures/contrato_eventos.json` es copia de `contrato_eventos.json` de Uploadrr-EMU (la suya manda)."""
+    carpeta = _carpeta_de_uploadrr_emu()
+    if carpeta is None:
+        pytest.skip("Sin UPLOADRR_EMU_DIR ni /opt/Uploadrr no se puede comparar con el contrato de Uploadrr-EMU")
+    original = carpeta / "contrato_eventos.json"
+    if not original.is_file():
+        pytest.skip("Esa copia de Uploadrr-EMU no tiene contrato_eventos.json todavía")
+    copia = CARPETA.parent / "contrato_eventos.json"
+    assert copia.read_bytes().replace(b"\r\n", b"\n") == original.read_bytes().replace(b"\r\n", b"\n"), (
+        f"{copia.name} difiere de {original}: copia la de Uploadrr-EMU")

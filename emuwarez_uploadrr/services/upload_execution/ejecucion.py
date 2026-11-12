@@ -14,18 +14,29 @@ from typing import Callable
 from ...database import get_setting_canonical
 from ...integrations.qbittorrent import qbit_configurado
 from ..subida_pasos import leer_subpasos, subpaso_de_linea
-from ..upload_result_parser import classify_upload_result
+from ..upload_result_parser import build_error_summary, classify_upload_result
 from ..uploadrr_contract import RUNTIME_EMU, get_runtime_settings
+from ..uploadrr_eventos import (
+    EstadoEventos,
+    SeguidorEventos,
+    borrar_fichero,
+    clasificar_con_eventos,
+    ficha_de_estado,
+    preparar_fichero,
+)
 from ..uploadrr_progress import parse_uploadrr_progress
 from . import procesos
 from .comun import (
     CONFIRMATION_TOKEN,
     ETAPA_ESPERANDO_TURNO,
     QBIT_AÑADIDO,
+    QBIT_LOGIN_INCORRECTO,
+    QBIT_SIN_TORRENT_FIRMADO,
     _collect_secrets,
     _get_db_conn,
     _now,
     logger,
+    mensaje_qbit_fallo,
     redact_secrets,
 )
 from .concurrencia import _upload_concurrency_gate
@@ -47,7 +58,7 @@ from .procesos import (
     _terminar_y_esperar,
 )
 from .progreso import advance_running_phase, mark_phase_done, mark_phase_failed
-from .registro import _ficha_del_torrent, append_upload_log, create_upload_artifact
+from .registro import _ficha_del_torrent, append_upload_log, create_upload_artifact, marcar_torrent_subido
 from ...integrations.base import texto_de_error
 
 
@@ -101,6 +112,7 @@ def _run_uploadrr_subprocess_body(job_id: int, cmd: dict, secrets: list[str]) ->
     # el config stageado, en vez de dejarlo «en marcha» para siempre.
     staged_config_path: Path | None = None
     proc: subprocess.Popen | None = None
+    eventos_ruta = cmd.get("eventos")
     try:
         def _cancelado() -> None:
             append_upload_log(job_id, "info", "Subida cancelada antes de lanzar Uploadrr; no se lanza.", stream="system")
@@ -145,6 +157,10 @@ def _run_uploadrr_subprocess_body(job_id: int, cmd: dict, secrets: list[str]) ->
             _cancelado()
             return
 
+        if eventos_ruta and not preparar_fichero(eventos_ruta):
+            eventos_ruta = None  # ni se sigue ni se lee: podría quedar el de un intento anterior
+            append_upload_log(job_id, "warning", "No se puede preparar el fichero de eventos de Uploadrr-EMU; "
+                              "el resultado se decide por su texto.", stream="system")
         proc = _lanzar_uploadrr(job_id, [executable] + args, cwd)
 
         if not _avanzar_job(job_id, "running", process_id=proc.pid):
@@ -190,13 +206,7 @@ def _run_uploadrr_subprocess_body(job_id: int, cmd: dict, secrets: list[str]) ->
                     # gets written, so add_to_client() has nothing to add.
                     # Not a qBittorrent problem at all; the eMuwarez upload
                     # itself did succeed.
-                    append_upload_log(
-                        job_id, "error",
-                        "qBittorrent: no se añadió ningún torrent porque no se pudo descargar el .torrent firmado "
-                        "desde eMuwarez justo después de subir (ver la línea \"Torrent upload succeeded, but failed "
-                        "to...\" más arriba). La subida a eMuwarez sí se completó.",
-                        stream="system",
-                    )
+                    append_upload_log(job_id, "error", QBIT_SIN_TORRENT_FIRMADO, stream="system")
                 elif "Torrent client add failed:" in line:
                     motivo = redact_secrets(line.split("Torrent client add failed:", 1)[1].strip(), secrets)
                     append_upload_log(
@@ -206,19 +216,14 @@ def _run_uploadrr_subprocess_body(job_id: int, cmd: dict, secrets: list[str]) ->
                         stream="system",
                     )
                 else:
-                    append_upload_log(
-                        job_id, "error",
-                        "qBittorrent: no se pudo añadir el torrent (credenciales incorrectas). Revisa la configuración de qBittorrent en Ajustes.",
-                        stream="system",
-                    )
+                    append_upload_log(job_id, "error", QBIT_LOGIN_INCORRECTO, stream="system")
 
         # Un trabajo que reanuda parte de los pasos que dejó hechos el anterior (queue: _paso_preparar).
         subpasos_hechos: list[str] = leer_subpasos((get_upload_job(job_id) or {}).get("pasos_uploadrr_json"))
 
-        def _apuntar_subpaso(line: str) -> None:
-            """Apunta en el trabajo cada paso que Uploadrr-EMU dice haber terminado (`Step done:`, `Torrent URL:`):
-            un reintento que reanuda sabe así qué no tiene que repetir."""
-            clave = subpaso_de_linea(line)
+        def _apuntar_clave(clave: str | None) -> None:
+            """Apunta en el trabajo cada paso que Uploadrr-EMU dice haber terminado: un reintento que reanuda sabe
+            así qué no tiene que repetir."""
             with progress_lock:
                 if clave is None or clave in subpasos_hechos:
                     return
@@ -226,7 +231,47 @@ def _run_uploadrr_subprocess_body(job_id: int, cmd: dict, secrets: list[str]) ->
                 crudo = json.dumps(subpasos_hechos)
             _avanzar_job(job_id, "running", pasos_uploadrr_json=crudo)
 
+        def _apuntar_subpaso(line: str) -> None:
+            """El paso que la línea (`Step done:`, `Torrent URL:`) da por terminado."""
+            _apuntar_clave(subpaso_de_linea(line))
+
+        estado_ev = EstadoEventos() if eventos_ruta else None
+        seguidor = SeguidorEventos(eventos_ruta, lambda ev: _procesar_evento(ev)) if eventos_ruta else None
+
+        def _hacer(efecto: tuple) -> None:
+            """Escribe lo que dice un evento (ver EstadoEventos.aplicar)."""
+            tipo = efecto[0]
+            if tipo == "fase":
+                advance_running_phase(job_id, efecto[1], efecto[2])
+            elif tipo == "paso":
+                _apuntar_clave(efecto[1])
+                if efecto[1] == "tracker":
+                    marcar_torrent_subido(job_id)
+            elif tipo == "qbit_ok":
+                with progress_lock:
+                    progress_state["qbittorrent_add_failed"] = False
+                    progress_state["qbittorrent_added"] = True
+                append_upload_log(job_id, "info", QBIT_AÑADIDO, stream="system")
+            elif tipo == "qbit_fallo":
+                with progress_lock:
+                    progress_state["qbittorrent_add_failed"] = True
+                append_upload_log(job_id, "error", mensaje_qbit_fallo(efecto[1]), stream="system")
+
+        def _procesar_evento(ev: dict) -> None:
+            for efecto in estado_ev.aplicar(ev):
+                try:
+                    _hacer(efecto)
+                except Exception:
+                    logger.exception("Subida %s: no se pudo aplicar el evento %s de Uploadrr", job_id, ev.get("ev"))
+
         def _procesar_linea(line: str) -> None:
+            # Con eventos mandan ellos y el texto solo se registra; hasta que llega `inicio` (o si nunca llega: una
+            # versión sin eventos, un fichero que no se puede escribir) el texto decide como siempre.
+            if estado_ev is not None:
+                if estado_ev.inicio is None:
+                    seguidor.leer()  # el evento puede estar ya escrito sin que el seguidor lo haya leído aún
+                if estado_ev.inicio is not None:
+                    return
             try:
                 # La línea sin redactar: un secreto que coincida con una palabra de las marcas las rompería.
                 # Lo que se registra de ella se redacta allí.
@@ -239,14 +284,24 @@ def _run_uploadrr_subprocess_body(job_id: int, cmd: dict, secrets: list[str]) ->
                 logger.exception("Subida %s: no se pudo apuntar el paso que terminó Uploadrr", job_id)
 
         returncode, timed_out, stdout_lines, stderr_lines = _leer_y_esperar(
-            job_id, proc, timeout, secrets, _procesar_linea)
+            job_id, proc, timeout, secrets, _procesar_linea, seguidor=seguidor)
+        por_eventos = estado_ev is not None and estado_ev.inicio is not None
+
+        def _ficha(texto: str) -> dict:
+            """La ficha del torrent subido: la de `subido`; la impresa si no hay eventos, o si se cortaron a medias
+            (sin `resultado`, o con uno bueno sin `subido`). Un `resultado` fallido sin `subido` manda sobre el texto."""
+            if not por_eventos:
+                return _ficha_del_torrent(texto)
+            if estado_ev.url or (estado_ev.resultado is not None and not estado_ev.resultado.get("ok")):
+                return ficha_de_estado(estado_ev)
+            return _ficha_del_torrent(texto)
 
         if timed_out:
             finished_dt = datetime.now(timezone.utc)
             finished_at = finished_dt.isoformat()
             duration_seconds = int((finished_dt - started_dt).total_seconds())
             msg = f"Proceso cancelado por timeout ({timeout}s)."
-            subido = _ficha_del_torrent("\n".join(stdout_lines))
+            subido = _ficha("\n".join(stdout_lines))
             _finalize_job_status(
                 job_id, "failed",
                 stage="timeout",
@@ -286,9 +341,19 @@ def _run_uploadrr_subprocess_body(job_id: int, cmd: dict, secrets: list[str]) ->
         stdout_text = "\n".join(stdout_lines)
         stderr_text = "\n".join(stderr_lines)
 
-        result = classify_upload_result(stdout_text, stderr_text, returncode)
+        if por_eventos:
+            result = clasificar_con_eventos(estado_ev, returncode)
+            if (estado_ev.resultado or {}).get("codigo") == "rechazado" and result["status"] == "failed":
+                # El motivo del rechazo (lo que dijo el tracker) solo está en el texto, y los frenos del lote lo leen.
+                result["error_summary"] = (build_error_summary(stderr_text, stdout_text, returncode)
+                                           or result["error_summary"])
+            if not result["result_url"]:
+                ficha = _ficha(stdout_text)
+                result["result_url"], result["torrent_id"] = ficha.get("result_url"), ficha.get("result_torrent_id")
+        else:
+            result = classify_upload_result(stdout_text, stderr_text, returncode)
 
-        if returncode == 0:
+        if result["status"] == "completed":
             # La ficha del torrent: la línea `Torrent URL:` de Uploadrr-EMU, no la primera URL que imprima.
             if result["result_url"]:
                 create_upload_artifact(job_id, "uploaded_url", name="URL subida", url=result["result_url"])
@@ -347,7 +412,7 @@ def _run_uploadrr_subprocess_body(job_id: int, cmd: dict, secrets: list[str]) ->
         else:
             safe_err = redact_secrets(result["error_summary"] or f"exit code {returncode}", secrets)
             # Si el torrent llegó a subirse antes de fallar, su ficha sigue siendo útil y su enlace no se borra.
-            subido = _ficha_del_torrent(stdout_text)
+            subido = _ficha(stdout_text)
 
             _finalize_job_status(
                 job_id, "failed",
@@ -398,6 +463,7 @@ def _run_uploadrr_subprocess_body(job_id: int, cmd: dict, secrets: list[str]) ->
     finally:
         _soltar_proceso(job_id, proc)
         _release_staged_config(job_id, staged_config_path)
+        borrar_fichero(eventos_ruta)
 
 
 def _lanzar_uploadrr(job_id: int, argv: list[str], cwd: str) -> subprocess.Popen:
@@ -433,8 +499,10 @@ def _leer_y_esperar(
     timeout: int | None,
     secrets: list[str],
     procesar: Callable[[str], None],
+    seguidor: SeguidorEventos | None = None,
 ) -> tuple[int, bool, list[str], list[str]]:
     """Registra en el job cada línea redactada, pasa la cruda a `procesar` (que no debe lanzar) y espera a que salga.
+    Con `seguidor`, mientras tanto va leyendo el fichero de eventos, y al salir hace su última lectura.
     Devuelve (código de salida, si se pasó del timeout, líneas de stdout, líneas de stderr)."""
     stdout_lines: list[str] = []
     stderr_lines: list[str] = []
@@ -465,16 +533,25 @@ def _leer_y_esperar(
     )
     t_out.start()
     t_err.start()
+    parar_eventos = threading.Event()
+    t_eventos = None
+    if seguidor is not None:
+        t_eventos = threading.Thread(target=seguidor.seguir, args=(parar_eventos,), daemon=True)
+        t_eventos.start()
     # El resultado lo decide el código de salida, no el fin de las tuberías:
     # un hijo de Uploadrr (mkbrr, ffmpeg…) que las herede las mantiene
     # abiertas aunque Uploadrr ya haya salido, y esperarlas daba por fallida
     # una subida buena tras el timeout.
     timed_out = False
     try:
-        returncode = proc.wait(timeout=timeout)
-    except subprocess.TimeoutExpired:
-        timed_out = True
-        returncode = _terminar_y_esperar(proc)
+        try:
+            returncode = proc.wait(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            timed_out = True
+            returncode = _terminar_y_esperar(proc)
+    except BaseException:
+        parar_eventos.set()  # el hilo del seguidor no se queda sondeando para siempre
+        raise
     limite = time.monotonic() + _GRACIA_LECTORES
     for t in (t_out, t_err):
         t.join(timeout=max(0, limite - time.monotonic()))
@@ -482,6 +559,10 @@ def _leer_y_esperar(
         _senalar_grupo(proc, signal.SIGKILL)  # lo que quede vivo en el grupo
         t_out.join(timeout=5)
         t_err.join(timeout=5)
+    if seguidor is not None:
+        parar_eventos.set()
+        t_eventos.join(timeout=5)
+        seguidor.terminar()
     return returncode, timed_out, stdout_lines, stderr_lines
 
 
