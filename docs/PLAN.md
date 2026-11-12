@@ -734,8 +734,8 @@ Hallazgos y maquetas: https://claude.ai/artifact/PjPRTxSfEs3Y8aVtXzN32i
   de eMuwarez y lo añade con recheck, sin subir nada. No crea otra fila: el estado va en `upload_jobs.reenvio_qbit_estado`
   (esquema 55) y el registro en el de la subida, que sigue `completed`. No pasa por «Subidas en paralelo» (dura segundos y
   la puerta da turno por id). Borrar espera a que termine y un reenvío cortado por un reinicio queda «fallido».
-  **Falta:** fusionar antes `--solo-cliente` en Uploadrr-EMU (sin él `test_contrato_uploadrr_real.py` falla en la CI) y
-  probarlo de verdad en el NAS.
+  `--solo-cliente` ya está en el `main` de Uploadrr-EMU (Kisnov/Uploadrr-EMU#42) y `test_contrato_uploadrr_real.py` pasa
+  contra él (12/11, en local). **Falta:** probarlo de verdad en el NAS.
 
 ## Siguiente
 
@@ -766,7 +766,8 @@ probarla, si guardar los `campos` y crear el trabajo van en una sola transacció
 - Descartados por Gabriel (11/11): que el filtro «Petición» de Biblioteca cuente la petición heredada (una serie pedida entera se sube
   en season packs, nunca por capítulos) y detectar el toque real con `pointerType` para los objetivos táctiles.
 - Probar en el NAS (`:edge`): el límite compartido entre CLI y servidor (`flock` sobre el volumen de `CONFIG_DIR`), el campo y el enlace de
-  qBittorrent, y la subida por lotes (ver «Siguiente»).
+  qBittorrent, la subida por lotes (ver «Siguiente»), «Reenviar a qBittorrent» y las estadísticas del tracker por subida (los nombres
+  de los atributos son los de UNIT3D, sin probar contra el eMuwarez real).
 
 ## Datos útiles
 
