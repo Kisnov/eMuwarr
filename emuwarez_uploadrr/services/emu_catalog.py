@@ -24,6 +24,7 @@ from .settings import leer_ajuste
 from ..integrations import emu
 from ..integrations.base import IntegrationError, texto_de_error
 from .tasks import start_task, finish_task
+from .upload_states import ACTIVE_JOB_STATUSES
 from .eventos import EVENTO_SYNC_EMPEZADA, EVENTO_SYNC_TERMINADA, publicar
 
 logger = logging.getLogger("emuwarez.emu")
@@ -742,14 +743,33 @@ def _set_progress(**kw) -> None:
         _SYNC_PROGRESS.update(kw)
 
 
+# Las subidas que gastan llamadas de eMuwarez: todas las activas menos las que esperan en la cola.
+ESTADOS_EN_MARCHA = ACTIVE_JOB_STATUSES - {"queued"}
+
+
+def motivo_subida_en_marcha(conn: sqlite3.Connection) -> Optional[str]:
+    """Una subida en cola (`queued`) no gasta llamadas, así que no cuenta: si no, un lote largo dejaría horas sin sincronizar.
+    Las que se preparan o suben, sí."""
+    en_marcha = tuple(sorted(ESTADOS_EN_MARCHA))
+    if conn.execute(
+        f"SELECT 1 FROM upload_jobs WHERE status IN ({','.join('?' * len(en_marcha))}) LIMIT 1", en_marcha
+    ).fetchone():
+        return "Hay una subida en marcha; vuelve a probar cuando termine."
+    return None
+
+
 def start_emu_sync_background(force: bool = False, mode: str = "incremental") -> dict:
     """Start the catalog sync in a background thread (so the UI can poll
     progress). Returns {status:'started'} or {status:'throttled', wait_seconds}.
-    mode: "incremental" (only new torrents) or "full" (re-download + reconcile)."""
+    mode: "incremental" (only new torrents) or "full" (re-download + reconcile).
+    Con una subida en marcha devuelve {status:'busy', message}."""
     from ..database import connect, db_path, get_state
     conn = connect(db_path())
     is_full = mode == "full"
     try:
+        motivo = motivo_subida_en_marcha(conn)
+        if motivo:
+            return {"status": "busy", "message": motivo}
         wait = seconds_until_next_sync(conn, mode)
         if wait > 0 and not force:
             return {"status": "throttled", "wait_seconds": wait}

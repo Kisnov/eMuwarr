@@ -452,6 +452,8 @@ def library_emu_sync(mode: str = "incremental", current_user: dict = Depends(req
             status_code=429,
             detail=f"Espera {result['wait_seconds']}s antes de volver a sincronizar con eMuwarez",
         )
+    if result.get("status") == "busy":
+        raise HTTPException(status_code=409, detail=result["message"])
     return result
 
 

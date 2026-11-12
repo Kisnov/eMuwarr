@@ -7,12 +7,14 @@ traffic.
 """
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
 from unittest.mock import patch
 
 import pytest
 
 from emuwarez_uploadrr.database import connect, db_path, init_db
 from emuwarez_uploadrr.services.scheduler import (
+    TASK_EMU_CATALOG_FULL,
     TASK_EMU_SYNC,
     TASK_LIBRARY_SYNC,
     claim_due_tasks,
@@ -205,3 +207,57 @@ def test_emu_request_sync_failure_is_recorded_with_its_message(db_conn):
 
     assert run["status"] == "failed"
     assert run["summary"] == "eMuwarez ha rechazado la API key (¿ratio por debajo de 1?)"
+
+
+# ---------------------------------------------------------------------------
+# Sincronización completa del catálogo de eMuwarez
+# ---------------------------------------------------------------------------
+
+def test_full_catalog_sync_is_weekly_with_a_daily_floor(db_conn):
+    tarea = {t["task_key"]: t for t in list_scheduled_tasks(db_conn)}[TASK_EMU_CATALOG_FULL]
+    assert (tarea["interval_minutes"], tarea["min_interval_minutes"], tarea["manual_allowed"]) == (10080, 1440, 1)
+
+
+def test_full_catalog_sync_is_scheduled_when_due_and_not_before(isolated_db):
+    conn = connect(db_path())
+    init_db(conn)
+    try:
+        with patch("emuwarez_uploadrr.services.emu_catalog.start_emu_sync_background",
+                   return_value={"status": "started"}) as mock_sync:
+            assert TASK_EMU_CATALOG_FULL in claim_due_tasks(conn)  # nunca ha corrido: toca
+            run = run_scheduled_task(conn, TASK_EMU_CATALOG_FULL)
+            mock_sync.assert_called_once_with(mode="full")
+            assert run["status"] == "completed"
+            assert TASK_EMU_CATALOG_FULL not in claim_due_tasks(conn)  # recién hecha: no toca
+
+            hace_una_semana = (datetime.now(timezone.utc) - timedelta(minutes=10081)).isoformat()
+            conn.execute("UPDATE scheduled_tasks SET next_run_at = ? WHERE task_key = ?",
+                         (hace_una_semana, TASK_EMU_CATALOG_FULL))
+            conn.commit()
+            assert TASK_EMU_CATALOG_FULL in claim_due_tasks(conn)  # pasado el intervalo: vuelve a tocar
+    finally:
+        conn.close()
+
+
+def test_full_catalog_sync_skipped_while_uploading_then_runs_next_tick(isolated_db):
+    conn = connect(db_path())
+    init_db(conn)
+    try:
+        conn.execute("INSERT INTO upload_jobs (title, path, status) VALUES ('X', '/x', 'running')")
+        conn.commit()
+        with patch("emuwarez_uploadrr.services.emu_catalog.threading") as hilo_mod:
+            hilo = hilo_mod.Thread
+            run = run_scheduled_task(conn, TASK_EMU_CATALOG_FULL)
+            assert (run["status"], "subida en marcha" in run["summary"]) == ("skipped", True)
+            hilo.assert_not_called()  # no descargó nada
+            assert TASK_EMU_CATALOG_FULL in claim_due_tasks(conn)  # y se reintenta en el siguiente tick
+
+            conn.execute("UPDATE upload_jobs SET status = 'completed'")
+            conn.commit()
+            run = run_scheduled_task(conn, TASK_EMU_CATALOG_FULL)
+            assert run["status"] == "completed"
+            hilo.assert_called_once()
+    finally:
+        from emuwarez_uploadrr.services import emu_catalog
+        emu_catalog._set_progress(active=False)
+        conn.close()

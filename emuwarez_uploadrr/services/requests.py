@@ -24,7 +24,6 @@ from .request_readiness import _biblioteca, refresh_request_readiness
 from .eventos import EVENTO_SYNC_EMPEZADA, EVENTO_SYNC_TERMINADA, publicar
 from .tasks import start_task, finish_task
 from .tmdb_titles import tmdb_configured
-from .upload_states import ACTIVE_JOB_STATUSES
 from .compatibility import (
     match_request_to_library,
     classify_request_match,
@@ -164,22 +163,13 @@ def _resolve_emu_api_key(conn: sqlite3.Connection) -> Optional[str]:
 
 
 _SYNC_EN_CURSO = threading.Lock()
-# Las subidas que gastan llamadas de eMuwarez: todas las activas menos las que esperan en la cola.
-ESTADOS_EN_MARCHA = ACTIVE_JOB_STATUSES - {"queued"}
 
 
 def _motivo_ocupado(conn: sqlite3.Connection) -> Optional[str]:
-    """Por qué ahora no toca sincronizar: el catálogo y las subidas gastan las mismas 30 llamadas por minuto de la clave.
-    Una subida que espera turno en la cola (`queued`) no gasta ninguna, así que no cuenta: si no, un lote largo dejaría
-    horas sin peticiones nuevas. Las que se preparan o suben, sí."""
+    """Por qué ahora no toca sincronizar: el catálogo y las subidas gastan las mismas 30 llamadas por minuto de la clave."""
     if emu_catalog.get_sync_progress().get("active"):
         return "Se está sincronizando el catálogo de eMuwarez; vuelve a probar cuando termine."
-    en_marcha = tuple(sorted(ESTADOS_EN_MARCHA))
-    if conn.execute(
-        f"SELECT 1 FROM upload_jobs WHERE status IN ({','.join('?' * len(en_marcha))}) LIMIT 1", en_marcha
-    ).fetchone():
-        return "Hay una subida en marcha; vuelve a probar cuando termine."
-    return None
+    return emu_catalog.motivo_subida_en_marcha(conn)
 
 
 def sync_emu_requests(
