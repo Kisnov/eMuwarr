@@ -23,6 +23,11 @@ BAD_LOGIN_ERROR = (
 )
 
 
+def qbit_configurado(url: str | None, qui_proxy_url: str | None) -> bool:
+    """qBittorrent está configurado si hay URL o proxy de qui: la misma condición para probarlo y para stagearlo."""
+    return bool((url or "").strip() or (qui_proxy_url or "").strip())
+
+
 def build_base_url(url: str, port: str | int | None) -> str:
     """Combine a host URL and port into a WebUI base like http://host:8080.
     Accepts a url that already includes a scheme and/or a port."""

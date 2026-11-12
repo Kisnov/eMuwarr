@@ -6,10 +6,12 @@ from pathlib import Path
 
 from ...database import get_setting_canonical
 from ...integrations.base import texto_de_error
+from ...integrations.qbittorrent import qbit_configurado
 from ..settings import leer_ajuste
 from ..image_hosts import fallback_order, get_host_key
 from ..uploadrr_config_staging import (
     SCREENS_API_KEY_HOSTS,
+    stage_anon_off,
     backup_config,
     default_uploadrr_config_path,
     read_baseline_lines,
@@ -19,6 +21,7 @@ from ..uploadrr_config_staging import (
     stage_blu_api_off,
     stage_emu_config,
     stage_image_hosts,
+    stage_keep_quiet_off,
     stage_per_episode_screens,
     stage_qbittorrent_config,
     stage_tmdb_key,
@@ -94,13 +97,15 @@ def _stage_uploadrr_config(job_id: int, cwd: str) -> Path | None:
         lines, _msg = stage_add_logo(lines, add_logo)
         lines, _msg = stage_per_episode_screens(lines, per_episode_screens)
         lines, _msg = stage_blu_api_off(lines)
+        lines, _msg = stage_keep_quiet_off(lines)
+        lines, _msg = stage_anon_off(lines)
         changed = True
         # Siempre hay al menos uno (ver arriba): esto es lo que hace que la
         # preferencia del usuario (p. ej. Pixhost) llegue de verdad a Uploadrr-EMU
         # en vez de que use el orden de img_hosts de su propio config.yaml.
         lines, _msg = stage_image_hosts(lines, img_hosts=img_hosts, api_keys=img_api_keys)
         changed = True
-        if (qbit_url and qbit_username and qbit_password) or qbit_qui:
+        if qbit_configurado(qbit_url, qbit_qui):
             # Without this, Uploadrr-EMU falls back to whatever
             # DEFAULT.default_torrent_client its own config.yaml ships with
             # (confirmed: "watch", not "qbit") — the job finishes
