@@ -31,6 +31,16 @@ def _ficha_del_torrent(stdout_text: str) -> dict:
     return {"result_url": url, "result_torrent_id": torrent_id_from_url(url), "torrent_subido": 1}
 
 
+def marcar_torrent_subido(job_id: int) -> None:
+    """Apunta que el torrent ya está en eMuwarez (el evento `subido`; con texto lo hace append_upload_log)."""
+    conn = _get_db_conn()
+    try:
+        conn.execute("UPDATE upload_jobs SET torrent_subido = 1 WHERE id = ?", (job_id,))
+        conn.commit()
+    finally:
+        conn.close()
+
+
 def _marca_torrent_subido(message: str) -> bool:
     """Si la línea dice que el torrent ya está en eMuwarez o en qBittorrent."""
     return message == QBIT_AÑADIDO or extract_torrent_url(message) is not None

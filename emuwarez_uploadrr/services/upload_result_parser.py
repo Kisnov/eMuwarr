@@ -105,18 +105,23 @@ def build_error_summary(stderr: str, stdout: str, exit_code: int | None) -> str 
 SEASON_PACK_PATTERN = re.compile(r"^Incomplete season pack: season (\d+|\?)(?:, missing episodes ([\d, ]+))?", re.MULTILINE)
 
 
-def season_pack_warning(text: str) -> str | None:
-    """Aviso en castellano si Uploadrr-EMU (mkbrr) vio un pack de temporada incompleto; None si no."""
-    m = SEASON_PACK_PATTERN.search(text or "")
-    if not m:
-        return None
-    aviso = f"Pack de temporada posiblemente incompleto (temporada {m.group(1)})"
-    episodios = [e.strip() for e in (m.group(2) or "").split(",") if e.strip()]
+def texto_aviso_pack(temporada, episodios: list[str]) -> str:
+    """El aviso en castellano de un pack de temporada incompleto (`temporada` es un número o «?»)."""
+    aviso = f"Pack de temporada posiblemente incompleto (temporada {temporada})"
     if len(episodios) == 1:
         aviso += f": falta el episodio {episodios[0]}"
     elif episodios:
         aviso += f": faltan los episodios {', '.join(episodios[:-1])} y {episodios[-1]}"
     return aviso + "."
+
+
+def season_pack_warning(text: str) -> str | None:
+    """Aviso en castellano si Uploadrr-EMU (mkbrr) vio un pack de temporada incompleto; None si no."""
+    m = SEASON_PACK_PATTERN.search(text or "")
+    if not m:
+        return None
+    episodios = [e.strip() for e in (m.group(2) or "").split(",") if e.strip()]
+    return texto_aviso_pack(m.group(1), episodios)
 
 
 def classify_upload_result(
@@ -159,4 +164,5 @@ __all__ = [
     "build_error_summary",
     "classify_upload_result",
     "season_pack_warning",
+    "texto_aviso_pack",
 ]
