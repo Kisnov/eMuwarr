@@ -5,6 +5,7 @@ isolated from the real ~/.config/emuwarez-renamer/ path.
 """
 from __future__ import annotations
 
+import json
 import shutil
 import sys
 from pathlib import Path
@@ -272,3 +273,13 @@ def fake_uploadrr_emu_dir(tmp_path):
 def fake_uploadrr_python_path():
     """python_path to use with fake_uploadrr_emu_dir — the current interpreter."""
     return sys.executable
+
+
+@pytest.fixture
+def guion_uploadrr(tmp_path, monkeypatch):
+    """Pone el guion del fake Uploadrr-EMU (ver tests/fixtures/fake_uploadrr_emu.py, FAKE_UPLOADRR_SCRIPT)."""
+    def poner(pasos: list[dict]) -> None:
+        ruta = tmp_path / "guion_uploadrr.json"
+        ruta.write_text(json.dumps(pasos), encoding="utf-8")
+        monkeypatch.setenv("FAKE_UPLOADRR_SCRIPT", str(ruta))
+    return poner

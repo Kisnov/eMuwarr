@@ -146,7 +146,7 @@ def test_upload_logs_cli_shows_fake_runner_output(
     rc = _run(["upload", "logs", str(jid)])
     out = capsys.readouterr().out
     assert rc == 0
-    assert "Torrent creado correctamente" in out
+    assert "Torrent uploaded successfully" in out
 
 
 def test_upload_cancel_cli_marks_job_cancelled(

@@ -170,9 +170,9 @@ def parse_uploadrr_progress(fragment: str) -> Optional[tuple[str, int, Optional[
     # puede traer textos de los patrones de abajo («Validation Error»).
     if clean.startswith("Torrent client add failed:"):
         return "qbittorrent_add", 0, False
-    if "Rejected Upload" in clean or "Validation Error" in clean or '"success":false' in clean:
+    if "Rejected Upload" in clean or "Validation Error" in clean:
         return "uploading_emu", 100, False
-    if re.search(r"(?:Torrent uploaded successfully|Uploaded successfully|Upload complete|Upload completed)", clean, re.I):
+    if re.search(r"(?:Torrent uploaded successfully|Upload complete|Upload completed)", clean, re.I):
         return "uploading_emu", 100, True
 
     if "Starting queue processing" in clean:
@@ -190,13 +190,7 @@ def parse_uploadrr_progress(fragment: str) -> Optional[tuple[str, int, Optional[
     if "No dupes found" in clean:
         return "duplicates", 100, True
 
-    # Generación de capturas: con o sin paréntesis.
-    m = re.search(r"\bGenerating\s+(?:screenshots|screens|images)\s*\(?\s*(\d+)\s*/\s*(\d+)\s*\)?", clean, re.I)
-    if m:
-        cur, total = int(m.group(1)), max(1, int(m.group(2)))
-        pct = int((cur / total) * 100)
-        return "screenshots_generate", pct, cur >= total
-
+    # Uploadrr-EMU imprime «Generating screenshots» sin contador (screenshots/generator.py).
     if re.search(r"\bGenerating\s+(?:screenshots|screens|images)\b", clean, re.I):
         return "screenshots_generate", 0, None
 
@@ -223,12 +217,11 @@ def parse_uploadrr_progress(fragment: str) -> Optional[tuple[str, int, Optional[
         hp = max(0.0, min(100.0, float(m.group(1))))
         return "hashing", int(hp), None
 
-    m = re.search(r"\b(?:Creating|Generating|Building)\s+torrent\s*:?\s*([0-9]+(?:\.[0-9]+)?)?\s*%?", clean, re.I)
-    if m:
-        if m.group(1):
-            hp = max(0.0, min(100.0, float(m.group(1))))
-            return "torrent_create", int(hp), None
+    # Línea real de src/utils/torrentman.py (cabe en 80 columnas, Rich no la parte).
+    if "Creating .torrent with piece size" in clean:
         return "torrent_create", 0, None
+    if clean == ".torrent created":
+        return "torrent_create", 100, True
 
     if "Uploading to EMU" in clean:
         return "uploading_emu", 0, None

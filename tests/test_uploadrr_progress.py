@@ -110,15 +110,13 @@ def test_parse_uploadrr_progress_video_metadata_and_dupes():
     assert parse_uploadrr_progress("No dupes found") == ("duplicates", 100, True)
 
 
-def test_parse_uploadrr_progress_screenshots_with_counter():
-    phase, pct, ok = parse_uploadrr_progress("Generating screenshots (2/8)")
-    assert phase == "screenshots_generate"
-    assert ok is False
-    phase2, pct2, ok2 = parse_uploadrr_progress("Generating screenshots (8/8)")
-    assert phase2 == "screenshots_generate"
-    assert ok2 is True
-    assert pct2 > pct
+def test_parse_uploadrr_progress_generating_screenshots_sin_contador():
+    # screenshots/generator.py imprime «Generating screenshots» sin contador; con «(n/m)» no existe.
+    assert parse_uploadrr_progress("Generating screenshots") == ("screenshots_generate", 0, None)
+    assert parse_uploadrr_progress("Generating screenshots for contact sheet 2") == ("screenshots_generate", 0, None)
 
+
+def test_parse_uploadrr_progress_screenshots_with_counter():
     phase3, _pct3, ok3 = parse_uploadrr_progress("Uploading screenshots (3/8)")
     assert phase3 == "screenshots_upload"
     assert ok3 is False
@@ -149,9 +147,16 @@ def test_parse_uploadrr_progress_hashing_and_torrent():
     assert pct == 50
     assert ok is None
 
-    phase2, pct2, ok2 = parse_uploadrr_progress("Creating torrent: 30%")
-    assert phase2 == "torrent_create"
-    assert pct2 == 30
+
+
+def test_parse_uploadrr_progress_creacion_del_torrent_real():
+    # Líneas literales de src/utils/torrentman.py (progress.update, que Rich imprime sin terminal).
+    assert parse_uploadrr_progress("Creating .torrent with piece size 4MiB...") == ("torrent_create", 0, None)
+    assert parse_uploadrr_progress("Creating .torrent with piece size 256KiB...") == ("torrent_create", 0, None)
+    assert parse_uploadrr_progress(".torrent created") == ("torrent_create", 100, True)
+    # Los textos inventados que reconocía antes ya no son de ninguna fase.
+    assert parse_uploadrr_progress("Creating torrent: 30%") is None
+    assert parse_uploadrr_progress("Generating torrent") is None
 
 
 def test_parse_uploadrr_progress_uploading_to_emu():
@@ -160,7 +165,8 @@ def test_parse_uploadrr_progress_uploading_to_emu():
 
 def test_parse_uploadrr_progress_success_and_failure():
     assert parse_uploadrr_progress("Torrent uploaded successfully") == ("uploading_emu", 100, True)
-    assert parse_uploadrr_progress('{"success":false}') == ("uploading_emu", 100, False)
+    assert parse_uploadrr_progress("Rejected Upload") == ("uploading_emu", 100, False)
+    assert parse_uploadrr_progress('{"success":false}') is None
 
 
 def test_parse_uploadrr_progress_qbittorrent_bad_login():
