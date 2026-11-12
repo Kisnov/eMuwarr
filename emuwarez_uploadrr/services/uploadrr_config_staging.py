@@ -194,6 +194,18 @@ def stage_keep_quiet_off(lines: list[str]) -> tuple[list[str], str]:
     return staged, set_block_key(staged, "AUTO", "keep_quiet", "false")
 
 
+# La firma de serie de las descripciones (SIGNATURES en la config de ejemplo de Uploadrr-EMU), antes y ahora.
+FIRMA_ANTERIOR = "https://i.ibb.co/5gt00Zv4/uploadrr-signature.webp"
+FIRMA_ACTUAL = "https://i.ibb.co/3yXzn45j/emuwarr-firma-animada.webp"
+
+
+def stage_firma_actual(lines: list[str]) -> tuple[list[str], str]:
+    """Cambia la firma de serie anterior por la actual: una instalación ya hecha conserva su config.yaml y no
+    recibe la del ejemplo nuevo. Una firma que el usuario haya puesto a mano no se toca."""
+    staged = [linea.replace(FIRMA_ANTERIOR, FIRMA_ACTUAL) for linea in lines]
+    return staged, "firma actualizada" if staged != lines else "firma sin cambios"
+
+
 def stage_anon_off(lines: list[str]) -> tuple[list[str], str]:
     """Stage TRACKERS.EMU.anon y DEFAULT.always_anon a false: Uploadrr-EMU los une con `-a` en un OR,
     así que solo el flag de la subida decide si es anónima."""
@@ -374,6 +386,7 @@ __all__ = [
     "stage_emu_config",
     "stage_add_logo",
     "stage_anon_off",
+    "stage_firma_actual",
     "stage_keep_quiet_off",
     "stage_per_episode_screens",
     "stage_blu_api_off",
