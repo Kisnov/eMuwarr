@@ -51,7 +51,7 @@ trabaja sobre la biblioteca real del NAS sin renombrarla ni reescribirla.
 
 ## Evidence on Hand
 
-- Capturas de la interfaz en `docs/capturas/` (Panel, Biblioteca, Peticiones, pistas, detalle de subida).
+- Capturas de la interfaz en `docs/capturas/` (Panel, Biblioteca, Subidas, Peticiones, pistas, detalle de subida, Configuración).
 - Datos de prueba: `python emuwarez_uploader.py demo seed` siembra una biblioteca ficticia. No hay testimonios, cifras de
   uso ni usuarios externos que citar.
 

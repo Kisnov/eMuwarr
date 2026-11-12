@@ -39,7 +39,8 @@ con [Uploadrr-EMU](https://github.com/Kisnov/Uploadrr-EMU), que va dentro de la 
   categoría, petición, pistas y tipo de copia) y lo que ya hay en eMuwarez del mismo contenido, con si lo tuyo es
   mejor, igual o peor, antes de pulsar «Subir». Opcionalmente renombra y reordena las pistas (cuatro modos, apagado
   por defecto). El detalle de una subida terminada abre por el resultado (enlace a eMuwarez, estado de siembra en
-  qBittorrent y dónde se fue el tiempo); si falla, se reintenta desde el paso que falló. Progreso en
+  qBittorrent y dónde se fue el tiempo); si falla, se reintenta desde el paso que falló, y si el torrent ya estaba
+  en eMuwarez pero no llegó a qBittorrent, «Reenviar a qBittorrent» lo vuelve a añadir sin subir nada. Progreso en
   directo, límite de subidas en paralelo y varios grupos de subida guardados para el tag; cada grupo se puede marcar
   como Personal release o anónimo, y el Resumen de la subida deja cambiarlo para esa subida. «Seleccionar» en
   Biblioteca marca varias películas, series o temporadas y «Subir por lotes» las encola de una vez (una serie se
@@ -72,6 +73,10 @@ estrechas el menú lateral es un cajón con botón de hamburguesa.
 **Biblioteca**
 
 ![Biblioteca](docs/capturas/biblioteca.webp)
+
+**Subidas**, con el grupo, la petición, el estado y la siembra de cada una
+
+![Subidas](docs/capturas/subidas.webp)
 
 **Peticiones**
 
@@ -178,7 +183,7 @@ Abre `http://localhost:9494`: el asistente de configuración inicial se abre sol
 - **Rutas permitidas** (Configuración → *Acceso a la biblioteca*) es `/data` por defecto. Si montas la raíz de
   datos en otra ruta, ponla ahí.
 
-![Configuración: cuenta, qBittorrent y acceso a la biblioteca](docs/capturas/configuracion.png)
+![Configuración: eMuwarez, TMDb, qBittorrent, proveedores y otros ajustes](docs/capturas/configuracion.webp)
 
 ### Versiones y volver atrás
 
@@ -187,7 +192,7 @@ La imagen se publica con varias etiquetas, y `EMUWAREZ_UPLOADRR_TAG` (en el `.en
 - `latest` (sin la variable): la última versión publicada. La publica el workflow *Publicar versión*, a mano
   o solo los días impares del mes si hay cambios suficientes, siempre después de pasar los tests (con la entrada `ref`
   publica la versión de un commit anterior); o `scripts/desplegar.sh` desde tu equipo. Se actualiza con `docker compose pull && docker compose up -d`.
-- `0.17.0`: una versión concreta, de las que tienen etiqueta `v0.17.0` en el repo. Sirve para quedarte en ella o
+- `1.0.0`: una versión concreta, de las que tienen etiqueta `v1.0.0` en el repo. Sirve para quedarte en ella o
   para volver atrás si la nueva falla.
 - El sha del commit de una versión: cada versión publicada tiene también esa etiqueta.
 - `edge`: lo más nuevo. Una prueba sin publicar como versión (la punta de `master` con el workflow en *solo
@@ -195,7 +200,7 @@ La imagen se publica con varias etiquetas, y `EMUWAREZ_UPLOADRR_TAG` (en el `.en
   se queda por detrás de `latest`.
 
 ```bash
-EMUWAREZ_UPLOADRR_TAG=0.17.0 docker compose up -d
+EMUWAREZ_UPLOADRR_TAG=1.0.0 docker compose up -d
 ```
 
 Si la versión nueva cambió el esquema de la base, la versión vieja no arranca y lo dice en el registro: la base ya
@@ -245,7 +250,7 @@ la nomenclatura, subir…): ver [`README_CLI_READY.md`](README_CLI_READY.md).
 ## Desarrollo
 
 ```bash
-# Backend, en Linux (hardlinks, mediainfo, mkvtoolnix): ~4200 tests
+# Backend, en Linux (hardlinks, mediainfo, mkvtoolnix): ~4400 tests
 pip install -e ".[web,dev]"
 python -m pytest tests -q -p no:cacheprovider
 
