@@ -138,30 +138,6 @@ def run_database_vacuum(
     }
 
 
-def run_database_analyze(*, dry_run: bool = True, apply: bool = False) -> dict:
-    """Runs ANALYZE to update query planner statistics (no confirmation needed)."""
-    do_apply = apply and not dry_run
-    db = _get_db_path()
-    if not db.exists():
-        return {"ok": False, "dry_run": dry_run, "error": f"BD no encontrada: {db}"}
-
-    if dry_run or not do_apply:
-        return {
-            "ok": True,
-            "dry_run": True,
-            "action": "preview",
-            "message": "Previsualización — ANALYZE no ejecutado",
-        }
-
-    try:
-        conn = sqlite3.connect(str(db))
-        conn.execute("ANALYZE")
-        conn.close()
-        return {"ok": True, "dry_run": False, "action": "analyze", "message": "ANALYZE completado"}
-    except Exception as exc:
-        return {"ok": False, "dry_run": False, "error": texto_de_error(exc)}
-
-
 # --- Mantenimiento nocturno: limpiar lo antiguo y optimizar la base -----------------------------------------
 # Solo toca task_runs, upload_job_logs y notifications. Nunca upload_jobs ni nada que una subida enlace.
 

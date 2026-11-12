@@ -92,43 +92,10 @@ def set_setting_canonical(conn: sqlite3.Connection, key: str, value: str) -> Non
     set_setting(conn, key, value)
 
 
-def get_secret_setting(conn: sqlite3.Connection, key: str, default: Optional[str] = None) -> Optional[str]:
-    """Same as get_setting_canonical, for call sites reading a secret
-    (tmdb.api_key / emu.api_key) — returns the raw value, never masked."""
-    return _get_setting_canonical(conn, key, default)
-
-
-def set_secret_setting(conn: sqlite3.Connection, key: str, value: str) -> None:
-    set_setting(conn, key, value)
-
-
 def get_configured(conn: sqlite3.Connection, key: str) -> bool:
     """Return True if key (or its legacy underscore alias) has a non-empty value."""
     v = _get_setting_canonical(conn, key)
     return bool(v and v.strip())
-
-
-def get_settings_status(conn: sqlite3.Connection) -> dict:
-    """Return a summary of each configuration section, with masked values."""
-    def _entry(key: str) -> dict:
-        value = _get_setting_canonical(conn, key)
-        configured = bool(value and value.strip())
-        if configured and _is_secret(key):
-            masked = mask_secret(value)  # type: ignore[arg-type]
-        else:
-            masked = value if configured else None
-        return {"configured": configured, "masked_value": masked}
-
-    return {
-        "tmdb": _entry("tmdb.api_key"),
-        "emu_api_key": _entry("emu.api_key"),
-        "emu_endpoint": _entry("emu.endpoint_url"),
-        "uploadrr_path": _entry("uploadrr.path"),
-        "uploadrr_python_path": _entry("uploadrr.python_path"),
-        "uploadrr_runtime_type": _entry("uploadrr.runtime_type"),
-        "uploadrr_timeout": _entry("uploadrr.timeout"),
-        "uploadrr_allowed_roots": _entry("uploadrr.allowed_roots"),
-    }
 
 
 def all_settings(conn: sqlite3.Connection) -> dict[str, Optional[str]]:

@@ -122,11 +122,6 @@ def radarr_get_history(instance: dict, page_size: int = 50) -> list[dict]:
     return registros_de(_get(instance, "history", {"pageSize": page_size}), "El historial de Radarr")
 
 
-def radarr_get_root_folders(instance: dict) -> list[dict]:
-    data = _get(instance, "rootfolder")
-    return data if isinstance(data, list) else []
-
-
 def radarr_get_quality_profiles(instance: dict) -> list[dict]:
     data = _get(instance, "qualityprofile")
     return data if isinstance(data, list) else []

@@ -112,14 +112,6 @@ def get_user_by_username(conn: sqlite3.Connection, username: str) -> Optional[di
     return dict(row) if row else None
 
 
-def get_user_by_id(conn: sqlite3.Connection, user_id: int) -> Optional[dict]:
-    row = conn.execute(
-        "SELECT * FROM users WHERE id = ? AND is_active = 1",
-        (user_id,),
-    ).fetchone()
-    return dict(row) if row else None
-
-
 def authenticate(conn: sqlite3.Connection, username: str, password: str) -> dict:
     """Return user dict or raise AuthError."""
     user = get_user_by_username(conn, username)

@@ -6,7 +6,6 @@ from typing import Optional
 
 from ..database import borrar_biblioteca
 from ..integrations import radarr, sonarr
-from ..integrations.arr_base import safe_api_key
 from ..integrations.base import IntegrationError, normalize_base_url, texto_de_error
 from ..models import InstanceConfig, InstanceType
 
@@ -170,20 +169,6 @@ def row_to_instance(row) -> InstanceConfig:
         created_at=row["created_at"],
         updated_at=row["updated_at"],
     )
-
-
-def instance_to_dict_safe(instance: InstanceConfig) -> dict:
-    """Return instance as dict with API key masked (safe for API responses)."""
-    return {
-        "id": instance.id,
-        "type": instance.type,
-        "name": instance.name,
-        "url": instance.url,
-        "api_key_masked": safe_api_key(instance.api_key),
-        "enabled": instance.enabled,
-        "created_at": instance.created_at,
-        "updated_at": instance.updated_at,
-    }
 
 
 def test_instance(instance: InstanceConfig) -> dict:

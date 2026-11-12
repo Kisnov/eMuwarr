@@ -31,11 +31,6 @@ VIDEO_EXTENSIONS = {
 }
 
 
-def resolve_safe_path(path: str) -> str:
-    """Resolve path without following symlinks for display."""
-    return str(Path(path).resolve())
-
-
 def ensure_path_under_base(path: str, base: str) -> bool:
     """Return True if path is strictly inside base (no traversal)."""
     try:

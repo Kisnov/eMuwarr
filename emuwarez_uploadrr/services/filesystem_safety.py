@@ -20,18 +20,8 @@ def _local(path: str, mappings: list[dict] | None = None) -> str:
     return resolve_local_path(path, mappings=mappings) or path
 
 
-def path_exists(path: str) -> bool:
-    return bool(path) and Path(_local(path)).exists()
-
-
 def is_file(path: str) -> bool:
     return bool(path) and Path(_local(path)).is_file()
-
-
-def is_video_file(path: str) -> bool:
-    if not is_file(path):
-        return False
-    return Path(path).suffix.lower() in VIDEO_EXTENSIONS
 
 
 def safe_stat(path: str, mappings: list[dict] | None = None) -> dict[str, Any]:

@@ -430,12 +430,6 @@ def toca_el_fichero(modo: str) -> bool:
     return modo != MODO_NINGUNO
 
 
-def reorder_tracks_enabled(conn=None) -> bool:
-    """Si además de lo demás se REORDENAN las pistas. Se mantiene porque hay
-    llamadas que solo preguntan eso; el estado completo es modo_pistas()."""
-    return reordena(modo_pistas(conn))
-
-
 def check_mkvmerge_available() -> dict:
     path = shutil.which("mkvmerge")
     if path:
