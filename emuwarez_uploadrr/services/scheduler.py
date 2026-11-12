@@ -14,6 +14,8 @@ in-process mechanism:
 Reuses existing sync functions/logging wherever they already exist:
 - library sync reuses services.library.sync_all() (already logs to
   task_runs under the name "sync-library").
+- full eMuwarez catalogue sync reuses services.emu_catalog.start_emu_sync_background(mode="full");
+  with an upload running it is skipped and retried on the next tick.
 - eMuwarez request sync reuses services.requests.sync_emu_requests()
   (already logs to task_runs under "sync-emu-requests", and already
   enforces the 1-hour minimum via can_sync_requests()).
@@ -32,6 +34,7 @@ from .eventos import EVENTO_TAREA, publicar
 
 TASK_LIBRARY_SYNC = "sync-library"
 TASK_EMU_SYNC = "sync-emu-requests"
+TASK_EMU_CATALOG_FULL = "sync-emu-catalog-full"
 TASK_CHECK_VERSION = "check-version"
 TASK_BACKUP = "backup-config"
 TASK_MAINTENANCE = "mantenimiento"
@@ -50,6 +53,12 @@ DEFAULT_TASKS: list[tuple[str, str, str, int, int, int, Optional[str]]] = [
         "Sincronizar peticiones eMuwarez",
         "Descarga las peticiones abiertas de eMuwarez y las cruza con tu biblioteca. Una vez al día, para gastar pocas llamadas de la API.",
         1440, 60, 1, None,
+    ),
+    (
+        TASK_EMU_CATALOG_FULL,
+        "Sincronizar catálogo eMuwarez (completo)",
+        "Vuelve a descargar todo el catálogo de eMuwarez, lo único que detecta los torrents borrados del tracker. Una vez por semana, para gastar pocas llamadas de la API.",
+        10080, 1440, 1, None,
     ),
     (
         TASK_INSTANCE_WATCH,
@@ -258,6 +267,16 @@ def _run_emu_sync(conn: sqlite3.Connection) -> tuple[str, str]:
     return "completed", f"{result.get('imported', 0)} peticiones importadas, {result.get('matched', 0)} cruces"
 
 
+def _run_emu_catalog_full(conn: sqlite3.Connection) -> tuple[str, str]:
+    from .emu_catalog import start_emu_sync_background
+    result = start_emu_sync_background(mode="full")
+    if result.get("status") == "throttled":
+        return "skipped", f"Esperando {result.get('wait_seconds', 0)}s (mínimo 1 día entre descargas completas)"
+    if result.get("status") == "busy":
+        return "busy", str(result["message"])
+    return "completed", "Descarga completa del catálogo lanzada en segundo plano"
+
+
 def _run_instance_watch(conn: sqlite3.Connection) -> tuple[str, str]:
     # Sin fila en task_runs: cada 5 minutos llenaría «Últimas tareas ejecutadas».
     from .vigilancia_instancias import vigilar_instancias
@@ -369,6 +388,7 @@ def _run_maintenance(conn: sqlite3.Connection) -> tuple[str, str]:
 _EXECUTORS = {
     TASK_LIBRARY_SYNC: _run_library_sync,
     TASK_EMU_SYNC: _run_emu_sync,
+    TASK_EMU_CATALOG_FULL: _run_emu_catalog_full,
     TASK_INSTANCE_WATCH: _run_instance_watch,
     TASK_CHECK_VERSION: _run_check_version,
     TASK_BACKUP: _run_backup,
@@ -398,6 +418,12 @@ def run_scheduled_task(conn: sqlite3.Connection, task_key: str, *, manual: bool 
         status, summary = "failed", texto_de_error(exc)
 
     task = get_scheduled_task(conn, task_key) or task  # el horario pudo cambiar mientras corría
+    if status == "busy":
+        # Una subida en marcha: se reintenta en el siguiente tick, sin tocar la última ejecución ni avisar cada minuto.
+        next_run_at = _now().isoformat()
+        conn.execute("UPDATE scheduled_tasks SET next_run_at = ? WHERE task_key = ?", (next_run_at, task_key))
+        conn.commit()
+        return {"task_key": task_key, "status": "skipped", "summary": summary, "next_run_at": next_run_at}
     next_run_at = _proxima_ejecucion(task, _now()).isoformat()
     conn.execute(
         """UPDATE scheduled_tasks
@@ -460,7 +486,7 @@ def tick_due_tasks() -> list[dict]:
 
 
 __all__ = [
-    "TASK_LIBRARY_SYNC", "TASK_EMU_SYNC", "TASK_INSTANCE_WATCH", "TASK_CHECK_VERSION", "TASK_BACKUP", "TASK_MAINTENANCE", "DEFAULT_TASKS",
+    "TASK_LIBRARY_SYNC", "TASK_EMU_SYNC", "TASK_EMU_CATALOG_FULL", "TASK_INSTANCE_WATCH", "TASK_CHECK_VERSION", "TASK_BACKUP", "TASK_MAINTENANCE", "DEFAULT_TASKS",
     "ensure_default_tasks", "list_scheduled_tasks", "get_scheduled_task",
     "set_task_interval", "set_task_schedule", "opciones_de_tarea", "set_task_options",
     "zona_horaria", "nombre_zona_horaria", "siguiente_a_hora_fija",

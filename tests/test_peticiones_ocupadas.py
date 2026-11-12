@@ -80,7 +80,7 @@ def test_una_subida_en_cola_no_para_la_sincronizacion(db_conn, fetch):
 
 def test_los_estados_en_marcha_son_los_activos_menos_la_cola():
     from emuwarez_uploadrr.services.upload_states import ACTIVE_JOB_STATUSES
-    assert reqs.ESTADOS_EN_MARCHA == ACTIVE_JOB_STATUSES - {"queued"}
+    assert emu_catalog.ESTADOS_EN_MARCHA == ACTIVE_JOB_STATUSES - {"queued"}
 
 
 @pytest.mark.parametrize("estado", ["completed", "failed", "cancelled", "ready"])
@@ -150,3 +150,10 @@ def test_el_cli_cuenta_que_esta_ocupado(isolated_db, monkeypatch, capsys):
 
     assert cli.cmd_requests(args) == 0
     assert SUBIDA in capsys.readouterr().out
+
+
+def test_el_boton_del_catalogo_responde_ocupado_con_una_subida_en_curso(db_conn):
+    _subida(db_conn, "running")
+    resultado = emu_catalog.start_emu_sync_background(mode="incremental")
+    assert resultado == {"status": "busy", "message": SUBIDA}
+    assert not emu_catalog.get_sync_progress()["active"]
