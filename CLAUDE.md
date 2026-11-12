@@ -78,7 +78,14 @@ the upload with Uploadrr-EMU (`Kisnov/Uploadrr-EMU`, cloned into the image at `/
   `data/config.yaml.bak` after every job, and also at startup and before the next job if one died mid-run
   (hand edits to `config.yaml` don't survive, edit the `.bak`);
   progress and result parsing in `uploadrr_progress.py` / `upload_result_parser.py` match its output lines
-  verbatim. Uploadrr-EMU exits 0 only if something was uploaded (any other code is a failed job), and after
+  verbatim, but they are now the fallback (one version, then they go): when the checkout has `contrato_eventos.json` (version 1) the
+  app launches with `--eventos <absolute path>` (a global flag, after the media path; the file is `eventos_uploadrr/<job>.jsonl`
+  next to the DB, emptied before launch and deleted at the end) and `services/uploadrr_eventos.py` follows that JSON Lines file.
+  Once an `inicio` event is read, events decide phases, steps, `torrent_subido`, the result and the qBittorrent outcome, and stdout
+  is only logged; the exit code must agree (no `resultado`, `ok:false`, or exit ≠ 0 with `ok:true` are all failed jobs;
+  `subido`, when present, is kept and authoritative). Without `inicio` (old Uploadrr-EMU, unwritable path) the text path runs
+  unchanged. The schema copy is `tests/fixtures/contrato_eventos.json`, with the golden `.jsonl` beside the `.txt` ones;
+  `test_transcripcion_dorada_uploadrr.py` compares both with Uploadrr-EMU's. Uploadrr-EMU exits 0 only if something was uploaded (any other code is a failed job), and after
   a successful upload prints `Torrent URL: …`. Resuming: Uploadrr-EMU prints `Step done: screenshots` / `Step done: torrent` (plain `print`) and
   the app stores them (`upload_jobs.pasos_uploadrr_json`, with `Torrent URL:` as `tracker`); a retry that reuses the
   previous job's prepared files, when that job itself launched Uploadrr-EMU, sets `reanuda_uploadrr` and launches with `--resume` (`subida_pasos.py`). Without
