@@ -59,10 +59,14 @@ export function esSesionCaducada(err: unknown): boolean {
 // FastAPI's `detail` is a plain string for hand-raised HTTPExceptions, but a
 // list of Pydantic error objects ({loc, msg, type, ...}) for 422 validation
 // failures — stringifying that list directly renders as "[object Object]".
-function extractErrorDetail(data: unknown, fallback: string): string {
+export function extractErrorDetail(data: unknown, fallback: string): string {
   if (typeof data !== 'object' || data === null || !('detail' in data)) return fallback
   const detail = (data as { detail: unknown }).detail
   if (typeof detail === 'string') return detail
+  // Algunos errores del backend mandan `detail: {message}`.
+  if (detail && typeof detail === 'object' && !Array.isArray(detail) && typeof (detail as { message?: unknown }).message === 'string') {
+    return (detail as { message: string }).message
+  }
   if (Array.isArray(detail)) {
     const messages = detail
       .map(item => (item && typeof item === 'object' && 'msg' in item) ? String((item as { msg: unknown }).msg) : null)
