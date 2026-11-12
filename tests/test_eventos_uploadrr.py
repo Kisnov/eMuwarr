@@ -442,7 +442,7 @@ def test_exit_0_sin_resultado_es_fallido(
 
     assert (job["status"], job["exit_code"]) == ("failed", 0)
     assert "sin dar un resultado" in job["error_message"]
-    assert not job["result_url"]
+    assert job["result_url"] and job["torrent_subido"] == 1  # la ficha impresa se conserva aunque falten eventos
 
 
 def test_resultado_ok_con_exit_distinto_de_0_es_fallido(

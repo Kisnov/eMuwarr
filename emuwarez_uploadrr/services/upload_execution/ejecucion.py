@@ -158,6 +158,7 @@ def _run_uploadrr_subprocess_body(job_id: int, cmd: dict, secrets: list[str]) ->
             return
 
         if eventos_ruta and not preparar_fichero(eventos_ruta):
+            eventos_ruta = None  # ni se sigue ni se lee: podría quedar el de un intento anterior
             append_upload_log(job_id, "warning", "No se puede preparar el fichero de eventos de Uploadrr-EMU; "
                               "el resultado se decide por su texto.", stream="system")
         proc = _lanzar_uploadrr(job_id, [executable] + args, cwd)
@@ -286,12 +287,21 @@ def _run_uploadrr_subprocess_body(job_id: int, cmd: dict, secrets: list[str]) ->
             job_id, proc, timeout, secrets, _procesar_linea, seguidor=seguidor)
         por_eventos = estado_ev is not None and estado_ev.inicio is not None
 
+        def _ficha(texto: str) -> dict:
+            """La ficha del torrent subido: la de `subido`; la impresa si no hay eventos, o si se cortaron a medias
+            (sin `resultado`, o con uno bueno sin `subido`). Un `resultado` fallido sin `subido` manda sobre el texto."""
+            if not por_eventos:
+                return _ficha_del_torrent(texto)
+            if estado_ev.url or (estado_ev.resultado is not None and not estado_ev.resultado.get("ok")):
+                return ficha_de_estado(estado_ev)
+            return _ficha_del_torrent(texto)
+
         if timed_out:
             finished_dt = datetime.now(timezone.utc)
             finished_at = finished_dt.isoformat()
             duration_seconds = int((finished_dt - started_dt).total_seconds())
             msg = f"Proceso cancelado por timeout ({timeout}s)."
-            subido = ficha_de_estado(estado_ev) if por_eventos else _ficha_del_torrent("\n".join(stdout_lines))
+            subido = _ficha("\n".join(stdout_lines))
             _finalize_job_status(
                 job_id, "failed",
                 stage="timeout",
@@ -337,6 +347,9 @@ def _run_uploadrr_subprocess_body(job_id: int, cmd: dict, secrets: list[str]) ->
                 # El motivo del rechazo (lo que dijo el tracker) solo está en el texto, y los frenos del lote lo leen.
                 result["error_summary"] = (build_error_summary(stderr_text, stdout_text, returncode)
                                            or result["error_summary"])
+            if not result["result_url"]:
+                ficha = _ficha(stdout_text)
+                result["result_url"], result["torrent_id"] = ficha.get("result_url"), ficha.get("result_torrent_id")
         else:
             result = classify_upload_result(stdout_text, stderr_text, returncode)
 
@@ -399,7 +412,7 @@ def _run_uploadrr_subprocess_body(job_id: int, cmd: dict, secrets: list[str]) ->
         else:
             safe_err = redact_secrets(result["error_summary"] or f"exit code {returncode}", secrets)
             # Si el torrent llegó a subirse antes de fallar, su ficha sigue siendo útil y su enlace no se borra.
-            subido = ficha_de_estado(estado_ev) if por_eventos else _ficha_del_torrent(stdout_text)
+            subido = _ficha(stdout_text)
 
             _finalize_job_status(
                 job_id, "failed",
@@ -531,10 +544,14 @@ def _leer_y_esperar(
     # una subida buena tras el timeout.
     timed_out = False
     try:
-        returncode = proc.wait(timeout=timeout)
-    except subprocess.TimeoutExpired:
-        timed_out = True
-        returncode = _terminar_y_esperar(proc)
+        try:
+            returncode = proc.wait(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            timed_out = True
+            returncode = _terminar_y_esperar(proc)
+    except BaseException:
+        parar_eventos.set()  # el hilo del seguidor no se queda sondeando para siempre
+        raise
     limite = time.monotonic() + _GRACIA_LECTORES
     for t in (t_out, t_err):
         t.join(timeout=max(0, limite - time.monotonic()))

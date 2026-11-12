@@ -149,8 +149,8 @@ def _lanzar(job_id: int, torrent_id: str, cmd: dict, secrets: list[str]) -> tupl
     try:
         if os.path.isdir(cwd):
             config = _acquire_staged_config(job_id, cwd)
-        if eventos_ruta:
-            preparar_fichero(eventos_ruta)
+        if eventos_ruta and not preparar_fichero(eventos_ruta):
+            estado = seguidor = None  # sin fichero limpio, por texto
         proc = _lanzar_uploadrr(job_id, [cmd["executable"]] + cmd["args"], cwd)
         codigo, sin_tiempo, _out, _err = _leer_y_esperar(
             job_id, proc, _TIMEOUT, secrets, _con_linea, seguidor=seguidor)
