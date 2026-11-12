@@ -12,12 +12,97 @@
 [![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-3776AB?logo=python&logoColor=white)](pyproject.toml)
 [![Node 26](https://img.shields.io/badge/node-26-5FA04E?logo=nodedotjs&logoColor=white)](frontend/package.json)
 
-Aplicación web autoalojada (+ CLI) para subir a **[eMuwarez](https://emu-warez.com)** (tracker UNIT3D) desde tu
-biblioteca de **Radarr**/**Sonarr**. Sincroniza la biblioteca, la cruza con las peticiones abiertas de eMuwarez,
-genera el nombre con la nomenclatura del tracker, enlaza los ficheros en una carpeta de subidas y lanza la subida
-con [Uploadrr-EMU](https://github.com/Kisnov/Uploadrr-EMU), que va dentro de la imagen. Todo desde la interfaz web.
+Aplicación web autoalojada para subir a **[eMuwarez](https://emu-warez.com)** lo que ya tienes en **Radarr** y
+**Sonarr**. Te dice qué puedes subir, pone el nombre que pide el tracker, sube el torrent y lo deja sembrando en
+qBittorrent. Todo desde el navegador.
 
-## Qué hace
+![Panel](docs/capturas/panel.webp)
+
+**En esta página:** [Cómo funciona](#cómo-funciona) · [Qué necesitas](#qué-necesitas) ·
+[Pantallas](#pantallas) · [Arranque rápido](#arranque-rápido-docker-compose) ·
+[Rutas](#rutas-lo-único-delicado) · [Versiones](#versiones-y-volver-atrás) · [Sin Docker](#uso-sin-docker) ·
+[Desarrollo](#desarrollo)
+
+## Cómo funciona
+
+1. **Sincroniza** tu biblioteca de Radarr y Sonarr, el catálogo de eMuwarez y sus peticiones abiertas.
+2. **Cruza** las tres cosas: qué tienes que no está en el tracker, y qué peticiones puedes cubrir (con su recompensa).
+3. **Prepara** la subida: genera el nombre con la nomenclatura de eMuwarez, revisa las pistas y enlaza los ficheros
+   en una carpeta de subidas, sin tocar los nombres de tu biblioteca.
+4. **Sube** con [Uploadrr-EMU](https://github.com/Kisnov/Uploadrr-EMU), que va dentro de la imagen: capturas,
+   torrent, subida a eMuwarez y alta en qBittorrent, con el progreso en directo.
+
+## Qué necesitas
+
+- Un equipo con **Docker** (24+ con Compose v2). La imagen lleva todo lo demás.
+- **Radarr** y/o **Sonarr** con tu biblioteca.
+- Una cuenta de **eMuwarez** con su API key, y una API key de **TMDb** (gratuita).
+- **qBittorrent**, que vea la carpeta de subidas en la misma ruta que este contenedor.
+- La media y la carpeta de subidas en el **mismo sistema de ficheros**, para que la subida sea un enlace duro y no
+  ocupe el doble.
+
+Las claves se ponen en el asistente web la primera vez que entras; no van en ningún fichero.
+
+## Pantallas
+
+### Panel
+
+Lo que puedes subir hoy. Arriba, tu perfil de eMuwarez (ratio, subido, buffer, BON). «Listo para subir» son las
+peticiones que ya puedes cubrir, ordenadas por recompensa; «En curso», las subidas en marcha y las últimas
+terminadas. Es la captura de arriba.
+
+### Biblioteca
+
+Tus películas y series, con su estado, si llevan castellano, el grupo de release y si ya están en eMuwarez. Los
+filtros están en la cabecera y una combinación se guarda como **vista**. «Seleccionar» marca varias y las sube
+por lotes.
+
+![Biblioteca](docs/capturas/biblioteca.webp)
+
+La ficha de cada título reúne su estado, los datos técnicos (resolución, source, códecs, idiomas) y sus
+identificadores, con «Subir» a un clic.
+
+![Ficha de una película en Biblioteca](docs/capturas/ficha.webp)
+
+### Peticiones
+
+Las peticiones abiertas de eMuwarez cruzadas con lo que tienes, agrupadas en «Lista para subir», «Parcial», «No la
+tienes» y «Cerradas», con la mayor recompensa primero. La ficha compara lo que piden con tu copia.
+
+![Ficha de una petición lista para subir](docs/capturas/peticion.webp)
+
+### Subir
+
+Un asistente de tres pasos (contenido, nombre y pistas, resumen) comprueba el contenido, propone el nombre (también
+para packs de temporada) y enseña lo que ya hay en eMuwarez del mismo título antes de pulsar «Subir».
+
+![Asistente de subida con la revisión de pistas](docs/capturas/pistas.webp)
+
+### Subidas
+
+Todas tus subidas, con su grupo, su petición, su estado y cómo va la siembra en qBittorrent.
+
+![Subidas](docs/capturas/subidas.webp)
+
+El detalle de una subida abre por el resultado: el enlace a eMuwarez, el estado de siembra y dónde se fue el
+tiempo. Si falla, se reintenta desde el paso que falló; si el torrent ya estaba en eMuwarez pero no llegó a
+qBittorrent, «Reenviar a qBittorrent» lo vuelve a añadir sin subir nada.
+
+![Detalle de una subida completada](docs/capturas/subida.webp)
+
+### Y además
+
+- **Estadísticas**: tu ratio, lo subido, lo bajado y el bonus, día a día.
+- **Guía**: cada campo de la nomenclatura de eMuwarez, con ejemplos.
+- **Tareas**: sincronización periódica, vigilancia de instancias, copias automáticas y aviso de versión nueva.
+- **Instancias**: tus Radarr y Sonarr.
+- **Logs**: registros de la aplicación y de cada subida, con los secretos tapados.
+- **Configuración**: claves, qBittorrent, proveedores de imágenes, notificaciones (Discord, Telegram, webhook), un
+  widget para [Homepage](https://gethomepage.dev), diagnóstico y copias de seguridad.
+- **Ctrl+K** abre una paleta para saltar a una sección o a un título. En pantallas estrechas el menú es un cajón.
+
+<details>
+<summary><strong>Todo lo que hace, con detalle</strong></summary>
 
 - **Panel**: lo que puedes subir hoy. Arriba, tu perfil de eMuwarez (ratio, subido, bajado, buffer, BON…) y un solo
   «Sincronizar todo» (biblioteca, catálogo y peticiones, una tras otra). «Listo para subir» son las peticiones que ya
@@ -39,7 +124,8 @@ con [Uploadrr-EMU](https://github.com/Kisnov/Uploadrr-EMU), que va dentro de la 
   categoría, petición, pistas y tipo de copia) y lo que ya hay en eMuwarez del mismo contenido, con si lo tuyo es
   mejor, igual o peor, antes de pulsar «Subir». Opcionalmente renombra y reordena las pistas (cuatro modos, apagado
   por defecto). El detalle de una subida terminada abre por el resultado (enlace a eMuwarez, estado de siembra en
-  qBittorrent y dónde se fue el tiempo); si falla, se reintenta desde el paso que falló. Progreso en
+  qBittorrent y dónde se fue el tiempo); si falla, se reintenta desde el paso que falló, y si el torrent ya estaba
+  en eMuwarez pero no llegó a qBittorrent, «Reenviar a qBittorrent» lo vuelve a añadir sin subir nada. Progreso en
   directo, límite de subidas en paralelo y varios grupos de subida guardados para el tag; cada grupo se puede marcar
   como Personal release o anónimo, y el Resumen de la subida deja cambiarlo para esa subida. «Seleccionar» en
   Biblioteca marca varias películas, series o temporadas y «Subir por lotes» las encola de una vez (una serie se
@@ -62,28 +148,7 @@ con [Uploadrr-EMU](https://github.com/Kisnov/Uploadrr-EMU), que va dentro de la 
   notificaciones (Discord, Telegram, webhook), un widget para [Homepage](https://gethomepage.dev) con su propia clave de
   solo lectura, diagnóstico, backup y mantenimiento.
 
-Además: **Ctrl+K** (o Cmd+K) abre una paleta para saltar a una sección o a una película o serie, y en ventanas
-estrechas el menú lateral es un cajón con botón de hamburguesa.
-
-**Panel**
-
-![Panel](docs/capturas/panel.webp)
-
-**Biblioteca**
-
-![Biblioteca](docs/capturas/biblioteca.webp)
-
-**Peticiones**
-
-![Peticiones](docs/capturas/peticiones.webp)
-
-**Asistente de subida**, con la revisión de las pistas de cada capítulo
-
-![Asistente de subida con la revisión de pistas](docs/capturas/pistas.webp)
-
-**Detalle de una subida**, con el progreso de cada fase
-
-![Detalle de una subida completada](docs/capturas/subida.webp)
+</details>
 
 ## Arranque rápido (Docker Compose)
 
@@ -178,24 +243,24 @@ Abre `http://localhost:9494`: el asistente de configuración inicial se abre sol
 - **Rutas permitidas** (Configuración → *Acceso a la biblioteca*) es `/data` por defecto. Si montas la raíz de
   datos en otra ruta, ponla ahí.
 
-![Configuración: cuenta, qBittorrent y acceso a la biblioteca](docs/capturas/configuracion.png)
+![Configuración: eMuwarez, TMDb, qBittorrent, proveedores y otros ajustes](docs/capturas/configuracion.webp)
 
 ### Versiones y volver atrás
 
 La imagen se publica con varias etiquetas, y `EMUWAREZ_UPLOADRR_TAG` (en el `.env`) elige cuál usa el compose:
 
-- `latest` (sin la variable): la última versión publicada. La publica el workflow *Publicar versión*, a mano
-  o solo los días impares del mes si hay cambios suficientes, siempre después de pasar los tests (con la entrada `ref`
-  publica la versión de un commit anterior); o `scripts/desplegar.sh` desde tu equipo. Se actualiza con `docker compose pull && docker compose up -d`.
-- `0.17.0`: una versión concreta, de las que tienen etiqueta `v0.17.0` en el repo. Sirve para quedarte en ella o
-  para volver atrás si la nueva falla.
-- El sha del commit de una versión: cada versión publicada tiene también esa etiqueta.
-- `edge`: lo más nuevo. Una prueba sin publicar como versión (la punta de `master` con el workflow en *solo
-  prueba*, o tu commit con `scripts/desplegar.sh --solo-prueba`), y también cada versión publicada, así que nunca
-  se queda por detrás de `latest`.
+| Etiqueta | Qué es | Para qué |
+|---|---|---|
+| `latest` (por defecto) | La última versión publicada | Uso normal. Se actualiza con `docker compose pull && docker compose up -d` |
+| `1.0.0` | Una versión concreta (las que tienen etiqueta `v1.0.0` en el repo) | Quedarte en ella, o volver atrás si la nueva falla |
+| el sha del commit | La misma imagen de esa versión, por su commit | Fijar exactamente un commit |
+| `edge` | Lo más nuevo: una prueba sin publicar, y también cada versión publicada | Probar un arreglo antes de que salga; nunca queda por detrás de `latest` |
+
+Las versiones las publica el workflow *Publicar versión* (a mano, o solo los días impares del mes si hay cambios
+suficientes, siempre después de pasar los tests) o `scripts/desplegar.sh` desde tu equipo.
 
 ```bash
-EMUWAREZ_UPLOADRR_TAG=0.17.0 docker compose up -d
+EMUWAREZ_UPLOADRR_TAG=1.0.0 docker compose up -d
 ```
 
 Si la versión nueva cambió el esquema de la base, la versión vieja no arranca y lo dice en el registro: la base ya
@@ -245,7 +310,7 @@ la nomenclatura, subir…): ver [`README_CLI_READY.md`](README_CLI_READY.md).
 ## Desarrollo
 
 ```bash
-# Backend, en Linux (hardlinks, mediainfo, mkvtoolnix): ~4200 tests
+# Backend, en Linux (hardlinks, mediainfo, mkvtoolnix): ~4400 tests
 pip install -e ".[web,dev]"
 python -m pytest tests -q -p no:cacheprovider
 
