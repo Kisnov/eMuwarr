@@ -73,7 +73,7 @@ the upload with Uploadrr-EMU (`Kisnov/Uploadrr-EMU`, cloned into the image at `/
   adds `-avbc`, and Uploadrr-EMU puts its `AVISO_BAJA_CALIDAD` notice at the top of the description;
   `test_contrato_uploadrr_real.py` parses the app's argv with Uploadrr-EMU's real `src/args.py` from `main`,
   cloned unless `UPLOADRR_EMU_DIR` or `/opt/Uploadrr` has it, so merge the Uploadrr-EMU side first);
-  `config.yaml` keys staged by `uploadrr_config_staging.py` / `uploadrr_yaml.py` (among them `AUTO.keep_quiet`, `DEFAULT.always_anon`
+  `config.yaml` keys staged by `uploadrr_config_staging.py` / `uploadrr_yaml.py` (among them the stock signature image, replaced by the current one, `AUTO.keep_quiet`, `DEFAULT.always_anon`
   and `TRACKERS.EMU.anon`, all `false`: only the `-a` flag makes an upload anonymous) and restored from
   `data/config.yaml.bak` after every job, and also at startup and before the next job if one died mid-run
   (hand edits to `config.yaml` don't survive, edit the `.bak`);

@@ -21,6 +21,7 @@ from ..uploadrr_config_staging import (
     stage_blu_api_off,
     stage_emu_config,
     stage_image_hosts,
+    stage_firma_actual,
     stage_keep_quiet_off,
     stage_per_episode_screens,
     stage_qbittorrent_config,
@@ -99,6 +100,7 @@ def _stage_uploadrr_config(job_id: int, cwd: str) -> Path | None:
         lines, _msg = stage_blu_api_off(lines)
         lines, _msg = stage_keep_quiet_off(lines)
         lines, _msg = stage_anon_off(lines)
+        lines, _msg = stage_firma_actual(lines)
         changed = True
         # Siempre hay al menos uno (ver arriba): esto es lo que hace que la
         # preferencia del usuario (p. ej. Pixhost) llegue de verdad a Uploadrr-EMU
