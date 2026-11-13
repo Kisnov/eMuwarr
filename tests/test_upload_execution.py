@@ -912,12 +912,57 @@ def test_delete_from_an_older_attempt_also_removes_the_whole_chain(db_conn):
     Reintentos), y hace lo mismo: da igual por dónde se entre."""
     original = _insert_job(db_conn, status="failed")
     medio = _insert_retry(db_conn, original)
-    ultimo = _insert_retry(db_conn, medio, status="completed")
+    ultimo = _insert_retry(db_conn, medio, status="cancelled")
 
     result = delete_upload_job(original, confirmation=DELETE_CONFIRMATION_TOKEN, conn=db_conn)
     assert result["ok"] is True
     for jid in (original, medio, ultimo):
         assert db_conn.execute("SELECT id FROM upload_jobs WHERE id=?", (jid,)).fetchone() is None
+
+
+def _queda(conn, jid):
+    return conn.execute("SELECT retry_of_job_id FROM upload_jobs WHERE id=?", (jid,)).fetchone()
+
+
+def test_borrar_el_segundo_intento_fallido_no_se_lleva_la_subida_buena(db_conn):
+    """Cada «Subir» del mismo título se encadena a su subida anterior: borrar la repetida que falló
+    borraba también la completada."""
+    buena = _insert_job(db_conn, status="completed")
+    repetida = _insert_retry(db_conn, buena, status="failed")
+    append_upload_log(buena, "info", "subida", stream="system", conn=db_conn)
+
+    result = delete_upload_job(repetida, confirmation=DELETE_CONFIRMATION_TOKEN, conn=db_conn)
+
+    assert result["ok"] is True
+    assert result["deleted_job_ids"] == [repetida] and result["kept_job_ids"] == [buena]
+    assert "Se conserva la subida" in result["message"]
+    assert _queda(db_conn, buena) is not None and _queda(db_conn, repetida) is None
+    assert db_conn.execute("SELECT id FROM upload_job_logs WHERE upload_job_id=?", (buena,)).fetchone() is not None
+
+
+def test_tampoco_la_que_fallo_con_el_torrent_ya_en_emuwarez_y_la_cadena_no_queda_rota(db_conn):
+    primero = _insert_job(db_conn, status="failed")
+    subida = _insert_retry(db_conn, primero, status="failed")
+    db_conn.execute("UPDATE upload_jobs SET torrent_subido = 1 WHERE id = ?", (subida,))
+    medio = _insert_retry(db_conn, subida, status="failed")
+    ultima_buena = _insert_retry(db_conn, medio, status="completed")
+    db_conn.commit()
+
+    result = delete_upload_job(medio, confirmation=DELETE_CONFIRMATION_TOKEN, conn=db_conn)
+
+    assert sorted(result["deleted_job_ids"]) == sorted([primero, medio])
+    assert sorted(result["kept_job_ids"]) == sorted([subida, ultima_buena])
+    assert _queda(db_conn, subida)["retry_of_job_id"] is None           # su padre se borró
+    assert _queda(db_conn, ultima_buena)["retry_of_job_id"] == subida   # salta el intento borrado
+
+
+def test_la_completada_se_borra_entrando_por_ella_con_sus_intentos_fallidos(db_conn):
+    fallida = _insert_job(db_conn, status="failed")
+    buena = _insert_retry(db_conn, fallida, status="completed")
+
+    result = delete_upload_job(buena, confirmation=DELETE_CONFIRMATION_TOKEN, conn=db_conn)
+
+    assert sorted(result["deleted_job_ids"]) == sorted([fallida, buena]) and result["kept_job_ids"] == []
 
 
 def test_a_self_referencing_row_does_not_hang_the_chain_walk(db_conn):

@@ -1275,7 +1275,8 @@ def _paso_preparar(t: _Trabajo) -> bool:
     if otra is not None:
         _fail(job_id, f"«{os.path.basename(t.destino_uploadrr)}» es de la subida #{otra}, que lo siembra "
                       "o lo tiene en qBittorrent: no se rehace para no romper ese torrent. "
-                      "Bórrala antes si quieres volver a subirlo.")
+                      f"Abre la subida #{otra} para ver su estado: si ya está en eMuwarez, "
+                      "no hace falta volver a subirlo.")
         return False
 
     # Un reintento que reanuda reutiliza los ficheros que dejó preparados la subida anterior (lo caro:
