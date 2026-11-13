@@ -360,6 +360,12 @@ def delete_upload_job(job_id: int, confirmation: str | None = None, conn=None) -
     alguno sigue vivo (en cola, preparando o subiendo) no se borra nada:
     hay un proceso en marcha que esto no sabe parar, y hacerlo a medias
     dejaría la cadena rota.
+
+    Lo que no se borra nunca de rebote es OTRA subida que llegó a eMuwarez
+    (completada, o con el torrent ya subido): cada «Subir» del mismo título
+    se encadena a su subida anterior, así que borrar un segundo intento
+    fallido se llevaba también la subida buena. Esa solo se borra entrando
+    por ella.
     """
     own = conn is None
     conn = conn or _get_db_conn()
@@ -376,12 +382,17 @@ def delete_upload_job(job_id: int, confirmation: str | None = None, conn=None) -
                 "job_id": job_id,
             }
 
-        chain = retry_chain_ids(job_id, conn=conn)
+        cadena = retry_chain_ids(job_id, conn=conn)
+        subidas = {f["id"] for f in conn.execute(
+            f"SELECT id FROM upload_jobs WHERE id IN ({','.join('?' * len(cadena))}) "
+            "AND (status = 'completed' OR torrent_subido = 1)", cadena)}
+        chain = [i for i in cadena if i == job_id or i not in subidas]
+        conservadas = [i for i in cadena if i not in chain]
 
         vivos = conn.execute(
-            f"SELECT id, status FROM upload_jobs WHERE id IN ({','.join('?' * len(chain))}) "
+            f"SELECT id, status FROM upload_jobs WHERE id IN ({','.join('?' * len(cadena))}) "
             "AND status NOT IN ('cancelled', 'failed', 'completed')",
-            chain,
+            cadena,
         ).fetchall()
         if vivos:
             estados = ", ".join(sorted({str(r["status"]) for r in vivos}))
@@ -434,12 +445,25 @@ def delete_upload_job(job_id: int, confirmation: str | None = None, conn=None) -
         conn.execute(f"DELETE FROM upload_job_logs WHERE upload_job_id IN ({marcas})", chain)
         conn.execute(f"UPDATE filesystem_operations SET upload_job_id = NULL WHERE upload_job_id IN ({marcas})", chain)
         conn.execute(f"UPDATE operational_queue_items SET upload_job_id = NULL WHERE upload_job_id IN ({marcas})", chain)
+        # Las que se quedan cuelgan ahora de su antepasada más cercana que también se queda (o de ninguna).
+        padre_de = {f["id"]: f["retry_of_job_id"] for f in conn.execute(
+            f"SELECT id, retry_of_job_id FROM upload_jobs WHERE id IN ({','.join('?' * len(cadena))})", cadena)}
+        for conservada in conservadas:
+            padre = padre_de.get(conservada)
+            while padre in chain:
+                padre = padre_de.get(padre)
+            if padre != padre_de.get(conservada):
+                conn.execute("UPDATE upload_jobs SET retry_of_job_id = ? WHERE id = ?", (padre, conservada))
         conn.execute(f"DELETE FROM upload_jobs WHERE id IN ({marcas})", chain)
         conn.commit()
 
         mensaje = ("Subida eliminada." if len(chain) == 1
                    else f"Subida eliminada, con sus {len(chain) - 1} reintento(s).")
-        return {"ok": True, "message": mensaje, "job_id": job_id, "deleted_job_ids": chain}
+        if conservadas:
+            mensaje += (f" Se conserva la subida #{conservadas[0]}, que llegó a eMuwarez." if len(conservadas) == 1
+                        else f" Se conservan {len(conservadas)} subidas que llegaron a eMuwarez.")
+        return {"ok": True, "message": mensaje, "job_id": job_id, "deleted_job_ids": chain,
+                "kept_job_ids": conservadas}
     finally:
         if own:
             conn.close()

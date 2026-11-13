@@ -31,17 +31,18 @@ export function DeleteUploadModal({ job, onClose, onDeleted }: {
         <p className="delsub-titulo">{job.title || `Subida #${job.id}`}</p>
         <div className="delsub-aviso">
           <p className="delsub-aviso-texto">
-            Se va a borrar todo el material y todo lo que hay registrado de esta subida: registro de actividad,
-            capturas y demás datos generados. Esta acción no se puede deshacer.
+            Se va a borrar lo que esta aplicación guarda de esta subida: el registro de actividad, las capturas y
+            los demás datos generados. Esta acción no se puede deshacer.
           </p>
           {(job.retry_count ?? 0) > 0 && (
             <p className="delsub-aviso-texto delsub-aviso-extra">
-              Incluye sus <strong>{job.retry_count} reintento(s)</strong>: se borra la subida entera, no un intento suelto.
+              Incluye sus <strong>{job.retry_count} reintento(s)</strong>: se borran los que
+              fallaron o se cancelaron. Otra subida del mismo título que llegó a eMuwarez no se borra desde aquí.
             </p>
           )}
         </div>
         <p className="delsub-nota">
-          El archivo de vídeo de tu biblioteca no se toca. Solo se borra el registro en esta aplicación.
+          No se toca el archivo de vídeo de tu biblioteca, ni el torrent en eMuwarez, ni lo que siembra qBittorrent.
         </p>
         {error && <p className="error-text delsub-error">{error}</p>}
         <div className="delsub-botones">
