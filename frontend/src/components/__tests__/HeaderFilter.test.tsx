@@ -9,6 +9,9 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { HeaderFilter } from '../HeaderFilter'
 import { desmontar, montar, pulsar } from './dom'
 
+// El tooltip mide el texto con un Range, que jsdom no sabe medir.
+Range.prototype.getClientRects = () => [] as unknown as DOMRectList
+
 const OPCIONES = [{ value: '', label: 'Todos' }, { value: 'a', label: 'Alfa' }, { value: 'b', label: 'Beta' }]
 
 function Arnes() {
