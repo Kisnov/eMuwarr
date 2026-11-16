@@ -748,11 +748,18 @@ Hallazgos y maquetas: https://claude.ai/artifact/PjPRTxSfEs3Y8aVtXzN32i
     etiquetaba a él y no al campo.
 
   Falsos positivos comprobados: Inter, el degradado y el brillo cian (identidad de `DESIGN.md`), el pie del póster de Biblioteca
-  (sale con hover y foco, fijo en táctil) y la campana tapando lo que tiene debajo. **Sin arreglar, a decidir:** ayudas de frase
-  entera a 11 px (Configuración, Tareas), chapas a 10 px en la tabla de fases del detalle de subida, el nombre del torrent a 9 px
-  en el asistente a 390 px, objetivos táctiles de 18 px de alto en las listas del móvil y la caja interior de las tarjetas de
-  Tareas. **Sin ver:** login, asistente de primera configuración, «Subir por lotes», lector de pantalla y dispositivos reales.
-  El informe queda en `.impeccable/audit/` (sin versionar).
+  (sale con hover y foco, fijo en táctil) y la campana tapando lo que tiene debajo. Después, sobre `master` con #293 (mismos
+  dos tamaños): el login en reposo y con error, la selección por lotes en el Panel y en Biblioteca con los dos pasos de su modal,
+  y los nueve pasos de la primera configuración en un contenedor sin datos. Ahí no salió nada de accesibilidad: ningún control sin
+  nombre ni campo sin etiqueta, sin desbordamiento, modales con nombre y foco, el error del login con `role="alert"`.
+
+  Los detalles mecánicos, en #294 (solo CSS): las chapas de la tabla de fases del detalle de subida pasan de 10 a 11 px, el enlace
+  de icono de 14×14 px junto a «API key» crece a 24 en zona de toque y la tarjeta de la primera configuración ya no salta ~3 px
+  cuando un paso hace aparecer la barra de desplazamiento. Los objetivos táctiles de las listas del móvil no necesitaban cambio:
+  el enlace a eMuwarez de Subidas ya crece con el dedo y los títulos de Peticiones van en una fila que abre lo mismo.
+  **Sin arreglar, a decidir:** ayudas de frase entera a 11 px (Configuración, Tareas, la primera configuración y las
+  comprobaciones del resumen del lote), el nombre del torrent a 9 px en el asistente a 390 px y la caja interior de las tarjetas
+  de Tareas. **Sin ver:** lector de pantalla y dispositivos reales. El informe queda en `.impeccable/audit/` (sin versionar).
 
 ## Siguiente
 
