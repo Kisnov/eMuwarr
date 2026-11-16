@@ -28,6 +28,8 @@ function ProviderIcon({ domain, size = 16, link = true }: { domain?: string | nu
       draggable={false}
       className="provprio-enlace"
       {...triggerProps}
+      aria-describedby={undefined}
+      aria-label={`Abrir ${domain}`}
     >
       {icon}
       {tooltipNode}
