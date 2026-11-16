@@ -1,5 +1,6 @@
 // Paso 1 de una película o un capítulo (uno o varios): los campos de la
 // nomenclatura con la vista previa del nombre, y MediaInfo y pistas del archivo.
+import { useId } from 'react'
 import { esTanda } from '../../utils/seleccionSubida'
 import { listDisplayTitle } from '../../utils/libraryItem'
 import { normalizarModo, renombra, tocaElFichero } from '../../utils/modoPistas'
@@ -14,6 +15,7 @@ import { AvisoModoPistas, RemuxTable } from './RemuxTable'
 import type { Asistente, PestanaArchivo } from './useAsistente'
 
 export function PasoArchivo({ a }: { a: Asistente }) {
+  const idCampo = useId()
   const {
     seleccion, targetId, episodeQueue, episodes, needsSelection, existingJob, existingJobBlocking,
     episodePrepping, episodePrepIndex, loading, error, reintentarNomenclatura,
@@ -28,13 +30,13 @@ export function PasoArchivo({ a }: { a: Asistente }) {
   const fieldBox = (
     <>
       <div className="asist-rejilla-campos">
-        <label><FieldLabel label="Título" info={FIELD_INFO.title} />
+        <label htmlFor={`${idCampo}-titulo`}><FieldLabel label="Título" info={FIELD_INFO.title} />
           {/* Spanish by default (it leads title_options), original as the
               alternative. Falls back to the old read-only input when the
               backend couldn't offer a choice at all, so the field never
               silently turns into an empty select. */}
           {titleOptions.length > 0 ? (
-            <select
+            <select id={`${idCampo}-titulo`}
               className="form-input form-select"
               value={fields.title || ''}
               onChange={e => setField('title', e.target.value)}
@@ -45,17 +47,17 @@ export function PasoArchivo({ a }: { a: Asistente }) {
               ))}
             </select>
           ) : (
-            <input className="form-input" value={fields.title || ''} disabled />
+            <input id={`${idCampo}-titulo`} className="form-input" value={fields.title || ''} disabled />
           )}
           {titleWarning && (
             <span className="asist-aviso-campo"><IconoAviso /> {titleWarning}</span>
           )}
         </label>
-        <label><FieldLabel label="Año" info={FIELD_INFO.year} />
-          <input className="form-input" value={fields.year || ''} disabled />
+        <label htmlFor={`${idCampo}-anio`}><FieldLabel label="Año" info={FIELD_INFO.year} />
+          <input id={`${idCampo}-anio`} className="form-input" value={fields.year || ''} disabled />
         </label>
         {fields.season_episode != null && (
-          <label><FieldLabel label="Temporada / Episodio" info={FIELD_INFO.season_episode} />
+          <label htmlFor={`${idCampo}-episodio`}><FieldLabel label="Temporada / Episodio" info={FIELD_INFO.season_episode} />
             {/* Read-only like every other derived field here (Año, Resolución,
                 códecs): it comes straight from Sonarr's season/episode numbers
                 for THIS file. Editing it let you name a file S03E07 when it is
@@ -63,15 +65,15 @@ export function PasoArchivo({ a }: { a: Asistente }) {
                 whatever this says — a typo here mislabels the release and the
                 file on disk. Only Source, Proveedor and Tag are meant to be
                 editable, and those are genuine judgement calls. */}
-            <input className="form-input" value={fields.season_episode || ''} disabled />
+            <input id={`${idCampo}-episodio`} className="form-input" value={fields.season_episode || ''} disabled />
           </label>
         )}
-        <label><FieldLabel label="Resolución" info={FIELD_INFO.resolution} />
-          <input className="form-input" value={fields.resolution || ''} disabled />
+        <label htmlFor={`${idCampo}-resolucion`}><FieldLabel label="Resolución" info={FIELD_INFO.resolution} />
+          <input id={`${idCampo}-resolucion`} className="form-input" value={fields.resolution || ''} disabled />
         </label>
-        <label><FieldLabel label="Source" info={FIELD_INFO.source} />
+        <label htmlFor={`${idCampo}-source`}><FieldLabel label="Source" info={FIELD_INFO.source} />
           <div className="asist-fila-source">
-            <select className="form-input form-select asist-crece" value={fields.source || ''} onChange={e => setField('source', e.target.value)}>
+            <select id={`${idCampo}-source`} className="form-input form-select asist-crece" value={fields.source || ''} onChange={e => setField('source', e.target.value)}>
               <option value="">— Seleccionar —</option>
               {sources.map(s => <option key={s.code} value={s.code}>{s.label}</option>)}
             </select>
@@ -90,30 +92,30 @@ export function PasoArchivo({ a }: { a: Asistente }) {
           )}
         </label>
         {sourceRequiresProvider && (
-          <label><FieldLabel label="Proveedor" info={FIELD_INFO.provider} />
+          <label htmlFor={`${idCampo}-proveedor`}><FieldLabel label="Proveedor" info={FIELD_INFO.provider} />
             {detectingProvider ? (
               <div className="form-input asist-detectando">
                 <span className="spinner asist-spinner-12" /> Detectando…
               </div>
             ) : (
-              <select className="form-input form-select" value={fields.provider || ''} onChange={e => setField('provider', e.target.value || null)}>
+              <select id={`${idCampo}-proveedor`} className="form-input form-select" value={fields.provider || ''} onChange={e => setField('provider', e.target.value || null)}>
                 <option value="">— Sin proveedor —</option>
                 {providers.map(p => <option key={p.code} value={p.code}>{p.name} ({p.code})</option>)}
               </select>
             )}
           </label>
         )}
-        <label><FieldLabel label="Códec de vídeo" info={FIELD_INFO.video_codec} />
-          <input className="form-input" value={fields.video_codec || ''} disabled />
+        <label htmlFor={`${idCampo}-video`}><FieldLabel label="Códec de vídeo" info={FIELD_INFO.video_codec} />
+          <input id={`${idCampo}-video`} className="form-input" value={fields.video_codec || ''} disabled />
         </label>
-        <label><FieldLabel label="Audio" info={FIELD_INFO.audio} />
-          <input className="form-input" value={fields.audio_summary || ''} disabled />
+        <label htmlFor={`${idCampo}-audio`}><FieldLabel label="Audio" info={FIELD_INFO.audio} />
+          <input id={`${idCampo}-audio`} className="form-input" value={fields.audio_summary || ''} disabled />
           {audioWarning && (
             <span className="asist-aviso-campo"><IconoAviso /> {audioWarning}</span>
           )}
         </label>
-        <label><FieldLabel label="Subtítulos" info={FIELD_INFO.subs} />
-          <input className="form-input" value={fields.subs || ''} disabled />
+        <label htmlFor={`${idCampo}-subs`}><FieldLabel label="Subtítulos" info={FIELD_INFO.subs} />
+          <input id={`${idCampo}-subs`} className="form-input" value={fields.subs || ''} disabled />
         </label>
         <CampoTag value={fields.tag} opciones={opcionesTag} onChange={t => setField('tag', t)} />
       </div>

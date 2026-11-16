@@ -1,6 +1,7 @@
 // Paso 1 de un pack de temporada (una o varias): el plan del pack, sus campos
 // con el nombre del torrent, el idioma de las pistas sin idioma, y MediaInfo,
 // pistas y nombres de cada capítulo.
+import { useId } from 'react'
 import { textoOrigenProveedor } from '../../utils/origenProveedor'
 import { etiquetaPistaSinIdioma, SIN_IDIOMAS, type IdiomasPorPosicion } from '../../utils/idiomasPack'
 import { FitText, FitTextPair } from '../FitText'
@@ -16,6 +17,7 @@ import { AvisoModoPistas, RemuxTable } from './RemuxTable'
 import type { Asistente, PestanaArchivo } from './useAsistente'
 
 export function PasoTemporada({ a }: { a: Asistente }) {
+  const idCampo = useId()
   const {
     targetId, seasonQueue, seasons, needsSelection, existingJob, existingJobBlocking,
     seasonPlan, seasonPlanLoading, seasonPlanError, seasonProgress, loadSeasonPlan, seasonDisplayTitle,
@@ -52,9 +54,9 @@ export function PasoTemporada({ a }: { a: Asistente }) {
 
   const seasonFieldBox = (
     <div className="asist-rejilla-campos">
-      <label><FieldLabel label="Título" info={FIELD_INFO.title} />
+      <label htmlFor={`${idCampo}-titulo`}><FieldLabel label="Título" info={FIELD_INFO.title} />
         {seasonTitleOptions.length > 0 ? (
-          <select
+          <select id={`${idCampo}-titulo`}
             className="form-input form-select"
             value={fields.title || seasonPlan?.series_title || ''}
             onChange={e => setField('title', e.target.value)}
@@ -65,18 +67,18 @@ export function PasoTemporada({ a }: { a: Asistente }) {
             ))}
           </select>
         ) : (
-          <input className="form-input" value={seasonPlan?.series_title || ''} disabled />
+          <input id={`${idCampo}-titulo`} className="form-input" value={seasonPlan?.series_title || ''} disabled />
         )}
       </label>
-      <label><FieldLabel label="Año" info={FIELD_INFO.year} />
-        <input className="form-input" value={seasonPlan?.year ?? ''} disabled />
+      <label htmlFor={`${idCampo}-anio`}><FieldLabel label="Año" info={FIELD_INFO.year} />
+        <input id={`${idCampo}-anio`} className="form-input" value={seasonPlan?.year ?? ''} disabled />
       </label>
-      <label><FieldLabel label="Resolución" info={FIELD_INFO.resolution} />
-        <input className="form-input" value={seasonPlan?.resolution || ''} disabled />
+      <label htmlFor={`${idCampo}-resolucion`}><FieldLabel label="Resolución" info={FIELD_INFO.resolution} />
+        <input id={`${idCampo}-resolucion`} className="form-input" value={seasonPlan?.resolution || ''} disabled />
       </label>
-      <label><FieldLabel label="Source" info={FIELD_INFO.source} />
+      <label htmlFor={`${idCampo}-source`}><FieldLabel label="Source" info={FIELD_INFO.source} />
         <div className="asist-fila-source">
-          <select className="form-input form-select asist-crece" value={fields.source || ''} onChange={e => setField('source', e.target.value)}>
+          <select id={`${idCampo}-source`} className="form-input form-select asist-crece" value={fields.source || ''} onChange={e => setField('source', e.target.value)}>
             <option value="">— Seleccionar —</option>
             {sources.map(s => <option key={s.code} value={s.code}>{s.label}</option>)}
           </select>
@@ -93,19 +95,19 @@ export function PasoTemporada({ a }: { a: Asistente }) {
         <p className="text-warning asist-col-completa asist-t12 asist-m0"><IconoAviso /> {avisoSource}</p>
       )}
       {sourceRequiresProvider && (
-        <label><FieldLabel label="Proveedor" info={FIELD_INFO.provider} />
-          <select className="form-input form-select" value={fields.provider || ''} onChange={e => setField('provider', e.target.value || null)}>
+        <label htmlFor={`${idCampo}-proveedor`}><FieldLabel label="Proveedor" info={FIELD_INFO.provider} />
+          <select id={`${idCampo}-proveedor`} className="form-input form-select" value={fields.provider || ''} onChange={e => setField('provider', e.target.value || null)}>
             <option value="">— Sin proveedor —</option>
             {providers.map(p => <option key={p.code} value={p.code}>{p.name} ({p.code})</option>)}
           </select>
           {origenProveedor && <span className="form-hint">{origenProveedor}</span>}
         </label>
       )}
-      <label><FieldLabel label="Códec de vídeo" info={FIELD_INFO.video_codec} />
-        <input className="form-input" value={seasonPlan?.video_codec || ''} disabled />
+      <label htmlFor={`${idCampo}-video`}><FieldLabel label="Códec de vídeo" info={FIELD_INFO.video_codec} />
+        <input id={`${idCampo}-video`} className="form-input" value={seasonPlan?.video_codec || ''} disabled />
       </label>
-      <label><FieldLabel label="Audio" info={FIELD_INFO.audio} />
-        <input className="form-input" value={fields.audio_summary ?? seasonPlan?.audio_summary ?? ''} disabled />
+      <label htmlFor={`${idCampo}-audio`}><FieldLabel label="Audio" info={FIELD_INFO.audio} />
+        <input id={`${idCampo}-audio`} className="form-input" value={fields.audio_summary ?? seasonPlan?.audio_summary ?? ''} disabled />
         {seasonPlan?.audio_warning && (
           <span className="asist-aviso-campo"><IconoAviso /> {seasonPlan.audio_warning}</span>
         )}
@@ -116,9 +118,9 @@ export function PasoTemporada({ a }: { a: Asistente }) {
       {(seasonPlan?.pistas_sin_idioma?.length ?? 0) > 0 && (
         <div className="asist-col-completa asist-pila">
           {(seasonPlan?.pistas_sin_idioma ?? []).map(p => (
-            <label key={p.posicion}>
+            <label htmlFor={`${idCampo}-pista-${p.posicion}`} key={p.posicion}>
               <FieldLabel label={etiquetaPistaSinIdioma(p.posicion, p.pista, p.capitulos)} info={FIELD_INFO.idioma_pista_pack} />
-              <select
+              <select id={`${idCampo}-pista-${p.posicion}`}
                 className="form-input form-select"
                 value={idiomasPackActuales[p.posicion] ?? ''}
                 onChange={e => elegirIdiomaPack(p.posicion, e.target.value)}
@@ -131,8 +133,8 @@ export function PasoTemporada({ a }: { a: Asistente }) {
           {recalculandoIdioma && <span className="form-hint"><span className="spinner asist-spinner-10" /> Recalculando el nombre del pack…</span>}
         </div>
       )}
-      <label><FieldLabel label="Subtítulos" info={FIELD_INFO.subs} />
-        <input className="form-input" value={seasonPlan?.subtitle_summary || ''} disabled />
+      <label htmlFor={`${idCampo}-subs`}><FieldLabel label="Subtítulos" info={FIELD_INFO.subs} />
+        <input id={`${idCampo}-subs`} className="form-input" value={seasonPlan?.subtitle_summary || ''} disabled />
       </label>
       <CampoTag value={fields.tag} opciones={opcionesTag} onChange={t => setField('tag', t)} />
     </div>
@@ -206,8 +208,8 @@ export function PasoTemporada({ a }: { a: Asistente }) {
           {avisosDelPlan}
           {(seasonPlan?.provider_conflict?.length ?? 0) > 0 && (
             // El error pide elegir un proveedor: el selector tiene que estar aquí.
-            <label className="asist-bloque asist-mb-10"><FieldLabel label="Proveedor" info={FIELD_INFO.provider} />
-              <select className="form-input form-select" value="" onChange={e => { if (e.target.value) loadSeasonPlan(e.target.value) }}>
+            <label htmlFor={`${idCampo}-proveedor-pack`} className="asist-bloque asist-mb-10"><FieldLabel label="Proveedor" info={FIELD_INFO.provider} />
+              <select id={`${idCampo}-proveedor-pack`} className="form-input form-select" value="" onChange={e => { if (e.target.value) loadSeasonPlan(e.target.value) }}>
                 <option value="">— Elegir proveedor para todo el pack —</option>
                 {providers.map(p => <option key={p.code} value={p.code}>{p.name} ({p.code})</option>)}
               </select>
