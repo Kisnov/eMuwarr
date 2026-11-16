@@ -415,10 +415,10 @@ export function InstancesPage() {
                 {editingId === inst.id && editForm ? (
                   <div className="inst-edicion" id={`inst-edicion-${inst.id}`}>
                     {/* Qué instancia se edita: los campos solos no lo decían. */}
-                    <h3 className="inst-titulo inst-titulo-edicion">
+                    <h2 className="inst-titulo inst-titulo-edicion">
                       <ServiceIcon type={inst.type as 'radarr' | 'sonarr'} size={20} />
                       Editar «{inst.name}»
-                    </h3>
+                    </h2>
                     <div className="inst-rejilla-180">
                       <Campo etiqueta="Nombre" nota="máx. 15" error={editErrores.name}>
                         {c => <input {...c} className="form-input" value={editForm.name} onChange={e => setEditForm(p => p && ({ ...p, name: e.target.value }))} maxLength={15} autoComplete="off" />}
@@ -453,7 +453,7 @@ export function InstancesPage() {
                       <ServiceIcon type={inst.type as 'radarr' | 'sonarr'} size={30} />
                       <div className="instance-card-meta">
                         <div className="inst-nombre">
-                          <h3 className="inst-titulo">{inst.name}</h3>
+                          <h2 className="inst-titulo">{inst.name}</h2>
                           {inst.is_4k && <span className="badge status-queued inst-etiqueta">4K</span>}
                           {inst.is_anime && <span className="badge status-uploading inst-etiqueta">Anime</span>}
                           <span className={`inst-estado inst-estado--${estado.tono}`}>

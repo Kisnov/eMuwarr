@@ -736,6 +736,23 @@ Hallazgos y maquetas: https://claude.ai/artifact/PjPRTxSfEs3Y8aVtXzN32i
   la puerta da turno por id). Borrar espera a que termine y un reenvío cortado por un reinicio queda «fallido».
   `--solo-cliente` ya está en el `main` de Uploadrr-EMU (Kisnov/Uploadrr-EMU#42) y `test_contrato_uploadrr_real.py` pasa
   contra él (12/11, en local). **Falta:** probarlo de verdad en el NAS.
+- **Auditoría con el detector de `impeccable` (16/11, #293):** primera vez que corre el detector (4.9.2, instalado en local; el
+  06/11 no se pudo). `impeccable detect --cdp` sobre un Chrome con sesión iniciada, contra un contenedor de un solo uso con datos
+  sembrados: las diez pantallas a 1440×900 y 390×844; fichas de película, serie y petición, detalle de subida, asistente, paleta y
+  campana en los dos tamaños; y sin detector (desbordamiento, nombres, etiquetas) a 1280, 1024 y 820. Nota 16/20. Arreglado:
+  - el texto de las chapas roja, azul, índigo, lila, verde oscuro y «Llena» va en su tono claro (estaban entre 3,5:1 y 4,2:1);
+  - los títulos de tarjeta de Tareas, Instancias y Configuración son `h2` (se saltaba del `h1` al `h3`); el buscador de
+    Configuración lee los `h2`;
+  - los enlaces de proveedor de Configuración llevan `aria-label`;
+  - los 20 campos del asistente llevan `htmlFor` e `id`: el `<label>` envolvía antes el «?» de ayuda, que es un botón, y lo
+    etiquetaba a él y no al campo.
+
+  Falsos positivos comprobados: Inter, el degradado y el brillo cian (identidad de `DESIGN.md`), el pie del póster de Biblioteca
+  (sale con hover y foco, fijo en táctil) y la campana tapando lo que tiene debajo. **Sin arreglar, a decidir:** ayudas de frase
+  entera a 11 px (Configuración, Tareas), chapas a 10 px en la tabla de fases del detalle de subida, el nombre del torrent a 9 px
+  en el asistente a 390 px, objetivos táctiles de 18 px de alto en las listas del móvil y la caja interior de las tarjetas de
+  Tareas. **Sin ver:** login, asistente de primera configuración, «Subir por lotes», lector de pantalla y dispositivos reales.
+  El informe queda en `.impeccable/audit/` (sin versionar).
 
 ## Siguiente
 

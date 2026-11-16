@@ -1,7 +1,7 @@
 /* Tareas (TasksPage) e Instancias (InstancesPage): estilos que antes iban en línea.
    Prefijos tareas- e inst-. Se importa el último en main.tsx. Las reglas que
-   retocan una celda de `.data-table`, un `.badge`, un `.alert`, un `.form-group`,
-   un `.modal-panel` o un `h3` de `.placeholder-card` llevan el selector tan
+   retocan una celda de `.data-table`, un `.badge`, un `.alert`, un `.form-group`
+   o un `.modal-panel` llevan el selector tan
    específico como la regla base o más: una clase suelta perdería contra ellas. */
 
 /* ---- Tareas ---- */
@@ -101,9 +101,13 @@
 
 .tareas-cabecera__texto { min-width: 0; }
 
-.placeholder-card h3.tareas-titulo {
+/* Es un h2: lleva aquí lo que `.placeholder-card h3` da a los títulos de tarjeta. */
+.placeholder-card .tareas-titulo {
   margin: 0 0 4px;
   font-size: 15px;
+  font-weight: 700;
+  color: var(--text-primary);
+  letter-spacing: .03em;
 }
 
 .tareas-descripcion {

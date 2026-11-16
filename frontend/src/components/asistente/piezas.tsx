@@ -1,4 +1,5 @@
 // Piezas pequeñas que comparten los pasos del asistente.
+import { useId } from 'react'
 import type { SourceComparison } from '../../api/nomenclature'
 import type { UploadCheck } from '../../api/uploads'
 import type { UploadJob } from '../../types/api'
@@ -51,7 +52,8 @@ export function CheckRow({ c }: { c: UploadCheck }) {
   )
 }
 
-// Field label + an info "?" explaining where the field's data comes from.
+// Field label + an info "?" explaining where the field's data comes from. El «?» es un botón: el <label> que
+// lo envuelve necesita `htmlFor`, o etiqueta al botón y no al campo.
 export function FieldLabel({ label, info }: { label: string; info?: React.ReactNode }) {
   return (
     <span className="asist-etiqueta asist-fila-info">
@@ -127,9 +129,10 @@ export function CampoTag({ value, opciones, onChange }: {
   opciones: string[]
   onChange: (tag: string) => void
 }) {
+  const idCampo = useId()
   return (
-    <label><FieldLabel label="Tag" info={FIELD_INFO.tag} />
-      <select className="form-input form-select" value={value || ''} onChange={e => onChange(e.target.value)}>
+    <label htmlFor={`${idCampo}-tag`}><FieldLabel label="Tag" info={FIELD_INFO.tag} />
+      <select id={`${idCampo}-tag`} className="form-input form-select" value={value || ''} onChange={e => onChange(e.target.value)}>
         {opciones.map(t => (
           <option key={t} value={t}>{t}</option>
         ))}

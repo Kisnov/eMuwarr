@@ -95,6 +95,8 @@
   --color-warning-pale:   #fde68a;
   --color-accent-soft:    #7cb0ff;
   --color-accent-pale:    #93c5fd;
+  --color-downloading-soft: #a5b4fc;
+  --color-uploading-soft: #c084fc;
 
   /* Botón primario. */
   --color-primary:       #2563eb;

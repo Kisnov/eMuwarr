@@ -145,15 +145,15 @@
   flex-shrink: 0;
 }
 
-/* Status badges */
+/* Status badges. El texto de rojo, azul, índigo, lila y verde oscuro va en su tono claro: con el del fondo no llega a 4,5:1. */
 .badge.status-available    { background: color-mix(in srgb, var(--color-available) 22%, transparent);   color: var(--color-available); }
-.badge.status-missing      { background: color-mix(in srgb, var(--color-missing) 22%, transparent);   color: var(--color-missing); }
-.badge.status-queued       { background: color-mix(in srgb, var(--color-queued) 22%, transparent);  color: var(--color-queued); }
-.badge.status-downloading  { background: color-mix(in srgb, var(--color-downloading) 22%, transparent); color: var(--color-downloading); }
+.badge.status-missing      { background: color-mix(in srgb, var(--color-missing) 22%, transparent);   color: var(--color-error-soft); }
+.badge.status-queued       { background: color-mix(in srgb, var(--color-queued) 22%, transparent);  color: var(--color-accent-soft); }
+.badge.status-downloading  { background: color-mix(in srgb, var(--color-downloading) 22%, transparent); color: var(--color-downloading-soft); }
 .badge.status-pending      { background: color-mix(in srgb, var(--color-pending) 22%, transparent);  color: var(--color-pending); }
-.badge.status-uploading    { background: color-mix(in srgb, var(--color-uploading) 22%, transparent);  color: var(--color-uploading); }
-.badge.status-uploaded     { background: color-mix(in srgb, var(--color-uploaded) 22%, transparent);   color: var(--color-uploaded); }
-.badge.status-error        { background: color-mix(in srgb, var(--color-error) 22%, transparent);   color: var(--color-error); }
+.badge.status-uploading    { background: color-mix(in srgb, var(--color-uploading) 22%, transparent);  color: var(--color-uploading-soft); }
+.badge.status-uploaded     { background: color-mix(in srgb, var(--color-uploaded) 22%, transparent);   color: var(--color-available); }
+.badge.status-error        { background: color-mix(in srgb, var(--color-error) 22%, transparent);   color: var(--color-error-soft); }
 .badge.status-partial      { background: color-mix(in srgb, var(--color-partial) 22%, transparent);  color: var(--color-partial); }
 .badge.status-unknown      { background: color-mix(in srgb, var(--color-neutral) 22%, transparent); color: var(--color-filled); }
 
@@ -161,22 +161,22 @@
 .badge.req-none            { background: color-mix(in srgb, var(--color-neutral) 20%, transparent); color: var(--color-filled); }
 .badge.req-compatible      { background: color-mix(in srgb, var(--color-compatible) 22%, transparent);   color: var(--color-compatible); }
 .badge.req-partial         { background: color-mix(in srgb, var(--color-partial) 22%, transparent);  color: var(--color-partial); }
-.badge.req-not-compatible  { background: color-mix(in srgb, var(--color-missing) 22%, transparent);   color: var(--color-missing); }
+.badge.req-not-compatible  { background: color-mix(in srgb, var(--color-missing) 22%, transparent);   color: var(--color-error-soft); }
 /* 'No disponible' (there IS a library entry, but no file on disk) reads as
    "Faltante" and in red: it's the same thing Biblioteca calls Faltante, and
    it's actionable — you'd re-download it. It used to render as a plain dash,
    which hid a real verdict among the empty cells. */
 /* (nota histórica) .req-unavailable estuvo sin usar mientras
    (see StatusBadge's dash-fallback for type 'request'), never a badge. */
-.badge.req-unavailable     { background: color-mix(in srgb, var(--color-missing) 22%, transparent);   color: var(--color-missing); }
-.badge.req-claimed         { background: color-mix(in srgb, var(--color-uploading) 22%, transparent);  color: var(--color-uploading); }
+.badge.req-unavailable     { background: color-mix(in srgb, var(--color-missing) 22%, transparent);   color: var(--color-error-soft); }
+.badge.req-claimed         { background: color-mix(in srgb, var(--color-uploading) 22%, transparent);  color: var(--color-uploading-soft); }
 .badge.req-pending         { background: color-mix(in srgb, var(--color-req-pending) 22%, transparent);   color: var(--color-req-pending); }
 /* 'Llena' en un gris MÁS APAGADO que 'Sin petición': los dos eran idénticos
    (#9ca3af sobre el mismo fondo) y no había forma de distinguirlos de un
    vistazo. Además encaja con lo que significan: una petición llena ya está
    resuelta y no pide nada de ti, mientras que "Sin petición" sí es un hueco
    que podrías llenar. Se ve en Biblioteca, en Peticiones y en Subidas. */
-.badge.req-filled          { background: color-mix(in srgb, var(--color-neutral) 14%, transparent); color: var(--color-neutral); }
+.badge.req-filled          { background: color-mix(in srgb, var(--color-neutral) 14%, transparent); color: var(--text-muted); }
 .badge.req-unknown         { background: color-mix(in srgb, var(--color-neutral) 20%, transparent); color: var(--color-filled); }
 /* Nothing in your library matches this request at all — not even an entry
    without a file. Neutral white: it isn't a problem with your copy, you just
