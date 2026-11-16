@@ -98,7 +98,13 @@
 /* Con el dedo, la zona táctil del «?» (InfoIcon) sobresale 16 px: el hueco crece hasta ella para que no tape el enlace. */
 @media (pointer: coarse) {
   .setup-enlace-fila { gap: 16px; }
+  /* El enlace de icono mide 14 px: crece a 24 en zona de toque, sin llegar al campo de debajo. */
+  .setup-enlace-icono { position: relative; }
+  .setup-enlace-icono::after { content: ""; position: absolute; inset: -5px; }
 }
+
+/* Los pasos largos hacen aparecer la barra de desplazamiento de la página: con el hueco reservado la tarjeta no salta. */
+html:has(.setup-wizard) { scrollbar-gutter: stable; }
 
 /* Fila "Probar conexión" + resultado */
 .setup-fila-prueba {
