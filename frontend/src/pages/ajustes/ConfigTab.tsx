@@ -39,7 +39,7 @@ const normalizar = (t: string) => t.normalize('NFD').replace(/\p{Diacritic}/gu, 
 
 // Lo que el buscador lee de cada tarjeta: título, etiquetas, la línea que dice para qué sirve, las ayudas y los botones
 // (con su nombre accesible, así «Quitar Pixhost» cuenta aunque solo enseñe una ✕).
-const BUSCABLE = 'h3, label, .form-label, .aj-cab__desc, .form-hint, button'
+const BUSCABLE = 'h2, label, .form-label, .aj-cab__desc, .form-hint, button'
 
 export function ConfigTab() {
   const form = useConfigForm()

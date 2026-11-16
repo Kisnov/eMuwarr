@@ -278,7 +278,7 @@ function TaskCard({ task, onChanged, onNavigate }: { task: ScheduledTask; onChan
       {logsOpen && <LogsModal taskKey={task.task_key} taskName={task.name} onClose={() => setLogsOpen(false)} />}
       <header className="tareas-cabecera">
         <div className="tareas-cabecera__texto">
-          <h3 className="tareas-titulo" id={idTitulo}>{task.name}</h3>
+          <h2 className="tareas-titulo" id={idTitulo}>{task.name}</h2>
           <p className="tareas-descripcion">{task.description}</p>
         </div>
         <EstadoTarea estado={task.last_status} desactivada={!task.enabled} />

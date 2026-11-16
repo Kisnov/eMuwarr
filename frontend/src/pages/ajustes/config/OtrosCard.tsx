@@ -46,7 +46,7 @@ export function OtrosCard({ form }: { form: ConfigForm }) {
         descripcion="Cómo se preparan las subidas, qué cuenta la biblioteca y el tamaño de esta interfaz."
       />
       <section className="aj-grupo" aria-labelledby="aj-otros-subida">
-        <h4 className="aj-grupo__titulo" id="aj-otros-subida">Subida</h4>
+        <h3 className="aj-grupo__titulo" id="aj-otros-subida">Subida</h3>
         <Campo etiqueta="Renombrar/Ordenar pistas" info={<InfoIcon text="Qué se le hace a las pistas de audio y subtítulos antes de subir. Renombrar les pone nombre siguiendo las reglas de eMuwarez y cambia solo la cabecera del archivo: es casi instantáneo por grande que sea. Reordenar las coloca en orden (Español, Català, Inglés, resto) y obliga a reescribir el contenedor entero, y tarda en proporción al tamaño. Si el archivo lo comparte un torrent (un hardlink), no se escribe en él: renombrar y el título interno se hacen en una copia por reflink en la carpeta de subidas (o se omiten, con «No hacer nunca copias reflink») y reordenar se omite. Con Ninguno el archivo se sube tal cual, sin tocar tampoco el título interno. En los tres primeros se marca la pista predeterminada, que es lo que decide qué audio suena al abrirlo." />}>
           {c => (
             <select {...c} className="form-input form-select" value={modoDePistas}
@@ -139,7 +139,7 @@ export function OtrosCard({ form }: { form: ConfigForm }) {
       </section>
 
       <section className="aj-grupo" aria-labelledby="aj-otros-biblioteca">
-        <h4 className="aj-grupo__titulo" id="aj-otros-biblioteca">Biblioteca</h4>
+        <h3 className="aj-grupo__titulo" id="aj-otros-biblioteca">Biblioteca</h3>
         <Interruptor etiqueta="Sincronizar al volver una instancia" info={<InfoIcon text="Radarr y Sonarr se suelen encender solo para subir y pasan días apagados. Cada pocos minutos se comprueba si responden, y cuando una que no respondía vuelve a hacerlo se sincroniza sola, para tener la biblioteca al día en cuanto la enciendes. Una instancia caída nunca borra nada de la biblioteca. Desactivado, solo sincroniza la tarea periódica de Sincronizar bibliotecas." />} marcado={sincronizarAlVolver} onCambio={setSincronizarAlVolver} />
         <Interruptor etiqueta="Ignorar temporadas especiales" info={<InfoIcon text="Excluye la temporada especial (temporada 0) del estado global de una serie. Si tienes todas las temporadas y capítulos salvo los especiales, la serie aparece como completa en las columnas Estado y eMuwarez de la Biblioteca. Sus atributos consolidados (resolución, source, códecs, audio y subtítulos) se calculan ignorando los especiales, y en el Panel sus capítulos faltantes no cuentan como faltantes." />} marcado={ignoreSpecials} onCambio={setIgnoreSpecials} />
         <Interruptor etiqueta="Internal Source Tool" info={<InfoIcon text="Herramienta interna que deduce el source analizando el archivo real con MediaInfo, FFprobe y MKVToolNix, sin mirar el nombre. Todavía está en desarrollo y puede ser inexacta, por eso viene desactivada. Activada, añade su columna a la comparación de Source y participa en el aviso de discrepancia. Desactivada, esa columna sale vacía y el aviso compara solo el nombre del archivo con Radarr/Sonarr; el source final no cambia salvo en archivos donde ni el nombre ni Radarr/Sonarr dicen nada, que siguen usando la estimación por bitrate de siempre." />} marcado={sourceEngine} onCambio={setSourceEngine} />
@@ -156,7 +156,7 @@ export function OtrosCard({ form }: { form: ConfigForm }) {
       {/* El único ajuste de esta pestaña que NO se guarda con el botón: es de este navegador, no de la instalación, y se
           aplica y se recuerda al elegirlo. Ver utils/uiScale.ts. */}
       <section className="aj-grupo" aria-labelledby="aj-otros-interfaz">
-        <h4 className="aj-grupo__titulo" id="aj-otros-interfaz">Esta interfaz<span className="form-hint"> · solo en este navegador</span></h4>
+        <h3 className="aj-grupo__titulo" id="aj-otros-interfaz">Esta interfaz<span className="form-hint"> · solo en este navegador</span></h3>
         <Campo etiqueta="Tamaño de interfaz" info={<InfoIcon text="Agranda o encoge la interfaz entera, para ajustarla a tu pantalla. La misma resolución se ve muy distinta según el tamaño del monitor y a la distancia que lo tengas, así que aquí no se adivina nada: lo eliges tú y se aplica al momento. Se guarda solo en este navegador, así que puedes tener un tamaño en el sobremesa y otro en el portátil, y no entra en el backup de configuración." />}>
           {c => (
             <select {...c} className="form-input form-select" value={tamanoInterfaz}
