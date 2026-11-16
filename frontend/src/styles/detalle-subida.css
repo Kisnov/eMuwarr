@@ -95,7 +95,7 @@ a.btn.dsub-sin-subrayado { text-decoration: none; }
   background: color-mix(in srgb, var(--dsub-tono) 9%, transparent);
   border: 1px solid color-mix(in srgb, var(--dsub-tono) 28%, transparent);
 }
-.badge.dsub-estado-seeding { font-size: 0.78rem; letter-spacing: 0; }
+.badge.dsub-estado-seeding { font-size: 0.79rem; letter-spacing: 0; }
 .dsub-acciones { display: flex; flex-wrap: wrap; gap: 8px; }
 .dsub-progreso-global { max-width: 420px; }
 .dsub-datos {
@@ -229,7 +229,8 @@ a.btn.dsub-sin-subrayado { text-decoration: none; }
 }
 .data-table tr.dsub-fila-plantilla { opacity: 0.5; font-style: italic; }
 .data-table tr.sticky-footer-row.dsub-total { border-top: 2px solid var(--border); }
-.badge.dsub-badge-chico { font-size: 0.72rem; }
+/* 11 px con la escala por defecto: el mínimo de una chapa. */
+.badge.dsub-badge-chico { font-size: 0.79rem; }
 
 /* Barra de progreso de cada fase */
 .dsub-progreso { display: flex; align-items: center; gap: 10px; }
