@@ -106,8 +106,8 @@ the upload with Uploadrr-EMU (`Kisnov/Uploadrr-EMU`, cloned into the image at `/
   the Uploadrr-EMU clone layer comes from cache.
 - Version manifest: the Diagnóstico card compares the image's `APP_COMMIT` with `latest.json` in the public
   repo `Kisnov/uploadrr-version` (a fork of `Rovaal-code/uploadrr-version`); to test against another
-  manifest, set `UPLOADRR_VERSION_MANIFEST_URL`. It is separate because this
-  repo and the image are private, so the app can't ask GHCR or read a private raw URL without a token.
+  manifest, set `UPLOADRR_VERSION_MANIFEST_URL`. It is a separate repo so the app reads one
+  static JSON with no token, instead of asking GHCR's registry API (anonymous tokens weren't issued).
   `desplegar.sh` publishes it after `docker push` via `scripts/publicar_version.py --repo`; don't edit it by
   hand, run that script. The file is public: keep `--notas` neutral.
 - Image Python deps: `constraints.txt` pins the `web` extra and what it pulls (Uploadrr-EMU pins its own in its
@@ -120,9 +120,3 @@ the upload with Uploadrr-EMU (`Kisnov/Uploadrr-EMU`, cloned into the image at `/
 - Building on Windows: `.gitattributes` keeps text files LF, so a new checkout builds with `docker build .`. A checkout
   made before it is still CRLF, and a CRLF `docker-entrypoint.sh` fails with "no such file or directory": build
   from `git -c core.autocrlf=false archive HEAD`.
-
-## Plan
-
-The phased improvement plan, what is done and what comes next live in `docs/PLAN.md`. Read it before starting plan
-work and update it in the same PR that finishes a step. The older detailed review notes are in `tmp/analisi/`
-(gitignored, on Gabriel's PC only).

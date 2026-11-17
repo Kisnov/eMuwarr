@@ -1,5 +1,4 @@
-"""El aviso de un lote (Ajustes → Notificaciones → «Notificaciones de un lote», pregunta 5 de
-docs/PLAN_SUBIDA_POR_LOTES.md).
+"""El aviso de un lote (Ajustes → Notificaciones → «Notificaciones de un lote»).
 
 Con «Una por subida» (por defecto) todo avisa como siempre. Con «Una por lote», las subidas de un lote no avisan una a
 una y, cuando la última punta del lote llega a un estado final, sale UNA notificación `upload_batch_done` con el

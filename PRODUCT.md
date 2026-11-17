@@ -8,8 +8,8 @@ web
 
 ## Users
 
-Gabriel (Kisnov) y unos pocos conocidos: uploaders hispanohablantes de eMuwarez (tracker privado UNIT3D,
-https://emu-warez.com) con Radarr y Sonarr en un NAS doméstico. No es un producto abierto a cualquier uploader. Saben lo que es
+Uploaders hispanohablantes de eMuwarez (tracker privado UNIT3D, https://emu-warez.com) con Radarr y Sonarr
+en un NAS doméstico. No es una herramienta genérica para cualquier tracker. Saben lo que es
 un release, un pack, un trump o el seeding; quieren subir contenido de su biblioteca, a menudo para cubrir peticiones con
 recompensa, sin hacerlo a mano. Trabajan sobre todo en escritorio (1280-1440 px); el móvil sirve para mirar el estado y
 alguna acción suelta.

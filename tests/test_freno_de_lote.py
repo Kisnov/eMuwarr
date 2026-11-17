@@ -1,4 +1,4 @@
-"""El freno del lote (pregunta 4 de docs/PLAN_SUBIDA_POR_LOTES.md): tras FALLOS_SEGUIDOS_PARA_PARAR fallos seguidos
+"""El freno del lote: tras FALLOS_SEGUIDOS_PARA_PARAR fallos seguidos
 con el mismo motivo, las puntas del lote que esperan en la cola no se lanzan.
 
 Los fallos se provocan por el camino real: upload_queue._fail (la preparación) o _finalize_job_status +
