@@ -760,6 +760,28 @@ Hallazgos y maquetas: https://claude.ai/artifact/PjPRTxSfEs3Y8aVtXzN32i
   **Sin arreglar, a decidir:** ayudas de frase entera a 11 px (Configuración, Tareas, la primera configuración y las
   comprobaciones del resumen del lote), el nombre del torrent a 9 px en el asistente a 390 px y la caja interior de las tarjetas
   de Tareas. **Sin ver:** lector de pantalla y dispositivos reales. El informe queda en `.impeccable/audit/` (sin versionar).
+- **Revisión de diseño con `impeccable critique` (17/11):** Panel, asistente de subida y Biblioteca sobre la imagen 1.0.2 con datos
+  sembrados, con dos agentes aislados (revisión de diseño y detector) a 1440×900, 1280×800 y 390×844. Nota 28/40 en las heurísticas
+  de Nielsen (bueno, en el límite inferior); carga cognitiva moderada. Lo propio del producto se sostiene (el carril «Listo para
+  subir» por recompensa, el nombre final fijo en el asistente); lo flojo es el final del recorrido y la ficha de Biblioteca.
+  Descartados tras comprobarlos: Source en «— Seleccionar —» con el nombre en «Remux» y 1080p frente a 720p (salen de los datos
+  sembrados; la sincronización real escribe `BDRemux`). Hecho:
+  - P1, el veredicto del Resumen dice qué comprobación bloquea la subida (#296);
+  - P2, menos chapas en Biblioteca: en la ficha los datos van en texto con su icono y solo lo que se pulsa sigue en chapa; en la
+    lista, el verde de Estado y Español va en texto y la chapa queda para ámbar, rojo y la columna eMuwarez (este PR).
+
+  **Pendiente, por orden:**
+  - P2, el paso 1 del asistente pinta seis valores derivados (Año, Resolución, Temporada/Episodio, Códec, Audio, Subtítulos)
+    como `input disabled` al 50 % de opacidad: pasarlos a filas de solo lectura y dejar arriba los editables (Título, Source,
+    Tag). `asistente/PasoArchivo.tsx` y `PasoTemporada.tsx` (`/impeccable distill`);
+  - P2, en el móvil cada carril del Panel tiene su propio scroll al 70 % del alto (`panel.css`) y el nombre final del asistente
+    baja a 9 px con scroll horizontal (`FitText min=9`): carriles a su alto natural y nombre en varias líneas (`/impeccable adapt`);
+  - P3, «Todo en orden» del Panel no mira si eMuwarez o TMDb responden (`avisosDeAtencion` en `utils/hoy.ts`), así que con la
+    clave caducada tranquiliza y la subida se bloquea después (`/impeccable harden`);
+  - menores: «Panel» dos veces (barra superior y h1); las cifras de la franja no enlazan a su sección; la ruta solo se ve tras
+    «Ver ruta»; «ideas» en la barra de selección; tres líneas con una palabra suelta.
+
+  Los informes completos quedan en `.impeccable/critique/` (sin versionar); `/impeccable polish` los lee.
 
 ## Siguiente
 
