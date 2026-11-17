@@ -407,7 +407,7 @@ export function DashboardPage({ onNavigate }: DashboardPageProps = {}) {
 
       <BandaAtencion avisos={avisos} onVerSubida={goToUpload} onVerSubidas={() => onNavigate?.('uploads')} onVerAjustes={() => onNavigate?.('settings')} />
 
-      <Franja resumen={s} />
+      <Franja resumen={s} onIr={seccion => onNavigate?.(seccion)} />
     </div>
     </>
   )

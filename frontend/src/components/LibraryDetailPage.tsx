@@ -19,11 +19,10 @@ import {
   StatusCardIcon, TechInfoCardIcon, ExternalIdsCardIcon,
   TypeValueIcon, ResolutionValueIcon, SourceValueIcon, VideoCodecValueIcon,
   AudioCodecValueIcon, LanguageValueIcon, SubtitleValueIcon, SizeValueIcon,
-  FolderIcon, CalendarValueIcon,
+  CalendarValueIcon,
 } from './DetailCard'
 import { IconoTipo } from './Iconos'
 import { useCoincide } from '../hooks/useCoincide'
-import { Modal } from './Modal'
 
 // Full dedicated detail page (Radarr/Sonarr-style) — replaces the old small
 // modal and the large card. Rendered in place of the library list, with a
@@ -75,7 +74,6 @@ export function LibraryDetailPage({ item, instances, onBack, onSelect, onAction,
   // (episode -> season -> series) and offer a "back to …" button per ancestor.
   const [parentSeason, setParentSeason] = useState<LibraryItemResponse | null>(null)
   const [parentSeries, setParentSeries] = useState<LibraryItemResponse | null>(null)
-  const [showRuta, setShowRuta] = useState(false)
   // Pliega el póster y las tres tarjetas para que la tabla de temporadas o
   // capítulos se quede con ese alto: la tabla ya llena el hueco que le sobra
   // (LibraryChildrenSection), así que encoger esto la agranda sola.
@@ -271,9 +269,7 @@ export function LibraryDetailPage({ item, instances, onBack, onSelect, onAction,
                 </FieldRow>
               )}
               <FieldRow label="Ruta">
-                <ValueChip as="button" linkable onClick={() => setShowRuta(true)} title="Ver ruta completa">
-                  <span className="brand-icon"><FolderIcon /></span><span className="txt">Ver ruta</span>
-                </ValueChip>
+                <span className="bibdet-ruta" translate="no">{item.prepared_path || item.path || '—'}</span>
               </FieldRow>
               <FieldRow label="Actualizado">
                 <ValueChip><ValueIcon><CalendarValueIcon /></ValueIcon><span className="txt">{formatDate(item.updated_at)}</span></ValueChip>
@@ -286,13 +282,6 @@ export function LibraryDetailPage({ item, instances, onBack, onSelect, onAction,
       </div>
       </DetailHero>
 
-      {showRuta && (
-        <Modal titulo="Ruta" onClose={() => setShowRuta(false)} className="bibdet-modal-ruta">
-          <div className="modal-body">
-            <div className="bibdet-ruta">{item.prepared_path || item.path || '—'}</div>
-          </div>
-        </Modal>
-      )}
       </div>
 
       {item.item_type === 'series' && (

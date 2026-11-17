@@ -131,7 +131,7 @@ export function CarrilListo({ recomendaciones, error, onReintentar, onSubir, onV
       pie={seleccion?.activa && (
         <BarraLote
           className="lote-barra-carril" total={seleccion.total}
-          vacia="Marca las peticiones o ideas que quieras subir juntas"
+          vacia="Marca lo que quieras subir de una vez"
           textoSubir={`Subir seleccionadas (${seleccion.total})`}
           onSubir={seleccion.onSubir} onLimpiar={seleccion.onLimpiar}
         />

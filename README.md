@@ -108,7 +108,7 @@ qBittorrent, «Reenviar a qBittorrent» lo vuelve a añadir sin subir nada.
   puedes cubrir, por recompensa, con el grupo de release y los idiomas de cada copia; «Subir» abre el asistente sobre
   la petición. «En curso» enseña las subidas en marcha y las últimas terminadas. Una banda «Necesita atención» avisa
   si eMuwarez o TMDb dan error (una clave caducada, por ejemplo), de instancias caídas, subidas fallidas y versión
-  nueva.
+  nueva. Cada cifra de la franja de abajo lleva a su sección.
 - **Biblioteca**: películas y series de Radarr/Sonarr con su estado (Disponible, Faltante, Subiendo, Subido, Error) y
   si llevan castellano (Ambos, Audio, Subs, No). Cada fila lleva bajo el título una línea con el tipo, la resolución,
   el source, el proveedor, el códec y los idiomas, y el **grupo de release** a la derecha. Los filtros están en la

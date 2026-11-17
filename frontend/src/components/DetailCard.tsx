@@ -113,7 +113,7 @@ export function FieldRow({ label, children, help }: { label: string; children: R
 
 // The mini-card a field's VALUE sits in (not the label — that stays plain
 // text, see FieldRow above). `linkable` fields (has a real click/hover
-// action — a link or the "Ver ruta" button) light up their whole padded
+// action — a link or a button) light up their whole padded
 // area and turn the text accent-blue on hover, not just an inner element's
 // own tight hitbox; static fields (plain specs, badges) stay put.
 export function ValueChip({ children, linkable = false, as = 'span', onClick, title, blink }: {
@@ -403,13 +403,3 @@ export function LogsValueIcon() {
   )
 }
 
-// Filled brand-blue folder icon for "Ver ruta" — fixed color (not
-// currentColor): like Radarr/Sonarr/provider icons, it keeps its own color
-// on hover and only grows a touch (via .brand-icon in components.css).
-export function FolderIcon({ size = 15 }: { size?: number }) {
-  return (
-    <svg aria-hidden="true" width={size} height={size} viewBox="0 0 24 24" fill="#2cbde5">
-      <path d="M4 4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-8l-2-2H4z" />
-    </svg>
-  )
-}

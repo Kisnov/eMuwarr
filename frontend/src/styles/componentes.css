@@ -299,13 +299,15 @@
 .hover-link.bibdet-pet-emu { display: inline-flex; align-items: center; padding: 1px; border-radius: 3px; }
 .hover-link.bibdet-pet-ver:focus-visible,
 .hover-link.bibdet-pet-emu:focus-visible { outline-offset: -2px; }
-.modal-panel.bibdet-modal-ruta { width: max-content; max-width: calc(var(--vw100) * 0.9); min-width: 320px; }
+/* La ruta, en la ficha: baja bajo «Ruta» y se parte por los espacios antes que por cualquier sitio. */
 .bibdet-ruta {
+  display: block;
   font-family: var(--font-mono);
-  font-size: 13px;
+  font-size: 12px;
   color: var(--text-secondary);
-  word-break: break-all;
-  line-height: 1.6;
+  text-align: left;
+  overflow-wrap: anywhere;
+  text-wrap: pretty;
 }
 
 /* LargePosterCard */

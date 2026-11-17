@@ -132,6 +132,9 @@
 .stat-card:focus-visible {
   outline-offset: -4px;
 }
+/* La cifra que lleva a su sección. */
+.stat-card.stat-card-enlace { color: inherit; text-decoration: none; cursor: pointer; }
+.stat-card.stat-card-enlace:hover { border-color: var(--border-hover); }
 
 .stat-card-sub {
   font-size: 12px;

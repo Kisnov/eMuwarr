@@ -37,7 +37,7 @@ export const TOUR_STEPS: TourStep[] = [
     tab: 'dashboard',
     selector: '[data-tour="dashboard-stats"]',
     title: 'Tus números de un vistazo',
-    description: 'Cuánto tienes en biblioteca y en disco, cuánto contenido único queda por subir, las peticiones abiertas y tus subidas. El resto de cifras están en Estadísticas.',
+    description: 'Cuánto tienes en biblioteca y en disco, cuánto contenido único queda por subir, las peticiones abiertas y tus subidas; cada cifra lleva a su sección. El resto de cifras están en Estadísticas.',
   },
   {
     id: 'library',

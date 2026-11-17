@@ -1261,7 +1261,7 @@ input[type="checkbox"]:not([role="switch"]):disabled {
    its own small tile with a contextual icon in front. Fields that already
    carry their own link (ServiceLabel/ProviderTag/ExternalIdLink each render
    their own inner <a class="hover-link">, or a plain <button>/<a> IS the
-   chip itself — see "Ver ruta") get `.linkable`: the tile's whole padded
+   chip itself) get `.linkable`: the tile's whole padded
    area lights up and the text turns accent-blue on hover, not just the
    inner link's own tight hitbox. */
 .value-chip {

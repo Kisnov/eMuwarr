@@ -237,6 +237,10 @@ describe('Panel', () => {
     expect(tarjetas.map(c => (c.querySelector('.stat-card-icon') as HTMLElement).style.color))
       .toEqual(['', 'var(--color-available)', '', '', ''])
     expect(tarjetas.map(c => (c.querySelector('.stat-card-value') as HTMLElement).style.color)).toEqual(['', '', '', '', ''])
+    // Cada cifra lleva a su sección.
+    expect(tarjetas.map(c => c.getAttribute('href'))).toEqual(['/library', '/library', '/library', '/requests', '/uploads'])
+    await pulsar(tarjetas[3])
+    expect(navegar).toHaveBeenCalledWith('requests')
   })
 
   it('con tres peticiones o más no hay línea «Nada más listo», ni sin ninguna (ahí habla el estado vacío)', async () => {
@@ -823,7 +827,7 @@ describe('«Subir seleccionadas» en «Listo para subir»', () => {
     expect(casillas().map(c => c.getAttribute('aria-label'))).toEqual([
       'Seleccionar «Lost (2016) - Temporada 2»', 'Seleccionar «Única (2016)»', 'Seleccionar «Mejora (2002)»',
     ])
-    expect(texto()).toContain('Marca las peticiones o ideas que quieras subir juntas')
+    expect(texto()).toContain('Marca lo que quieras subir de una vez')
     expect(boton('Subir seleccionadas (0)')!.disabled).toBe(true)
     await pulsar(casilla('Lost (2016) - Temporada 2'))
     await pulsar(casilla('Mejora (2002)'))
