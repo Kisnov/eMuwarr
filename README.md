@@ -8,7 +8,7 @@
 [![Cobertura: Codecov](https://img.shields.io/badge/cobertura-Codecov-F01F7A?logo=codecov&logoColor=white)](https://app.codecov.io/gh/Kisnov/eMuwarr)
 [![Revisión: CodeRabbit](https://img.shields.io/badge/revisi%C3%B3n-CodeRabbit-FF570A)](https://coderabbit.ai)
 [![Dependabot](https://img.shields.io/badge/dependabot-activo-025E8C?logo=dependabot&logoColor=white)](.github/dependabot.yml)
-[![Imagen: ghcr.io](https://img.shields.io/badge/imagen-ghcr.io-2496ED?logo=docker&logoColor=white)](https://github.com/users/Kisnov/packages/container/package/emuwarez-uploadrr)
+[![Imagen: ghcr.io](https://img.shields.io/badge/imagen-ghcr.io-2496ED?logo=docker&logoColor=white)](https://github.com/users/Kisnov/packages/container/package/emuwarr)
 [![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-3776AB?logo=python&logoColor=white)](pyproject.toml)
 [![Node 26](https://img.shields.io/badge/node-26-5FA04E?logo=nodedotjs&logoColor=white)](frontend/package.json)
 
@@ -153,13 +153,13 @@ qBittorrent, «Reenviar a qBittorrent» lo vuelve a añadir sin subir nada.
 ## Arranque rápido (Docker Compose)
 
 Requiere Docker 24+ con Compose v2. No hace falta clonar el repo: copia esto en un `docker-compose.yml`, ajusta
-las rutas de los volúmenes y levántalo. Usa la imagen publicada en `ghcr.io/kisnov/emuwarez-uploadrr`, así que no
+las rutas de los volúmenes y levántalo. Usa la imagen publicada en `ghcr.io/kisnov/emuwarr`, así que no
 compila nada.
 
 ```yaml
 services:
   emuwarez-uploadrr:
-    image: ghcr.io/kisnov/emuwarez-uploadrr:${EMUWAREZ_UPLOADRR_TAG:-latest}
+    image: ghcr.io/kisnov/emuwarr:${EMUWAREZ_UPLOADRR_TAG:-latest}
     container_name: emuwarez-uploadrr
     restart: unless-stopped
     # Un init como proceso 1: recoge los procesos que quedan sueltos al cancelar una subida (ffmpeg, mkbrr...).
@@ -287,8 +287,8 @@ Sin minutos de CI, o para probar un commit, construye la imagen en tu equipo, gu
 pasar por el registro:
 
 ```bash
-git -c core.autocrlf=false archive HEAD | docker build -t ghcr.io/kisnov/emuwarez-uploadrr:edge   --build-arg UPLOADRR_COMMIT=$(git ls-remote https://github.com/Kisnov/Uploadrr-EMU.git main | cut -f1)   --build-arg APP_COMMIT=$(git rev-parse HEAD) -
-docker save ghcr.io/kisnov/emuwarez-uploadrr:edge | gzip > emuwarez-edge.tar.gz
+git -c core.autocrlf=false archive HEAD | docker build -t ghcr.io/kisnov/emuwarr:edge   --build-arg UPLOADRR_COMMIT=$(git ls-remote https://github.com/Kisnov/Uploadrr-EMU.git main | cut -f1)   --build-arg APP_COMMIT=$(git rev-parse HEAD) -
+docker save ghcr.io/kisnov/emuwarr:edge | gzip > emuwarez-edge.tar.gz
 # En el servidor: carga la imagen y recrea el contenedor sin descargar nada
 docker load -i emuwarez-edge.tar.gz && EMUWAREZ_UPLOADRR_TAG=edge docker compose up -d --pull never
 ```

@@ -198,7 +198,7 @@ jobs:
           echo "commit=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
           echo "fecha=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
           # Una versión se construye solo con su sha; :X.Y.Z, :latest y :edge llegan cuando master ya la tiene.
-          imagen=ghcr.io/kisnov/emuwarez-uploadrr
+          imagen=ghcr.io/kisnov/emuwarr
           if [ "$ACCION" = publicar ]; then
             echo "tags=$imagen:$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
           else
@@ -252,7 +252,7 @@ jobs:
           # Otra vez justo antes de mover las etiquetas: desde la primera comprobación pasó lo que tarda la imagen,
           # y pudo salir una versión más nueva (p. ej. con desplegar.sh). Así :latest y :edge no vuelven atrás.
           python3 scripts/publicar_version.py --solo-comprobar --notas "$NOTAS" --repo
-          imagen=ghcr.io/kisnov/emuwarez-uploadrr
+          imagen=ghcr.io/kisnov/emuwarr
           # Con ref no se mueve :edge: sigue siendo la punta de master.
           edge=(--tag "$imagen:edge"); [ -z "$REF" ] || edge=()
           docker buildx imagetools create --tag "$imagen:$VERSION" --tag "$imagen:latest" "${edge[@]}" "$imagen:$COMMIT"
