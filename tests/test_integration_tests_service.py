@@ -5,6 +5,7 @@ All HTTP calls are mocked — no real internet traffic.
 from __future__ import annotations
 
 from unittest.mock import patch
+from urllib.parse import urlsplit
 
 from tests.http_falso import falla_conexion, respuesta, tiempo_agotado
 
@@ -203,8 +204,7 @@ class TestEmuwarezConnection:
         http_falso.responde(_mock_response(200))
         result = svc_test_emu(api_key="key123")
         assert result["ok"] is True
-        called_url = str(http_falso.ultima.url)
-        assert "emu-warez.com" in called_url
+        assert urlsplit(str(http_falso.ultima.url)).hostname == "emu-warez.com"
 
     def test_full_key_never_in_response(self):
         import json
