@@ -97,7 +97,7 @@ def test_las_cabeceras_y_el_cuerpo_json_van_como_antes(http_falso):
     assert p.content == json.dumps(datos).encode("utf-8")  # el mismo json.dumps de siempre, byte a byte
     assert p.headers["Content-Type"] == "application/json"
     assert p.headers["Accept"] == "application/json"
-    assert p.headers["User-Agent"] == "emuwarez-uploadrr-cli/2"
+    assert p.headers["User-Agent"] == "emuwarr-cli/2"
     assert p.headers["X-Api-Key"] == "K"
     assert p.headers["X-Extra"] == "1"
 

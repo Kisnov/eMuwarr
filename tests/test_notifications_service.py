@@ -194,7 +194,7 @@ def test_las_peticiones_salen_igual_que_con_urllib():
     assert p.method == "POST" and str(p.url) == "https://discord.com/api/webhooks/123/abc"
     assert p.content == json.dumps({"content": "hola ñ"}).encode("utf-8")
     assert p.headers["Content-Type"] == "application/json"
-    assert p.headers["User-Agent"] == "emuwarez-uploadrr/3"
+    assert p.headers["User-Agent"] == "emuwarr/3"
     assert p.extensions["timeout"]["connect"] == 10
 
     with servidor_falso(_mock_response(200, b'{"ok": true}')) as servidor:

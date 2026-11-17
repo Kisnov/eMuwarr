@@ -77,7 +77,7 @@ describe('LoginPage', () => {
   it('el título es el h1 de la pantalla y el nombre de la marca no se traduce', async () => {
     await montar(<LoginPage onSuccess={vi.fn()} />)
     const h1 = document.querySelector('h1')!
-    expect(h1.textContent).toBe('eMuwarez Uploadrr')
+    expect(h1.textContent).toBe('eMuwarr')
     expect(h1.getAttribute('translate')).toBe('no')
   })
 })

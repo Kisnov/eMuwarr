@@ -129,7 +129,7 @@ function StepTitleIcon({ step }: { step: string }) {
   return null
 }
 
-// One-line "eMuwarez Uploadrr es una aplicación que:" cards on the welcome
+// One-line "eMuwarr es una aplicación que:" cards on the welcome
 // step — icon + a single line of text each, replacing the old plain bullet
 // list so the page reads at a glance instead of as a wall of text.
 function FeatureCard({ icon, text }: { icon: React.ReactNode; text: string }) {
@@ -556,7 +556,7 @@ export function SetupWizard({ setupStatus, onComplete }: SetupWizardProps) {
       <div className="setup-wizard">
         <div className="wizard-logo">
           <ServiceIcon type="emu" size={40} />
-          <h1 className="wizard-logo-title setup-mt-8" translate="no">eMuwarez Uploadrr</h1>
+          <h1 className="wizard-logo-title setup-mt-8" translate="no">eMuwarr</h1>
           <div className="wizard-logo-sub">Asistente de configuración inicial</div>
         </div>
 
@@ -575,7 +575,7 @@ export function SetupWizard({ setupStatus, onComplete }: SetupWizardProps) {
           {step === 'welcome' && (
             <>
               <div className="wizard-step-desc setup-mb-12">
-                eMuwarez Uploadrr es una aplicación que:
+                eMuwarr es una aplicación que:
               </div>
               <div className="wizard-feature-grid">
                 <FeatureCard icon={FEATURE_ICONS.sync} text="Gestiona y sincroniza tus bibliotecas de Radarr y Sonarr" />
@@ -769,7 +769,7 @@ export function SetupWizard({ setupStatus, onComplete }: SetupWizardProps) {
                 </div>
                 {instTestResult?.ok && instTestResult.details?.content_visible === false && (
                   <div role="alert" className="alert alert-error setup-mt-10">
-                    <IconoAviso /> La conexión funciona, pero eMuwarez Uploadrr <strong>no puede ver el contenido</strong> de
+                    <IconoAviso /> La conexión funciona, pero eMuwarr <strong>no puede ver el contenido</strong> de
                     esta instancia: sus carpetas raíz no están accesibles desde aquí (probablemente el volumen de
                     medios no está montado igual que en Radarr/Sonarr).
                     {Array.isArray(instTestResult.details?.root_folders) && (

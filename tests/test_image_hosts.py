@@ -211,7 +211,7 @@ def test_la_comprobacion_de_la_clave_sale_igual_que_con_urllib(http_falso):
     assert p.method == "POST" and str(p.url) == "https://api.imgbb.com/1/upload?key=clave%2Fbuena"
     assert p.content == b"" and p.headers["Content-Length"] == "0"
     assert p.headers["Content-Type"] == "application/x-www-form-urlencoded"
-    assert p.headers["User-Agent"] == "emuwarez-uploadrr/2"
+    assert p.headers["User-Agent"] == "emuwarr/2"
 
     ih.validate_image_host_key("lensdump", "clave")
     assert http_falso.ultima.headers["X-API-Key"] == "clave"
