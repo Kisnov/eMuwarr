@@ -117,9 +117,8 @@ export function elementosDeLista<T>(
 
 // Por qué una petición que tienes (o casi) aún no está lista, en pocas palabras para la lista: solo cuando aporta algo
 // que el grupo y la compatibilidad no dicen ya («Lista para subir» y «Sin copia» se explican solos). La ficha da el
-// texto entero de la preparación.
+// texto entero de la preparación. Sin preflight_needed: al subir, el asistente prepara el fichero él solo.
 const MOTIVOS_CORTOS: Record<string, string> = {
-  preflight_needed: 'Falta la comprobación',
   needs_nomenclature: 'Falta la nomenclatura',
   partially_available: 'Incompleta',
   spec_mismatch: 'No cumple lo pedido',
