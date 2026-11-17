@@ -348,6 +348,13 @@ los dos lados, cambia el otro a la vez.
 - Frontend: React + Vite + TypeScript, servido como estáticos por el backend.
 - Integraciones: Radarr, Sonarr, TMDb, eMuwarez (UNIT3D), Uploadrr-EMU, qBittorrent.
 
+## Reportar algo
+
+Abre un [issue](https://github.com/Kisnov/eMuwarr/issues/new/choose) con la plantilla de fallo o de sugerencia. Para
+un fallo, incluye la versión (Configuración → Diagnóstico → *Versión*), lo que hiciste, lo que esperabas y lo que
+pasó, y el log de la página **Logs** (con una captura si es algo visual). No pegues API keys, passkeys ni tokens. Un
+fallo de seguridad va por aviso privado, no en un issue: mira [`SECURITY.md`](SECURITY.md).
+
 ## Licencia
 
 Software libre bajo la [GNU General Public License v3.0](LICENSE) o posterior (GPL-3.0-or-later). Puedes usarlo,

@@ -1,0 +1,36 @@
+name: Fallo
+description: Algo no funciona como debería
+labels: [bug]
+body:
+  - type: input
+    id: version
+    attributes:
+      label: Versión
+      description: Configuración → Diagnóstico → Versión
+      placeholder: "1.0.2"
+    validations:
+      required: true
+  - type: textarea
+    id: pasos
+    attributes:
+      label: Qué hiciste
+      description: Los pasos para que vuelva a pasar
+    validations:
+      required: true
+  - type: textarea
+    id: esperado
+    attributes:
+      label: Qué esperabas y qué pasó
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: De la página Logs. Revisa que no quede ninguna clave antes de enviarlo.
+      render: text
+  - type: textarea
+    id: capturas
+    attributes:
+      label: Capturas
+      description: Arrastra aquí las imágenes si es algo visual

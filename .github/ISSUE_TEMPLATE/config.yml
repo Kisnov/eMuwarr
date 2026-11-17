@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Fallo de seguridad
+    url: https://github.com/Kisnov/eMuwarr/security/advisories/new
+    about: No lo publiques en un issue; usa el aviso privado (ver SECURITY.md).
