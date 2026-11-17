@@ -51,6 +51,8 @@ the upload with Uploadrr-EMU (`Kisnov/Uploadrr-EMU`, cloned into the image at `/
   frontend is not measured; the total is informational;
   needs the `CODECOV_TOKEN` secret). On pushes to `dev` CI runs the backend only; `bundle.yml`
   only builds the frontend on each push that touches `frontend/` (~40 s) so PRs have a bundle size to compare against.
+- `imagen-pr.yml` builds `ghcr.io/kisnov/emuwarr:pr-<n>` (amd64) for PRs from this repo's branches; `etiquetas.yml` labels
+  each PR by its branch prefix (`.github/labeler.yml`) and `.github/release.yml` groups the release notes by those labels.
 - `zizmor.yml` audits the workflows and `dependabot.yml` when `.github/` changes; run `zizmor --gh-token "$(gh auth token)" .` locally (without a token it skips online audits) before pushing a workflow edit.
 
 ## Not obvious
@@ -105,7 +107,8 @@ the upload with Uploadrr-EMU (`Kisnov/Uploadrr-EMU`, cloned into the image at `/
   `main` to it and pushes `vX.Y.Z` (all atomic), builds `:X.Y.Z`, `:<sha>`, `:latest` and `:dev`, publishes the manifest (secret
   `UPLOADRR_VERSION_TOKEN`) and creates the GitHub release with the PRs merged since the previous tag. Release when Gabriel asks: `gh workflow run publicar.yml -f notas="…"`, with a
   neutral public note. Every push to `dev` (except docs/`.md`-only) and `solo_prueba=true` build `:dev` from dev's tip only (no tests). `ref=<commit|branch|tag>` publishes that commit's version instead (no tests; the version commit and tag go to `release/vX.Y.Z`, to merge into dev afterwards; neither `main` nor `:dev` moves). `scripts/desplegar.sh` is
-  the local fallback (no Actions minutes, no tests) and pushes in the same order; `--solo-prueba` pushes only
+  the local fallback (no Actions minutes, no tests, amd64 only: a version published with it leaves `:latest` without
+  arm64, so prefer `publicar.yml`, which builds amd64 and arm64 via QEMU) and pushes in the same order; `--solo-prueba` pushes only
   `:dev`. Pass `--build-arg UPLOADRR_COMMIT=…` or
   the Uploadrr-EMU clone layer comes from cache.
 - Version manifest: the Diagnóstico card compares the image's `APP_COMMIT` with `latest.json` in the public

@@ -136,7 +136,7 @@ jobs:
       ((needs.decidir.outputs.accion == 'publicar' && (needs.tests.result == 'success' || (inputs.ref != '' && needs.tests.result == 'skipped'))) ||
        needs.decidir.outputs.accion == 'prueba')
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 90  # arm64 va por emulación
     permissions:
       contents: write
       packages: write
@@ -208,6 +208,12 @@ jobs:
             echo "tags=$imagen:dev" >> "$GITHUB_OUTPUT"
           fi
 
+      # arm64 por emulación: el frontend se compila en la plataforma nativa (--platform=$BUILDPLATFORM en el Dockerfile).
+      - uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
+        if: steps.version.outputs.hecha != 'true'
+        with:
+          platforms: arm64
+
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
         if: steps.version.outputs.hecha != 'true'
 
@@ -223,6 +229,7 @@ jobs:
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
+          platforms: linux/amd64,linux/arm64
           push: true
           tags: ${{ steps.sello.outputs.tags }}
           build-args: |
