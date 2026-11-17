@@ -191,7 +191,7 @@ export function AppShell({ user, onLogout }: AppShellProps) {
 
   // La pestaña del navegador dice dónde estás (historial, pestañas fijadas, lector de pantalla).
   useEffect(() => {
-    document.title = PAGE_TITLE[activePage] ? `${PAGE_TITLE[activePage]} · eMuwarez Uploadrr` : 'eMuwarez Uploadrr'
+    document.title = PAGE_TITLE[activePage] ? `${PAGE_TITLE[activePage]} · eMuwarr` : 'eMuwarr'
   }, [activePage])
 
   useEffect(() => {

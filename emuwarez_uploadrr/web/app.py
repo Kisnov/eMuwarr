@@ -1,4 +1,4 @@
-"""FastAPI application factory for eMuwarez Uploadrr web backend."""
+"""FastAPI application factory for eMuwarr web backend."""
 from __future__ import annotations
 
 import asyncio
@@ -142,7 +142,7 @@ async def _lifespan(app: FastAPI):
         _detener_procesos()
 
 _DESCRIPTION = """
-**eMuwarez Uploadrr** — backend web para cruzar biblioteca Radarr/Sonarr con
+**eMuwarr** — backend web para cruzar biblioteca Radarr/Sonarr con
 peticiones de eMuwarez, detectar compatibilidad, adaptar nomenclatura y subir
 contenido usando Uploadrr.
 
@@ -233,7 +233,7 @@ def create_app() -> FastAPI:
     _req_log = logging.getLogger("emuwarez.request")
 
     app = FastAPI(
-        title="eMuwarez Uploadrr",
+        title="eMuwarr",
         version=get_app_version(),
         description=_DESCRIPTION,
         docs_url="/api/docs",

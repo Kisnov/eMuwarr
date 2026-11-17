@@ -48,7 +48,7 @@ def seed_demo_data(
     media_path = Path(media_root) / "movies" / DEMO_FOLDER / DEMO_FILENAME
     media_path.parent.mkdir(parents=True, exist_ok=True)
     if not media_path.exists():
-        media_path.write_text("FAKE MKV DEMO — eMuwarez Uploadrr E2E test fixture\n")
+        media_path.write_text("FAKE MKV DEMO — eMuwarr E2E test fixture\n")
 
     Path(prepared_root).mkdir(parents=True, exist_ok=True)
 

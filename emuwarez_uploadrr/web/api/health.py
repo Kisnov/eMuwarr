@@ -32,7 +32,7 @@ def health(response: Response) -> HealthResponse:
         response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
     return HealthResponse(
         status="ok" if db_ok else "error",
-        app="eMuwarez Uploadrr",
+        app="eMuwarr",
         version=get_app_version(),
         database="ok" if db_ok else "error",
         initialized=initialized,

@@ -1,4 +1,4 @@
-"""Web backend package for eMuwarez Uploadrr.
+"""Web backend package for eMuwarr.
 
 Install web dependencies:
     pip install -e ".[web]"

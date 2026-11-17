@@ -109,7 +109,7 @@ def cmd_web_reset_password(args) -> int:
 def cmd_web_info() -> int:
     print(
         "Backend: FastAPI\n"
-        "App: eMuwarez Uploadrr\n"
+        "App: eMuwarr\n"
         "Backend URL:    http://localhost:9494\n"
         "Frontend dev:   http://localhost:5173\n"
         "\n"
@@ -162,7 +162,7 @@ def cmd_web_info() -> int:
         "  pip install -e \".[web]\"\n"
         "\n"
         "── Docker ───────────────────────────────────────────\n"
-        "  Build:    docker build -t emuwarez-uploadrr:local .\n"
+        "  Build:    docker build -t emuwarr:local .\n"
         "  Compose:  docker compose -f docker-compose.example.yml up -d --build\n"
         "  URL:      http://localhost:9494\n"
         "  Config:   /config  (montar como volumen persistente)\n"

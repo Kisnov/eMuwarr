@@ -68,7 +68,7 @@ export function LoginPage({ onSuccess }: LoginPageProps) {
       <div className="login-card">
         <div className="login-logo">
           <ServiceIcon type="emu" size={40} />
-          <h1 className="login-title login-titulo-mt" translate="no">eMuwarez Uploadrr</h1>
+          <h1 className="login-title login-titulo-mt" translate="no">eMuwarr</h1>
           <div className="login-sub">Inicia sesión para continuar</div>
         </div>
         <form onSubmit={handleSubmit} className="login-fields" autoComplete="on" noValidate>
