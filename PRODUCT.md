@@ -46,7 +46,7 @@ trabaja sobre la biblioteca real del NAS sin renombrarla ni reescribirla.
 
 ## Brand Commitments
 
-- Nombre: eMuwarez Uploadrr.
+- Nombre: eMuwarr.
 - Voz: directa y técnica, de tú, frases cortas, con la jerga del tracker (release, pack, trump, seeding) sin explicarla.
 
 ## Evidence on Hand

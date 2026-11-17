@@ -1,4 +1,4 @@
-# eMuwarez Uploadrr
+# eMuwarr
 
 [![CI](https://github.com/Kisnov/eMuwarr/actions/workflows/ci.yml/badge.svg)](https://github.com/Kisnov/eMuwarr/actions/workflows/ci.yml)
 [![Publicar versión](https://github.com/Kisnov/eMuwarr/actions/workflows/publicar.yml/badge.svg)](https://github.com/Kisnov/eMuwarr/actions/workflows/publicar.yml)
@@ -158,9 +158,9 @@ compila nada.
 
 ```yaml
 services:
-  emuwarez-uploadrr:
+  emuwarr:
     image: ghcr.io/kisnov/emuwarr:${EMUWAREZ_UPLOADRR_TAG:-latest}
-    container_name: emuwarez-uploadrr
+    container_name: emuwarr
     restart: unless-stopped
     # Un init como proceso 1: recoge los procesos que quedan sueltos al cancelar una subida (ffmpeg, mkbrr...).
     init: true
@@ -194,7 +194,7 @@ services:
     volumes:
       # Configuración persistente: base de datos SQLite, settings, y el
       # config.yaml/temporales de Uploadrr-EMU (bajo /config/Uploadrr).
-      - /srv/emuwarez-uploadrr/config:/config
+      - /srv/emuwarr/config:/config
 
       # Raíz de datos compartida: media de Radarr/Sonarr y carpeta de subidas.
       - /srv/data:/data
@@ -360,3 +360,9 @@ fallo de seguridad va por aviso privado, no en un issue: mira [`SECURITY.md`](SE
 Software libre bajo la [GNU General Public License v3.0](LICENSE) o posterior (GPL-3.0-or-later). Puedes usarlo,
 estudiarlo, modificarlo y redistribuirlo; si distribuyes una versión modificada, tiene que seguir siendo GPL y con el
 código disponible. Va sin garantía de ningún tipo.
+
+## Agradecimientos
+
+eMuwarr parte de eMuwarez Uploadrr, el proyecto original de Alvaro (Rovaal-code). Él creó la aplicación sobre la que
+se ha construido todo lo demás y dio permiso para publicarla como software libre. Gracias, Alvaro: sin tu trabajo
+esto no existiría.

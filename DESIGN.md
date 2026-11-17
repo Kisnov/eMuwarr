@@ -1,5 +1,5 @@
 ---
-name: eMuwarez Uploadrr
+name: eMuwarr
 description: Consola nocturna para subir la biblioteca del NAS a eMuwarez
 colors:
   base-night: "#0a0d14"
@@ -94,7 +94,7 @@ components:
     rounded: "{rounded.small}"
 ---
 
-# Design System: eMuwarez Uploadrr
+# Design System: eMuwarr
 
 ## Overview
 

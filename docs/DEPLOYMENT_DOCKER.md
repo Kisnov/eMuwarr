@@ -1,6 +1,6 @@
 # Despliegue con Docker
 
-Cómo desplegar eMuwarez Uploadrr con Docker Compose en un servidor o NAS, y qué mirar cuando algo falla. El
+Cómo desplegar eMuwarr con Docker Compose en un servidor o NAS, y qué mirar cuando algo falla. El
 [README](../README.md) tiene el arranque rápido; aquí está el porqué de cada ruta y cada permiso.
 
 ## 1. Qué necesitas
@@ -18,7 +18,7 @@ Es lo único delicado del despliegue. El contenedor trabaja con tres:
 
 | En el contenedor | En el host (ejemplo) | Qué hay |
 |---|---|---|
-| `/config` | `/srv/emuwarez-uploadrr/config` | Base de datos SQLite, ajustes, backups (`/config/backups`) y el estado de Uploadrr-EMU (`/config/Uploadrr`). |
+| `/config` | `/srv/emuwarr/config` | Base de datos SQLite, ajustes, backups (`/config/backups`) y el estado de Uploadrr-EMU (`/config/Uploadrr`). |
 | `/data` | `/srv/data` | Raíz común: la media de Radarr/Sonarr (`/data/media`) y la carpeta de subidas. |
 | `/data/uploads/emu` | `/srv/data/uploads/emu` | Carpeta de subidas, la que indica `UPLOADRR_UPLOADS_DIR`. |
 
@@ -68,8 +68,8 @@ biblioteca nunca se toca.
 # UID y GID del dueño de la media: son tu PUID y PGID (van también al .env)
 PUID=$(id -u tu_usuario) PGID=$(id -g tu_usuario)
 
-mkdir -p /srv/emuwarez-uploadrr/config /srv/data/uploads/emu
-chown "$PUID:$PGID" /srv/emuwarez-uploadrr/config /srv/data/uploads/emu
+mkdir -p /srv/emuwarr/config /srv/data/uploads/emu
+chown "$PUID:$PGID" /srv/emuwarr/config /srv/data/uploads/emu
 ```
 
 El contenedor corre directamente como `PUID:PGID` (la clave `user:` del compose), sin pasar por root, así que no
@@ -93,7 +93,7 @@ no compila nada. Lo que hay que mirar:
 | `TZ` | `Europe/Madrid` | Zona horaria. |
 | `CONFIG_DIR` | `/config` | Dónde vive la configuración. No lo cambies. |
 | `UPLOADRR_UPLOADS_DIR` | `/data/uploads/emu` | Carpeta de subidas (sección 2). |
-| `volumes` | `/srv/emuwarez-uploadrr/config:/config` y `/srv/data:/data` | Cambia la parte del host por tus rutas. |
+| `volumes` | `/srv/emuwarr/config:/config` y `/srv/data:/data` | Cambia la parte del host por tus rutas. |
 
 Si Radarr, Sonarr y qBittorrent corren en Docker, descomenta `networks` y pon el contenedor en su misma red: así
 los alcanzas por el nombre del servicio (`http://radarr:7878`).
@@ -218,8 +218,8 @@ ficheros, por ejemplo para pasar la instalación a otra máquina; al restaurarlo
 tengas. Guárdalo donde guardarías esas claves.
 
 ```bash
-docker exec emuwarez-uploadrr python3 emuwarez_uploader.py maintenance backup
-docker exec emuwarez-uploadrr python3 emuwarez_uploader.py maintenance backup --include-secrets --confirm RESTAURAR_CONFIG
+docker exec emuwarr python3 emuwarez_uploader.py maintenance backup
+docker exec emuwarr python3 emuwarez_uploader.py maintenance backup --include-secrets --confirm RESTAURAR_CONFIG
 ```
 
 ## 9. Problemas frecuentes
@@ -227,14 +227,14 @@ docker exec emuwarez-uploadrr python3 emuwarez_uploader.py maintenance backup --
 ### El contenedor se para nada más arrancar
 
 ```bash
-docker logs emuwarez-uploadrr
+docker logs emuwarr
 ```
 
 Si sale `mkdir: cannot create directory ‘/config/Uploadrr’: Permission denied`, el `PUID:PGID` del contenedor no
 puede escribir en `/config`. Arréglalo en el host y vuelve a arrancar:
 
 ```bash
-chown -R "$PUID:$PGID" /srv/emuwarez-uploadrr/config   # los de la sección 3
+chown -R "$PUID:$PGID" /srv/emuwarr/config   # los de la sección 3
 docker compose up -d
 ```
 
@@ -282,8 +282,8 @@ Es `/opt/Uploadrr/tmp`, que apunta a `/config/Uploadrr/tmp`. Comprueba que los e
 del `PUID:PGID`:
 
 ```bash
-docker exec emuwarez-uploadrr ls -la /opt/Uploadrr /opt/Uploadrr/data
-ls -la /srv/emuwarez-uploadrr/config/Uploadrr
+docker exec emuwarr ls -la /opt/Uploadrr /opt/Uploadrr/data
+ls -la /srv/emuwarr/config/Uploadrr
 ```
 
 `tmp` tiene que verse como enlace a `/config/Uploadrr/tmp`, y `config.yaml`, `config.yaml.bak` y `cookies` de `data`
@@ -293,7 +293,7 @@ como enlaces a `/config/Uploadrr/data/...`.
 
 - Con la imagen publicada, vuelve a bajarla: `docker compose pull && docker compose up -d`.
 - Si la construyes tú, comprueba que el frontend llegó a la imagen:
-  `docker exec emuwarez-uploadrr ls /app/frontend/dist/` tiene que mostrar `index.html` y `assets`. Si no, la
+  `docker exec emuwarr ls /app/frontend/dist/` tiene que mostrar `index.html` y `assets`. Si no, la
   compilación del frontend falló: reconstruye y mira la salida de `npm run build`.
 - Detrás de un proxy inverso, sírvela en la raíz de un dominio o subdominio. El frontend pide sus ficheros a
   `/assets/…`, así que en una subruta (`https://servidor/emuwarez/`) la página sale en blanco.
@@ -318,22 +318,22 @@ No pongas `*` si la app también es accesible sin pasar por el proxy: cualquiera
 Git ha convertido `docker-entrypoint.sh` a finales de línea CRLF. Construye desde una copia con LF:
 
 ```bash
-git -c core.autocrlf=false archive HEAD | docker build -t emuwarez-uploadrr:local -
+git -c core.autocrlf=false archive HEAD | docker build -t emuwarr:local -
 docker compose -f docker-compose.example.yml up -d
 ```
 
 ### He olvidado la contraseña
 
 ```bash
-docker exec -it emuwarez-uploadrr python3 emuwarez_uploader.py web reset-password --username admin
+docker exec -it emuwarr python3 emuwarez_uploader.py web reset-password --username admin
 ```
 
 ## 10. Diagnóstico
 
 ```bash
-docker logs emuwarez-uploadrr --tail 50
-docker exec emuwarez-uploadrr python3 emuwarez_uploader.py web doctor
-docker exec emuwarez-uploadrr python3 emuwarez_uploader.py web setup-status
+docker logs emuwarr --tail 50
+docker exec emuwarr python3 emuwarez_uploader.py web doctor
+docker exec emuwarr python3 emuwarez_uploader.py web setup-status
 ```
 
 `web doctor` revisa que `/config` sea escribible, la base de datos, el frontend, Uploadrr-EMU, las rutas permitidas,
@@ -363,7 +363,7 @@ Homepage manda la clave en una cabecera (`headers` del widget); la app acepta `X
 En el `services.yaml` de Homepage (cambia el host y el puerto por los de tu app y pega tu clave):
 
 ```yaml
-- eMuwarez Uploadrr:
+- eMuwarr:
     icon: mdi-upload
     href: http://192.168.1.10:9494
     widget:

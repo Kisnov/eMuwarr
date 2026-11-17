@@ -1,4 +1,4 @@
-# emuwarez-uploadrr
+# eMuwarr
 
 Self-hosted web app: FastAPI + SQLite backend (`emuwarez_uploadrr/`) and React + Vite + TypeScript frontend
 (`frontend/`, served as static files). It syncs Radarr/Sonarr, cross-checks eMuwarez (UNIT3D tracker,

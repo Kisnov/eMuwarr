@@ -3,7 +3,7 @@
 Generada con `python3 scripts/referencia_cli.py` a partir de `build_parser()`: no se edita a mano.
 
 ```bash
-docker exec emuwarez-uploadrr python3 emuwarez_uploader.py <comando>
+docker exec emuwarr python3 emuwarez_uploader.py <comando>
 ```
 
 Sin Docker, `python3 emuwarez_uploader.py <comando>`. La opción global `--db RUTA` elige otra base SQLite.

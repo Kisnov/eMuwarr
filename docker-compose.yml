@@ -32,9 +32,9 @@
 #    desde Configuración. No las pongas en este fichero ni en .env.
 
 services:
-  emuwarez-uploadrr:
+  emuwarr:
     image: ghcr.io/kisnov/emuwarr:${EMUWAREZ_UPLOADRR_TAG:-latest}
-    container_name: emuwarez-uploadrr
+    container_name: emuwarr
     restart: unless-stopped
     # Un init como proceso 1: recoge los procesos que quedan sueltos al cancelar una subida (ffmpeg, mkbrr...).
     init: true
@@ -65,7 +65,7 @@ services:
     volumes:
       # Configuración persistente: base de datos SQLite, settings, y el
       # config.yaml/temporales de Uploadrr-EMU (bajo /config/Uploadrr).
-      - /srv/emuwarez-uploadrr/config:/config
+      - /srv/emuwarr/config:/config
 
       # Raíz de datos compartida: media de Radarr/Sonarr y carpeta de subidas.
       - /srv/data:/data
