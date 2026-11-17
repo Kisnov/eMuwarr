@@ -9,7 +9,7 @@ the upload with Uploadrr-EMU (`Kisnov/Uploadrr-EMU`, cloned into the image at `/
 
 - Sole maintainer: Gabriel (Kisnov). Main repo `Kisnov/eMuwarr`, base `master`. It started as a private fork of
   Rovaal-code's project (abandoned; Alvaro gave permission to publish it under the GPL); the history was moved here
-  without the fork link and with his commit e-mail replaced. The image keeps its old name, `emuwarez-uploadrr`.
+  without the fork link and with his commit e-mail replaced. The image moved with it to `ghcr.io/kisnov/emuwarr` (the old `emuwarez-uploadrr` package is retired).
 - Docs-only changes and very simple fixes go straight to `master` as a commit, no PR. Everything else: branch and
   PR. Group related changes: no PR per one-line fix. Open PRs as non-draft so CodeRabbit reviews them; its standing
   rules per path live in `.coderabbit.yaml`.
@@ -96,7 +96,7 @@ the upload with Uploadrr-EMU (`Kisnov/Uploadrr-EMU`, cloned into the image at `/
   Uploadrr-EMU only re-adds that eMuwarez torrent to qBittorrent, exits 0 only if it was added and never prints `Torrent URL:`.
 - eMuwarez and TMDb keys travel in the URL query. Never log or return a raw URL: use
   `integrations.base.url_sin_claves`.
-- Image: `ghcr.io/kisnov/emuwarez-uploadrr`, built only when a version is published. `publicar.yml` ("Publicar
+- Image: `ghcr.io/kisnov/emuwarr`, built only when a version is published. `publicar.yml` ("Publicar
   versión": by hand, or on odd days of the month when 3+ PRs from `feat/` or `fix/` branches (merge commits, or `feat:`/`fix:` squash
   commits) merged since the last `__version__` change) runs
   the full CI on master's tip, bumps `__version__` (`auto`: minor if any `feat/` PR, else patch), pushes that commit

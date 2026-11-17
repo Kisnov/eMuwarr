@@ -32,7 +32,7 @@
 # Necesita `gh auth login` hecho, para publicar la versión.
 set -euo pipefail
 
-IMAGEN="ghcr.io/kisnov/emuwarez-uploadrr"
+IMAGEN="ghcr.io/kisnov/emuwarr"
 FORK="https://github.com/Kisnov/Uploadrr-EMU.git"
 RAIZ="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # En Git Bash de Windows no hay python3.

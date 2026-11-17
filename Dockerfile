@@ -15,6 +15,7 @@ FROM python:3.12-slim AS runtime
 
 LABEL org.opencontainers.image.title="eMuwarez Uploadrr"
 LABEL org.opencontainers.image.description="Upload manager for eMuwarez with Radarr/Sonarr integration"
+LABEL org.opencontainers.image.source="https://github.com/Kisnov/eMuwarr"
 
 # System dependencies. mediainfo/ffmpeg/mktorrent are needed by the bundled
 # Uploadrr-EMU (mediainfo also by our own nomenclature); mkvtoolnix (mkvmerge)
