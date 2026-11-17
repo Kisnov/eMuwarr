@@ -10,7 +10,7 @@ from typing import Any, Optional
 
 from ..services.filesystem_safety import safe_stat, VIDEO_EXTENSIONS
 from .path_mapping import get_path_mappings
-from ..integrations.base import texto_de_error
+from ..integrations.base import error_inesperado
 
 # Los ficheros que mira una petición como mucho: cada uno es un stat al disco, y con el NAS dormido son segundos.
 MAX_VERIFICACION = 2000
@@ -55,7 +55,7 @@ def _inspeccionar(
         elif stat["extension"] and stat["extension"] not in VIDEO_EXTENSIONS:
             result["file_verification_error"] = f"extensión no reconocida como vídeo: {stat['extension']}"
     except Exception as exc:
-        result["file_verification_error"] = f"error al inspeccionar: {texto_de_error(exc)}"
+        result["file_verification_error"] = error_inesperado(exc, "error al inspeccionar")
 
     return result
 

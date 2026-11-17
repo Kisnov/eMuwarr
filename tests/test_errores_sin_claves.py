@@ -14,7 +14,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from emuwarez_uploadrr.database import connect, db_path, init_db
-from emuwarez_uploadrr.integrations.base import IntegrationError, tapar_claves, texto_de_error
+from emuwarez_uploadrr.integrations.base import IntegrationError, error_inesperado, tapar_claves, texto_de_error
 from tests.http_falso import falla_conexion
 
 SECRETO = "SECRETO-no-debe-salir"
@@ -65,6 +65,18 @@ def test_texto_de_error_taparia_la_url_de_una_excepcion():
     assert texto_de_error(ValueError("Ya existe una instancia")) == "Ya existe una instancia"
 
 
+def test_un_error_inesperado_solo_deja_su_texto_en_el_log(client, caplog):
+    # `client` ya creó la app, que instala el tapado de claves en los registros.
+    caplog.set_level(logging.DEBUG)
+    try:
+        raise RuntimeError(f"no such table: x en {URL_CON_CLAVE}")
+    except RuntimeError as exc:
+        texto = error_inesperado(exc, "No se pudo leer la base")
+    assert texto == "No se pudo leer la base: error inesperado (el detalle está en los logs)"
+    assert "no such table: x" in caplog.text
+    assert SECRETO not in caplog.text
+
+
 # ---------------------------------------------------------------------------
 # El log
 # ---------------------------------------------------------------------------
@@ -103,7 +115,8 @@ def test_el_500_generico_no_devuelve_ni_registra_la_url(client, auth_headers, ca
     assert resp.status_code == 500
     cuerpo = resp.json()
     assert cuerpo["error"] == "Internal server error"
-    assert cuerpo["detail"] == "fallo en https://host/x?apikey=***"
+    assert cuerpo["detail"] == "Error interno: el detalle está en los logs"
+    assert "fallo en" not in resp.text
     _limpio(resp, caplog)
     assert "EXCEPCIÓN" in caplog.text  # el fallo sí queda en el log, solo que sin la clave
 

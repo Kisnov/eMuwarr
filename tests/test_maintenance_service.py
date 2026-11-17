@@ -131,3 +131,19 @@ def test_vacuum_counts_the_wal_in_freed_bytes(db_config):
         app.close()
     assert result["ok"] is True
     assert result["bytes_saved"] >= 0
+
+
+@pytest.mark.parametrize("operacion", [
+    get_database_maintenance_status,
+    run_database_integrity_check,
+    lambda: run_database_vacuum(dry_run=False, apply=True, confirmation=VACUUM_CONFIRMATION),
+])
+def test_un_fallo_de_sqlite_no_devuelve_su_texto(db_config, monkeypatch, operacion):
+    def falla(*_a, **_k):
+        raise sqlite3.OperationalError("disk I/O error en /config/emuwarez_uploadrr.db")
+
+    monkeypatch.setattr(sqlite3, "connect", falla)
+    result = operacion()
+    assert result["ok"] is False
+    assert result["error"].endswith("error inesperado (el detalle está en los logs)")
+    assert "disk I/O" not in result["error"]
