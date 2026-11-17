@@ -53,6 +53,19 @@ def test_dockerfile_npm_ci_sin_alternativa_y_nada_de_uploadrr_escribible():
     assert "chmod 1777 /opt/Uploadrr/data" in DOCKERFILE
 
 
+def test_uploadrr_emu_sale_de_este_repo_y_no_de_un_clon():
+    """La imagen lleva el uploadrr-emu/ del mismo commit: nada de clonarlo ni de pasarle su commit."""
+    assert "COPY uploadrr-emu/ /opt/Uploadrr/" in DOCKERFILE
+    assert "git clone" not in DOCKERFILE
+    for fichero in [*WORKFLOWS.glob("*.yml"), RAIZ / "scripts" / "desplegar.sh"]:
+        texto = fichero.read_text(encoding="utf-8")
+        assert "UPLOADRR_COMMIT" not in texto and "Uploadrr-EMU.git" not in texto, fichero.name
+    # Ni la configuración local de quien construye (claves, cookies) ni los tests entran en la imagen.
+    ignorado = (RAIZ / ".dockerignore").read_text(encoding="utf-8").splitlines()
+    for patron in ("uploadrr-emu/data/config.yaml*", "uploadrr-emu/data/cookies/*", "uploadrr-emu/tests/"):
+        assert patron in ignorado
+
+
 def test_node_26_en_la_imagen_y_en_los_workflows():
     assert "FROM --platform=$BUILDPLATFORM node:26-alpine AS frontend-builder" in DOCKERFILE
     for nombre in ("ci.yml", "bundle.yml"):

@@ -19,15 +19,14 @@ LABEL org.opencontainers.image.source="https://github.com/Kisnov/eMuwarr"
 
 # System dependencies. mediainfo/ffmpeg/mktorrent are needed by the bundled
 # Uploadrr-EMU (mediainfo also by our own nomenclature); mkvtoolnix (mkvmerge)
-# is what our own nomenclature uses to reorder/rename tracks; git is used to
-# fetch the Uploadrr-EMU fork at build time. These same three (mediainfo,
+# is what our own nomenclature uses to reorder/rename tracks. These same three (mediainfo,
 # ffmpeg's ffprobe, mkvtoolnix's mkvmerge) are also the whole toolset behind
 # services/source_engine (see docs/source_engine.md) — no extra package
 # needed for it.
 # mesa-vulkan-drivers: Vulkan por CPU para el libplacebo de ffmpeg, con el que Uploadrr-EMU saca las capturas de
 # un Dolby Vision perfil 5.
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    mediainfo ffmpeg mktorrent mkvtoolnix git mesa-vulkan-drivers \
+    mediainfo ffmpeg mktorrent mkvtoolnix mesa-vulkan-drivers \
     && rm -rf /var/lib/apt/lists/*
 
 # mkbrr: Uploadrr-EMU crea el .torrent con él si está en el PATH (si no, con torf).
@@ -67,33 +66,13 @@ RUN python -c "import tomllib; print(*tomllib.load(open('pyproject.toml', 'rb'))
 # they already have. The rest of data/ (services.json, tags.json, templates...)
 # stays real in the image: a new image updates it.
 #
-# Cloned from our own fork (Kisnov/Uploadrr-EMU on GitHub, not the public
-# codeberg.org/ccx94/Uploadrr-EMU upstream) so the image ships our local
-# patches — Spanish trailer preference, trailer on TV/anime too, and our own
-# signature instead of Uploadrr's default branding — instead of a clean
-# upstream checkout that silently drops all of that on a fresh deploy. The
-# fork is public, so the build needs no token.
-#
-# Cache-busting: Docker's layer cache keys a RUN step on its literal command
-# text, not on what the command actually fetches from the network — a plain
-# `git clone` here would silently keep reusing a stale checkout on every
-# rebuild forever, even after new commits land on the fork's main branch
-# (confirmed happened across several previous deploys in this project: the
-# clone step showed CACHED and shipped stale Uploadrr-EMU code despite fresh
-# fixes already pushed to the fork). Passing the fork's current commit SHA as
-# a build arg makes THIS layer's cache key include it, so it only re-clones
-# when the fork actually has new commits — pass
-# `--build-arg UPLOADRR_COMMIT=$(git ls-remote https://github.com/Kisnov/Uploadrr-EMU.git main | cut -f1)`
-# at build time. If omitted it stays "unknown", which can reuse a cached
-# clone: pass a current UPLOADRR_COMMIT or build with `--no-cache`.
+# Uploadrr-EMU vive en este mismo repo (uploadrr-emu/): la imagen lleva el código del mismo commit que la app.
 # Uploadrr-EMU no versiona data/config.yaml: el entrypoint lo crea en /config desde su ejemplo la primera vez.
-ARG UPLOADRR_COMMIT=unknown
-RUN echo "Uploadrr-EMU @ ${UPLOADRR_COMMIT}" \
-    && git clone --depth 1 https://github.com/Kisnov/Uploadrr-EMU.git /opt/Uploadrr \
-    && if [ "${UPLOADRR_COMMIT}" != unknown ]; then \
-         git -C /opt/Uploadrr fetch -q --depth 1 origin "${UPLOADRR_COMMIT}" && git -C /opt/Uploadrr checkout -q FETCH_HEAD; fi \
-    && pip install --no-cache-dir -r /opt/Uploadrr/requirements.txt \
-    && rm -rf /opt/Uploadrr/.git /opt/Uploadrr/data/cookies /opt/Uploadrr/tmp \
+# Sus dependencias antes que su código: un cambio en uploadrr-emu/ no las reinstala.
+COPY uploadrr-emu/requirements.txt /tmp/uploadrr-requirements.txt
+RUN pip install --no-cache-dir -r /tmp/uploadrr-requirements.txt && rm /tmp/uploadrr-requirements.txt
+COPY uploadrr-emu/ /opt/Uploadrr/
+RUN rm -rf /opt/Uploadrr/data/cookies /opt/Uploadrr/tmp \
     && ln -sf /config/Uploadrr/data/config.yaml /opt/Uploadrr/data/config.yaml \
     && ln -sf /config/Uploadrr/data/config.yaml.bak /opt/Uploadrr/data/config.yaml.bak \
     && ln -s /config/Uploadrr/data/cookies /opt/Uploadrr/data/cookies \

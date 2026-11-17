@@ -1,0 +1,259 @@
+"""Línea de órdenes (src/args.py): del argv de upload.py al meta de cada elemento."""
+from __future__ import annotations
+
+import datetime
+
+import pytest
+
+from src.args import apply_special_logic, build_parser, enforce_global_only, group_args_by_path, normalize_args
+
+
+def _meta(argv, config=None):
+    parser = build_parser(config or {})
+    return apply_special_logic(normalize_args(parser.parse_args(argv)))
+
+
+@pytest.mark.parametrize(
+    ("extra", "esperado"),
+    [
+        (["-c", "movie", "-res", "1080p", "-t", "remux"], {"category": "MOVIE", "resolution": "1080p", "manual_type": "remux"}),
+        (["-c", "tv", "-season", "S00", "-episode", "E02"], {"category": "TV", "manual_season": "S00", "manual_episode": "E02"}),
+    ],
+)
+def test_el_argv_de_emuwarez_uploadrr_llega_al_meta(tmp_path, extra, esperado):
+    # El mismo orden que build_uploadrr_emu_command en emuwarez-uploadrr.
+    video = tmp_path / "Peli.mkv"
+    video.write_bytes(b"")
+    nombre = "Peli 2020 1080p BluRay REMUX-GRP"
+    argv = [str(video), "-tk", "EMU", "-mt", nombre, "-tmdb", "123", "-ua", *extra]
+
+    items, global_argv = group_args_by_path(argv)
+    parser = build_parser({})
+    ns = parser.parse_args(global_argv)
+    enforce_global_only(ns, is_global=True, parser=parser)
+    meta = apply_special_logic(normalize_args(ns))
+
+    assert items == [([], str(video.resolve()))]
+    assert meta["trackers"] == ["EMU"]
+    assert meta["manual_name"] == nombre
+    assert meta["tmdb_manual"] == "123"
+    assert meta["unattended"] is True
+    assert esperado.items() <= meta.items()
+    assert meta.get("season") is None and meta.get("episode") is None
+
+
+def test_solo_cliente_lleva_el_id_y_conserva_tmp_como_resume(tmp_path):
+    video = tmp_path / "Peli.mkv"
+    video.write_bytes(b"")
+    # Lo que añade emuwarez-uploadrr al argv de siempre.
+    items, global_argv = group_args_by_path([str(video), "-tk", "EMU", "-ua", "--resume", "-sc", "123"])
+    meta = apply_special_logic(normalize_args(build_parser({}).parse_args(global_argv)))
+
+    assert items == [([], str(video.resolve()))]
+    assert meta["solo_cliente"] == 123 and meta["resume"] is True
+    assert _meta(["--solo-cliente", "7"])["resume"] is True  # sin --resume tampoco se borra tmp/<uuid>
+    assert _meta([])["solo_cliente"] is None and _meta([])["resume"] is False
+
+
+def test_las_banderas_antes_de_una_ruta_son_de_esa_ruta(tmp_path):
+    a, b = tmp_path / "a.mkv", tmp_path / "b.mkv"
+    a.write_bytes(b"")
+    b.write_bytes(b"")
+
+    items, global_argv = group_args_by_path(["-s", "4", str(a), str(b), "-tk", "EMU"])
+
+    assert items == [(["-s", "4"], str(a.resolve())), ([], str(b.resolve()))]
+    assert global_argv == ["-tk", "EMU"]
+
+
+def test_tras_el_separador_todo_son_rutas(tmp_path):
+    a = tmp_path / "a.mkv"
+    a.write_bytes(b"")
+
+    items, global_argv = group_args_by_path(["-s", "4", "--", str(a), str(tmp_path / "no-existe.mkv")])
+
+    assert items == [(["-s", "4"], str(a.resolve()))]
+    assert global_argv == []
+
+
+def test_el_valor_de_una_bandera_de_fichero_no_es_un_elemento(tmp_path):
+    a = tmp_path / "a.mkv"
+    a.write_bytes(b"")
+
+    items, _ = group_args_by_path(["-cv", "poster.png", str(a)])
+
+    assert items == [(["-cv", "poster.png"], str(a.resolve()))]
+
+
+def test_la_primera_ruta_cuenta_aunque_no_exista():
+    items, global_argv = group_args_by_path(["no-existe.mkv", "-tk", "EMU"])
+
+    assert items == [([], "no-existe.mkv")]
+    assert global_argv == ["-tk", "EMU"]
+
+
+def test_un_argumento_global_no_vale_por_elemento():
+    parser = build_parser({})
+
+    with pytest.raises(ValueError, match="--trackers is global-only"):
+        enforce_global_only(parser.parse_args(["-tk", "BLU"]), is_global=False, parser=parser)
+    enforce_global_only(parser.parse_args(["-s", "5"]), is_global=False, parser=parser)
+
+
+def test_los_valores_por_defecto_salen_de_la_config():
+    config = {"TRACKERS": {"default_trackers": ["EMU"]}, "SCREENS": {"screen_count": 6}, "DEFAULT": {"torrent_creation": "Torf"}}
+
+    meta = _meta([], config)
+
+    assert (meta["trackers"], meta["screens"], meta["torrent_creation"]) == (["EMU"], 6, "torf")
+
+
+@pytest.mark.parametrize(
+    ("argv", "clave", "valor"),
+    [
+        (["-fl"], "freeleech", 100),
+        (["-fl", "50"], "freeleech", 50),
+        (["-g", "GRP"], "tag", "-GRP"),
+        (["--source", "BluRay"], "manual_source", "BluRay"),
+        (["--source", "Blu-ray"], "manual_source", "Blu-ray"),
+        (["--source", "WEB"], "manual_source", "WEB"),
+        (["-edition", "Director's", "Cut"], "manual_edition", "Director's Cut"),
+        (["-k", "drama", "crimen"], "keywords", "drama,crimen"),
+        (["-ih", "PixHost"], "imghost", "pixhost"),
+        (["-ptp", "https://passthepopcorn.me/torrents.php?id=1&torrentid=99"], "ptp", "99"),
+        (["-blu", "https://blutopia.cc/torrents/12345/"], "blu", "12345"),
+        (["-hdb", "https://hdbits.org/details.php?id=7"], "hdb", "7"),
+        (["-hdb", "7"], "hdb", "7"),
+        (["-daily", "2024-05-01"], "manual_date", datetime.date(2024, 5, 1)),
+    ],
+)
+def test_normaliza_los_argumentos(argv, clave, valor):
+    assert _meta(argv)[clave] == valor
+
+
+@pytest.mark.parametrize(
+    ("argv", "categoria", "tmdb"),
+    [
+        (["-tmdb", "tv/55"], "TV", "55"),
+        (["-tmdb", "movie/9"], "MOVIE", "9"),
+        (["-c", "tv", "-tmdb", "9"], "TV", "9"),
+        (["-c", "movie", "-tmdb", "tv/55"], "TV", "55"),
+        (["-tmdb", "9"], None, "9"),
+    ],
+)
+def test_la_categoria_del_tmdb_gana_a_la_del_argumento(argv, categoria, tmdb):
+    meta = _meta(argv)
+    assert (meta["category"], meta["tmdb_manual"]) == (categoria, tmdb)
+
+
+@pytest.mark.parametrize(
+    ("temporada", "esperado"),
+    [
+        ("S02", {"manual_season": "S02"}),
+        ("2", {"manual_season": "S02"}),
+        ("S01E05", {"manual_season": "S01", "manual_episode": "E05"}),
+    ],
+)
+def test_la_temporada_se_normaliza(temporada, esperado):
+    assert esperado.items() <= apply_special_logic({"season": temporada}).items()
+
+
+def test_full_auto_activa_el_modo_desatendido():
+    meta = apply_special_logic({"full_auto": "/cola"})
+    assert (meta["unattended"], meta["auto_desc"], meta["auto_queue"]) == (True, True, "/cola")
+
+
+def test_en_debug_el_torrent_va_a_la_categoria_debug():
+    meta = apply_special_logic({"debug": True})
+    assert (meta["qbit_cat"], meta["qbit_tag"], meta["rtorrent_label"]) == ("DEBUG", "DEBUG", "DEBUG")
+
+
+def test_cualquier_bandera_xxx_marca_el_contenido_adulto():
+    assert apply_special_logic({"jav": True})["xxx"] is True
+    assert "xxx" not in apply_special_logic({})
+
+
+@pytest.mark.parametrize(("fecha", "esperada"), [("2024-05-01", datetime.date(2024, 5, 1)), ("ayer", None)])
+def test_una_fecha_manual_en_texto_se_convierte_o_se_descarta(fecha, esperada):
+    assert apply_special_logic({"manual_date": fecha}).get("manual_date") == esperada
+
+
+@pytest.mark.parametrize("argv", [["-mbid", "no-es-un-uuid"], ["-tpdb", "abc"], ["-res", "1081p"]])
+def test_un_valor_invalido_aborta(argv):
+    with pytest.raises(SystemExit):
+        build_parser({}).parse_args(argv)
+
+
+# El argv que de verdad manda la app, con el tipo (str, lista, bool, int) y la grafía de cada campo que lee la ruta de EMU.
+NOMBRE = "Peli 2020 1080p WEB-DL DUAL-GRP"
+PELICULA = ["-tk", "EMU", "-mt", NOMBRE, "-tmdb", "123", "-ua", "-c", "movie", "-res", "1080p"]
+SERIE = ["-tk", "EMU", "-mt", NOMBRE, "-tmdb", "tv/55", "-ua", "-c", "tv", "-res", "720p", "-season", "S01", "-episode", "E02"]
+
+
+def _meta_del_item(argv, tmp_path):
+    """Lo que hace upload.py con el argv: agrupar, parsear, normalizar y aplicar la lógica especial (global y del ítem)."""
+    video = tmp_path / "Peli.mkv"
+    video.write_bytes(b"")
+    items, global_argv = group_args_by_path([str(video), *argv])
+    parser = build_parser({})
+    ns = parser.parse_args(global_argv)
+    enforce_global_only(ns, is_global=True, parser=parser)
+    meta = apply_special_logic({"base_dir": str(tmp_path), **normalize_args(ns)})
+    meta = apply_special_logic({**meta, "path": items[0][1]})
+    return meta
+
+
+def _campos_de_emu(meta):
+    return {
+        "category": meta["category"],
+        "resolution": meta["resolution"],
+        "manual_name": meta["manual_name"],
+        "tmdb": meta["tmdb"],
+        "tmdb_manual": meta["tmdb_manual"],
+        "trackers": meta["trackers"],
+        "unattended": meta["unattended"],
+        "resume": meta["resume"],
+        "aviso_baja_calidad": meta["aviso_baja_calidad"],
+        "solo_cliente": meta["solo_cliente"],
+        "manual_season": meta.get("manual_season"),
+        "manual_episode": meta.get("manual_episode"),
+    }
+
+
+@pytest.mark.parametrize(
+    ("extra", "esperado"),
+    [
+        (
+            PELICULA,
+            {"category": "MOVIE", "resolution": "1080p", "manual_name": NOMBRE, "tmdb": ["123"], "tmdb_manual": "123", "trackers": ["EMU"],
+             "unattended": True, "resume": False, "aviso_baja_calidad": False, "solo_cliente": None, "manual_season": None,
+             "manual_episode": None},
+        ),
+        (
+            SERIE,
+            {"category": "TV", "resolution": "720p", "manual_name": NOMBRE, "tmdb": ["tv/55"], "tmdb_manual": "55", "trackers": ["EMU"],
+             "unattended": True, "resume": False, "aviso_baja_calidad": False, "solo_cliente": None, "manual_season": "S01",
+             "manual_episode": "E02"},
+        ),
+        (
+            [*SERIE, "--resume", "-avbc", "--solo-cliente", "123"],
+            {"category": "TV", "resolution": "720p", "manual_name": NOMBRE, "tmdb": ["tv/55"], "tmdb_manual": "55", "trackers": ["EMU"],
+             "unattended": True, "resume": True, "aviso_baja_calidad": True, "solo_cliente": 123, "manual_season": "S01",
+             "manual_episode": "E02"},
+        ),
+    ],
+    ids=["pelicula", "serie", "serie-con-resume-avbc-y-solo-cliente"],
+)
+def test_cada_campo_de_emu_llega_con_su_tipo(tmp_path, extra, esperado):
+    campos = _campos_de_emu(_meta_del_item(extra, tmp_path))
+
+    assert campos == esperado
+    assert {k: type(v) for k, v in campos.items()} == {k: type(v) for k, v in esperado.items()}  # 1 != True, "123" != 123
+
+
+def test_el_id_de_solo_cliente_es_un_entero_y_la_temporada_en_mayusculas(tmp_path):
+    meta = _meta_del_item([*SERIE[:-4], "-season", "s1", "-episode", "e2", "-sc", "007"], tmp_path)
+
+    assert type(meta["solo_cliente"]) is int and meta["solo_cliente"] == 7
+    assert (meta["manual_season"], meta["manual_episode"]) == ("S01", "E02")
+    assert "season" not in meta and "episode" not in meta  # lo crudo se retira: solo queda manual_*

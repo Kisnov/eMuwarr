@@ -57,10 +57,7 @@ def entorno(tmp_path):
     env = {**os.environ, "PATH": f"{bin_}{os.pathsep}{os.environ['PATH']}", "FALSO": str(tmp_path),
            "TMPDIR": str(tmp_path), "GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_NOSYSTEM": "1",
            "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t", "GIT_COMMITTER_NAME": "t",
-           "GIT_COMMITTER_EMAIL": "t@t",
-           # El fork, a un repo local.
-           "GIT_CONFIG_COUNT": "1", "GIT_CONFIG_KEY_0": f"url.file://{tmp_path}/fork.git.insteadOf",
-           "GIT_CONFIG_VALUE_0": "https://github.com/Kisnov/Uploadrr-EMU.git"}
+           "GIT_COMMITTER_EMAIL": "t@t"}
 
     def git(*args, cwd=tmp_path):
         return subprocess.run(["git", *args], cwd=cwd, env=env, check=True,
@@ -75,10 +72,8 @@ def entorno(tmp_path):
     git("add", ".", cwd=repo)
     git("commit", "-qm", "inicio", cwd=repo)
     git("init", "-q", "--bare", "origen.git")
-    git("init", "-q", "--bare", "fork.git")
     git("remote", "add", "origin", str(tmp_path / "origen.git"), cwd=repo)
     git("push", "-q", "origin", "dev", cwd=repo)
-    git("push", "-q", str(tmp_path / "fork.git"), "dev:main", cwd=repo)
 
     manifiesto = tmp_path / "m"
     git("init", "-q", "-b", "main", str(manifiesto))

@@ -1,18 +1,15 @@
-"""El argv que arma la app, contra el parser de verdad de Uploadrr-EMU (`src/args.py` de su `main`).
+"""El argv que arma la app, contra el parser de verdad de Uploadrr-EMU (`uploadrr-emu/src/args.py`).
 
-Los dos repos se prueban por separado: si la app pasa una opción que Uploadrr-EMU no conoce (o un valor fuera de
-sus `choices`), upload.py aborta antes de empezar y cada subida falla, sin que ningún test de los dos repos lo vea.
+Las dos suites se prueban por separado: si la app pasa una opción que Uploadrr-EMU no conoce (o un valor fuera de
+sus `choices`), upload.py aborta antes de empezar y cada subida falla, sin que ningún test de las dos lo vea.
 Aquí se carga su parser y se le pasan los comandos que de verdad sale de build_uploadrr_emu_command.
 
-De dónde sale Uploadrr-EMU: `UPLOADRR_EMU_DIR`, o `/opt/Uploadrr` (la imagen), o un `git clone --depth 1` de su
-`main` (lo que clona el Dockerfile). Sin ninguno, en CI suspende y en local se salta.
+Uploadrr-EMU vive en `uploadrr-emu/`, en este mismo repo: es lo que copia el Dockerfile.
 """
 from __future__ import annotations
 
 import argparse
 import importlib.util
-import os
-import subprocess
 import sys
 import types
 from pathlib import Path
@@ -26,33 +23,12 @@ from emuwarez_uploadrr.services.uploadrr_contract import (
     build_uploadrr_emu_command,
 )
 
-REPO_UPLOADRR = "https://github.com/Kisnov/Uploadrr-EMU.git"
-
-
-def _carpeta_uploadrr(tmp_path_factory) -> Path | None:
-    for candidata in (os.environ.get("UPLOADRR_EMU_DIR"), "/opt/Uploadrr"):
-        if candidata and (Path(candidata) / "src" / "args.py").is_file():
-            return Path(candidata)
-    destino = tmp_path_factory.mktemp("uploadrr") / "Uploadrr-EMU"
-    try:
-        subprocess.run(
-            ["git", "clone", "-q", "--depth", "1", REPO_UPLOADRR, str(destino)],
-            check=True, capture_output=True, timeout=120,
-        )
-    except (OSError, subprocess.SubprocessError):
-        return None
-    return destino
+CARPETA_UPLOADRR = Path(__file__).resolve().parents[1] / "uploadrr-emu"
 
 
 @pytest.fixture(scope="module")
-def args_uploadrr(tmp_path_factory):
+def args_uploadrr():
     """El módulo `src/args.py` real de Uploadrr-EMU."""
-    carpeta = _carpeta_uploadrr(tmp_path_factory)
-    if carpeta is None:
-        motivo = "No se pudo conseguir Uploadrr-EMU (ni UPLOADRR_EMU_DIR, ni /opt/Uploadrr, ni git clone)."
-        if os.environ.get("CI"):
-            pytest.fail(motivo)
-        pytest.skip(motivo)
     # src/args.py solo trae de su paquete la consola de Rich, que aquí no está instalada: el parser no la usa.
     sustitutos = {
         "src": types.ModuleType("src"),
@@ -61,7 +37,7 @@ def args_uploadrr(tmp_path_factory):
     }
     sustitutos["src.utils.console"].console = mock.MagicMock()
     with mock.patch.dict(sys.modules, sustitutos):
-        spec = importlib.util.spec_from_file_location("_uploadrr_args_real", carpeta / "src" / "args.py")
+        spec = importlib.util.spec_from_file_location("_uploadrr_args_real", CARPETA_UPLOADRR / "src" / "args.py")
         modulo = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(modulo)
     return modulo

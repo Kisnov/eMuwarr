@@ -50,8 +50,8 @@ reviews:
         - Rutas comparadas por componentes (commonpath / en_carpeta_de_subidas), nunca con startswith.
     - path: "emuwarez_uploadrr/services/{uploadrr_contract,uploadrr_progress,upload_result_parser,uploadrr_config_staging,uploadrr_yaml,upload_execution}.py"
       instructions: |
-        Contrato con Kisnov/Uploadrr-EMU: argv, claves de config.yaml y líneas de salida se cambian en los dos repos a
-        la vez. Uploadrr-EMU sale con 0 solo si subió algo, y el enlace del torrent sale de la línea `Torrent URL:`.
+        Contrato con Uploadrr-EMU (uploadrr-emu/): argv, claves de config.yaml y líneas de salida se cambian en los dos
+        lados en el mismo PR. Uploadrr-EMU sale con 0 solo si subió algo, y el enlace del torrent sale de la línea `Torrent URL:`.
         config.yaml se restaura desde data/config.yaml.bak tras cada trabajo. Los subprocesos van en su propio grupo
         y se cancelan con killpg.
     - path: "emuwarez_uploadrr/database.py"
@@ -75,6 +75,11 @@ reviews:
         test_no_han_aparecido_sondeos_nuevos). Diálogos con components/Modal.tsx. Colores y tamaños con los tokens y
         clases existentes, no estilos en línea nuevos. Las copias de constantes del backend deben coincidir
         (test_copias_frontend.py).
+    - path: "uploadrr-emu/**"
+      instructions: |
+        Uploadrr-EMU, el subproceso que hace la subida (derivado de Uploadrr): su propio requirements.txt, sus tests
+        en uploadrr-emu/tests (su conftest corta la red y los subprocesos) y el contrato con la app en
+        contrato_eventos.json. Solo se mantiene el camino de eMuwarez (EMU): no pidas arreglar los otros trackers.
     - path: "tests/**"
       instructions: |
         Las pruebas corren en Linux (Docker) y sin red. Cada arreglo de un fallo lleva una prueba que falla sin él.
