@@ -1,0 +1,33 @@
+# COMMON
+__pycache__/
+.DS_Store
+._*
+.python-version
+.vscode/
+.idea/
+.wdm/
+*.lock
+venv/*
+.venv/
+.pytest_cache/
+.coverage
+coverage.xml
+
+# Project Specifics
+*.mkv
+*copy.py
+*_old*
+old_*
+wip_*
+data/*_index.json
+data/backup/old_config*
+data/cookies/*.pkl
+data/cookies/*.pickle
+data/cookies/*.txt
+data/config.json
+data/config.py
+data/config.yaml
+data/config.yaml.bak
+data/tags.json
+/src/old_trackers/*
+tmp/*

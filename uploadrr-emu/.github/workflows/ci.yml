@@ -1,0 +1,41 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  python:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -r requirements.txt ruff==0.17.3 pytest==9.2.0 pytest-cov==7.1.0
+      # Solo errores que rompen en ejecución (sintaxis, nombres sin definir).
+      # El estilo lo revisa CodeRabbit sobre las líneas cambiadas.
+      - run: ruff check --select E9,F63,F7,F82 --output-format github .
+      - run: python -m compileall -q .
+      # Sin red ni ffmpeg/mediainfo: tests/conftest.py corta cualquier salida.
+      - run: pytest --cov=src --cov-report=term-missing --cov-report=xml
+      # Codecov solo informa (continue-on-error): si la subida falla, el CI no cae.
+      # fail_ci_if_error hace que pare si la firma de su CLI no cuadra, en vez de ejecutarla igual.
+      - uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
+        timeout-minutes: 5
+        continue-on-error: true
+        with:
+          files: coverage.xml
+          token: ${{ secrets.CODECOV_TOKEN }}
+          fail_ci_if_error: true
