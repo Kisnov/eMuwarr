@@ -1,0 +1,19 @@
+name: Etiquetas
+
+# Pone la etiqueta del PR según el prefijo de su rama (.github/labeler.yml). pull_request_target para que también
+# funcione en PR desde forks; no hace checkout ni ejecuta nada del PR, solo lee su rama.
+on:
+  pull_request_target:  # zizmor: ignore[dangerous-triggers] no hay checkout ni código del PR
+    types: [opened, reopened]
+
+permissions: {}
+
+jobs:
+  etiquetar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/labeler@bf12e9b00b37c5c0ca2b87b79b2daf7891dbda13 # v7.0.0
