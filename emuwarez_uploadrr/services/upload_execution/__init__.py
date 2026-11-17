@@ -11,7 +11,7 @@ SAFETY CONTRACT:
 """
 from __future__ import annotations
 
-# El servicio se parte en módulos por responsabilidad (ver docs/PLAN.md); este paquete
+# El servicio se parte en módulos por responsabilidad; este paquete
 # re-exporta sus nombres para que `from ...services.upload_execution import X` siga igual.
 # Ojo con parchear en tests: un parche sobre este paquete NO alcanza al código de los
 # submódulos, que importan los nombres directamente; hay que parchear el módulo que lo usa.

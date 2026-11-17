@@ -1,11 +1,9 @@
 #!/usr/bin/env python3
 """Publica el manifiesto de versión que lee la tarjeta de Diagnóstico.
 
-El repositorio y el paquete de imágenes son privados, así que la aplicación no
-puede preguntarle al registro si hay algo nuevo. La salida es este manifiesto:
-un único JSON, público, con el commit, la fecha, el digest y una nota. El
-código y la imagen siguen privados; lo único que se publica es "cuál es la
-última versión".
+La aplicación no le pregunta al registro de imágenes si hay algo nuevo: lee
+este manifiesto, un único JSON público con el commit, la fecha, el digest y una
+nota. Es lo único que se publica aquí: "cuál es la última versión".
 
 Se ejecuta DESPUÉS de `docker push`, porque el digest no existe hasta entonces:
 

@@ -84,8 +84,7 @@ def generar() -> str:
         "```",
         "",
         "Sin Docker, `python3 emuwarez_uploader.py <comando>`. La opción global `--db RUTA` elige otra base SQLite.",
-        "Los argumentos entre corchetes son opcionales. El historial de la CLI anterior está en "
-        "[`docs/historial_cli.md`](docs/historial_cli.md).",
+        "Los argumentos entre corchetes son opcionales.",
         "",
     ]
     for nombre, hijo in _subcomandos(parser).items():
