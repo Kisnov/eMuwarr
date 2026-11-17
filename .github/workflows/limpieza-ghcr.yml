@@ -1,0 +1,40 @@
+name: Limpieza de ghcr
+
+# Cada semana borra de ghcr.io/kisnov/emuwarr lo que ya no sirve: las versiones sin etiqueta (cada :dev nueva deja la
+# anterior así), las :pr-<n> y la vieja :edge, siempre con más de 14 días. Nunca toca latest, dev, X.Y.Z ni el sha de una
+# versión. La acción sabe de imágenes multiarquitectura: no borra las de amd64/arm64 que cuelgan de una etiquetada.
+# A mano, por defecto solo enseña lo que borraría.
+on:
+  schedule:
+    - cron: "11 6 * * 1"
+  workflow_dispatch:
+    inputs:
+      prueba:
+        description: "Solo enseñar qué borraría"
+        type: boolean
+        default: true
+
+permissions: {}
+
+# El mismo grupo que «Publicar versión»: no limpia mientras se sube una imagen.
+concurrency:
+  group: publicar
+  cancel-in-progress: false
+
+jobs:
+  limpiar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      packages: write
+    steps:
+      - uses: dataaxiom/ghcr-cleanup-action@d52806a0dc70b430571a37da1fde39733ffd640f # v1.2.2
+        with:
+          package: emuwarr
+          delete-untagged: true
+          delete-tags: pr-*,edge
+          older-than: 14 days
+          delete-ghost-images: true
+          delete-partial-images: true
+          validate: true
+          dry-run: ${{ github.event_name == 'workflow_dispatch' && inputs.prueba }}
