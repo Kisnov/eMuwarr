@@ -13,6 +13,17 @@ updates:
       python:
         update-types: [minor, patch]
 
+  # requirements.txt de Uploadrr-EMU fija sus dependencias directas: sus subidas llegan solo por estos PR.
+  - package-ecosystem: pip
+    directory: /uploadrr-emu
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    groups:
+      uploadrr-emu:
+        update-types: [minor, patch]
+
   - package-ecosystem: npm
     directory: /frontend
     schedule:

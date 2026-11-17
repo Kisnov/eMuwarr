@@ -77,6 +77,38 @@ jobs:
           token: ${{ secrets.CODECOV_TOKEN }}
           fail_ci_if_error: true
 
+  uploadrr-emu:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: uploadrr-emu
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: uploadrr-emu/requirements.txt
+      - run: pip install -r requirements.txt ruff==0.17.3 pytest==9.2.0 pytest-cov==7.1.0
+      # Solo lo que rompe en ejecución: el código heredado aún no pasa las reglas de la app (E9,F).
+      - run: ruff check --select E9,F63,F7,F82 --output-format github .
+      - run: python -m compileall -q .
+      # Sin red ni ffmpeg/mediainfo: su tests/conftest.py corta cualquier salida.
+      - run: pytest -q --cov=src --cov-report=term-missing --cov-report=xml
+      - if: ${{ !cancelled() }}
+        uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
+        timeout-minutes: 5
+        continue-on-error: true
+        with:
+          files: uploadrr-emu/coverage.xml
+          disable_search: true
+          flags: uploadrr-emu
+          token: ${{ secrets.CODECOV_TOKEN }}
+          fail_ci_if_error: true
+
   frontend:
     # En dev el bundle ya lo sube Bundle.
     if: github.event_name != 'push'

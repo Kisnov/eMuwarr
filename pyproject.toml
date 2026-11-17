@@ -42,3 +42,11 @@ version = {attr = "emuwarez_uploadrr.__version__"}
 # a instalar ("Multiple top-level packages discovered in a flat-layout").
 [tool.setuptools.packages.find]
 include = ["emuwarez_uploadrr*"]
+
+# Los tests de la app. Los de Uploadrr-EMU se pasan desde uploadrr-emu/, con su propio conftest (job uploadrr-emu del CI).
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+# uploadrr-emu/ tiene sus propias reglas de ruff, en su job del CI.
+[tool.ruff]
+extend-exclude = ["uploadrr-emu"]
