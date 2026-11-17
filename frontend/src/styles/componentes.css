@@ -175,6 +175,8 @@
 
 /* LibraryDetailPage */
 .bibdet-pagina { width: 100%; height: 100%; min-height: 0; display: flex; flex-direction: column; }
+/* Los datos van en texto con su icono; lo que se pulsa (origen, ruta, identificadores) sigue en chapa. */
+.bibdet-pagina .value-chip:not(.linkable) { background: none; border-color: transparent; padding-inline: 0; }
 .bibdet-cabecera { flex-shrink: 0; }
 .bibdet-barra {
   display: flex;

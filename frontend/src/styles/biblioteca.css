@@ -363,6 +363,15 @@
 .data-table.bib-tabla td { font-size: 12.5px; }
 .data-table.bib-tabla td .detcard-plano { color: var(--text-secondary); }
 .data-table.bib-tabla td .value-chip { padding: 3px 8px; font-size: 12.5px; gap: 5px; }
+/* Estado y Español: el verde de «todo bien» (Disponible, Ambos) va en texto, y la chapa queda para lo que hay que
+   mirar. En la columna eMuwarez el verde es una oportunidad («No», «Nuevo») y se queda en chapa. */
+.data-table.bib-tabla td.bib-celda-calma .badge.status-available {
+  background: none;
+  border-color: transparent;
+  padding-inline: 0;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
 /* Con doce columnas la tabla no cabe en un ancho normal y se desplaza: el título se queda fijo a la izquierda (como
    las acciones a la derecha) para no perder de qué fila se está leyendo. Fondo opaco, o lo que pasa por detrás se
    transparenta; cada estado de la fila mezcla su tinte sobre ese fondo. */
