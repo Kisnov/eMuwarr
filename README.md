@@ -350,5 +350,6 @@ los dos lados, cambia el otro a la vez.
 
 ## Licencia
 
-Todavía sin licencia elegida: hasta que se publique una, todos los derechos quedan reservados al autor. Puedes
-usarla en tu casa, pero no redistribuirla ni reutilizar su código.
+Software libre bajo la [GNU General Public License v3.0](LICENSE) o posterior (GPL-3.0-or-later). Puedes usarlo,
+estudiarlo, modificarlo y redistribuirlo; si distribuyes una versión modificada, tiene que seguir siendo GPL y con el
+código disponible. Va sin garantía de ningún tipo.
