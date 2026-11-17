@@ -23,7 +23,7 @@ from ..integrations import http_cliente
 from ..integrations.base import tapar_claves, texto_de_error, url_sin_claves
 
 _TIMEOUT = 10  # seconds — short timeout for connection probes
-_CABECERAS_PRUEBA = {"Accept": "application/json", "User-Agent": "emuwarez-uploadrr/3"}
+_CABECERAS_PRUEBA = {"Accept": "application/json", "User-Agent": "emuwarr/3"}
 
 # Rate-limit the live eMuwarez connection probe so the "Probar conexión" button
 # cannot hammer the real server. Mirrors the sync throttle pattern in

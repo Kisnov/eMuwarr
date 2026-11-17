@@ -41,7 +41,7 @@ _LIMITE = 300_000
 # sha256 del icono genérico (el globo, 649 bytes) que Google devuelve a 64 px para un sitio que no conoce. Con esto se
 # descarta aunque sea el único de la tanda; repetido entre varios dominios también se descarta (otro tamaño u otro globo).
 HUELLAS_GENERICAS = frozenset({"beaa2f87e130b8b83363dc30f9143c3712094be82f61d2c4037b91fceff86b85"})
-_AGENTE = "Mozilla/5.0 (compatible; emuwarez-uploadrr/iconos)"
+_AGENTE = "Mozilla/5.0 (compatible; emuwarr/iconos)"
 _FIRMAS = (
     (b"\x89PNG\r\n\x1a\n", "png"),
     (b"\xff\xd8\xff", "jpg"),

@@ -17,9 +17,9 @@ from typing import Optional
 from ..integrations import http_cliente
 
 _TIMEOUT = 10  # seconds — short timeout, matches services/integration_tests.py
-_CABECERAS_JSON = {"Content-Type": "application/json", "User-Agent": "emuwarez-uploadrr/3"}
+_CABECERAS_JSON = {"Content-Type": "application/json", "User-Agent": "emuwarr/3"}
 
-_TEST_MESSAGE = "eMuwarez Uploadrr — notificación de prueba. Si ves esto, la configuración es correcta."
+_TEST_MESSAGE = "eMuwarr — notificación de prueba. Si ves esto, la configuración es correcta."
 
 # Poster URLs are TMDb CDN links (or Radarr/Sonarr's own remoteUrl) shaped
 # like ".../t/p/w500/xxxx.jpg" — swap the size segment for a normal/large one

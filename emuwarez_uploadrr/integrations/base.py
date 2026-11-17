@@ -157,7 +157,7 @@ def request_json(
     timeout: int = 20,
     verify_ssl: bool = True,
 ) -> Any:
-    req_headers = {"Accept": "application/json", "User-Agent": "emuwarez-uploadrr-cli/2"}
+    req_headers = {"Accept": "application/json", "User-Agent": "emuwarr-cli/2"}
     if headers:
         req_headers.update(headers)
     if api_key:

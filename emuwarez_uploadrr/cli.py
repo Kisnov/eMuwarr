@@ -1,4 +1,4 @@
-"""Modern console entry point for eMuwarez Uploadrr.
+"""Modern console entry point for eMuwarr.
 
 This CLI is the functional mirror of the future web interface.  The original
 single-path uploader is still available and is used for prepare/upload actions.

@@ -174,7 +174,7 @@ export function Sidebar({ active, onNavigate, movil = false, abierta = false, on
         {...logoTip}
       >
         <ServiceIcon type="emu" size={28} />
-        {!collapsed && <span className="sidebar-logo-text" translate="no">eMuwarez Uploadrr</span>}
+        {!collapsed && <span className="sidebar-logo-text" translate="no">eMuwarr</span>}
         {/* Plegada, el tooltip del logo no sale con el dedo: el chevrón dice que se puede abrir. */}
         {collapsed && <span className="sidebar-expandir"><IconoDesplegar abierto={false} size={12} /></span>}
         {movil && <span className="sidebar-cerrar"><IconoCerrar size={18} /></span>}

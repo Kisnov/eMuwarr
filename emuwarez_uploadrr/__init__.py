@@ -1,3 +1,3 @@
-"""eMuwarez Uploadrr modular CLI package."""
+"""eMuwarr modular CLI package."""
 
 __version__ = "1.0.2"

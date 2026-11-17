@@ -1,20 +1,20 @@
 #!/usr/bin/env bash
 # scripts/docker-smoke-test.sh
-# Smoke test reproducible para la imagen Docker de eMuwarez Uploadrr.
+# Smoke test reproducible para la imagen Docker de eMuwarr.
 #
 # Uso: bash scripts/docker-smoke-test.sh
 #
 # Variables opcionales:
-#   IMAGE_NAME=emuwarez-uploadrr:smoke   nombre de imagen a construir
+#   IMAGE_NAME=emuwarr:smoke   nombre de imagen a construir
 #   PORT=9494                            puerto local a mapear
 #   KEEP_CONTAINER=0                     si 1, no limpia el contenedor al salir
 
 set -euo pipefail
 
-IMAGE_NAME="${IMAGE_NAME:-emuwarez-uploadrr:smoke}"
+IMAGE_NAME="${IMAGE_NAME:-emuwarr:smoke}"
 PORT="${PORT:-9494}"
 KEEP_CONTAINER="${KEEP_CONTAINER:-0}"
-CONTAINER_NAME="emuwarez-uploadrr-smoke-$$"
+CONTAINER_NAME="emuwarr-smoke-$$"
 TIMEOUT=90
 
 RED='\033[0;31m'
@@ -76,7 +76,7 @@ except Exception:
 }
 
 echo ""
-echo "eMuwarez Uploadrr — Docker Smoke Test"
+echo "eMuwarr — Docker Smoke Test"
 echo "======================================="
 echo ""
 
