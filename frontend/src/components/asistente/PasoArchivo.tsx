@@ -9,7 +9,7 @@ import { IconoAviso } from '../Iconos'
 import { SourceComparisonModal } from '../SourceComparisonModal'
 import { FIELD_INFO, INTERNAL_TITLE_LABEL } from './constantes'
 import { MediaInfoTable } from './MediaInfoTable'
-import { AvisoSubidaExistente, BotonComparacionSource, CampoTag, FieldLabel, GeneratingHint, MarcoPaso, TableLoadingSpinner } from './piezas'
+import { AvisoSubidaExistente, BotonComparacionSource, CampoTag, DatosDerivados, FieldLabel, GeneratingHint, MarcoPaso, TableLoadingSpinner } from './piezas'
 import { Pestanas, type Pestana } from './Pestanas'
 import { AvisoModoPistas, RemuxTable } from './RemuxTable'
 import type { Asistente, PestanaArchivo } from './useAsistente'
@@ -53,24 +53,6 @@ export function PasoArchivo({ a }: { a: Asistente }) {
             <span className="asist-aviso-campo"><IconoAviso /> {titleWarning}</span>
           )}
         </label>
-        <label htmlFor={`${idCampo}-anio`}><FieldLabel label="Año" info={FIELD_INFO.year} />
-          <input id={`${idCampo}-anio`} className="form-input" value={fields.year || ''} disabled />
-        </label>
-        {fields.season_episode != null && (
-          <label htmlFor={`${idCampo}-episodio`}><FieldLabel label="Temporada / Episodio" info={FIELD_INFO.season_episode} />
-            {/* Read-only like every other derived field here (Año, Resolución,
-                códecs): it comes straight from Sonarr's season/episode numbers
-                for THIS file. Editing it let you name a file S03E07 when it is
-                actually S01E02, and the upload renames the real file to
-                whatever this says — a typo here mislabels the release and the
-                file on disk. Only Source, Proveedor and Tag are meant to be
-                editable, and those are genuine judgement calls. */}
-            <input id={`${idCampo}-episodio`} className="form-input" value={fields.season_episode || ''} disabled />
-          </label>
-        )}
-        <label htmlFor={`${idCampo}-resolucion`}><FieldLabel label="Resolución" info={FIELD_INFO.resolution} />
-          <input id={`${idCampo}-resolucion`} className="form-input" value={fields.resolution || ''} disabled />
-        </label>
         <label htmlFor={`${idCampo}-source`}><FieldLabel label="Source" info={FIELD_INFO.source} />
           <div className="asist-fila-source">
             <select id={`${idCampo}-source`} className="form-input form-select asist-crece" value={fields.source || ''} onChange={e => setField('source', e.target.value)}>
@@ -105,20 +87,18 @@ export function PasoArchivo({ a }: { a: Asistente }) {
             )}
           </label>
         )}
-        <label htmlFor={`${idCampo}-video`}><FieldLabel label="Códec de vídeo" info={FIELD_INFO.video_codec} />
-          <input id={`${idCampo}-video`} className="form-input" value={fields.video_codec || ''} disabled />
-        </label>
-        <label htmlFor={`${idCampo}-audio`}><FieldLabel label="Audio" info={FIELD_INFO.audio} />
-          <input id={`${idCampo}-audio`} className="form-input" value={fields.audio_summary || ''} disabled />
-          {audioWarning && (
-            <span className="asist-aviso-campo"><IconoAviso /> {audioWarning}</span>
-          )}
-        </label>
-        <label htmlFor={`${idCampo}-subs`}><FieldLabel label="Subtítulos" info={FIELD_INFO.subs} />
-          <input id={`${idCampo}-subs`} className="form-input" value={fields.subs || ''} disabled />
-        </label>
         <CampoTag value={fields.tag} opciones={opcionesTag} onChange={t => setField('tag', t)} />
       </div>
+      {/* Temporada / Episodio tampoco se edita: el nombre del release y el del archivo saldrían de lo que se escribiera. */}
+      <DatosDerivados datos={[
+        { etiqueta: 'Año', info: FIELD_INFO.year, valor: fields.year },
+        ...(fields.season_episode != null
+          ? [{ etiqueta: 'Temporada / Episodio', info: FIELD_INFO.season_episode, valor: fields.season_episode }] : []),
+        { etiqueta: 'Resolución', info: FIELD_INFO.resolution, valor: fields.resolution },
+        { etiqueta: 'Códec de vídeo', info: FIELD_INFO.video_codec, valor: fields.video_codec },
+        { etiqueta: 'Audio', info: FIELD_INFO.audio, valor: fields.audio_summary, avisos: [audioWarning] },
+        { etiqueta: 'Subtítulos', info: FIELD_INFO.subs, valor: fields.subs },
+      ]} />
       <div className="asist-mt-16">
         <div className="asist-etiqueta">{INTERNAL_TITLE_LABEL}</div>
         {preview?.internal_mkv_title ? <div translate="no"><FitText min={9} text={preview.internal_mkv_title} /></div> : <GeneratingHint />}

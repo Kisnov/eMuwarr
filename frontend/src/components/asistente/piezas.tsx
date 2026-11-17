@@ -5,6 +5,7 @@ import type { UploadCheck } from '../../api/uploads'
 import type { UploadJob } from '../../types/api'
 import { statusLabel } from '../../utils/uploadStatus'
 import { CheckStatusIcon } from '../DetailCard'
+import { IconoAviso } from '../Iconos'
 import { InfoIcon } from '../InfoIcon'
 import { Tooltip } from '../Tooltip'
 import { FIELD_INFO } from './constantes'
@@ -59,6 +60,30 @@ export function FieldLabel({ label, info }: { label: string; info?: React.ReactN
     <span className="asist-etiqueta asist-fila-info">
       {label}{info && <InfoIcon text={info} />}
     </span>
+  )
+}
+
+// Lo que sale del archivo y de Radarr/Sonarr y no se cambia aquí: filas de lectura, no campos apagados.
+export interface DatoDerivado {
+  etiqueta: string
+  info: React.ReactNode
+  valor: string | number | null | undefined
+  avisos?: (string | null | undefined)[]
+}
+
+export function DatosDerivados({ datos }: { datos: DatoDerivado[] }) {
+  return (
+    <dl className="asist-datos asist-derivados">
+      {datos.map(d => (
+        <div key={d.etiqueta} className="asist-derivado">
+          <dt><FieldLabel label={d.etiqueta} info={d.info} /></dt>
+          <dd>
+            <span translate="no">{d.valor || '—'}</span>
+            {d.avisos?.filter(Boolean).map(a => <span key={a} className="asist-aviso-campo"><IconoAviso /> {a}</span>)}
+          </dd>
+        </div>
+      ))}
+    </dl>
   )
 }
 
