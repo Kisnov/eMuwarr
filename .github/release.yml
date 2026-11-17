@@ -1,0 +1,15 @@
+# Apartados de las notas que genera «Publicar versión» (gh release create --generate-notes).
+changelog:
+  exclude:
+    labels: [duplicate, invalid, wontfix]
+  categories:
+    - title: Novedades
+      labels: [enhancement]
+    - title: Correcciones
+      labels: [bug]
+    - title: Documentación
+      labels: [documentation]
+    - title: Dependencias
+      labels: [dependencies]
+    - title: Mantenimiento
+      labels: ["*"]

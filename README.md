@@ -3,6 +3,7 @@
 [![CI](https://github.com/Kisnov/eMuwarr/actions/workflows/ci.yml/badge.svg?branch=dev)](https://github.com/Kisnov/eMuwarr/actions/workflows/ci.yml)
 [![Publicar versión](https://github.com/Kisnov/eMuwarr/actions/workflows/publicar.yml/badge.svg)](https://github.com/Kisnov/eMuwarr/actions/workflows/publicar.yml)
 [![zizmor](https://github.com/Kisnov/eMuwarr/actions/workflows/zizmor.yml/badge.svg?branch=dev)](https://github.com/Kisnov/eMuwarr/actions/workflows/zizmor.yml)
+[![CodeQL](https://github.com/Kisnov/eMuwarr/actions/workflows/github-code-scanning/codeql/badge.svg?branch=dev)](https://github.com/Kisnov/eMuwarr/security/code-scanning)
 [![Bundle](https://github.com/Kisnov/eMuwarr/actions/workflows/bundle.yml/badge.svg?branch=dev)](https://github.com/Kisnov/eMuwarr/actions/workflows/bundle.yml)
 [![Cobertura](https://codecov.io/gh/Kisnov/eMuwarr/branch/dev/graph/badge.svg)](https://app.codecov.io/gh/Kisnov/eMuwarr/tree/dev)
 [![Revisión: CodeRabbit](https://img.shields.io/badge/revisi%C3%B3n-CodeRabbit-FF570A)](https://coderabbit.ai)
@@ -151,7 +152,7 @@ qBittorrent, «Reenviar a qBittorrent» lo vuelve a añadir sin subir nada.
 
 ## Arranque rápido (Docker Compose)
 
-Requiere Docker 24+ con Compose v2. No hace falta clonar el repo: copia esto en un `docker-compose.yml`, ajusta
+Requiere Docker 24+ con Compose v2, en amd64 o arm64 (en ARM, mejor con 2 GB de RAM o más y una subida a la vez). No hace falta clonar el repo: copia esto en un `docker-compose.yml`, ajusta
 las rutas de los volúmenes y levántalo. Usa la imagen publicada en `ghcr.io/kisnov/emuwarr`, así que no
 compila nada.
 

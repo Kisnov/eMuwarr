@@ -1,0 +1,9 @@
+# Etiqueta cada PR por el prefijo de su rama; .github/release.yml agrupa las notas de la versión por estas etiquetas.
+enhancement:
+  - head-branch: ['^feat/']
+bug:
+  - head-branch: ['^fix/']
+documentation:
+  - head-branch: ['^docs/']
+mantenimiento:
+  - head-branch: ['^(chore|ci|refactor|perf|test|build|style)/']

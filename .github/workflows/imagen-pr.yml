@@ -1,0 +1,58 @@
+name: Imagen del PR
+
+# Construye ghcr.io/kisnov/emuwarr:pr-<número> para probar un PR antes de fusionarlo. Solo para ramas de este repo:
+# un PR desde un fork no tiene permiso para subir la imagen. Dependabot tampoco (su token es de solo lectura).
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths-ignore: ["docs/**", "**.md"]
+
+permissions: {}
+
+concurrency:
+  group: imagen-pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  imagen:
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - id: sello
+        env:
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          uploadrr="$(git ls-remote --exit-code https://github.com/Kisnov/Uploadrr-EMU.git refs/heads/main | cut -f1)"
+          test -n "$uploadrr"
+          echo "uploadrr=$uploadrr" >> "$GITHUB_OUTPUT"
+          echo "commit=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          echo "fecha=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
+          echo "tags=ghcr.io/kisnov/emuwarr:pr-$PR" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Lee la caché de las versiones, pero no la escribe: un PR no debe ensuciar la de dev.
+      - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.sello.outputs.tags }}
+          build-args: |
+            UPLOADRR_COMMIT=${{ steps.sello.outputs.uploadrr }}
+            APP_COMMIT=${{ steps.sello.outputs.commit }}
+            APP_BUILD_DATE=${{ steps.sello.outputs.fecha }}
+          cache-from: type=gha
