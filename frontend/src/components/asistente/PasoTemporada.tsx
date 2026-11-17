@@ -212,7 +212,7 @@ export function PasoTemporada({ a }: { a: Asistente }) {
           {/* El nombre del pack, a la vista en las tres pestañas. */}
           <div className="detail-card asist-tarjeta">
             <div className="asist-etiqueta">Nombre final del torrent (eMuwarez)</div>
-            {seasonDisplayTitle ? <div translate="no"><FitText min={9} text={seasonDisplayTitle} /></div> : <GeneratingHint />}
+            {seasonDisplayTitle ? <div translate="no"><FitText min={11} text={seasonDisplayTitle} /></div> : <GeneratingHint />}
           </div>
 
           <Pestanas nombre="Detalle de los capítulos" pestanas={pestanas} activa={pestana} onCambiar={elegirPestana}>
@@ -320,7 +320,7 @@ export function PasoTemporada({ a }: { a: Asistente }) {
                     <p className="text-error asist-t12 asist-m0">✗ {current.error}</p>
                   ) : (
                     <FitTextPair
-                      min={9}
+                      min={11}
                       items={[
                         { label: 'Nombre del torrent', text: current.torrent_name || '—', labelStyle },
                         { label: INTERNAL_TITLE_LABEL, text: current.internal_mkv_title || '—', labelStyle },

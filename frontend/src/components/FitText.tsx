@@ -5,8 +5,9 @@ import { medir } from '../utils/uiScale'
 // Binary-searches the LARGEST font size in [min,max] that makes `el`'s own
 // text content fit on one line within `el`'s current width — mutates
 // el.style.fontSize as it measures (that's how it's measured) and returns the
-// chosen size. Pure w.r.t. everything except that one element's style.
-function measureFitSize(el: HTMLElement, min: number, max: number): number {
+// chosen size, or null when not even `min` fits. Pure w.r.t. everything except
+// that one element's style.
+function measureFitSize(el: HTMLElement, min: number, max: number): number | null {
   // Por medir() y no getBoundingClientRect(): el ancho disponible se compara
   // contra scrollWidth y contra tamaños de fuente en px, que NO llevan el zoom
   // del body encima. Mezclarlos daría una letra más pequeña cuanto más se
@@ -31,8 +32,11 @@ function measureFitSize(el: HTMLElement, min: number, max: number): number {
   // real natural width at each candidate size — then it's restored after.
   const prevWidth = el.style.width
   el.style.width = 'max-content'
+  el.style.whiteSpace = 'nowrap'
   el.style.fontSize = `${max}px`
   if (el.scrollWidth <= target) { el.style.width = prevWidth; return max } // fits at max → keep it big
+  el.style.fontSize = `${min}px`
+  if (el.scrollWidth > target) { el.style.width = prevWidth; return null }
   // Measure each candidate (scrollWidth) rather than estimate from a ratio:
   // monospace glyph advances don't scale perfectly linearly, so an estimate
   // can overflow by a sub-pixel and get clipped. Measuring guarantees the
@@ -47,6 +51,15 @@ function measureFitSize(el: HTMLElement, min: number, max: number): number {
   el.style.fontSize = `${lo}px`
   el.style.width = prevWidth
   return lo
+}
+
+// Con el tamaño que cabe en una línea; si ni `min` cabe (el móvil), el texto se parte en líneas a `max` en vez de
+// encogerse hasta no leerse.
+function aplicarTamano(el: HTMLElement, size: number | null, max: number): number {
+  el.style.whiteSpace = size == null ? 'normal' : 'nowrap'
+  el.style.overflowWrap = size == null ? 'anywhere' : ''
+  el.style.fontSize = `${size ?? max}px`
+  return size ?? max
 }
 
 const textStyle: React.CSSProperties = {
@@ -86,7 +99,7 @@ export function FitText({
       const avail = medir(el).width
       if (avail <= 0 || Math.abs(avail - lastAvail) < 0.5) return
       lastAvail = avail
-      autoSizeRef.current = measureFitSize(el, min, max)
+      autoSizeRef.current = aplicarTamano(el, measureFitSize(el, min, max), max)
     }
     // No synchronous fit() here: right after mount, sibling content in the
     // same modal (other fields, async sections) can still be settling its own
@@ -171,10 +184,9 @@ export function FitTextPair({
       lastAvailB = availB
       const sizeA = measureFitSize(elA, min, max)
       const sizeB = measureFitSize(elB, min, max)
-      const shared = Math.min(sizeA, sizeB)
-      elA.style.fontSize = `${shared}px`
-      elB.style.fontSize = `${shared}px`
-      autoSizeRef.current = shared
+      const shared = sizeA == null || sizeB == null ? null : Math.min(sizeA, sizeB)
+      aplicarTamano(elA, shared, max)
+      autoSizeRef.current = aplicarTamano(elB, shared, max)
     }
     // No synchronous fit() here — see FitText's comment: measuring before
     // sibling layout has settled can read a too-generous width and briefly
