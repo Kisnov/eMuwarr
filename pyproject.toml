@@ -6,6 +6,7 @@ name = "emuwarez-uploadrr"
 dynamic = ["version"]
 description = "CLI modular para eMuwarez Uploadrr, preparada para interfaz web"
 requires-python = ">=3.12"
+license = { text = "GPL-3.0-or-later" }
 # Las llamadas HTTP salientes (también las de la CLI) salen por integrations/http_cliente.py, que importa httpx.
 dependencies = [
     "httpx>=0.27.0",
