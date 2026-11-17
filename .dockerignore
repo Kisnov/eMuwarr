@@ -29,3 +29,4 @@ uploadrr-emu/data/cookies/*
 uploadrr-emu/data/*_index.json
 uploadrr-emu/tmp/
 uploadrr-emu/**/__pycache__/
+uploadrr-emu/.*_cache/
