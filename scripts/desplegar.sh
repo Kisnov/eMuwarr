@@ -21,7 +21,7 @@
 #   scripts/desplegar.sh --solo-prueba                   # sube solo :dev, sin versión ni manifiesto
 #
 # Al publicar sigue el orden del workflow: la imagen como :<sha>, la etiqueta
-# vX.Y.Z (y master avanza hasta ella), la imagen como :X.Y.Z, :dev y :latest, y el manifiesto. Si algo falla,
+# vX.Y.Z (y main avanza hasta ella), la imagen como :X.Y.Z, :dev y :latest, y el manifiesto. Si algo falla,
 # relanzar completa la versión. :X.Y.Z es la que se fija en el compose
 # (EMUWAREZ_UPLOADRR_TAG=X.Y.Z) para quedarse en una versión o volver a ella.
 #
@@ -128,7 +128,7 @@ comprobar_etiqueta() {
 
 # Con :<sha> ya subida y antes que :X.Y.Z y :latest: crea la etiqueta, o sube
 # la que una ejecución anterior dejó solo aquí. Solo si el commit es la punta de
-# dev en GitHub: la etiqueta marca en el repo el commit de esta versión, y master avanza hasta él.
+# dev en GitHub: la etiqueta marca en el repo el commit de esta versión, y main avanza hasta él.
 etiquetar() {
   # Otra vez, por si algo ha cambiado mientras se construía.
   comprobar_etiqueta || return 1
@@ -139,7 +139,7 @@ etiquetar() {
   git fetch -q origin dev
   if [[ "$(git rev-parse origin/dev)" != "$COMMIT" ]]; then
     echo "Este commit no es la punta de dev en GitHub, así que no creo $ETIQUETA." >&2
-    echo "Cuando lo sea:  git tag -a $ETIQUETA -m \"…\" $COMMIT && git push --atomic origin $ETIQUETA $COMMIT:refs/heads/master" >&2
+    echo "Cuando lo sea:  git tag -a $ETIQUETA -m \"…\" $COMMIT && git push --atomic origin $ETIQUETA $COMMIT:refs/heads/main" >&2
     return 0
   fi
   if [[ -n "$(etiqueta_local)" ]]; then
@@ -147,8 +147,8 @@ etiquetar() {
   else
     git tag -a "$ETIQUETA" -m "${NOTAS:-Versión $VERSION}" "$COMMIT"
   fi
-  # Si alguien la ha subido en otro commit desde la comprobación, git push no la pisa; master solo avanza (fast-forward).
-  git push -q --atomic origin "$ETIQUETA" "$COMMIT:refs/heads/master"
+  # Si alguien la ha subido en otro commit desde la comprobación, git push no la pisa; main solo avanza (fast-forward).
+  git push -q --atomic origin "$ETIQUETA" "$COMMIT:refs/heads/main"
   echo "Etiqueta .... $ETIQUETA"
 }
 

@@ -114,7 +114,7 @@ def test_publica_en_el_orden_del_workflow(entorno):
                                 ["push", v, f"v{v}"], ["push", "dev", f"v{v}"],
                                 ["push", "latest", f"v{v}"]]
     assert entorno.git("--git-dir=origen.git", "rev-parse", f"v{v}^{{commit}}") == entorno.commit
-    assert entorno.git("--git-dir=origen.git", "rev-parse", "master") == entorno.commit
+    assert entorno.git("--git-dir=origen.git", "rev-parse", "main") == entorno.commit
     assert _manifiesto(entorno) | {"fecha": None} == {
         "commit": entorno.commit, "version": v, "digest": "sha256:abc", "notas": "Mejoras", "fecha": None}
 

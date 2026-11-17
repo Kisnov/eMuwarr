@@ -254,7 +254,7 @@ La imagen se publica con varias etiquetas, y `EMUWAREZ_UPLOADRR_TAG` (en el `.en
 | `latest` (por defecto) | La última versión publicada | Uso normal. Se actualiza con `docker compose pull && docker compose up -d` |
 | `1.0.0` | Una versión concreta (las que tienen etiqueta `v1.0.0` en el repo) | Quedarte en ella, o volver atrás si la nueva falla |
 | el sha del commit | La misma imagen de esa versión, por su commit | Fijar exactamente un commit |
-| `dev` | La punta de la rama `dev`: una prueba sin publicar, y también cada versión publicada | Probar un arreglo antes de que salga; nunca queda por detrás de `latest` |
+| `dev` | La punta de la rama `dev`: se construye en cada cambio, y también con cada versión publicada | Probar un arreglo antes de que salga; nunca queda por detrás de `latest` |
 
 Las versiones las publica el workflow *Publicar versión* (a mano, o solo los días impares del mes si hay cambios
 suficientes, siempre después de pasar los tests) o `scripts/desplegar.sh` desde tu equipo.

@@ -7,9 +7,9 @@ the upload with Uploadrr-EMU (`Kisnov/Uploadrr-EMU`, cloned into the image at `/
 
 ## Workflow
 
-- Sole maintainer: Gabriel (Kisnov). Main repo `Kisnov/eMuwarr`. All work goes to `dev` (the default branch); `master` is
+- Sole maintainer: Gabriel (Kisnov). Main repo `Kisnov/eMuwarr`. All work goes to `dev` (the default branch); `main` is
   always the last published version and only moves when `publicar.yml` (or `desplegar.sh`) fast-forwards it to the
-  version commit: never commit or open a PR to `master`. It started as a private fork of
+  version commit: never commit or open a PR to `main`. It started as a private fork of
   Rovaal-code's project (abandoned; Alvaro gave permission to publish it under the GPL); the history was moved here
   without the fork link and with his commit e-mail replaced. The image moved with it to `ghcr.io/kisnov/emuwarr` (the old `emuwarez-uploadrr` package is retired).
 - Docs-only changes and very simple fixes go straight to `dev` as a commit, no PR. Everything else: branch and
@@ -102,9 +102,9 @@ the upload with Uploadrr-EMU (`Kisnov/Uploadrr-EMU`, cloned into the image at `/
   versión": by hand, or on odd days of the month when 3+ PRs from `feat/` or `fix/` branches (merge commits, or `feat:`/`fix:` squash
   commits) merged since the last `__version__` change) runs
   the full CI on dev's tip, bumps `__version__` (`auto`: minor if any `feat/` PR, else patch), pushes that commit to `dev`, fast-forwards
-  `master` to it and pushes `vX.Y.Z` (all atomic), builds `:X.Y.Z`, `:<sha>`, `:latest` and `:dev`, publishes the manifest (secret
+  `main` to it and pushes `vX.Y.Z` (all atomic), builds `:X.Y.Z`, `:<sha>`, `:latest` and `:dev`, publishes the manifest (secret
   `UPLOADRR_VERSION_TOKEN`) and creates the GitHub release with the PRs merged since the previous tag. Release when Gabriel asks: `gh workflow run publicar.yml -f notas="…"`, with a
-  neutral public note. `solo_prueba=true` builds `:dev` from dev's tip only. `ref=<commit|branch|tag>` publishes that commit's version instead (no tests; the version commit and tag go to `release/vX.Y.Z`, to merge into dev afterwards; neither `master` nor `:dev` moves). `scripts/desplegar.sh` is
+  neutral public note. Every push to `dev` (except docs/`.md`-only) and `solo_prueba=true` build `:dev` from dev's tip only (no tests). `ref=<commit|branch|tag>` publishes that commit's version instead (no tests; the version commit and tag go to `release/vX.Y.Z`, to merge into dev afterwards; neither `main` nor `:dev` moves). `scripts/desplegar.sh` is
   the local fallback (no Actions minutes, no tests) and pushes in the same order; `--solo-prueba` pushes only
   `:dev`. Pass `--build-arg UPLOADRR_COMMIT=…` or
   the Uploadrr-EMU clone layer comes from cache.

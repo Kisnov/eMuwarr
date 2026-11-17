@@ -1,15 +1,15 @@
 # Publica una versión: pasa los tests completos sobre la punta de dev, sube
-# __version__ (en dev, y master avanza hasta ese commit: master es siempre la última versión),
+# __version__ (en dev, y main avanza hasta ese commit: main es siempre la última versión),
 # la etiqueta vX.Y.Z, construye la imagen (:X.Y.Z, :<sha>, :latest y :dev), publica el manifiesto en Kisnov/uploadrr-version, que es lo que
 # lee el aviso de actualización de la app, y crea el release con sus PR.
 #
 # A mano (Actions → Publicar versión → Run workflow), o solo los días impares del mes si desde
-# la última versión se han fusionado al menos 3 PR de ramas feat/ o fix/ (aquí o en Uploadrr-EMU). Con «solo prueba» construye
-# :dev de la punta de dev, sin tests, versión ni manifiesto.
+# la última versión se han fusionado al menos 3 PR de ramas feat/ o fix/ (aquí o en Uploadrr-EMU). Con «solo prueba», y en
+# cada push a dev que no sea solo de documentación, construye :dev de la punta de dev, sin tests, versión ni manifiesto.
 #
 # Con «ref» (un commit de dev, una rama o una etiqueta) publica la versión de ESE commit: sin tests (la CI solo corre sobre
 # la punta), con la versión y su etiqueta en la rama release/vX.Y.Z en vez de en dev (que ya avanzó; se fusiona después), sin
-# mover master ni :dev, que sigue siendo la punta de dev. Si falla después de subir la versión, se reanuda con ref=release/vX.Y.Z.
+# mover main ni :dev, que sigue siendo la punta de dev. Si falla después de subir la versión, se reanuda con ref=release/vX.Y.Z.
 #
 # Necesita el secreto UPLOADRR_VERSION_TOKEN: un token con permiso de escritura
 # solo en Kisnov/uploadrr-version (GITHUB_TOKEN no puede escribir en otro repo).
@@ -35,6 +35,9 @@ on:
         description: "Publicar la versión de este commit en vez de la punta de dev (sin tests; la versión va a release/vX.Y.Z)"
         type: string
         required: false
+  push:
+    branches: [dev]
+    paths-ignore: ["docs/**", "**.md"]
   schedule:
     - cron: "17 4 */2 * *"
 
@@ -81,7 +84,7 @@ jobs:
             echo "::error::El commit de ref es demasiado antiguo: su scripts/publicar_version.py no admite --solo-comprobar."
             exit 1
           fi
-          if [ "$PRUEBA" = true ]; then
+          if [ "$PRUEBA" = true ] || [ "$EVENTO" = push ]; then
             echo "accion=prueba" >> "$GITHUB_OUTPUT"
             exit 0
           fi
@@ -141,7 +144,7 @@ jobs:
       ACCION: ${{ needs.decidir.outputs.accion }}
       REF: ${{ inputs.ref }}
     steps:
-      # Con credenciales: este job sube a dev y master (o a release/vX.Y.Z, con ref) el commit de la versión y su
+      # Con credenciales: este job sube a dev y main (o a release/vX.Y.Z, con ref) el commit de la versión y su
       # etiqueta. .dockerignore excluye .git, así que no llegan a la imagen.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4  # zizmor: ignore[artipacked]
         with:
@@ -229,7 +232,7 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      # Con la imagen ya subida, y todo a la vez: si dev ha avanzado durante los tests (o master no es un
+      # Con la imagen ya subida, y todo a la vez: si dev ha avanzado durante los tests (o main no es un
       # antecesor de la versión) se rechaza todo y no queda ninguna versión a medias.
       - if: env.ACCION == 'publicar' && steps.version.outputs.subida != 'true'
         env:
@@ -238,7 +241,7 @@ jobs:
           if [ -n "$REF" ]; then
             git push --atomic origin "HEAD:refs/heads/release/v$VERSION" "v$VERSION"
           else
-            git push --atomic origin HEAD:dev HEAD:master "v$VERSION"
+            git push --atomic origin HEAD:dev HEAD:main "v$VERSION"
           fi
 
       - id: etiquetas
