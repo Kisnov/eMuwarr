@@ -1,6 +1,6 @@
 """Lotes de subidas: varias subidas lanzadas de una vez (una tanda del asistente, y más adelante el modal «Subir por
 lotes»). Un lote no es una tabla: es la etiqueta `upload_jobs.lote_id`, y lo que se sabe de él se deduce de sus filas.
-Pertenece al lote la punta de cada cadena de reintentos que lleva esa etiqueta (ver docs/PLAN_SUBIDA_POR_LOTES.md).
+Pertenece al lote la punta de cada cadena de reintentos que lleva esa etiqueta.
 
 Todo el SQL de los lotes vive aquí o en upload_execution/consultas.py: web/ no habla SQL."""
 
@@ -290,7 +290,7 @@ def reintentar_fallidas(conn: sqlite3.Connection, lote_id: str, *, desde_el_prin
     return {"reintentadas": len(encoladas), "saltadas": saltadas}
 
 
-# ── El freno del lote (pregunta 4 de docs/PLAN_SUBIDA_POR_LOTES.md) ───────────────────────────────────────────────
+# ── El freno del lote ───────────────────────────────────────────────
 #
 # Un fallo sistémico (eMuwarez caído, qBittorrent mal, una clave que ya no vale) haría fallar el resto del lote uno
 # tras otro, con un aviso por subida. Cuando una punta del lote acaba `failed`, se miran las puntas ya terminadas por

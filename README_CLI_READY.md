@@ -7,7 +7,7 @@ docker exec emuwarez-uploadrr python3 emuwarez_uploader.py <comando>
 ```
 
 Sin Docker, `python3 emuwarez_uploader.py <comando>`. La opción global `--db RUTA` elige otra base SQLite.
-Los argumentos entre corchetes son opcionales. El historial de la CLI anterior está en [`docs/historial_cli.md`](docs/historial_cli.md).
+Los argumentos entre corchetes son opcionales.
 
 ## `db` — Operaciones de base de datos local
 

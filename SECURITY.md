@@ -1,7 +1,5 @@
 # Política de seguridad
 
-Este repositorio es privado: solo lo ven quienes tienen acceso a él.
-
 ## Versiones con soporte
 
 Solo la última: la imagen `ghcr.io/kisnov/emuwarez-uploadrr:latest`, construida desde `master`. No se mantienen
@@ -9,8 +7,9 @@ versiones antiguas.
 
 ## Cómo avisar de un fallo de seguridad
 
-Si tienes acceso al repositorio, avisa directamente a Kisnov o abre un issue aquí, que solo lo ven los
-colaboradores. Cuenta qué has visto, qué impacto crees que tiene y cómo reproducirlo, y la versión de la imagen.
+No abras un issue público con un fallo de seguridad. Usa el aviso privado de GitHub:
+[Security → Report a vulnerability](https://github.com/Kisnov/emuwarez-uploadrr/security/advisories/new). Cuenta qué has
+visto, qué impacto crees que tiene y cómo reproducirlo, y la versión de la imagen.
 
 Si el fallo está en la subida en sí (el programa que se lanza para subir a eMuwarez), repórtalo en
 [Kisnov/Uploadrr-EMU](https://github.com/Kisnov/Uploadrr-EMU/security/advisories/new), que tiene informes privados.

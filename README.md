@@ -350,4 +350,5 @@ los dos lados, cambia el otro a la vez.
 
 ## Licencia
 
-Uso privado/homelab. No redistribuido públicamente.
+Todavía sin licencia elegida: hasta que se publique una, todos los derechos quedan reservados al autor. Puedes
+usarla en tu casa, pero no redistribuirla ni reutilizar su código.

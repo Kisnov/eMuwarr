@@ -1,11 +1,10 @@
 """Qué versión estoy ejecutando, y si hay una más nueva publicada.
 
-El repositorio y el paquete de imágenes son privados, así que la aplicación no
-puede preguntarle al registro si hay algo nuevo (comprobado: el token anónimo
-de GHCR no se emite y el manifest devuelve 403). La salida es un **manifiesto
-público** aparte: un único JSON con el commit, la fecha, el digest y una nota
-del cambio. El código y la imagen siguen privados; lo único público es "qué
-versión es la última", que es justo lo que hace falta saber.
+La aplicación no le pregunta al registro de imágenes si hay algo nuevo (el
+token anónimo de GHCR no se emitía y el manifest devolvía 403). Lee un
+**manifiesto público** aparte: un único JSON con el commit, la fecha, el digest
+y una nota del cambio. Es lo único que hace falta saber ("qué versión es la
+última") y se lee sin clave ni cuenta.
 
 Lo propio se sella en la imagen al construirla (ver Dockerfile: APP_COMMIT y
 APP_BUILD_DATE). Sin sellar -por ejemplo ejecutando desde el código fuente-
