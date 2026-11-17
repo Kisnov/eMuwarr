@@ -3,7 +3,8 @@
  */
 import { describe, expect, it } from 'vitest'
 import {
-  describirSerie, diaAMs, diaMasCercano, diasDelTrazado, formatDia, trazar, variacion, type Medidas, type PuntoSerie,
+  describirSerie, diaAMs, diaMasCercano, diasDelTrazado, formatDia, margenIzquierdo, nivelesY, trazar, variacion,
+  type Medidas, type PuntoSerie,
 } from '../graficos'
 
 // Recuadro útil de 100 x 100, a partir de (10, 10).
@@ -136,5 +137,21 @@ describe('variacion', () => {
   it('sin porcentaje si se parte de cero, y sin nada con menos de dos valores', () => {
     expect(variacion([p('2026-11-01', 0), p('2026-11-03', 4)])).toEqual({ diferencia: 4, porcentaje: null })
     expect(variacion([p('2026-11-01', 4), p('2026-11-03', null)])).toBeNull()
+  })
+})
+
+describe('eje Y', () => {
+  it('nivelesY da mínimo, medio y máximo; uno si son iguales; desde cero si se pide', () => {
+    expect(nivelesY([[p('2026-11-01', 2), p('2026-11-02', 6)]])).toEqual([2, 4, 6])
+    expect(nivelesY([[p('2026-11-01', 5), p('2026-11-02', 5)]])).toEqual([5])
+    expect(nivelesY([[p('2026-11-01', 2), p('2026-11-02', 6)]], true)).toEqual([0, 3, 6])
+    expect(nivelesY([[p('2026-11-01', null)]])).toEqual([])
+  })
+
+  it('margenIzquierdo crece con las cifras largas y nunca baja del mínimo', () => {
+    expect(margenIzquierdo(['18,96', '17,02'], 62)).toBe(62)
+    expect(margenIzquierdo([], 62)).toBe(62)
+    // «2.169.010»: siete cifras y dos puntos no caben en 62 px (se cortaba la primera cifra).
+    expect(margenIzquierdo(['154.801', '1.161.906', '2.169.010'], 62)).toBeGreaterThan(62 + 7)
   })
 })
