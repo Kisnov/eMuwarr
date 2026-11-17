@@ -120,8 +120,8 @@ El estado `healthy` lo da el healthcheck de la imagen, que consulta `/api/health
 el código:
 
 ```bash
-git clone https://github.com/Kisnov/emuwarez-uploadrr.git
-cd emuwarez-uploadrr
+git clone https://github.com/Kisnov/eMuwarr.git
+cd eMuwarr
 cp .env.example .env
 docker compose -f docker-compose.example.yml build \
   --build-arg UPLOADRR_COMMIT=$(git ls-remote https://github.com/Kisnov/Uploadrr-EMU.git main | cut -f1)

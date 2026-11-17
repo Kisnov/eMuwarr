@@ -8,7 +8,7 @@ versiones antiguas.
 ## Cómo avisar de un fallo de seguridad
 
 No abras un issue público con un fallo de seguridad. Usa el aviso privado de GitHub:
-[Security → Report a vulnerability](https://github.com/Kisnov/emuwarez-uploadrr/security/advisories/new). Cuenta qué has
+[Security → Report a vulnerability](https://github.com/Kisnov/eMuwarr/security/advisories/new). Cuenta qué has
 visto, qué impacto crees que tiene y cómo reproducirlo, y la versión de la imagen.
 
 Si el fallo está en la subida en sí (el programa que se lanza para subir a eMuwarez), repórtalo en
