@@ -120,3 +120,10 @@ the upload with Uploadrr-EMU (`Kisnov/Uploadrr-EMU`, cloned into the image at `/
 - Building on Windows: `.gitattributes` keeps text files LF, so a new checkout builds with `docker build .`. A checkout
   made before it is still CRLF, and a CRLF `docker-entrypoint.sh` fails with "no such file or directory": build
   from `git -c core.autocrlf=false archive HEAD`.
+
+## Plan
+
+What is still pending (to decide, to test on the NAS) lives in `docs/PLAN.md`; what is done lives in the commit
+history and the PRs, so delete an item from the plan when it is finished. Read it before starting plan work and
+update it in the same PR that closes a point. The older detailed review notes are in `tmp/analisi/` (gitignored, on
+Gabriel's PC only).
