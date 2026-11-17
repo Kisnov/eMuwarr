@@ -17,6 +17,7 @@ from typing import Any
 from ..database import get_json_state, get_setting_canonical, set_json_state
 from ..integrations.base import IntegrationError, texto_de_error
 from ..integrations.emu import emu_get_user
+from .avisos_cuenta import avisar_cambios
 from .perfil_historial import guardar_instantanea
 from .settings import set_setting
 
@@ -80,6 +81,7 @@ def _pedir(conn: sqlite3.Connection, clave: str, guardado: dict[str, Any]) -> di
         if not get_setting_canonical(conn, "emu.username"):
             set_setting(conn, "emu.username", str(datos["username"]))
         guardar_instantanea(conn, datos)
+        avisar_cambios(conn, guardado.get("perfil"), nuevo["perfil"])
     set_json_state(conn, PERFIL_STATE_KEY, nuevo)
     conn.commit()
     return nuevo
