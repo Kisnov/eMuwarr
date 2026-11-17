@@ -111,7 +111,7 @@ def test_cada_caso_de_ruta_da_su_aviso(conn, isolated_db, monkeypatch):
                for k, i in ids.items()}
     assert errores["extension"] == "extensión no reconocida como vídeo: .txt"
     assert "directorio" in errores["directorio"]
-    assert errores["falla"] == "error al inspeccionar: disco caído"
+    assert errores["falla"] == "error al inspeccionar: error inesperado (el detalle está en los logs)"
     if "no_regular" in errores:
         assert errores["no_regular"] == "la ruta existe pero no es un archivo regular"
 

@@ -6,8 +6,6 @@ from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
-from ..integrations.base import texto_de_error
-
 
 # Pydantic repite en cada error el valor recibido (`input`) y, a veces, la excepción que lo
 # provocó (`ctx`). En esta API ese valor puede ser una URL con la clave en la query, una API
@@ -26,7 +24,9 @@ async def validation_error_handler(request: Request, exc: RequestValidationError
 
 
 async def generic_error_handler(request: Request, exc: Exception) -> JSONResponse:
+    # El middleware de app.py ya deja la excepción en el log; su texto no sale de aquí.
     return JSONResponse(
         status_code=500,
-        content={"error": "Internal server error", "detail": texto_de_error(exc), "status_code": 500},
+        content={"error": "Internal server error", "detail": "Error interno: el detalle está en los logs",
+                 "status_code": 500},
     )

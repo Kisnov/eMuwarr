@@ -9,7 +9,8 @@ import sqlite3
 from datetime import datetime, timezone
 from typing import Any, Optional
 
-from ..integrations.base import texto_de_error
+from ..integrations.arr_base import ArrClientError
+from ..integrations.base import error_inesperado, texto_de_error
 from ..integrations.radarr import (
     radarr_get_queue,
     radarr_get_history,
@@ -138,9 +139,13 @@ def collect_instance_health(instance_id: int, conn: sqlite3.Connection) -> dict[
             result["ok"] = False
             result["error"] = f"tipo desconocido: {inst_type}"
             result["health_status"] = "error"
-    except Exception as exc:
+    except ArrClientError as exc:
         result["ok"] = False
         result["error"] = texto_de_error(exc, row["api_key"])
+        result["health_status"] = "error"
+    except Exception as exc:
+        result["ok"] = False
+        result["error"] = error_inesperado(exc, "No se pudo consultar la instancia")
         result["health_status"] = "error"
 
     return result
@@ -174,8 +179,10 @@ def refresh_arr_queue_diagnostics(
                 mapped = _map_sonarr_queue(queue, inst.id, conn)
                 updated += mapped
                 queue_items_total += len(queue)
-        except Exception as exc:
+        except ArrClientError as exc:
             errors.append({"instance": inst.name, "error": texto_de_error(exc, inst.api_key)})
+        except Exception as exc:
+            errors.append({"instance": inst.name, "error": error_inesperado(exc, "No se pudo leer la cola")})
 
     conn.commit()
     return {
@@ -214,8 +221,10 @@ def refresh_arr_history_diagnostics(
                 mapped = _map_sonarr_history(history, inst.id, conn)
                 updated += mapped
                 history_total += len(history)
-        except Exception as exc:
+        except ArrClientError as exc:
             errors.append({"instance": inst.name, "error": texto_de_error(exc, inst.api_key)})
+        except Exception as exc:
+            errors.append({"instance": inst.name, "error": error_inesperado(exc, "No se pudo leer el historial")})
 
     conn.commit()
     return {

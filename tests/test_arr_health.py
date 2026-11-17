@@ -76,6 +76,22 @@ def test_collect_arr_health_connection_error(db_with_instances):
     assert result["summary"]["error"] == 1
 
 
+def test_un_fallo_de_radarr_conserva_su_texto_y_uno_inesperado_no(db_with_instances):
+    from emuwarez_uploadrr.integrations.arr_base import ArrConnectionError
+    from emuwarez_uploadrr.services.arr_health import collect_arr_health
+    conn = db_with_instances
+
+    with patch("emuwarez_uploadrr.services.arr_health.radarr_test_connection", return_value={"ok": True}),          patch("emuwarez_uploadrr.services.arr_health.radarr_get_system_status",
+               side_effect=ArrConnectionError("Timeout conectando con http://radarr:7878")):
+        propio = collect_arr_health(conn)["instances"][0]["error"]
+    with patch("emuwarez_uploadrr.services.arr_health.radarr_test_connection", return_value={"ok": True}),          patch("emuwarez_uploadrr.services.arr_health.radarr_get_system_status",
+               side_effect=KeyError("version")):
+        inesperado = collect_arr_health(conn)["instances"][0]["error"]
+
+    assert propio == "Timeout conectando con http://radarr:7878"
+    assert inesperado == "No se pudo consultar la instancia: error inesperado (el detalle está en los logs)"
+
+
 def test_radarr_queue_maps_to_movie_item(db_with_movie_item):
     from emuwarez_uploadrr.services.arr_health import refresh_arr_queue_diagnostics
     conn, item_id, inst_id = db_with_movie_item

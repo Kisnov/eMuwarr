@@ -2,11 +2,14 @@
 from __future__ import annotations
 
 import json
+import logging
 import re
 import urllib.parse
 from typing import Any, Optional
 
 from . import http_cliente
+
+logger = logging.getLogger(__name__)
 
 
 class IntegrationError(RuntimeError):
@@ -281,6 +284,13 @@ def texto_de_error(exc: BaseException, *claves: Optional[str]) -> str:
     excepción llegue a una respuesta HTTP, un log, una notificación o una columna de la base. Una excepción de
     integración puede llevar la URL pedida, y eMuwarez y TMDb llevan la clave en ella."""
     return tapar_claves(str(exc), *claves)
+
+
+def error_inesperado(exc: BaseException, que: str) -> str:
+    """Para un `except Exception`: el texto de un fallo que no es nuestro (SQL, rutas, un bug) va al log, que tapa
+    las claves, y a la respuesta solo llega qué falló."""
+    logger.error("%s", que, exc_info=exc)
+    return f"{que}: error inesperado (el detalle está en los logs)"
 
 
 def build_url(base_url: str, path: str, params: Optional[dict[str, Any]] = None) -> str:

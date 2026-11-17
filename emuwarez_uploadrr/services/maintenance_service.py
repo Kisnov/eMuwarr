@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Iterable, Optional
 
 from .settings import get_setting_canonical, set_setting
-from ..integrations.base import texto_de_error
+from ..integrations.base import error_inesperado, texto_de_error
 
 VACUUM_CONFIRMATION = "MANTENIMIENTO_DB"
 
@@ -47,7 +47,7 @@ def get_database_maintenance_status() -> dict:
             "fragmentation_pct": round(freelist / page_count * 100, 1) if page_count else 0,
         }
     except Exception as exc:
-        return {"ok": False, "error": texto_de_error(exc)}
+        return {"ok": False, "error": error_inesperado(exc, "No se pudo leer el estado de la base")}
 
 
 def run_database_integrity_check() -> dict:
@@ -68,7 +68,7 @@ def run_database_integrity_check() -> dict:
             "message": "Integridad OK" if passed else f"Problemas encontrados: {results}",
         }
     except Exception as exc:
-        return {"ok": False, "error": texto_de_error(exc)}
+        return {"ok": False, "error": error_inesperado(exc, "No se pudo comprobar la integridad de la base")}
 
 
 def run_database_vacuum(
@@ -119,7 +119,7 @@ def run_database_vacuum(
         busy = conn.execute("PRAGMA wal_checkpoint(TRUNCATE)").fetchone()[0]
         conn.close()
     except Exception as exc:
-        return {"ok": False, "dry_run": False, "error": texto_de_error(exc)}
+        return {"ok": False, "dry_run": False, "error": error_inesperado(exc, "No se pudo compactar la base")}
 
     after = _size_on_disk(db)
     saved = before - after
