@@ -4,6 +4,7 @@ import re
 from datetime import timedelta
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
+from urllib.parse import urlparse
 
 from tinytag import TinyTag
 
@@ -857,6 +858,7 @@ class MusicProcessor:
 
         # Genius
         for url in relations.get("genius", []) + relations.get("lyrics", []):
-            if "genius.com" in url:
+            host = urlparse(url).hostname or ""
+            if host == "genius.com" or host.endswith(".genius.com"):
                 meta["genius"] = url
                 break
