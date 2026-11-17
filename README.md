@@ -316,7 +316,7 @@ pip install -e ".[web,dev]"
 python -m pytest tests -q -p no:cacheprovider
 
 # Uploadrr-EMU, desde su carpeta (su conftest corta la red y los subprocesos)
-cd uploadrr-emu && pip install -r requirements.txt pytest pytest-cov && python -m pytest tests -q -p no:cacheprovider
+(cd uploadrr-emu && pip install -r requirements.txt pytest pytest-cov && python -m pytest tests -q -p no:cacheprovider)
 
 # Frontend
 cd frontend && npm ci && npx tsc --noEmit && npm run lint && npx vitest run && npx vite build
