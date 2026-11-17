@@ -10,8 +10,9 @@ the upload with Uploadrr-EMU (`Kisnov/Uploadrr-EMU`, cloned into the image at `/
 - Sole maintainer: Gabriel (Kisnov). Main repo `Kisnov/eMuwarr`, base `master`. It started as a private fork of
   Rovaal-code's project (abandoned; Alvaro gave permission to publish it under the GPL); the history was moved here
   without the fork link and with his commit e-mail replaced. The image keeps its old name, `emuwarez-uploadrr`.
-- Branch and PR, never commit to `master`. Group related changes: no PR per one-line fix. Open PRs as
-  non-draft so CodeRabbit reviews them; its standing rules per path live in `.coderabbit.yaml`.
+- Docs-only changes and very simple fixes go straight to `master` as a commit, no PR. Everything else: branch and
+  PR. Group related changes: no PR per one-line fix. Open PRs as non-draft so CodeRabbit reviews them; its standing
+  rules per path live in `.coderabbit.yaml`.
 - UI text is in Spanish (the users are Spanish speakers), and so are the README and docs. Code comments and commits
   may be in Spanish or English; most of the code is in Spanish, so Spanish keeps it consistent, but don't translate
   existing comments just to change their language. Conventional Commits with a one-line summary of the user-visible
