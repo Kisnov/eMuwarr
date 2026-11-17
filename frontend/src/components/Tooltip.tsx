@@ -278,6 +278,12 @@ export function Tooltip({ content, children, style, maxWidth }: {
 type AtributosExtra = Omit<React.HTMLAttributes<HTMLElement>, 'onClick' | 'onMouseDown' | 'onMouseUp' | 'children' | 'style' | 'className'>
   & { [dato: `data-${string}`]: string | undefined }
 
+/** Clic con el botón principal y sin teclas: lo lleva la SPA. Con modificador o con otro botón lo hace el navegador
+ *  (otra pestaña o ventana). */
+export function esClicNormal(e: React.MouseEvent): boolean {
+  return e.button === 0 && !e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey
+}
+
 export function HoverTitle({ as = 'div', href, className, style, onClick, onMouseDown, onMouseUp, tip, children, onKeyDown, ...resto }: {
   as?: 'div' | 'span'
   /** Con onClick: la ruta a la que lleva. Se pinta un enlace de verdad (<a href>), así que el clic central y Ctrl/⌘+clic
@@ -308,7 +314,7 @@ export function HoverTitle({ as = 'div', href, className, style, onClick, onMous
     // que si no abriría el detalle también en esta pestaña.
     const alPulsar = (e: React.MouseEvent<HTMLAnchorElement>) => {
       if (e.defaultPrevented) return
-      if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) {
+      if (!esClicNormal(e)) {
         e.stopPropagation()
         return
       }

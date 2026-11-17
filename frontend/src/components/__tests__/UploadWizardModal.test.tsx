@@ -173,6 +173,15 @@ describe('película', () => {
     expect(document.querySelector('.modal-panel.asist-marco')!.classList.contains('asist-alto-fijo')).toBe(true)
   })
 
+  it('lo que sale del archivo se lee en filas, no en campos apagados, y los editables van arriba', async () => {
+    await abrir(PELICULA)
+    await esperar(() => texto().includes('Dune WEB-DL AMZN [GRP]'))
+    expect(document.querySelectorAll('.asist-rejilla-campos input:disabled')).toHaveLength(0)
+    expect([...document.querySelectorAll('.asist-derivados dt')].map(d => d.textContent))
+      .toEqual(['Año?', 'Resolución?', 'Códec de vídeo?', 'Audio?', 'Subtítulos?'])
+    expect(campo('Tag')).toBeDefined()
+  })
+
   it('carga la nomenclatura, comprueba y encola con lo elegido', async () => {
     await abrir(PELICULA)
     await esperar(() => texto().includes('Dune WEB-DL AMZN [GRP]'))
@@ -269,7 +278,7 @@ describe('película', () => {
     expect(boton('Continuar')!.disabled).toBe(true)
 
     recalculo.resolver(respuestaCampos({ audio_summary: 'Castellano DD 5.1 / Inglés DD 2.0' }))
-    await esperar(() => campo<HTMLInputElement>('Audio')!.value === 'Castellano DD 5.1 / Inglés DD 2.0')
+    await esperar(() => texto().includes('Castellano DD 5.1 / Inglés DD 2.0'))
     await esperar(() => !boton('Continuar')!.disabled)
   })
 

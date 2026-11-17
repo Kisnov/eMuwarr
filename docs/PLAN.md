@@ -8,26 +8,10 @@ fichero en el mismo PR que cierra un punto: bórralo.**
 
 - **Subida por lotes:** si guardar los `campos` de un elemento y crear su trabajo van en una sola transacción. Se
   decide al probarla en el NAS.
-- **Interfaz (auditoría con `impeccable`, #294):** quedaron sin arreglar tres detalles de tamaño:
+- **Interfaz (auditoría con `impeccable`, #294):** quedaron sin arreglar dos detalles de tamaño:
   - las ayudas de frase entera a 11 px (Configuración, Tareas, la primera configuración y las comprobaciones del
     resumen del lote);
-  - el nombre del torrent a 9 px en el asistente a 390 px;
   - la caja interior de las tarjetas de Tareas.
-
-## Por hacer: revisión de diseño con `impeccable critique` (17/11)
-
-Panel, asistente de subida y Biblioteca: 28/40 en las heurísticas de Nielsen. Los informes completos quedan en
-`.impeccable/critique/` (sin versionar), y `/impeccable polish` los lee. Por orden:
-
-- **El paso 1 del asistente** pinta seis valores derivados (Año, Resolución, Temporada/Episodio, Códec, Audio,
-  Subtítulos) como `input disabled` al 50 % de opacidad: pasarlos a filas de solo lectura y dejar arriba los editables
-  (Título, Source, Tag). `asistente/PasoArchivo.tsx` y `PasoTemporada.tsx`.
-- **En el móvil**, cada carril del Panel tiene su propio scroll al 70 % del alto (`panel.css`): dejarlos a su alto
-  natural. El nombre del torrent a 9 px de «Por decidir» es parte de lo mismo.
-- **«Todo en orden»** del Panel no mira si eMuwarez o TMDb responden (`avisosDeAtencion` en `utils/hoy.ts`): con la
-  clave caducada tranquiliza y la subida se bloquea después.
-- **Menores:** «Panel» sale dos veces (barra superior y h1); las cifras de la franja no enlazan a su sección; la ruta
-  solo se ve tras «Ver ruta»; «ideas» en la barra de selección; tres líneas con una palabra suelta.
 
 ## Por probar en el NAS (`:dev`)
 

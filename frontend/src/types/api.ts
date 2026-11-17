@@ -74,6 +74,7 @@ export interface DashboardSummaryResponse {
   next_sync_at: string | null
   // Las instancias activas que la vigilancia no vio responder en su última mirada.
   instancias_caidas?: { id: number; nombre: string; tipo: string; ultima_sincronizacion: string | null }[]
+  tmdb_error?: string | null
   // Phase 8B — request readiness (used by "Peticiones eMuwarez")
   requests_ready_to_upload?: number
   requests_need_nomenclature?: number

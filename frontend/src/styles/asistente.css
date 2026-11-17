@@ -11,6 +11,8 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  /* Se hereda: ningún párrafo del asistente acaba con una palabra sola en su última línea. */
+  text-wrap: pretty;
 }
 .asist-marco > .modal-header { flex: none; }
 .asist-seccion { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; }
@@ -446,6 +448,17 @@
 .asist-datos { display: grid; grid-template-columns: max-content 1fr; gap: 6px 14px; margin: 0; font-size: 12.5px; }
 .asist-datos dt { color: var(--text-muted); }
 .asist-datos dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+/* Paso 1: lo que no se edita, en filas de lectura bajo los campos editables, dos por fila. */
+.asist-derivados {
+  grid-template-columns: max-content 1fr max-content 1fr;
+  gap: 8px 14px;
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+  font-size: 13px;
+}
+.asist-derivado { display: contents; }
+.asist-derivados .asist-etiqueta { margin-bottom: 0; }
 .asist-marcas { display: flex; flex-wrap: wrap; gap: 4px 16px; }
 .asist-dato-nota { display: block; margin-top: 2px; font-size: 11.5px; color: var(--text-muted); }
 .asist-aviso-dato { color: var(--color-warning-soft); }
@@ -518,6 +531,7 @@
   .modal-panel.asist-marco.asist-alto-fijo { height: calc(var(--vh100) * 0.96); }
   .asist-pie-estado { order: -1; flex-basis: 100%; text-align: left; }
   .asist-rejilla-campos, .asist-rejilla-modos { grid-template-columns: 1fr; }
+  .asist-derivados { grid-template-columns: max-content 1fr; }
   .asist-pestana { padding: 10px 12px; }
   /* Las tablas de Pistas y MediaInfo no caben a 390 px: se desplazan de lado en vez de apretar las columnas. */
   .asist-pestana-panel .asist-tabla-caja { overflow-x: auto; }

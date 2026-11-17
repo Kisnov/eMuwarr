@@ -11,6 +11,7 @@ import type { DashboardSummaryResponse, LibraryItemResponse, UploadJob } from '.
 import { SyncCard } from '../components/SyncCard'
 import { CuentaEmu } from '../components/CuentaEmu'
 import { useSync } from '../context/SyncContext'
+import { usePerfilEmu } from '../context/PerfilEmuContext'
 import { LoadingState } from '../components/LoadingState'
 import { ErrorState } from '../components/ErrorState'
 import { RequestFormModal } from '../components/RequestFormModal'
@@ -93,6 +94,8 @@ export function DashboardPage({ onNavigate }: DashboardPageProps = {}) {
   // Una sincronización que termina, o volver a la pestaña, sube `lastInvalidatedAt` y recarga lo cargado. El mensaje
   // de que terminó sale en la barra de arriba (ver SyncProgressBanner), no aquí.
   const { lastInvalidatedAt } = useSync()
+  // El error de tu cuenta de eMuwarez también va a «Necesita atención»: con la clave rechazada no se sube.
+  const { perfil } = usePerfilEmu()
 
   // Toda la respuesta, para sacar de ella las que han terminado hace poco.
   const [todasLasSubidas, setTodasLasSubidas] = useState<UploadJob[]>([])
@@ -269,6 +272,10 @@ export function DashboardPage({ onNavigate }: DashboardPageProps = {}) {
   // Las que aún se despiden salen arriba, no se repiten en «Recientes».
   const recientes = ultimasTerminadas(todasLasSubidas, idsDe(despidiendose.map(d => d.job)))
   const avisos = avisosDeAtencion({
+    servicios: [
+      ...(perfil?.error ? [{ nombre: 'eMuwarez', error: perfil.error }] : []),
+      ...(s.tmdb_error ? [{ nombre: 'TMDb', error: s.tmdb_error }] : []),
+    ],
     instancias: s.instancias_caidas ?? [],
     fallidas: fallidasRecientes(todasLasSubidas, idsDe(despidiendose.map(d => d.job))),
     versionNueva,
@@ -398,9 +405,9 @@ export function DashboardPage({ onNavigate }: DashboardPageProps = {}) {
         <CarrilEnCurso filas={filasDeSubida} recientes={recientes} onOpen={goToUpload} onVerTodas={() => onNavigate?.('uploads')} />
       </div>
 
-      <BandaAtencion avisos={avisos} onVerSubida={goToUpload} onVerSubidas={() => onNavigate?.('uploads')} onVerVersion={() => onNavigate?.('settings')} />
+      <BandaAtencion avisos={avisos} onVerSubida={goToUpload} onVerSubidas={() => onNavigate?.('uploads')} onVerAjustes={() => onNavigate?.('settings')} />
 
-      <Franja resumen={s} />
+      <Franja resumen={s} onIr={seccion => onNavigate?.(seccion)} />
     </div>
     </>
   )

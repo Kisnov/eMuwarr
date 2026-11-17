@@ -323,7 +323,8 @@ export function AppShell({ user, onLogout }: AppShellProps) {
       <div className="main-content" inert={menu.abierto}>
         <Topbar
           user={user}
-          pageTitle={PAGE_TITLE[activePage] ?? ''}
+          // En el Panel, la portada, la miga repetía el «Panel» del h1 de debajo.
+          pageTitle={activePage === 'dashboard' ? '' : PAGE_TITLE[activePage] ?? ''}
           onLogout={onLogout}
           onBuscar={() => setPaletaAbierta(true)}
           menu={menu}

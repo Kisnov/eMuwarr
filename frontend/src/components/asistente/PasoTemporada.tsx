@@ -11,7 +11,7 @@ import { SourceComparisonModal } from '../SourceComparisonModal'
 import { EpisodePicker } from './Capitulos'
 import { FIELD_INFO, INTERNAL_TITLE_LABEL, labelStyle } from './constantes'
 import { MediaInfoTable } from './MediaInfoTable'
-import { AvisoSubidaExistente, BotonComparacionSource, CampoTag, FieldLabel, GeneratingHint, MarcoPaso, TableLoadingSpinner } from './piezas'
+import { AvisoSubidaExistente, BotonComparacionSource, CampoTag, DatosDerivados, FieldLabel, GeneratingHint, MarcoPaso, TableLoadingSpinner } from './piezas'
 import { Pestanas, type Pestana } from './Pestanas'
 import { AvisoModoPistas, RemuxTable } from './RemuxTable'
 import type { Asistente, PestanaArchivo } from './useAsistente'
@@ -70,12 +70,6 @@ export function PasoTemporada({ a }: { a: Asistente }) {
           <input id={`${idCampo}-titulo`} className="form-input" value={seasonPlan?.series_title || ''} disabled />
         )}
       </label>
-      <label htmlFor={`${idCampo}-anio`}><FieldLabel label="Año" info={FIELD_INFO.year} />
-        <input id={`${idCampo}-anio`} className="form-input" value={seasonPlan?.year ?? ''} disabled />
-      </label>
-      <label htmlFor={`${idCampo}-resolucion`}><FieldLabel label="Resolución" info={FIELD_INFO.resolution} />
-        <input id={`${idCampo}-resolucion`} className="form-input" value={seasonPlan?.resolution || ''} disabled />
-      </label>
       <label htmlFor={`${idCampo}-source`}><FieldLabel label="Source" info={FIELD_INFO.source} />
         <div className="asist-fila-source">
           <select id={`${idCampo}-source`} className="form-input form-select asist-crece" value={fields.source || ''} onChange={e => setField('source', e.target.value)}>
@@ -103,18 +97,7 @@ export function PasoTemporada({ a }: { a: Asistente }) {
           {origenProveedor && <span className="form-hint">{origenProveedor}</span>}
         </label>
       )}
-      <label htmlFor={`${idCampo}-video`}><FieldLabel label="Códec de vídeo" info={FIELD_INFO.video_codec} />
-        <input id={`${idCampo}-video`} className="form-input" value={seasonPlan?.video_codec || ''} disabled />
-      </label>
-      <label htmlFor={`${idCampo}-audio`}><FieldLabel label="Audio" info={FIELD_INFO.audio} />
-        <input id={`${idCampo}-audio`} className="form-input" value={fields.audio_summary ?? seasonPlan?.audio_summary ?? ''} disabled />
-        {seasonPlan?.audio_warning && (
-          <span className="asist-aviso-campo"><IconoAviso /> {seasonPlan.audio_warning}</span>
-        )}
-        {audioWarning && (
-          <span className="asist-aviso-campo"><IconoAviso /> {audioWarning}</span>
-        )}
-      </label>
+      <CampoTag value={fields.tag} opciones={opcionesTag} onChange={t => setField('tag', t)} />
       {(seasonPlan?.pistas_sin_idioma?.length ?? 0) > 0 && (
         <div className="asist-col-completa asist-pila">
           {(seasonPlan?.pistas_sin_idioma ?? []).map(p => (
@@ -133,11 +116,17 @@ export function PasoTemporada({ a }: { a: Asistente }) {
           {recalculandoIdioma && <span className="form-hint"><span className="spinner asist-spinner-10" /> Recalculando el nombre del pack…</span>}
         </div>
       )}
-      <label htmlFor={`${idCampo}-subs`}><FieldLabel label="Subtítulos" info={FIELD_INFO.subs} />
-        <input id={`${idCampo}-subs`} className="form-input" value={seasonPlan?.subtitle_summary || ''} disabled />
-      </label>
-      <CampoTag value={fields.tag} opciones={opcionesTag} onChange={t => setField('tag', t)} />
     </div>
+  )
+  const seasonDerivados = (
+    <DatosDerivados datos={[
+      { etiqueta: 'Año', info: FIELD_INFO.year, valor: seasonPlan?.year },
+      { etiqueta: 'Resolución', info: FIELD_INFO.resolution, valor: seasonPlan?.resolution },
+      { etiqueta: 'Códec de vídeo', info: FIELD_INFO.video_codec, valor: seasonPlan?.video_codec },
+      { etiqueta: 'Audio', info: FIELD_INFO.audio, valor: fields.audio_summary ?? seasonPlan?.audio_summary,
+        avisos: [seasonPlan?.audio_warning, audioWarning] },
+      { etiqueta: 'Subtítulos', info: FIELD_INFO.subs, valor: seasonPlan?.subtitle_summary },
+    ]} />
   )
 
   // El resumen del pack (la tarjeta del nombre va sobre las pestañas): cuántos capítulos y el nombre de cada uno.
@@ -223,7 +212,7 @@ export function PasoTemporada({ a }: { a: Asistente }) {
           {/* El nombre del pack, a la vista en las tres pestañas. */}
           <div className="detail-card asist-tarjeta">
             <div className="asist-etiqueta">Nombre final del torrent (eMuwarez)</div>
-            {seasonDisplayTitle ? <div translate="no"><FitText min={9} text={seasonDisplayTitle} /></div> : <GeneratingHint />}
+            {seasonDisplayTitle ? <div translate="no"><FitText min={11} text={seasonDisplayTitle} /></div> : <GeneratingHint />}
           </div>
 
           <Pestanas nombre="Detalle de los capítulos" pestanas={pestanas} activa={pestana} onCambiar={elegirPestana}>
@@ -235,6 +224,7 @@ export function PasoTemporada({ a }: { a: Asistente }) {
                   Source, Proveedor y Tag se pueden corregir a mano y se aplican a todos los capítulos por igual.
                 </p>
                 {seasonFieldBox}
+                {seasonDerivados}
                 {avisosDelPlan}
                 {resumenPack}
               </>
@@ -330,7 +320,7 @@ export function PasoTemporada({ a }: { a: Asistente }) {
                     <p className="text-error asist-t12 asist-m0">✗ {current.error}</p>
                   ) : (
                     <FitTextPair
-                      min={9}
+                      min={11}
                       items={[
                         { label: 'Nombre del torrent', text: current.torrent_name || '—', labelStyle },
                         { label: INTERNAL_TITLE_LABEL, text: current.internal_mkv_title || '—', labelStyle },

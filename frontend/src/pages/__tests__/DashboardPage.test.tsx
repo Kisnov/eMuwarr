@@ -24,10 +24,11 @@ vi.mock('../../api/eventos', () => ({
   seguirProgreso: vi.fn(() => () => {}),
 }))
 // La cuenta de eMuwarez: sin perfil no pinta nada (como el componente real); con perfil, un hueco reconocible.
-const cuenta = vi.hoisted(() => ({ hayPerfil: false }))
+const cuenta = vi.hoisted(() => ({ hayPerfil: false, error: null as string | null }))
 vi.mock('../../components/CuentaEmu', () => ({
   CuentaEmu: () => (cuenta.hayPerfil ? <section data-testid="cuenta">Ratio 17,31</section> : null),
 }))
+vi.mock('../../context/PerfilEmuContext', () => ({ usePerfilEmu: () => ({ perfil: { error: cuenta.error } }) }))
 vi.mock('../../components/SyncCard', () => ({ SyncCard: () => <button>↻ Sincronizar todo</button> }))
 vi.mock('../../components/UploadWizardModal', () => ({
   UploadWizardModal: (p: { item: { id: number }; preselect?: unknown; requestId?: number }) => (
@@ -94,6 +95,7 @@ const botonDe = (donde: Element, nombre: string) =>
 
 beforeEach(() => {
   cuenta.hayPerfil = false
+  cuenta.error = null
   vi.mocked(getDashboardSummary).mockResolvedValue(resumen())
   vi.mocked(getDashboardRecommendations).mockResolvedValue({ items: [] })
   vi.mocked(getUploads).mockResolvedValue([])
@@ -235,6 +237,10 @@ describe('Panel', () => {
     expect(tarjetas.map(c => (c.querySelector('.stat-card-icon') as HTMLElement).style.color))
       .toEqual(['', 'var(--color-available)', '', '', ''])
     expect(tarjetas.map(c => (c.querySelector('.stat-card-value') as HTMLElement).style.color)).toEqual(['', '', '', '', ''])
+    // Cada cifra lleva a su sección.
+    expect(tarjetas.map(c => c.getAttribute('href'))).toEqual(['/library', '/library', '/library', '/requests', '/uploads'])
+    await pulsar(tarjetas[3])
+    expect(navegar).toHaveBeenCalledWith('requests')
   })
 
   it('con tres peticiones o más no hay línea «Nada más listo», ni sin ninguna (ahí habla el estado vacío)', async () => {
@@ -373,6 +379,27 @@ describe('Panel', () => {
     await pulsar(ver)
     expect(sessionStorage.getItem('emuwarez_open_upload')).toBe('9')
     expect(navegar).toHaveBeenCalledWith('uploads')
+  })
+
+  it('con la clave de eMuwarez rechazada y TMDb fallando no dice «Todo en orden»: van primero y llevan a Configuración', async () => {
+    cuenta.error = 'eMuwarez ha rechazado la API key (¿ratio por debajo de 1?)'
+    vi.mocked(getDashboardSummary).mockResolvedValue(resumen({ tmdb_error: 'API key de TMDb inválida o no autorizada' }))
+    vi.mocked(getVersionInfo).mockResolvedValue({ version: '0.14.0', estado: 'hay_novedad', ultima: { version: '0.14.1' } })
+    await pagina()
+    await esperar(() => banda().querySelectorAll('.panel-aviso').length === 3)
+
+    const avisos = [...banda().querySelectorAll('.panel-aviso')].map(a => a.textContent)
+    expect(avisos[0]).toContain('eMuwarez da error')
+    expect(avisos[0]).toContain('eMuwarez ha rechazado la API key')
+    expect(avisos[1]).toContain('TMDb da error')
+    expect(avisos[1]).toContain('API key de TMDb inválida')
+    expect(avisos[2]).toContain('Versión nueva 0.14.1 publicada')
+    expect(banda().querySelector('.panel-punto')!.className).toContain('panel-punto-mala')
+
+    const revisar = [...banda().querySelectorAll('a[href]')].find(l => l.textContent === 'Revisar')!
+    expect(revisar.getAttribute('href')).toBe('/settings')
+    await pulsar(revisar)
+    expect(navegar).toHaveBeenCalledWith('settings')
   })
 
   it('con más de cuatro avisos enseña cuatro y «y N más» despliega el resto', async () => {
@@ -800,7 +827,7 @@ describe('«Subir seleccionadas» en «Listo para subir»', () => {
     expect(casillas().map(c => c.getAttribute('aria-label'))).toEqual([
       'Seleccionar «Lost (2016) - Temporada 2»', 'Seleccionar «Única (2016)»', 'Seleccionar «Mejora (2002)»',
     ])
-    expect(texto()).toContain('Marca las peticiones o ideas que quieras subir juntas')
+    expect(texto()).toContain('Marca lo que quieras subir de una vez')
     expect(boton('Subir seleccionadas (0)')!.disabled).toBe(true)
     await pulsar(casilla('Lost (2016) - Temporada 2'))
     await pulsar(casilla('Mejora (2002)'))
