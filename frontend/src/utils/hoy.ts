@@ -81,6 +81,7 @@ export function fallidasRecientes(todas: UploadJob[], excluir: Set<number>, ahor
 export type InstanciaCaida = NonNullable<DashboardSummaryResponse['instancias_caidas']>[number]
 
 export type AvisoHoy =
+  | { tipo: 'servicio'; clave: string; titulo: string; detalle: string }
   | { tipo: 'instancia'; clave: string; titulo: string; detalle: string }
   | { tipo: 'subida'; clave: string; titulo: string; detalle: string; jobId: number }
   | { tipo: 'version'; clave: string; titulo: string; detalle: null }
@@ -97,17 +98,23 @@ const primeraLinea = (texto: string) => {
   return linea.length > MOTIVO_MAX ? `${linea.slice(0, MOTIVO_MAX - 1)}…` : linea
 }
 
-/** «Necesita atención»: instancias caídas, subidas fallidas (con «y N más» si no caben) y una versión nueva, en ese orden. Solo salud. */
+/** «Necesita atención»: eMuwarez o TMDb con error (sin ellos no se sube), instancias caídas, subidas fallidas (con
+ *  «y N más» si no caben) y una versión nueva, en ese orden. Solo salud. */
 export function avisosDeAtencion(
-  { instancias, fallidas, versionNueva }:
-  { instancias: InstanciaCaida[]; fallidas: UploadJob[]; versionNueva: string | null },
+  { servicios, instancias, fallidas, versionNueva }:
+  { servicios: { nombre: string; error: string }[]; instancias: InstanciaCaida[]; fallidas: UploadJob[]; versionNueva: string | null },
 ): AvisoHoy[] {
-  const avisos: AvisoHoy[] = instancias.map(i => ({
-    tipo: 'instancia', clave: `instancia-${i.id}`,
-    titulo: `${i.nombre} no responde`,
-    detalle: (i.ultima_sincronizacion ? `Biblioteca de ${hace(i.ultima_sincronizacion)}` : 'Biblioteca sin sincronizar')
-      + ' · se sincroniza sola al volver',
-  }))
+  const avisos: AvisoHoy[] = [
+    ...servicios.map((s): AvisoHoy => ({
+      tipo: 'servicio', clave: `servicio-${s.nombre}`, titulo: `${s.nombre} da error`, detalle: primeraLinea(s.error),
+    })),
+    ...instancias.map((i): AvisoHoy => ({
+      tipo: 'instancia', clave: `instancia-${i.id}`,
+      titulo: `${i.nombre} no responde`,
+      detalle: (i.ultima_sincronizacion ? `Biblioteca de ${hace(i.ultima_sincronizacion)}` : 'Biblioteca sin sincronizar')
+        + ' · se sincroniza sola al volver',
+    })),
+  ]
   for (const j of fallidas.slice(0, FALLIDAS_MAX)) {
     avisos.push({
       tipo: 'subida', clave: `subida-${j.id}`, jobId: j.id!,

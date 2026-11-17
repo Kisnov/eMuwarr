@@ -3,6 +3,7 @@ import type { AvisoHoy } from '../../utils/hoy'
 import { HoverTitle } from '../Tooltip'
 
 const PUNTO: Record<AvisoHoy['tipo'], string> = {
+  servicio: 'panel-punto-mala',
   instancia: 'panel-punto-aviso',
   subida: 'panel-punto-mala',
   version: 'panel-punto-aviso',
@@ -13,11 +14,11 @@ const PUNTO: Record<AvisoHoy['tipo'], string> = {
 const VISIBLES = 4
 
 // «Necesita atención»: una banda fina, no un carril. Sin avisos es una sola línea; con avisos, filas compactas.
-export function BandaAtencion({ avisos, onVerSubida, onVerSubidas, onVerVersion }: {
+export function BandaAtencion({ avisos, onVerSubida, onVerSubidas, onVerAjustes }: {
   avisos: AvisoHoy[]
   onVerSubida: (jobId: number) => void
   onVerSubidas: () => void
-  onVerVersion: () => void
+  onVerAjustes: () => void
 }) {
   const [todos, setTodos] = useState(false)
 
@@ -56,8 +57,11 @@ export function BandaAtencion({ avisos, onVerSubida, onVerSubidas, onVerVersion 
             {a.tipo === 'mas' && (
               <HoverTitle as="span" className="hover-link panel-aviso-accion" href="/uploads" onClick={onVerSubidas} tip="Abrir Subidas">Ver todas</HoverTitle>
             )}
+            {a.tipo === 'servicio' && (
+              <HoverTitle as="span" className="hover-link panel-aviso-accion" href="/settings" onClick={onVerAjustes} tip="Abrir Configuración para revisar la API key">Revisar</HoverTitle>
+            )}
             {a.tipo === 'version' && (
-              <HoverTitle as="span" className="hover-link panel-aviso-accion" href="/settings" onClick={onVerVersion} tip="Abrir Configuración">Ver</HoverTitle>
+              <HoverTitle as="span" className="hover-link panel-aviso-accion" href="/settings" onClick={onVerAjustes} tip="Abrir Configuración">Ver</HoverTitle>
             )}
           </li>
         ))}

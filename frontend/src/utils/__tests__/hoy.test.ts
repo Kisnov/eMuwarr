@@ -114,11 +114,11 @@ describe('«Necesita atención»', () => {
   afterEach(() => vi.useRealTimers())
 
   it('nada que avisar, ningún aviso (no hay «todo configurado» en verde)', () => {
-    expect(avisosDeAtencion({ instancias: [], fallidas: [], versionNueva: null })).toEqual([])
+    expect(avisosDeAtencion({ servicios: [], instancias: [], fallidas: [], versionNueva: null })).toEqual([])
   })
 
   it('primero las instancias, luego las subidas fallidas y al final la versión', () => {
-    const avisos = avisosDeAtencion({
+    const avisos = avisosDeAtencion({ servicios: [],
       instancias: [{ ...caida, ultima_sincronizacion: '2026-11-02T10:00:00Z' }],
       fallidas: [job({ id: 9, status: 'failed', title: 'Youjo Senki S01E12', error_message: 'Duplicado en eMuwarez\ntraza larga' })],
       versionNueva: '0.14.1',
@@ -132,13 +132,22 @@ describe('«Necesita atención»', () => {
     expect(avisos[2]).toMatchObject({ titulo: 'Versión nueva 0.14.1 publicada' })
   })
 
+  it('eMuwarez o TMDb con error van antes que todo, con la primera línea del motivo', () => {
+    const avisos = avisosDeAtencion({
+      servicios: [{ nombre: 'TMDb', error: 'API key de TMDb inválida o no autorizada\ndetalle' }],
+      instancias: [caida], fallidas: [], versionNueva: '0.14.1',
+    })
+    expect(avisos.map(a => a.tipo)).toEqual(['servicio', 'instancia', 'version'])
+    expect(avisos[0]).toMatchObject({ titulo: 'TMDb da error', detalle: 'API key de TMDb inválida o no autorizada' })
+  })
+
   it('una instancia que nunca se sincronizó lo dice', () => {
-    const [aviso] = avisosDeAtencion({ instancias: [caida], fallidas: [], versionNueva: null })
+    const [aviso] = avisosDeAtencion({ servicios: [], instancias: [caida], fallidas: [], versionNueva: null })
     expect(aviso.detalle).toContain('Biblioteca sin sincronizar')
   })
 
   it('una subida fallida sin motivo guardado no inventa uno, y uno largo se corta', () => {
-    const avisos = avisosDeAtencion({
+    const avisos = avisosDeAtencion({ servicios: [],
       instancias: [], versionNueva: null,
       fallidas: [job({ id: 1, status: 'failed' }), job({ id: 2, status: 'failed', error_message: 'x'.repeat(300) })],
     })
@@ -149,7 +158,7 @@ describe('«Necesita atención»', () => {
 
   it('lista como mucho las fallidas que caben y dice cuántas quedan fuera', () => {
     const fallidas = Array.from({ length: FALLIDAS_MAX + 2 }, (_, i) => job({ id: i + 1, status: 'failed' }))
-    const avisos = avisosDeAtencion({ instancias: [], fallidas, versionNueva: null })
+    const avisos = avisosDeAtencion({ servicios: [], instancias: [], fallidas, versionNueva: null })
     expect(avisos.filter(a => a.tipo === 'subida')).toHaveLength(FALLIDAS_MAX)
     expect(avisos[avisos.length - 1]).toMatchObject({ tipo: 'mas', titulo: 'y 2 subidas fallidas más' })
   })

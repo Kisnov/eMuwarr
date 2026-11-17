@@ -30,7 +30,7 @@ export const TOUR_STEPS: TourStep[] = [
     tab: 'dashboard',
     selector: '[data-tour="dashboard-attention"]',
     title: 'Necesita atención',
-    description: 'Solo lo que va mal: una instancia de Radarr/Sonarr que no responde, una subida que ha fallado o una versión nueva de la aplicación.',
+    description: 'Solo lo que va mal: eMuwarez o TMDb dando error (una clave caducada, por ejemplo), una instancia de Radarr/Sonarr que no responde, una subida que ha fallado o una versión nueva de la aplicación.',
   },
   {
     id: 'dashboard-stats',

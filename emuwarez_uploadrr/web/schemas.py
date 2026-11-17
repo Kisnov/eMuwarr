@@ -441,6 +441,8 @@ class DashboardSummaryResponse(BaseModel):
     next_sync_at: Optional[str] = None
     # Las instancias activas que la vigilancia no vio responder en su última mirada.
     instancias_caidas: list[InstanciaCaida] = []
+    # Por qué falló la última prueba de TMDb (una por hora); None si respondió.
+    tmdb_error: Optional[str] = None
     # Phase 5B — EMU request stats (optional, default 0 if not yet synced)
     requests_total: int = 0
     requests_compatible: int = 0
