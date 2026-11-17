@@ -47,6 +47,11 @@ Todo lo de interfaz se ha comprobado en Chromium (con emulación táctil), no en
 - El Panel a 2000 px.
 - La banda del Panel con más de cuatro instancias caídas y el tour abierto.
 
+## Por hacer: repositorio
+
+- **Imagen de vista previa** del repo (Settings → General → Social preview, 1280×640): la que sale al compartir el
+  enlace. Aplazada el 17/11.
+
 ## Descartado (para no volver a proponerlo)
 
 - Que el filtro «Petición» de Biblioteca cuente la petición heredada: una serie pedida entera se sube en season
