@@ -40,6 +40,7 @@ TASK_BACKUP = "backup-config"
 TASK_MAINTENANCE = "mantenimiento"
 TASK_INSTANCE_WATCH = "vigilar-instancias"
 TASK_EMU_CUENTA = "leer-cuenta-emu"
+TASK_EMU_MIS_SUBIDAS = "leer-mis-subidas-emu"
 
 # task_key, name, description, default_interval_minutes, min_interval_minutes, manual_allowed, run_at (HH:MM o None)
 DEFAULT_TASKS: list[tuple[str, str, str, int, int, int, Optional[str]]] = [
@@ -72,6 +73,12 @@ DEFAULT_TASKS: list[tuple[str, str, str, int, int, int, Optional[str]]] = [
         "Leer tu cuenta de eMuwarez",
         "Lee tu perfil de eMuwarez (una llamada a la API) para que Estadísticas tenga el dato de cada día aunque no abras la interfaz. Si el Panel ya lo leyó hace menos de una hora, no vuelve a llamar.",
         60, 60, 1, None,
+    ),
+    (
+        TASK_EMU_MIS_SUBIDAS,
+        "Leer tus subidas en eMuwarez",
+        "Lee los seeders, leechers y veces completada de tus subidas en eMuwarez, para Estadísticas: una llamada a la API por cada 100 subidas. No corre con una subida en marcha.",
+        360, 180, 1, None,
     ),
     (
         TASK_CHECK_VERSION,
@@ -301,6 +308,11 @@ def _run_emu_cuenta(conn: sqlite3.Connection) -> tuple[str, str]:
     return "completed", f"Ratio {perfil['ratio']} · bonus {perfil['seedbonus']}"
 
 
+def _run_emu_mis_subidas(conn: sqlite3.Connection) -> tuple[str, str]:
+    from .mis_torrents import sincronizar
+    return sincronizar(conn)
+
+
 # Clave donde se recuerda de qué versión ya se avisó, para no repetir el aviso
 # cada hora mientras no actualices.
 _ESTADO_ULTIMO_AVISO = "version_avisada_commit"
@@ -409,6 +421,7 @@ _EXECUTORS = {
     TASK_EMU_CATALOG_FULL: _run_emu_catalog_full,
     TASK_INSTANCE_WATCH: _run_instance_watch,
     TASK_EMU_CUENTA: _run_emu_cuenta,
+    TASK_EMU_MIS_SUBIDAS: _run_emu_mis_subidas,
     TASK_CHECK_VERSION: _run_check_version,
     TASK_BACKUP: _run_backup,
     TASK_MAINTENANCE: _run_maintenance,
@@ -505,7 +518,7 @@ def tick_due_tasks() -> list[dict]:
 
 
 __all__ = [
-    "TASK_LIBRARY_SYNC", "TASK_EMU_SYNC", "TASK_EMU_CATALOG_FULL", "TASK_INSTANCE_WATCH", "TASK_EMU_CUENTA", "TASK_CHECK_VERSION", "TASK_BACKUP", "TASK_MAINTENANCE", "DEFAULT_TASKS",
+    "TASK_LIBRARY_SYNC", "TASK_EMU_SYNC", "TASK_EMU_CATALOG_FULL", "TASK_INSTANCE_WATCH", "TASK_EMU_CUENTA", "TASK_EMU_MIS_SUBIDAS", "TASK_CHECK_VERSION", "TASK_BACKUP", "TASK_MAINTENANCE", "DEFAULT_TASKS",
     "ensure_default_tasks", "list_scheduled_tasks", "get_scheduled_task",
     "set_task_interval", "set_task_schedule", "opciones_de_tarea", "set_task_options",
     "zona_horaria", "nombre_zona_horaria", "siguiente_a_hora_fija",

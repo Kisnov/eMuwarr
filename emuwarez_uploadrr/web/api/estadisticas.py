@@ -6,7 +6,7 @@ import sqlite3
 from fastapi import APIRouter, Depends, Query
 
 from ..dependencies import get_db, require_auth
-from ..schemas import EstadisticasCuentaResponse
+from ..schemas import EstadisticasCuentaResponse, MisTorrentsResponse
 
 router = APIRouter(prefix="/estadisticas", tags=["estadisticas"])
 
@@ -20,3 +20,13 @@ def estadisticas_cuenta(
     """Una instantánea por día de tu cuenta, de la más antigua a la más reciente, y los ritmos de la última semana."""
     from emuwarez_uploadrr.services.perfil_historial import ritmos_cuenta, serie_cuenta
     return EstadisticasCuentaResponse(dias=dias, puntos=serie_cuenta(conn, dias), ritmos=ritmos_cuenta(conn))
+
+
+@router.get("/mis-subidas", response_model=MisTorrentsResponse)
+def estadisticas_mis_subidas(
+    current_user: dict = Depends(require_auth),
+    conn: sqlite3.Connection = Depends(get_db),
+) -> MisTorrentsResponse:
+    """Tus subidas en eMuwarez de la última lectura (la tarea «Leer tus subidas en eMuwarez»), sin llamar al tracker."""
+    from emuwarez_uploadrr.services.mis_torrents import resumen
+    return MisTorrentsResponse(**resumen(conn))

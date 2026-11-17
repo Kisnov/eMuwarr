@@ -64,6 +64,33 @@ export interface RitmosCuenta {
   bonus_hora: number | null
 }
 
+// Una de tus subidas en eMuwarez (GET /estadisticas/mis-subidas).
+export interface MiTorrent {
+  torrent_id: number
+  nombre: string
+  tamano: number | null
+  subido_at: string | null
+  seeders: number | null
+  leechers: number | null
+  completados: number | null
+  completados_semana: number | null
+  freeleech: string | null
+  doble_subida: boolean
+}
+
+export interface MisTorrents {
+  leido_at: string | null
+  torrents: MiTorrent[]
+  totales: {
+    subidas: number
+    seeders: number
+    leechers: number
+    completados: number
+    completados_semana: number | null
+    sin_seeders: number
+  }
+}
+
 export interface EstadisticasCuenta {
   dias: number
   puntos: PuntoCuenta[]
