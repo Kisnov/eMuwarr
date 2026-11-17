@@ -49,11 +49,25 @@ export interface PuntoCuenta {
   subido_bytes: number | null
   bajado_bytes: number | null
   bonus: number | null
+  buffer_bytes: number | null
+  seeding: number | null
+  leeching: number | null
+  hit_and_runs: number | null
+  grupo: string | null
+}
+
+// Lo que crece tu cuenta en la última semana (`dias`); null si aún no hay con qué calcularlo.
+export interface RitmosCuenta {
+  dias: number
+  subido_dia: number | null
+  bajado_dia: number | null
+  bonus_hora: number | null
 }
 
 export interface EstadisticasCuenta {
   dias: number
   puntos: PuntoCuenta[]
+  ritmos: RitmosCuenta
 }
 
 export interface DashboardSummaryResponse {

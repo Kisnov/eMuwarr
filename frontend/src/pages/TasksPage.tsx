@@ -23,6 +23,7 @@ const MS_CONFIRMACION = 3000
 // tarea solo enseña su error.
 const DONDE_SE_ARREGLA: Record<string, { pagina: string; texto: string }> = {
   'sync-emu-requests': { pagina: 'settings', texto: 'Revisar eMuwarez en Configuración' },
+  'leer-cuenta-emu': { pagina: 'settings', texto: 'Revisar eMuwarez en Configuración' },
   'sync-library': { pagina: 'instances', texto: 'Revisar las instancias' },
   'vigilar-instancias': { pagina: 'instances', texto: 'Revisar las instancias' },
 }

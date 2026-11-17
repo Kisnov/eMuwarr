@@ -81,6 +81,11 @@
 /* El trazo discontinuo, además del color: no se distinguen solo por él. */
 .est-serie-bajado .est-linea { stroke-dasharray: 6 4; }
 .est-serie-bonus { --est-color: var(--color-uploading); }
+.est-serie-buffer { --est-color: var(--color-accent-soft); }
+.est-serie-seeding { --est-color: var(--color-available-soft); }
+.est-serie-leeching { --est-color: var(--color-warning-soft); }
+.est-serie-leeching .est-linea { stroke-dasharray: 6 4; }
+.est-serie-hr { --est-color: var(--color-error-soft); }
 
 .est-tabla { margin-bottom: 20px; }
 .est-tabla summary { cursor: pointer; min-height: 24px; font-size: 13px; color: var(--text-secondary); margin-bottom: 10px; }
@@ -98,6 +103,10 @@
 .est-tabla-marco .data-table th[scope="row"] { position: static; background: none; }
 .est-tabla .data-table td,
 .est-tabla .data-table th[scope="row"] { font-variant-numeric: tabular-nums; }
+
+/* Un nombre de grupo largo («InsaneUser») no cabe en la tarjeta del móvil: se corta, y entero está en su explicación. */
+[aria-labelledby="est-grupo-ritmo"] .stat-card-text { min-width: 0; }
+[aria-labelledby="est-grupo-ritmo"] .stat-card-value { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .est-pagina h1.page-title { margin: 0; }
 /* Cabecera: si el título, su frase y los rangos no caben en una fila, los rangos bajan. */

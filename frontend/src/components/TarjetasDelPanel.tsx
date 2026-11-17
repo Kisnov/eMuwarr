@@ -5,7 +5,7 @@ import { IconoPelicula, IconoSerie } from './Iconos'
 import { formatNumero, SIN_DATO } from '../utils/format'
 
 // Iconos grandes de las tarjetas, uno por cifra (el `icon` de StatCard solo se pinta dentro del HUD).
-function svgIcon(d: React.ReactNode) {
+export function svgIcon(d: React.ReactNode) {
   // strokeLinecap="round" es lo que hace que el "M12 17h.01" de ICON_MISSING (la forma estándar de dibujar
   // el punto de la exclamación) salga como un punto y no desaparezca: con el "butt" por defecto un
   // trazo de longitud casi cero no pinta nada.

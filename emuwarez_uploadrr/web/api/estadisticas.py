@@ -17,6 +17,6 @@ def estadisticas_cuenta(
     current_user: dict = Depends(require_auth),
     conn: sqlite3.Connection = Depends(get_db),
 ) -> EstadisticasCuentaResponse:
-    """Ratio, subido, bajado y bonus, una instantánea por día, de la más antigua a la más reciente."""
-    from emuwarez_uploadrr.services.perfil_historial import serie_cuenta
-    return EstadisticasCuentaResponse(dias=dias, puntos=serie_cuenta(conn, dias))
+    """Una instantánea por día de tu cuenta, de la más antigua a la más reciente, y los ritmos de la última semana."""
+    from emuwarez_uploadrr.services.perfil_historial import ritmos_cuenta, serie_cuenta
+    return EstadisticasCuentaResponse(dias=dias, puntos=serie_cuenta(conn, dias), ritmos=ritmos_cuenta(conn))

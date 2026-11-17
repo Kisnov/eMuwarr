@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 
 DB_FILE = CONFIG_DIR / "emuwarez_uploadrr.db"
 
-SCHEMA_VERSION = 55
+SCHEMA_VERSION = 56
 
 # Phase 10E: canonical settings namespace fix.
 #
@@ -1360,6 +1360,22 @@ def _migrate_upload_jobs_reenvio_qbit(conn: sqlite3.Connection) -> None:
                 raise
 
 
+def _migrate_perfil_historial_completo(conn: sqlite3.Connection) -> None:
+    """Esquema 56: el historial de la cuenta guarda también buffer, seeding, leeching, H&R y grupo, que ya trae la
+    misma lectura de /api/user. Las filas de antes se quedan con esas columnas a NULL."""
+    tipos = {"buffer_bytes": "INTEGER", "seeding": "INTEGER", "leeching": "INTEGER", "hit_and_runs": "INTEGER",
+             "grupo": "TEXT"}
+    columnas = {fila[1] for fila in conn.execute("PRAGMA table_info(perfil_historial)")}
+    for nombre, tipo in tipos.items():
+        if nombre in columnas:
+            continue
+        try:
+            conn.execute(f"ALTER TABLE perfil_historial ADD COLUMN {nombre} {tipo}")
+        except sqlite3.OperationalError:
+            if nombre not in {fila[1] for fila in conn.execute("PRAGMA table_info(perfil_historial)")}:
+                raise
+
+
 def _migrate_imgbox_a_pixhost(conn: sqlite3.Connection) -> None:
     """Esquema 53: imgbox deja de ir siempre el último (lleva meses caído) y pasa a ser un proveedor más, que se puede
     quitar. Quien ya tenía la lista guardada lo tenía de último sin verlo en ella: se cambia por Pixhost, que tampoco
@@ -1975,6 +1991,7 @@ def init_db(conn: Optional[sqlite3.Connection] = None) -> None:
             _migrate_imgbox_a_pixhost(conn)
         _migrate_upload_jobs_trailer_estado(conn)
         _migrate_upload_jobs_reenvio_qbit(conn)
+        _migrate_perfil_historial_completo(conn)
         set_state(conn, "schema_version", str(SCHEMA_VERSION))
         conn.commit()
     finally:
