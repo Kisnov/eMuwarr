@@ -7,8 +7,9 @@ the upload with Uploadrr-EMU (`Kisnov/Uploadrr-EMU`, cloned into the image at `/
 
 ## Workflow
 
-- Sole maintainer: Gabriel (Kisnov). Main repo `Kisnov/emuwarez-uploadrr`, base `master`. `upstream`
-  (Rovaal-code) is abandoned.
+- Sole maintainer: Gabriel (Kisnov). Main repo `Kisnov/eMuwarr`, base `master`. It started as a private fork of
+  Rovaal-code's project (abandoned; Alvaro gave permission to publish it under the GPL); the history was moved here
+  without the fork link and with his commit e-mail replaced. The image keeps its old name, `emuwarez-uploadrr`.
 - Branch and PR, never commit to `master`. Group related changes: no PR per one-line fix. Open PRs as
   non-draft so CodeRabbit reviews them; its standing rules per path live in `.coderabbit.yaml`.
 - UI text is in Spanish (the users are Spanish speakers), and so are the README and docs. Code comments and commits

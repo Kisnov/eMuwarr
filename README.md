@@ -1,14 +1,14 @@
 # eMuwarez Uploadrr
 
-[![CI](https://github.com/Kisnov/emuwarez-uploadrr/actions/workflows/ci.yml/badge.svg)](https://github.com/Kisnov/emuwarez-uploadrr/actions/workflows/ci.yml)
-[![Publicar versión](https://github.com/Kisnov/emuwarez-uploadrr/actions/workflows/publicar.yml/badge.svg)](https://github.com/Kisnov/emuwarez-uploadrr/actions/workflows/publicar.yml)
-[![zizmor](https://github.com/Kisnov/emuwarez-uploadrr/actions/workflows/zizmor.yml/badge.svg)](https://github.com/Kisnov/emuwarez-uploadrr/actions/workflows/zizmor.yml)
-[![Bundle](https://github.com/Kisnov/emuwarez-uploadrr/actions/workflows/bundle.yml/badge.svg)](https://github.com/Kisnov/emuwarez-uploadrr/actions/workflows/bundle.yml)
-[![Claude](https://github.com/Kisnov/emuwarez-uploadrr/actions/workflows/claude.yml/badge.svg)](https://github.com/Kisnov/emuwarez-uploadrr/actions/workflows/claude.yml)
-[![Cobertura: Codecov](https://img.shields.io/badge/cobertura-Codecov-F01F7A?logo=codecov&logoColor=white)](https://app.codecov.io/gh/Kisnov/emuwarez-uploadrr)
+[![CI](https://github.com/Kisnov/eMuwarr/actions/workflows/ci.yml/badge.svg)](https://github.com/Kisnov/eMuwarr/actions/workflows/ci.yml)
+[![Publicar versión](https://github.com/Kisnov/eMuwarr/actions/workflows/publicar.yml/badge.svg)](https://github.com/Kisnov/eMuwarr/actions/workflows/publicar.yml)
+[![zizmor](https://github.com/Kisnov/eMuwarr/actions/workflows/zizmor.yml/badge.svg)](https://github.com/Kisnov/eMuwarr/actions/workflows/zizmor.yml)
+[![Bundle](https://github.com/Kisnov/eMuwarr/actions/workflows/bundle.yml/badge.svg)](https://github.com/Kisnov/eMuwarr/actions/workflows/bundle.yml)
+[![Claude](https://github.com/Kisnov/eMuwarr/actions/workflows/claude.yml/badge.svg)](https://github.com/Kisnov/eMuwarr/actions/workflows/claude.yml)
+[![Cobertura: Codecov](https://img.shields.io/badge/cobertura-Codecov-F01F7A?logo=codecov&logoColor=white)](https://app.codecov.io/gh/Kisnov/eMuwarr)
 [![Revisión: CodeRabbit](https://img.shields.io/badge/revisi%C3%B3n-CodeRabbit-FF570A)](https://coderabbit.ai)
 [![Dependabot](https://img.shields.io/badge/dependabot-activo-025E8C?logo=dependabot&logoColor=white)](.github/dependabot.yml)
-[![Imagen: ghcr.io](https://img.shields.io/badge/imagen-ghcr.io-2496ED?logo=docker&logoColor=white)](https://github.com/Kisnov/emuwarez-uploadrr/pkgs/container/emuwarez-uploadrr)
+[![Imagen: ghcr.io](https://img.shields.io/badge/imagen-ghcr.io-2496ED?logo=docker&logoColor=white)](https://github.com/users/Kisnov/packages/container/package/emuwarez-uploadrr)
 [![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-3776AB?logo=python&logoColor=white)](pyproject.toml)
 [![Node 26](https://img.shields.io/badge/node-26-5FA04E?logo=nodedotjs&logoColor=white)](frontend/package.json)
 
@@ -272,8 +272,8 @@ actualización se pierde.
 ### Construir la imagen tú mismo
 
 ```bash
-git clone https://github.com/Kisnov/emuwarez-uploadrr.git
-cd emuwarez-uploadrr
+git clone https://github.com/Kisnov/eMuwarr.git
+cd eMuwarr
 cp .env.example .env
 docker compose -f docker-compose.example.yml build \
   --build-arg UPLOADRR_COMMIT=$(git ls-remote https://github.com/Kisnov/Uploadrr-EMU.git main | cut -f1)
@@ -319,7 +319,7 @@ cd frontend && npm ci && npx tsc --noEmit && npm run lint && npx vitest run && n
 ```
 
 En cada PR, el CI pasa las reglas graves de `ruff`, los tests del backend con una cobertura mínima del 78 % y `tsc`,
-`eslint`, `vitest` y `vite build` del frontend. Sube a [Codecov](https://app.codecov.io/gh/Kisnov/emuwarez-uploadrr) la
+`eslint`, `vitest` y `vite build` del frontend. Sube a [Codecov](https://app.codecov.io/gh/Kisnov/eMuwarr) la
 cobertura, los resultados de los tests y el tamaño del bundle: las líneas nuevas o cambiadas de `emuwarez_uploadrr/`
 necesitan un 70 % de cobertura. El workflow *Bundle* sube el tamaño del bundle de cada push a `master` que toca
 `frontend/`, para que los PR tengan con qué compararse. Un PR que solo toca `frontend/`, `docs/` o ficheros `.md`
