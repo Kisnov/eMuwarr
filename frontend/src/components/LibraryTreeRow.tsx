@@ -276,7 +276,7 @@ export const LibraryTreeRow = memo(function LibraryTreeRow({ item, depth, instan
             )
             : <span className="bib-guion">—</span>}
         </td>
-        <td><StatusBadge status={item.local_status} type="local" /></td>
+        <td className="bib-celda-calma"><StatusBadge status={item.local_status} type="local" /></td>
         <td className="bib-nowrap">
           {/* «Sin petición» es lo normal y llenaba la columna de insignias grises: se queda en un guion, y la
               insignia solo sale cuando hay algo que mirar. */}
@@ -306,7 +306,7 @@ export const LibraryTreeRow = memo(function LibraryTreeRow({ item, depth, instan
             : <span className="bib-guion">—</span>}
         </td>
         <td className="bib-nowrap"><GrupoDeLaFila item={item} /></td>
-        <td className="bib-nowrap"><SpanishAudioCell item={item} /></td>
+        <td className="bib-nowrap bib-celda-calma"><SpanishAudioCell item={item} /></td>
         <td className="bib-nowrap"><EmuStatusCell item={item} /></td>
         <td className="bib-nowrap">
           {item.size_bytes
