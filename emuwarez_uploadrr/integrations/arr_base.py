@@ -73,7 +73,7 @@ def arr_request(
     headers = {
         "Accept": "application/json",
         "X-Api-Key": api_key,
-        "User-Agent": "emuwarez-uploadrr/3",
+        "User-Agent": "emuwarr/3",
     }
     if data is not None:
         body = json.dumps(data).encode("utf-8")

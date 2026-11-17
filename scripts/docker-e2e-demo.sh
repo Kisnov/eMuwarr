@@ -8,7 +8,7 @@
 #   PORT=9595 bash scripts/docker-e2e-demo.sh
 #
 # Variables opcionales:
-#   IMAGE_NAME=emuwarez-uploadrr:e2e  imagen a construir
+#   IMAGE_NAME=emuwarr:e2e  imagen a construir
 #   PORT=9494                          puerto local
 #   KEEP_CONTAINER=0                   si 1, mantiene el contenedor y el tmpdir al salir
 #
@@ -23,7 +23,7 @@
 
 set -euo pipefail
 
-IMAGE_NAME="${IMAGE_NAME:-emuwarez-uploadrr:e2e}"
+IMAGE_NAME="${IMAGE_NAME:-emuwarr:e2e}"
 PORT="${PORT:-9494}"
 KEEP_CONTAINER="${KEEP_CONTAINER:-0}"
 CONTAINER_NAME="emuwarez-e2e-$$"
@@ -50,7 +50,7 @@ mkdir -p \
     "$E2E_TMPDIR/uploadrr-tmp"
 
 # Fake .mkv file — text content, .mkv extension (verifiers check existence/extension/size)
-echo "FAKE MKV DEMO — eMuwarez Uploadrr E2E test fixture" \
+echo "FAKE MKV DEMO — eMuwarr E2E test fixture" \
     > "$E2E_TMPDIR/data/media/movies/Demo Movie (2024)/Demo Movie (2024) WEBDL-1080p.mkv"
 
 # Phase 10F — fake Uploadrr-EMU: never the real fork, never touches eMuwarez.
@@ -165,7 +165,7 @@ exec_in_container() {
 }
 
 echo ""
-echo "eMuwarez Uploadrr — E2E Demo Controlado (Phase 9B)"
+echo "eMuwarr — E2E Demo Controlado (Phase 9B)"
 echo "==================================================="
 echo "  Imagen:     $IMAGE_NAME"
 echo "  Puerto:     $PORT"

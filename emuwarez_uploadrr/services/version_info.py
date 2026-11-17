@@ -58,7 +58,7 @@ def version_local() -> dict[str, Optional[str]]:
 
 def _descargar_manifiesto() -> tuple[Optional[dict], Optional[str]]:
     try:
-        r = http_cliente.pedir("GET", URL_MANIFIESTO, cabeceras={"User-Agent": "emuwarez-uploadrr"},
+        r = http_cliente.pedir("GET", URL_MANIFIESTO, cabeceras={"User-Agent": "emuwarr"},
                                timeout=_TIEMPO_ESPERA)
         return json.loads(r.content.decode("utf-8")), None
     except http_cliente.ErrorHTTP as e:

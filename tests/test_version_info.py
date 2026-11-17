@@ -120,5 +120,5 @@ def test_los_fallos_del_manifiesto_se_cuentan(http_falso, fallo, esperado):
 def test_el_manifiesto_se_lee(http_falso):
     http_falso.responde(respuesta(200, json={"commit": "abc"}))
     assert vi._descargar_manifiesto() == ({"commit": "abc"}, None)
-    assert http_falso.ultima.headers["User-Agent"] == "emuwarez-uploadrr"
+    assert http_falso.ultima.headers["User-Agent"] == "emuwarr"
     assert http_falso.ultima.extensions["timeout"]["read"] == vi._TIEMPO_ESPERA

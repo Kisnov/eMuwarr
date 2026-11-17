@@ -10,7 +10,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="emuwarez-uploadrr",
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        description="CLI modular de eMuwarez Uploadrr. Espejo funcional de la futura interfaz web.",
+        description="CLI modular de eMuwarr. Espejo funcional de la futura interfaz web.",
     )
     parser.add_argument("--db", default=str(db_path()), help="Ruta de SQLite. Por defecto: ~/.config/emuwarez-renamer/emuwarez_uploadrr.db")
     sub = parser.add_subparsers(dest="command", required=True)

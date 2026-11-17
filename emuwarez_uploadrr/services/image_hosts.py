@@ -134,7 +134,7 @@ def validate_image_host_key(host_id: str, api_key: str, *, timeout: int = 10) ->
         return {"ok": False, "error": None, "checked": False}
 
     url = check["url"]
-    headers = {"User-Agent": "emuwarez-uploadrr/2"}
+    headers = {"User-Agent": "emuwarr/2"}
     if check["auth"] == "query":
         url = f"{url}?key={urllib.parse.quote(api_key.strip(), safe='')}"
     else:
@@ -194,7 +194,7 @@ def test_image_host(host_id: str, api_key: Optional[str] = None, *, timeout: int
     else:
         motivo = None
     try:
-        resp = http_cliente.pedir("GET", meta["url"], cabeceras={"User-Agent": "emuwarez-uploadrr/2"},
+        resp = http_cliente.pedir("GET", meta["url"], cabeceras={"User-Agent": "emuwarr/2"},
                                   timeout=timeout)
         if 200 <= resp.status_code < 400:
             return {"ok": True, "key_checked": not meta["needs_key"], "key_error": motivo}

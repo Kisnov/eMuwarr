@@ -227,7 +227,7 @@ def test_arr_request_devuelve_el_json_con_sus_cabeceras(http_falso):
     http_falso.responde(respuesta(200, json=[{"id": 1}]), respuesta(200))
     assert arr_request("GET", "http://radarr:7878/api/v3/movie", "K") == [{"id": 1}]
     p = http_falso.ultima
-    assert p.headers["X-Api-Key"] == "K" and p.headers["User-Agent"] == "emuwarez-uploadrr/3"
+    assert p.headers["X-Api-Key"] == "K" and p.headers["User-Agent"] == "emuwarr/3"
     assert p.extensions["timeout"]["read"] == 15
     assert arr_request("PUT", "http://radarr:7878/api/v3/movie/1", "K", data={"a": 1}) == {}
     assert http_falso.ultima.content == b'{"a": 1}'
