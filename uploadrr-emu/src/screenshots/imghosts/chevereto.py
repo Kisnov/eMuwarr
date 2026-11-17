@@ -44,7 +44,7 @@ class CheveretoTemplate(BaseImageHost):
         if not api_key:
             raise KeyError(f"API key for '{self.host}' missing")
 
-        log.debug(f"Using API key for {self.host} (adult={adult}): {api_key}")
+        log.debug(f"Using API key for {self.host} (adult={adult})")
         try:
             async with aiofiles.open(image_path, "rb") as f:
                 img = await f.read()
