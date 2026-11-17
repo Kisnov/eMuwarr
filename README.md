@@ -29,7 +29,7 @@ qBittorrent. Todo desde el navegador.
 2. **Cruza** las tres cosas: qué tienes que no está en el tracker, y qué peticiones puedes cubrir (con su recompensa).
 3. **Prepara** la subida: genera el nombre con la nomenclatura de eMuwarez, revisa las pistas y enlaza los ficheros
    en una carpeta de subidas, sin tocar los nombres de tu biblioteca.
-4. **Sube** con [Uploadrr-EMU](https://github.com/Kisnov/Uploadrr-EMU), que va dentro de la imagen: capturas,
+4. **Sube** con [Uploadrr-EMU](uploadrr-emu/), que va dentro de la imagen: capturas,
    torrent, subida a eMuwarez y alta en qBittorrent, con el progreso en directo.
 
 ## Qué necesitas
@@ -276,8 +276,7 @@ actualización se pierde.
 git clone https://github.com/Kisnov/eMuwarr.git
 cd eMuwarr
 cp .env.example .env
-docker compose -f docker-compose.example.yml build \
-  --build-arg UPLOADRR_COMMIT=$(git ls-remote https://github.com/Kisnov/Uploadrr-EMU.git main | cut -f1)
+docker compose -f docker-compose.example.yml build
 docker compose -f docker-compose.example.yml up -d
 ```
 
@@ -288,7 +287,7 @@ Sin minutos de CI, o para probar un commit, construye la imagen en tu equipo, gu
 pasar por el registro:
 
 ```bash
-git -c core.autocrlf=false archive HEAD | docker build -t ghcr.io/kisnov/emuwarr:dev   --build-arg UPLOADRR_COMMIT=$(git ls-remote https://github.com/Kisnov/Uploadrr-EMU.git main | cut -f1)   --build-arg APP_COMMIT=$(git rev-parse HEAD) -
+git -c core.autocrlf=false archive HEAD | docker build -t ghcr.io/kisnov/emuwarr:dev   --build-arg APP_COMMIT=$(git rev-parse HEAD) -
 docker save ghcr.io/kisnov/emuwarr:dev | gzip > emuwarez-dev.tar.gz
 # En el servidor: carga la imagen y recrea el contenedor sin descargar nada
 docker load -i emuwarez-dev.tar.gz && EMUWAREZ_UPLOADRR_TAG=dev docker compose up -d --pull never
@@ -296,8 +295,9 @@ docker load -i emuwarez-dev.tar.gz && EMUWAREZ_UPLOADRR_TAG=dev docker compose u
 
 ## Uso sin Docker
 
-Necesita Python 3.12+, Node 26, `mediainfo`, `ffmpeg`, `mkvtoolnix` y una copia de Uploadrr-EMU (ruta en el ajuste
-`uploadrr.path`, por defecto `/opt/Uploadrr`).
+Necesita Python 3.12+, Node 26, `mediainfo`, `ffmpeg`, `mkvtoolnix` y las dependencias de Uploadrr-EMU
+(`pip install -r uploadrr-emu/requirements.txt`). Su ruta va en el ajuste `uploadrr.path`, por defecto `/opt/Uploadrr`:
+apúntalo a la carpeta `uploadrr-emu/`.
 
 ```bash
 pip install -e ".[web]"
@@ -315,12 +315,15 @@ la nomenclatura, subir…): ver [`README_CLI_READY.md`](README_CLI_READY.md).
 pip install -e ".[web,dev]"
 python -m pytest tests -q -p no:cacheprovider
 
+# Uploadrr-EMU, desde su carpeta (su conftest corta la red y los subprocesos)
+cd uploadrr-emu && pip install -r requirements.txt pytest pytest-cov && python -m pytest tests -q -p no:cacheprovider
+
 # Frontend
 cd frontend && npm ci && npx tsc --noEmit && npm run lint && npx vitest run && npx vite build
 ```
 
-En cada PR, el CI pasa las reglas graves de `ruff`, los tests del backend con una cobertura mínima del 78 % y `tsc`,
-`eslint`, `vitest` y `vite build` del frontend. Sube a [Codecov](https://app.codecov.io/gh/Kisnov/eMuwarr) la
+En cada PR, el CI pasa las reglas graves de `ruff`, los tests del backend con una cobertura mínima del 78 %, los de
+Uploadrr-EMU y `tsc`, `eslint`, `vitest` y `vite build` del frontend. Sube a [Codecov](https://app.codecov.io/gh/Kisnov/eMuwarr) la
 cobertura, los resultados de los tests y el tamaño del bundle: las líneas nuevas o cambiadas de `emuwarez_uploadrr/`
 necesitan un 70 % de cobertura. El workflow *Bundle* sube el tamaño del bundle de cada push a `dev` que toca
 `frontend/`, para que los PR tengan con qué compararse. Un PR que solo toca `frontend/`, `docs/` o ficheros `.md`
@@ -329,13 +332,13 @@ limita los tests del backend a los que mencionan el frontend, sin mínimo de cob
 mantenedor publica un comentario nuevo con `@claude` en un issue, en un PR o en el código de un PR (no basta con
 mencionarlo en la descripción).
 
-Dependabot propone cada semana las versiones nuevas de pip, npm, la imagen base del `Dockerfile` y las GitHub
+Dependabot propone cada semana las versiones nuevas de pip (la app y `uploadrr-emu/`), npm, la imagen base del `Dockerfile` y las GitHub
 Actions, cuando llevan 7 días publicadas: las menores y los parches juntos en un PR por ecosistema, y cada versión
 mayor en el suyo. Las de seguridad no esperan esos 7 días: llegan en cuanto un aviso tiene versión corregida.
 
 `CLAUDE.md` recoge las reglas de arquitectura y el
 contrato con Uploadrr-EMU (argumentos, claves de `config.yaml` y líneas de salida que se leen): si cambias uno de
-los dos lados, cambia el otro a la vez.
+los dos lados, cambia el otro en el mismo PR.
 
 ## Documentación
 

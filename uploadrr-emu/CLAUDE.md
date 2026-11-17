@@ -1,8 +1,9 @@
 # Uploadrr-EMU
 
-Standalone repo derived from Uploadrr (via codeberg.org/ccx94/Uploadrr-EMU), used only to upload to eMuwarez, a
-UNIT3D tracker (key `EMU`, https://emu-warez.com). Its one caller is emuwarez-uploadrr, which clones `main`
-into its Docker image at `/opt/Uploadrr` and runs it unattended:
+Derived from Uploadrr (via codeberg.org/ccx94/Uploadrr-EMU), used only to upload to eMuwarez, a
+UNIT3D tracker (key `EMU`, https://emu-warez.com). It lives in `uploadrr-emu/` of the eMuwarr repo (brought in from
+`Kisnov/Uploadrr-EMU` with `git subtree add`, history kept). Its one caller is the app in the same repo, whose image
+copies this folder to `/opt/Uploadrr` and runs it unattended as a subprocess:
 
 `python upload.py PATH -tk EMU -mt NAME -tmdb ID -ua -c movie -res RES` (series: `-c tv`, plus `-season SXX -episode EXX`)
 
@@ -13,13 +14,12 @@ or report their errors unless they break an eMuwarez upload.
 
 ## Workflow
 
-- Sole maintainer: Gabriel (Kisnov). Main repo `Kisnov/Uploadrr-EMU`, base `main`. Branch and PR, grouped
-  (no PR per one-line fix), non-draft so CodeRabbit reviews. Conventional Commits with a Spanish summary.
-- Merged changes reach the app only when its image is rebuilt.
+- The eMuwarr workflow applies (root `CLAUDE.md`): base `dev`, branch and PR, Conventional Commits with a Spanish
+  summary. A change here and the app side of it go in the same PR.
 - Not in a GitHub fork network: nothing syncs from upstream. Pull a change from Codeberg only on purpose,
   by hand, and credit it in the commit.
 
-## Contract with emuwarez-uploadrr (change both repos together)
+## Contract with the app (change both sides in the same PR)
 
 - Exit code: 0 only if something was uploaded. Duplicates, tracker rejections, TMDb misses and missing video
   exit 1. Any unhandled exception exits 1 too.
@@ -86,10 +86,9 @@ or report their errors unless they break an eMuwarez upload.
   runs the dupe search and the upload against a fake UNIT3D tracker on localhost. Anything else: focused scripts in
   Docker (`upload.py` on a test folder, exit code).
 - The redactor rewrites config secrets in all Rich output.
-- CI (`.github/workflows/ci.yml`) runs critical ruff rules (`E9,F63,F7,F82`), `compileall` and pytest with coverage on
-  every PR, and uploads it to Codecov (informational only, `codecov.yml`).
-  Style is left to CodeRabbit on changed lines.
-- `zizmor.yml` audits the workflows and `dependabot.yml` when `.github/` changes; run `zizmor --gh-token "$(gh auth token)" .` locally (without a token it skips online audits) before pushing a workflow edit.
+- The `uploadrr-emu` job of the root `.github/workflows/ci.yml` runs critical ruff rules (`E9,F63,F7,F82`), `compileall`
+  and pytest with coverage on every PR, and uploads it to Codecov (flag `uploadrr-emu`, informational only, root
+  `codecov.yml`). Style is left to CodeRabbit on changed lines.
 
 ## Secrets and auth
 
