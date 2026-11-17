@@ -574,6 +574,39 @@ class RitmosCuentaResponse(BaseModel):
     bonus_hora: Optional[float] = None
 
 
+class ObjetivoCuenta(BaseModel):
+    """Un objetivo de tu cuenta. `valor` en TB para el subido, en meses para la antigüedad y en su cifra el resto."""
+    tipo: Literal["subido", "ratio", "bonus", "seeding", "antiguedad"]
+    valor: float = Field(gt=0, le=1e9)
+
+
+class ObjetivosCuenta(BaseModel):
+    """Tu fecha de alta en eMuwarez (YYYY-MM-DD; la API no la da) y tus objetivos, uno por tipo como mucho."""
+    fecha_alta: Optional[str] = None
+    objetivos: list[ObjetivoCuenta] = Field(default_factory=list)
+
+    @field_validator("fecha_alta")
+    @classmethod
+    def _fecha(cls, v: Optional[str]) -> Optional[str]:
+        if not v:
+            return None
+        from datetime import date
+        try:
+            dia = date.fromisoformat(v)
+        except ValueError:
+            raise ValueError("La fecha de alta debe ser YYYY-MM-DD") from None
+        if dia > date.today():
+            raise ValueError("La fecha de alta no puede ser futura")
+        return dia.isoformat()
+
+    @field_validator("objetivos")
+    @classmethod
+    def _uno_por_tipo(cls, v: list[ObjetivoCuenta]) -> list[ObjetivoCuenta]:
+        if len({o.tipo for o in v}) != len(v):
+            raise ValueError("Solo un objetivo de cada tipo")
+        return v
+
+
 class EstadisticasCuentaResponse(BaseModel):
     dias: int
     puntos: list[PuntoCuentaResponse]

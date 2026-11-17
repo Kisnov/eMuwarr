@@ -5,6 +5,7 @@ import { EmptyState } from '../components/EmptyState'
 import { ErrorState } from '../components/ErrorState'
 import { GraficoLinea } from '../components/GraficoLinea'
 import { LoadingState } from '../components/LoadingState'
+import { ObjetivosCuenta } from '../components/ObjetivosCuenta'
 import { StatCard } from '../components/StatCard'
 import { ICON_UPLOADS, svgIcon, TarjetasDelPanel } from '../components/TarjetasDelPanel'
 import { useSeccionVisible } from '../context/SeccionVisible'
@@ -147,6 +148,7 @@ export function EstadisticasPage() {
       ) : (
         <div className={enCurso ? 'est-cargando' : undefined} aria-busy={enCurso}>
           {resultado.ritmos && <TarjetasDeRitmo puntos={puntos} ritmos={resultado.ritmos} />}
+          <ObjetivosCuenta visible={seVe} ultimo={puntos[puntos.length - 1]} ritmos={resultado.ritmos} />
           {puntos.length === 1 ? (
             <p className="est-nota" role="status">Solo hay un día guardado: la línea aparecerá a partir de mañana.</p>
           ) : (

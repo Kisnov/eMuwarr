@@ -6,7 +6,12 @@
 import { act, useState } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-vi.mock('../../api/estadisticas', () => ({ getEstadisticasCuenta: vi.fn() }))
+vi.mock('../../api/estadisticas', () => ({
+  getEstadisticasCuenta: vi.fn(),
+  // Los objetivos (ObjetivosCuenta) tienen su propia prueba: aquí, ninguno.
+  getObjetivos: vi.fn(() => Promise.resolve({ fecha_alta: null, objetivos: [] })),
+  guardarObjetivos: vi.fn(),
+}))
 vi.mock('../../api/dashboard', () => ({ getDashboardSummary: vi.fn() }))
 
 import { getDashboardSummary } from '../../api/dashboard'
