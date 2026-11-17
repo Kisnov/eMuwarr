@@ -2,6 +2,7 @@
 // tanda, las comprobaciones de cada uno, las comunes a todos, y «Subir todas/todos»
 // con su resultado. Mismo aspecto que el de uno solo, con un desplegable arriba a
 // la derecha para recorrer las comprobaciones de los elementos.
+import { motivoDelBloqueo } from '../../utils/comprobaciones'
 import { CheckRow, MarcoPaso } from './piezas'
 import { ResumenSubida } from './ResumenSubida'
 import type { Asistente } from './useAsistente'
@@ -23,7 +24,7 @@ export function PasoSubidaTanda({ a }: { a: Asistente }) {
   // El veredicto va en el pie, junto al botón que lo obedece; la región existe siempre para que el lector lo anuncie.
   const veredicto = !resumen ? ''
     : batchChecksError ? `✗ No se pudieron completar las comprobaciones: ${batchChecksError}`
-    : !envReady ? '✗ La subida no se puede realizar'
+    : !envReady ? `✗ ${motivoDelBloqueo(batchEnvChecks?.checks)}`
     : blocked.length === 0 ? `✓ Todo listo: ${batchQueue.length} ${batchIsEpisodes ? 'capítulos' : 'temporadas'}`
     : `✗ ${blocked.length} de ${batchQueue.length} no se ${blocked.length === 1 ? 'puede' : 'pueden'} subir`
   const pie = batchPhase === 'idle' ? (

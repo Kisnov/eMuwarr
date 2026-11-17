@@ -1,5 +1,6 @@
 // Paso Resumen de un solo elemento: lo que se sube, las comprobaciones previas y
 // el botón que encola la subida.
+import { motivoDelBloqueo } from '../../utils/comprobaciones'
 import { useTooltip } from '../Tooltip'
 import { CHECK_STEP_ORDER, CHECK_STEP_ORDER_SEASON, CHECK_STEP_PENDING_LABEL } from './constantes'
 import { CheckRow, MarcoPaso } from './piezas'
@@ -19,9 +20,11 @@ export function PasoSubida({ a }: { a: Asistente }) {
     : !checksLoading && checks
     ? checks.ready
       ? { texto: '✓ Todo listo para subir', clase: 'asist-ok' }
-      : { texto: '✗ La subida no se puede realizar', clase: 'asist-error' }
+      : { texto: `✗ ${motivoDelBloqueo(checks.checks)}`, clase: 'asist-error' }
     : { texto: '', clase: '' }
-  const uploadBtnTip = useTooltip(canUpload ? null : 'Alguna comprobación ha fallado o aún está en curso')
+  const uploadBtnTip = useTooltip(canUpload ? null
+    : !checksLoading && checks && !checks.ready ? motivoDelBloqueo(checks.checks)
+    : 'Alguna comprobación ha fallado o aún está en curso')
   return (
     <MarcoPaso
       pie={<>

@@ -2,6 +2,7 @@
 // que ya hay en eMuwarez, con la casilla «Incluir»; debajo, las comprobaciones comunes (una sola vez) y «Subir N».
 import type { UploadCheck, UploadChecksResult } from '../../api/uploads'
 import type { LibraryItemResponse } from '../../types/api'
+import { motivoDelBloqueo } from '../../utils/comprobaciones'
 import { CheckRow } from '../asistente/piezas'
 import type { AnalisisElemento } from './useLote'
 
@@ -138,7 +139,7 @@ export function PasoResumenLote({
               {errorComprobando
                 ? `✗ No se pudieron completar las comprobaciones: ${errorComprobando}`
                 : !envReady
-                ? '✗ La subida no se puede realizar'
+                ? `✗ ${motivoDelBloqueo(entorno?.checks)}`
                 : incluidas === 0
                 ? '✗ No queda nada marcado para subir'
                 : `✓ Se subirán ${incluidas} de ${total}`}

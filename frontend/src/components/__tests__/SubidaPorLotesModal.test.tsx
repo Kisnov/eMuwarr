@@ -232,7 +232,7 @@ describe('cuándo se habilita «Subir»', () => {
     m(subidas.runUploadChecks).mockImplementation(async (_id, scope) => (scope === 'environment' ? MAL : LISTO))
     await abrir([DUNE])
     await alResumen(1)
-    expect(texto()).toContain('✗ La subida no se puede realizar')
+    expect(texto()).toContain('✗ No se puede subir: qBittorrent')
     expect(botonSubir()!.disabled).toBe(true)
     m(subidas.runUploadChecks).mockImplementation(async (_id, scope) => (scope === 'environment' ? ENTORNO : LISTO))
     await pulsar(boton('↻ Volver a comprobar'))
