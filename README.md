@@ -1,15 +1,14 @@
 # eMuwarr
 
-[![CI](https://github.com/Kisnov/eMuwarr/actions/workflows/ci.yml/badge.svg)](https://github.com/Kisnov/eMuwarr/actions/workflows/ci.yml)
+[![CI](https://github.com/Kisnov/eMuwarr/actions/workflows/ci.yml/badge.svg?branch=dev)](https://github.com/Kisnov/eMuwarr/actions/workflows/ci.yml)
 [![Publicar versión](https://github.com/Kisnov/eMuwarr/actions/workflows/publicar.yml/badge.svg)](https://github.com/Kisnov/eMuwarr/actions/workflows/publicar.yml)
-[![zizmor](https://github.com/Kisnov/eMuwarr/actions/workflows/zizmor.yml/badge.svg)](https://github.com/Kisnov/eMuwarr/actions/workflows/zizmor.yml)
-[![Bundle](https://github.com/Kisnov/eMuwarr/actions/workflows/bundle.yml/badge.svg)](https://github.com/Kisnov/eMuwarr/actions/workflows/bundle.yml)
-[![Claude](https://github.com/Kisnov/eMuwarr/actions/workflows/claude.yml/badge.svg)](https://github.com/Kisnov/eMuwarr/actions/workflows/claude.yml)
-[![Cobertura: Codecov](https://img.shields.io/badge/cobertura-Codecov-F01F7A?logo=codecov&logoColor=white)](https://app.codecov.io/gh/Kisnov/eMuwarr)
+[![zizmor](https://github.com/Kisnov/eMuwarr/actions/workflows/zizmor.yml/badge.svg?branch=dev)](https://github.com/Kisnov/eMuwarr/actions/workflows/zizmor.yml)
+[![Bundle](https://github.com/Kisnov/eMuwarr/actions/workflows/bundle.yml/badge.svg?branch=dev)](https://github.com/Kisnov/eMuwarr/actions/workflows/bundle.yml)
+[![Cobertura](https://codecov.io/gh/Kisnov/eMuwarr/branch/dev/graph/badge.svg)](https://app.codecov.io/gh/Kisnov/eMuwarr/tree/dev)
 [![Revisión: CodeRabbit](https://img.shields.io/badge/revisi%C3%B3n-CodeRabbit-FF570A)](https://coderabbit.ai)
 [![Dependabot](https://img.shields.io/badge/dependabot-activo-025E8C?logo=dependabot&logoColor=white)](.github/dependabot.yml)
-[![Imagen: ghcr.io](https://img.shields.io/badge/imagen-ghcr.io-2496ED?logo=docker&logoColor=white)](https://github.com/users/Kisnov/packages/container/package/emuwarr)
-[![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-3776AB?logo=python&logoColor=white)](pyproject.toml)
+[![Imagen](https://img.shields.io/github/v/release/Kisnov/eMuwarr?label=imagen&logo=docker&logoColor=white&color=2496ED)](https://github.com/users/Kisnov/packages/container/package/emuwarr)
+[![Python](https://img.shields.io/python/required-version-toml?tomlFilePath=https%3A%2F%2Fraw.githubusercontent.com%2FKisnov%2FeMuwarr%2Fdev%2Fpyproject.toml&logo=python&logoColor=white&color=3776AB)](pyproject.toml)
 [![Node 26](https://img.shields.io/badge/node-26-5FA04E?logo=nodedotjs&logoColor=white)](frontend/package.json)
 
 Aplicación web autoalojada para subir a **[eMuwarez](https://emu-warez.com)** lo que ya tienes en **Radarr** y
