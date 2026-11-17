@@ -29,7 +29,7 @@ Panel, asistente de subida y Biblioteca: 28/40 en las heurísticas de Nielsen. L
 - **Menores:** «Panel» sale dos veces (barra superior y h1); las cifras de la franja no enlazan a su sección; la ruta
   solo se ve tras «Ver ruta»; «ideas» en la barra de selección; tres líneas con una palabra suelta.
 
-## Por probar en el NAS (`:edge`)
+## Por probar en el NAS (`:dev`)
 
 - El límite compartido entre la CLI y el servidor (`flock` sobre el volumen de `CONFIG_DIR`).
 - El campo y el enlace de qBittorrent.

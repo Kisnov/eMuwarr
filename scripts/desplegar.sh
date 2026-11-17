@@ -18,10 +18,10 @@
 # Uso:
 #   scripts/desplegar.sh --notas "Lo que cambia, en una línea"
 #   scripts/desplegar.sh --notas "..." --version patch   # sube la versión antes
-#   scripts/desplegar.sh --solo-prueba                   # sube solo :edge, sin versión ni manifiesto
+#   scripts/desplegar.sh --solo-prueba                   # sube solo :dev, sin versión ni manifiesto
 #
 # Al publicar sigue el orden del workflow: la imagen como :<sha>, la etiqueta
-# vX.Y.Z, la imagen como :X.Y.Z, :edge y :latest, y el manifiesto. Si algo falla,
+# vX.Y.Z (y main avanza hasta ella), la imagen como :X.Y.Z, :dev y :latest, y el manifiesto. Si algo falla,
 # relanzar completa la versión. :X.Y.Z es la que se fija en el compose
 # (EMUWAREZ_UPLOADRR_TAG=X.Y.Z) para quedarse en una versión o volver a ella.
 #
@@ -57,7 +57,7 @@ cd "$RAIZ"
 
 if [[ -z "$NOTAS" && "$PRUEBA" -eq 0 ]]; then
   echo "Falta --notas: es la línea que verá el usuario en el aviso de versión." >&2
-  echo "(o --solo-prueba para subir solo :edge, sin anunciar nada)" >&2
+  echo "(o --solo-prueba para subir solo :dev, sin anunciar nada)" >&2
   exit 2
 fi
 
@@ -128,7 +128,7 @@ comprobar_etiqueta() {
 
 # Con :<sha> ya subida y antes que :X.Y.Z y :latest: crea la etiqueta, o sube
 # la que una ejecución anterior dejó solo aquí. Solo si el commit es la punta de
-# master en GitHub: la etiqueta marca en el repo el commit de esta versión.
+# dev en GitHub: la etiqueta marca en el repo el commit de esta versión, y main avanza hasta él.
 etiquetar() {
   # Otra vez, por si algo ha cambiado mientras se construía.
   comprobar_etiqueta || return 1
@@ -136,10 +136,10 @@ etiquetar() {
     echo "La etiqueta $ETIQUETA ya está en GitHub."
     return 0
   fi
-  git fetch -q origin master
-  if [[ "$(git rev-parse origin/master)" != "$COMMIT" ]]; then
-    echo "Este commit no es la punta de master en GitHub, así que no creo $ETIQUETA." >&2
-    echo "Cuando lo sea:  git tag -a $ETIQUETA -m \"…\" $COMMIT && git push origin $ETIQUETA" >&2
+  git fetch -q origin dev
+  if [[ "$(git rev-parse origin/dev)" != "$COMMIT" ]]; then
+    echo "Este commit no es la punta de dev en GitHub, así que no creo $ETIQUETA." >&2
+    echo "Cuando lo sea:  git tag -a $ETIQUETA -m \"…\" $COMMIT && git push --atomic origin $ETIQUETA $COMMIT:refs/heads/main" >&2
     return 0
   fi
   if [[ -n "$(etiqueta_local)" ]]; then
@@ -147,8 +147,8 @@ etiquetar() {
   else
     git tag -a "$ETIQUETA" -m "${NOTAS:-Versión $VERSION}" "$COMMIT"
   fi
-  # Si alguien la ha subido en otro commit desde la comprobación, git push no la pisa.
-  git push -q origin "$ETIQUETA"
+  # Si alguien la ha subido en otro commit desde la comprobación, git push no la pisa; main solo avanza (fast-forward).
+  git push -q --atomic origin "$ETIQUETA" "$COMMIT:refs/heads/main"
   echo "Etiqueta .... $ETIQUETA"
 }
 
@@ -204,18 +204,18 @@ subir() {
 
 echo "Subiendo…"
 if [[ "$PRUEBA" -eq 1 ]]; then
-  subir edge
-  echo "Subida como :edge, sin versión ni manifiesto. Para publicarla, relanza sin --solo-prueba."
+  subir dev
+  echo "Subida como :dev, sin versión ni manifiesto. Para publicarla, relanza sin --solo-prueba."
   exit 0
 fi
 subir "$COMMIT"
-# Otra vez: si durante la construcción salió una versión más nueva, :latest y :edge no vuelven atrás.
+# Otra vez: si durante la construcción salió una versión más nueva, :latest y :dev no vuelven atrás.
 "$PYTHON" scripts/publicar_version.py --solo-comprobar --notas "$NOTAS" --repo
 # Como el workflow: la etiqueta de git antes que :X.Y.Z y :latest, y el manifiesto lo último.
 etiquetar
 subir "$VERSION"
-# :edge antes que :latest: si algo falla entre medias, :edge nunca queda por detrás.
-subir edge
+# :dev antes que :latest: si algo falla entre medias, :dev nunca queda por detrás.
+subir dev
 subir latest
 DIGEST="$(docker image inspect "$IMAGEN:latest" --format '{{index .RepoDigests 0}}' | cut -d@ -f2)"
 echo "Digest ...... $DIGEST"

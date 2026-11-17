@@ -71,14 +71,14 @@ def entorno(tmp_path):
                     "scripts/subir_version.py", "emuwarez_uploadrr/__init__.py"):
         (repo / fichero).parent.mkdir(parents=True, exist_ok=True)
         shutil.copy(RAIZ / fichero, repo / fichero)
-    git("init", "-q", "-b", "master", cwd=repo)
+    git("init", "-q", "-b", "dev", cwd=repo)
     git("add", ".", cwd=repo)
     git("commit", "-qm", "inicio", cwd=repo)
     git("init", "-q", "--bare", "origen.git")
     git("init", "-q", "--bare", "fork.git")
     git("remote", "add", "origin", str(tmp_path / "origen.git"), cwd=repo)
-    git("push", "-q", "origin", "master", cwd=repo)
-    git("push", "-q", str(tmp_path / "fork.git"), "master:main", cwd=repo)
+    git("push", "-q", "origin", "dev", cwd=repo)
+    git("push", "-q", str(tmp_path / "fork.git"), "dev:main", cwd=repo)
 
     manifiesto = tmp_path / "m"
     git("init", "-q", "-b", "main", str(manifiesto))
@@ -111,9 +111,10 @@ def test_publica_en_el_orden_del_workflow(entorno):
 
     v = __version__
     assert _docker(entorno) == [["build"], ["push", entorno.commit],
-                                ["push", v, f"v{v}"], ["push", "edge", f"v{v}"],
+                                ["push", v, f"v{v}"], ["push", "dev", f"v{v}"],
                                 ["push", "latest", f"v{v}"]]
     assert entorno.git("--git-dir=origen.git", "rev-parse", f"v{v}^{{commit}}") == entorno.commit
+    assert entorno.git("--git-dir=origen.git", "rev-parse", "main") == entorno.commit
     assert _manifiesto(entorno) | {"fecha": None} == {
         "commit": entorno.commit, "version": v, "digest": "sha256:abc", "notas": "Mejoras", "fecha": None}
 
@@ -129,11 +130,11 @@ def test_relanzar_completa_una_version_a_medias(entorno):
     assert _manifiesto(entorno)["commit"] == entorno.commit
 
 
-def test_solo_prueba_sube_solo_edge(entorno):
+def test_solo_prueba_sube_solo_dev(entorno):
     r = _desplegar(entorno, "--solo-prueba")
     assert r.returncode == 0, r.stderr
 
-    assert _docker(entorno) == [["build"], ["push", "edge"]]
+    assert _docker(entorno) == [["build"], ["push", "dev"]]
     assert entorno.git("--git-dir=origen.git", "tag") == ""
     assert _manifiesto(entorno)["version"] == "0.0.1"
 

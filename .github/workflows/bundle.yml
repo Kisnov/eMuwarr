@@ -1,9 +1,9 @@
-# Sube a Codecov el tamaño del bundle de cada commit de master, para que los PR tengan con qué compararse.
+# Sube a Codecov el tamaño del bundle de cada commit de dev, para que los PR tengan con qué compararse.
 name: Bundle
 
 on:
   push:
-    branches: [master]
+    branches: [dev]
     paths: ['frontend/**', '.github/workflows/bundle.yml']
 
 permissions: {}

@@ -253,7 +253,7 @@ La imagen se publica con varias etiquetas, y `EMUWAREZ_UPLOADRR_TAG` (en el `.en
 | `latest` (por defecto) | La última versión publicada | Uso normal. Se actualiza con `docker compose pull && docker compose up -d` |
 | `1.0.0` | Una versión concreta (las que tienen etiqueta `v1.0.0` en el repo) | Quedarte en ella, o volver atrás si la nueva falla |
 | el sha del commit | La misma imagen de esa versión, por su commit | Fijar exactamente un commit |
-| `edge` | Lo más nuevo: una prueba sin publicar, y también cada versión publicada | Probar un arreglo antes de que salga; nunca queda por detrás de `latest` |
+| `dev` | La punta de la rama `dev`: se construye en cada cambio, y también con cada versión publicada | Probar un arreglo antes de que salga; nunca queda por detrás de `latest` |
 
 Las versiones las publica el workflow *Publicar versión* (a mano, o solo los días impares del mes si hay cambios
 suficientes, siempre después de pasar los tests) o `scripts/desplegar.sh` desde tu equipo.
@@ -286,10 +286,10 @@ Sin minutos de CI, o para probar un commit, construye la imagen en tu equipo, gu
 pasar por el registro:
 
 ```bash
-git -c core.autocrlf=false archive HEAD | docker build -t ghcr.io/kisnov/emuwarr:edge   --build-arg UPLOADRR_COMMIT=$(git ls-remote https://github.com/Kisnov/Uploadrr-EMU.git main | cut -f1)   --build-arg APP_COMMIT=$(git rev-parse HEAD) -
-docker save ghcr.io/kisnov/emuwarr:edge | gzip > emuwarez-edge.tar.gz
+git -c core.autocrlf=false archive HEAD | docker build -t ghcr.io/kisnov/emuwarr:dev   --build-arg UPLOADRR_COMMIT=$(git ls-remote https://github.com/Kisnov/Uploadrr-EMU.git main | cut -f1)   --build-arg APP_COMMIT=$(git rev-parse HEAD) -
+docker save ghcr.io/kisnov/emuwarr:dev | gzip > emuwarez-dev.tar.gz
 # En el servidor: carga la imagen y recrea el contenedor sin descargar nada
-docker load -i emuwarez-edge.tar.gz && EMUWAREZ_UPLOADRR_TAG=edge docker compose up -d --pull never
+docker load -i emuwarez-dev.tar.gz && EMUWAREZ_UPLOADRR_TAG=dev docker compose up -d --pull never
 ```
 
 ## Uso sin Docker
@@ -320,7 +320,7 @@ cd frontend && npm ci && npx tsc --noEmit && npm run lint && npx vitest run && n
 En cada PR, el CI pasa las reglas graves de `ruff`, los tests del backend con una cobertura mínima del 78 % y `tsc`,
 `eslint`, `vitest` y `vite build` del frontend. Sube a [Codecov](https://app.codecov.io/gh/Kisnov/eMuwarr) la
 cobertura, los resultados de los tests y el tamaño del bundle: las líneas nuevas o cambiadas de `emuwarez_uploadrr/`
-necesitan un 70 % de cobertura. El workflow *Bundle* sube el tamaño del bundle de cada push a `master` que toca
+necesitan un 70 % de cobertura. El workflow *Bundle* sube el tamaño del bundle de cada push a `dev` que toca
 `frontend/`, para que los PR tengan con qué compararse. Un PR que solo toca `frontend/`, `docs/` o ficheros `.md`
 limita los tests del backend a los que mencionan el frontend, sin mínimo de cobertura. Si toca `.github/`,
 [zizmor](https://docs.zizmor.sh) revisa los workflows y `dependabot.yml`. El workflow *Claude* responde cuando el

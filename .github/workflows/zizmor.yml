@@ -3,7 +3,7 @@ name: zizmor
 
 on:
   push:
-    branches: [master]
+    branches: [dev]
     paths: ['.github/**']
   pull_request:
     paths: ['.github/**']
