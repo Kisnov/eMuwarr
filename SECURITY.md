@@ -2,7 +2,7 @@
 
 ## Versiones con soporte
 
-Solo la última: la imagen `ghcr.io/kisnov/emuwarr:latest`, construida desde `master`. No se mantienen
+Solo la última: la imagen `ghcr.io/kisnov/emuwarr:latest`, construida desde `master`, que es siempre la última versión publicada (el desarrollo va en `dev`). No se mantienen
 versiones antiguas.
 
 ## Cómo avisar de un fallo de seguridad

@@ -7,10 +7,12 @@ the upload with Uploadrr-EMU (`Kisnov/Uploadrr-EMU`, cloned into the image at `/
 
 ## Workflow
 
-- Sole maintainer: Gabriel (Kisnov). Main repo `Kisnov/eMuwarr`, base `master`. It started as a private fork of
+- Sole maintainer: Gabriel (Kisnov). Main repo `Kisnov/eMuwarr`. All work goes to `dev` (the default branch); `master` is
+  always the last published version and only moves when `publicar.yml` (or `desplegar.sh`) fast-forwards it to the
+  version commit: never commit or open a PR to `master`. It started as a private fork of
   Rovaal-code's project (abandoned; Alvaro gave permission to publish it under the GPL); the history was moved here
   without the fork link and with his commit e-mail replaced. The image moved with it to `ghcr.io/kisnov/emuwarr` (the old `emuwarez-uploadrr` package is retired).
-- Docs-only changes and very simple fixes go straight to `master` as a commit, no PR. Everything else: branch and
+- Docs-only changes and very simple fixes go straight to `dev` as a commit, no PR. Everything else: branch and
   PR. Group related changes: no PR per one-line fix. Open PRs as non-draft so CodeRabbit reviews them; its standing
   rules per path live in `.coderabbit.yaml`.
 - UI text is in Spanish (the users are Spanish speakers), and so are the README and docs. Code comments and commits
@@ -23,7 +25,7 @@ the upload with Uploadrr-EMU (`Kisnov/Uploadrr-EMU`, cloned into the image at `/
 ## Saving review and CI budget
 
 - Run the full backend suite locally only when code changed or a merge conflict was resolved. A clean merge of
-  `master` into a PR branch is left to CI.
+  `dev` into a PR branch is left to CI.
 - CodeRabbit allows 10 reviews per hour, and every push to an open PR costs one. Fix real Major/Critical findings
   right away. A Minor, nitpick or trivial finding gets a reply on its thread (fix it or say why not), and its fix
   rides on the next push that is happening anyway, not on a push of its own.
@@ -47,7 +49,7 @@ the upload with Uploadrr-EMU (`Kisnov/Uploadrr-EMU`, cloned into the image at `/
   `publicar.yml` before a release; it uploads coverage, test results and the frontend bundle size to Codecov
   (`codecov.yml`: the changed `emuwarez_uploadrr/` lines of a PR need 70 % coverage or `codecov/patch` fails; the
   frontend is not measured; the total is informational;
-  needs the `CODECOV_TOKEN` secret). Master has no CI of its own: `bundle.yml`
+  needs the `CODECOV_TOKEN` secret). On pushes to `dev` CI runs the backend only; `bundle.yml`
   only builds the frontend on each push that touches `frontend/` (~40 s) so PRs have a bundle size to compare against.
 - `zizmor.yml` audits the workflows and `dependabot.yml` when `.github/` changes; run `zizmor --gh-token "$(gh auth token)" .` locally (without a token it skips online audits) before pushing a workflow edit.
 
@@ -99,12 +101,12 @@ the upload with Uploadrr-EMU (`Kisnov/Uploadrr-EMU`, cloned into the image at `/
 - Image: `ghcr.io/kisnov/emuwarr`, built only when a version is published. `publicar.yml` ("Publicar
   versión": by hand, or on odd days of the month when 3+ PRs from `feat/` or `fix/` branches (merge commits, or `feat:`/`fix:` squash
   commits) merged since the last `__version__` change) runs
-  the full CI on master's tip, bumps `__version__` (`auto`: minor if any `feat/` PR, else patch), pushes that commit
-  and `vX.Y.Z`, builds `:X.Y.Z`, `:<sha>`, `:latest` and `:edge`, publishes the manifest (secret
+  the full CI on dev's tip, bumps `__version__` (`auto`: minor if any `feat/` PR, else patch), pushes that commit to `dev`, fast-forwards
+  `master` to it and pushes `vX.Y.Z` (all atomic), builds `:X.Y.Z`, `:<sha>`, `:latest` and `:dev`, publishes the manifest (secret
   `UPLOADRR_VERSION_TOKEN`) and creates the GitHub release with the PRs merged since the previous tag. Release when Gabriel asks: `gh workflow run publicar.yml -f notas="…"`, with a
-  neutral public note. `solo_prueba=true` builds `:edge` from master's tip only. `ref=<commit|branch|tag>` publishes that commit's version instead (no tests; the version commit and tag go to `release/vX.Y.Z`, to merge into master afterwards; `:edge` isn't moved). `scripts/desplegar.sh` is
+  neutral public note. `solo_prueba=true` builds `:dev` from dev's tip only. `ref=<commit|branch|tag>` publishes that commit's version instead (no tests; the version commit and tag go to `release/vX.Y.Z`, to merge into dev afterwards; neither `master` nor `:dev` moves). `scripts/desplegar.sh` is
   the local fallback (no Actions minutes, no tests) and pushes in the same order; `--solo-prueba` pushes only
-  `:edge`. Pass `--build-arg UPLOADRR_COMMIT=…` or
+  `:dev`. Pass `--build-arg UPLOADRR_COMMIT=…` or
   the Uploadrr-EMU clone layer comes from cache.
 - Version manifest: the Diagnóstico card compares the image's `APP_COMMIT` with `latest.json` in the public
   repo `Kisnov/uploadrr-version` (a fork of `Rovaal-code/uploadrr-version`); to test against another

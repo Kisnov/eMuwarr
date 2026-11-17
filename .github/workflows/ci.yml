@@ -1,18 +1,18 @@
 name: CI
 
-# En cada PR, y desde «Publicar versión» antes de publicar. En master solo el backend, para que
+# En cada PR, y desde «Publicar versión» antes de publicar. En dev solo el backend, para que
 # Codecov tenga la cobertura de la base con la que compara los PR.
 on:
   pull_request:
   push:
-    branches: [master]
+    branches: [dev]
     paths-ignore: ["frontend/**", "docs/**", "**.md"]
   workflow_call:
 
 permissions:
   contents: read
 
-# Con el evento, un merge a master no cancela los tests de «Publicar versión».
+# Con el evento, un merge a dev no cancela los tests de «Publicar versión».
 concurrency:
   group: ci-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: true
@@ -78,7 +78,7 @@ jobs:
           fail_ci_if_error: true
 
   frontend:
-    # En master el bundle ya lo sube Bundle.
+    # En dev el bundle ya lo sube Bundle.
     if: github.event_name != 'push'
     runs-on: ubuntu-latest
     timeout-minutes: 10
