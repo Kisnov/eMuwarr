@@ -1,0 +1,14 @@
+DEFAULT:
+  always_anon: false
+  tmdb: ''
+  add_logo: true
+SCREENS:
+  per_episode: 0
+  img_hosts: [pixhost]
+
+AUTO:
+  keep_quiet: false
+
+TRACKERS:
+  EMU:
+    anon: false
