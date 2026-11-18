@@ -124,3 +124,10 @@ def test_missing_specials_count_when_setting_off(db_conn):
 
     _compute_and_store_item_status(db_conn)
     assert db_conn.execute("SELECT emu_in_catalog FROM library_items WHERE id=?", (sid,)).fetchone()[0] == 2
+
+
+def test_los_torrents_de_otros_valen_con_el_codigo_viejo_y_con_el_internacional():
+    from emuwarez_uploadrr.services.emu_catalog import _has_spanish
+    for codigo in ("ING", "ENG", "JAP", "JPN", "COR", "KOR", "ALE", "GER"):
+        assert _has_spanish(f"Pelicula 2024 1080p WEB-DL AVC {codigo} DD+ 5.1-GRP") == 0, codigo
+    assert _has_spanish("Pelicula 2024 1080p WEB-DL AVC ESP-JPN DD+ 5.1-GRP") == 1

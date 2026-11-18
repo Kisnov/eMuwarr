@@ -61,7 +61,7 @@ const FIELD_SOURCES: { field: string; example: string; source: string }[] = [
   {
     field: 'Audio (idioma + códec + canales)',
     example: 'ESP DD+ Atmos 5.1',
-    source: 'MediaInfo del archivo real, pista a pista (idioma, códec y canales de cada pista de audio); aplica las reglas DUAL/MULTI/ESP-ING según cuántos idiomas haya. Si el archivo no es accesible, se usa el resumen agregado que ya trae Radarr/Sonarr (sin distinguir pistas).',
+    source: 'MediaInfo del archivo real, pista a pista (idioma, códec y canales de cada pista de audio); aplica las reglas DUAL/MULTI/ESP-ENG según cuántos idiomas haya. Si el archivo no es accesible, se usa el resumen agregado que ya trae Radarr/Sonarr (sin distinguir pistas).',
   },
   {
     field: 'Subtítulos (SUBS)',
@@ -119,17 +119,17 @@ const HDR_ROWS: [string, string][] = [
 const LANGUAGE_ROWS: [string, string][] = [
   ['Castellano', 'ESP'],
   ['Latino', 'LAT'],
-  ['Inglés', 'ING'],
+  ['Inglés', 'ENG'],
   ['Francés', 'FRA'],
-  ['Alemán', 'ALE'],
-  ['Japonés', 'JAP'],
-  ['Coreano', 'COR'],
-  ['Solo V.O.', 'V.O. ING'],
-  ['V.O. sin doblaje ESP pero con subs ESP', 'VOSE ING'],
-  ['V.O. ING + ESP con códecs iguales', 'DUAL'],
+  ['Alemán', 'GER'],
+  ['Japonés', 'JPN'],
+  ['Coreano', 'KOR'],
+  ['Solo V.O.', 'V.O. ENG'],
+  ['V.O. sin doblaje ESP pero con subs ESP', 'VOSE ENG'],
+  ['V.O. ENG + ESP con códecs iguales', 'DUAL'],
   ['2 o 3 idiomas (ej. ESP+ITA)', 'ESP-ITA'],
   ['4 idiomas o más', 'MULTI'],
-  ['Comentarios del director', 'ING-COM'],
+  ['Comentarios del director', 'ENG-COM'],
 ]
 
 const AUDIO_CODEC_ROWS: [string, string][] = [
@@ -189,11 +189,11 @@ const CHANNEL_ROWS: [string, string][] = [
 ]
 
 const EXAMPLES = [
-  'Hora punta 1998 1080p BluRay x264 ESP DD 5.1 ING DTS ES 5.1 ING-COM DD 2.0 SUBS-EMUWAREZ',
-  'La trama fenicia 2025 1080p MA WEB-DL x264 ESP DD+ 5.1 ING DD+ Atmos 5.1 SUBS-EMUWAREZ',
+  'Hora punta 1998 1080p BluRay x264 ESP DD 5.1 ENG DTS ES 5.1 ENG-COM DD 2.0 SUBS-EMUWAREZ',
+  'La trama fenicia 2025 1080p MA WEB-DL x264 ESP DD+ 5.1 ENG DD+ Atmos 5.1 SUBS-EMUWAREZ',
   'Brave - Indomable 2012 2160p 4K UHD AV1 MULTI DD 5.1 SUBS - EMUWAREZ',
-  'La trama fenicia 2025 2160p 4K UHD MA WEB-DL DV HDR HEVC ESP DD+ 5.1 ING DD+ Atmos 5.1 SUBS-EMUWAREZ',
-  'Raíces profundas 1953 1080p BDRemux AVC ESP MLP TrueHD 2.0 ING DD 2.0 SUBS-MATTS',
+  'La trama fenicia 2025 2160p 4K UHD MA WEB-DL DV HDR HEVC ESP DD+ 5.1 ENG DD+ Atmos 5.1 SUBS-EMUWAREZ',
+  'Raíces profundas 1953 1080p BDRemux AVC ESP MLP TrueHD 2.0 ENG DD 2.0 SUBS-MATTS',
   'Anacleto: Agente secreto 2015 1080p BDRemux AVC ESP-CAT TrueHD 5.1 SUBS-MATTS',
   'Upload S01 2020 1080p AMZN WEB-DL AVC DUAL DD+ 5.1 SUBS-EMUWAREZ',
   'It: Bienvenidos a Derry S01E01 2025 1080p WEB-DL HBO AVC DUAL DD+ 5.1 SUBS-EMUWAREZ',
@@ -291,7 +291,7 @@ function TechSpecsContent() {
       <div className="guia-ejemplos-audio">
         <div>
           Dos pistas japonesas, TrueHD y DD:
-          <br /><Mono>JAP TrueHD 5.1 JAP DD 5.1</Mono> → <Mono>JAP TrueHD 5.1</Mono>
+          <br /><Mono>JPN TrueHD 5.1 JPN DD 5.1</Mono> → <Mono>JPN TrueHD 5.1</Mono>
         </div>
         <div>
           Mismo códec y distintos canales, gana el que más tiene:
@@ -299,7 +299,7 @@ function TechSpecsContent() {
         </div>
         <div>
           Atmos desempata dentro del mismo códec, porque es una capa por encima y no un códec aparte:
-          <br /><Mono>ING DD+ 5.1 ING DD+ Atmos 5.1</Mono> → <Mono>ING DD+ Atmos 5.1</Mono>
+          <br /><Mono>ENG DD+ 5.1 ENG DD+ Atmos 5.1</Mono> → <Mono>ENG DD+ Atmos 5.1</Mono>
         </div>
         <div>
           Idiomas distintos no se tocan, y si comparten códec y canales se juntan:
@@ -609,19 +609,19 @@ function UploadConditionsContent() {
           </thead>
           <tbody>
             {([
-              ['Todos: ING TrueHD Atmos 7.1 + ESP DD+ 5.1',
-               'ING TrueHD Atmos 7.1 ESP DD+ 5.1',
+              ['Todos: ENG TrueHD Atmos 7.1 + ESP DD+ 5.1',
+               'ENG TrueHD Atmos 7.1 ESP DD+ 5.1',
                'Nadie se queda fuera: las dos pistas están en los diez capítulos.'],
-              ['5 con ING DD+ Atmos 5.1 y 5 con ING DD+ 5.1 (ESP y JAP iguales)',
-               'CUSTOM … ING DD+ Atmos 5.1 ING-ESP-JAP DD+ 5.1',
+              ['5 con ENG DD+ Atmos 5.1 y 5 con ENG DD+ 5.1 (ESP y JPN iguales)',
+               'CUSTOM … ENG DD+ Atmos 5.1 ENG-ESP-JPN DD+ 5.1',
                'El Atmos solo está en la mitad. Se anuncian las dos versiones del inglés y CUSTOM avisa de que no todos los capítulos son iguales.'],
-              ['Todos con ESP, el JAP solo en 4 capítulos',
-               'CUSTOM … ESP DD+ 5.1 JAP FLAC 2.0',
+              ['Todos con ESP, el JPN solo en 4 capítulos',
+               'CUSTOM … ESP DD+ 5.1 JPN FLAC 2.0',
                'El japonés se anuncia porque está, y CUSTOM avisa de que no está en todos.'],
               ['ESP DD+ 5.1 en unos, ESP DD+ 2.0 en otros',
-               'CUSTOM … ESP-ING DD+ 5.1 ESP DD+ 2.0',
+               'CUSTOM … ESP-ENG DD+ 5.1 ESP DD+ 2.0',
                'Mismo códec, distintos canales: sigue siendo otra pista.'],
-              ['Todos: ESP DD 5.1 + ING DD 5.1',
+              ['Todos: ESP DD 5.1 + ENG DD 5.1',
                'DUAL DD 5.1',
                'Sin CUSTOM, DUAL y MULTI siguen valiendo: ahí sí es verdad que todos los capítulos traen esos idiomas.'],
             ] as [string, string, string][]).map(([tienen, nombre, why], i) => (

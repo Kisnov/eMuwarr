@@ -549,7 +549,7 @@ describe('Panel', () => {
     it('con grupo e idiomas: el grupo en su chip, el audio, los subtítulos y «Ver petición», en la segunda línea', async () => {
       vi.mocked(getDashboardRecommendations).mockResolvedValue({ items: [
         rec({ id: 1, rec_request_id: 11, rec_points: 9, content_name: 'Con datos', release_group: 'Ryodan',
-          audio_languages: ['ESP', 'ING'], subtitle_languages: ['ESP'], resolution: '1080p', source: 'WEB-DL', size_bytes: 6 * 1024 ** 3 }),
+          audio_languages: ['ESP', 'ENG'], subtitle_languages: ['ESP'], resolution: '1080p', source: 'WEB-DL', size_bytes: 6 * 1024 ** 3 }),
       ] })
       await pagina()
       const fila = filas('Listo para subir')[0]
@@ -558,7 +558,7 @@ describe('Panel', () => {
       expect(meta(0).querySelector('.panel-rg')!.textContent).toBe('Grupo de release: Ryodan')
       expect(meta(0).querySelector('.panel-rg-texto')!.textContent).toBe('Ryodan')
       const idiomas = [...meta(0).querySelectorAll('.detcard-plano')].map(p => p.textContent)
-      expect(idiomas).toEqual(['Audio: ESP, ING', 'Subtítulos: ESP'])
+      expect(idiomas).toEqual(['Audio: ESP, ENG', 'Subtítulos: ESP'])
       expect(meta(0).querySelector('a[href]')!.textContent).toBe('Ver petición')
     })
 

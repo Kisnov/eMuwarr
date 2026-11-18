@@ -646,11 +646,11 @@ def test_el_pack_se_escribe_igual_que_sus_capitulos():
     result = preview_season_pack_title({
         "title": "Fate/Zero", "year": 2011, "season_number": 1, "resolution": "2160p",
         "source": "WEB-DL", "provider": "NF", "dynamic_range": "Dolby Vision / SMPTE ST 2086",
-        "video_codec": "HEVC", "audio_summary": "ESP-JAP DD+ 5.1", "subtitle_summary": "SUBS",
+        "video_codec": "HEVC", "audio_summary": "ESP-JPN DD+ 5.1", "subtitle_summary": "SUBS",
         "tag": "EMUWAREZ",
     })
     assert result["torrent_name"] == (
-        "Fate Zero S01 2011 2160p 4K UHD NF WEB-DL DV HDR HEVC ESP-JAP DD+ 5.1 SUBS-EMUWAREZ")
+        "Fate Zero S01 2011 2160p 4K UHD NF WEB-DL DV HDR HEVC ESP-JPN DD+ 5.1 SUBS-EMUWAREZ")
 
 
 def test_un_pack_con_un_nombre_demasiado_largo_se_bloquea(isolated_db, tmp_path):
@@ -781,7 +781,7 @@ def test_different_audio_languages_are_summed_not_blocked(isolated_db, tmp_path)
     titulo = plan["season_pack_title"]
     # Los dos idiomas se anuncian, pero explícitos y con el aviso: DUAL diría
     # que los dos capítulos traen castellano e inglés, y no es verdad.
-    assert "ESP-ING" in titulo and "DUAL" not in titulo, titulo
+    assert "ESP-ENG" in titulo and "DUAL" not in titulo, titulo
     assert "CUSTOM" in titulo, titulo
     assert plan["custom"] is True
     conn.close()
@@ -963,7 +963,7 @@ def test_pack_fields_are_emptied_when_they_differ_and_audios_are_summed(isolated
     assert "WEB-DL x264" in titulo, titulo
     # Y los idiomas sumados, explícitos y con CUSTOM: el inglés solo está en
     # el segundo capítulo, así que DUAL a secas prometería de más.
-    assert "ESP-ING" in titulo and "DUAL" not in titulo, titulo
+    assert "ESP-ENG" in titulo and "DUAL" not in titulo, titulo
     assert "CUSTOM" in titulo, titulo
     conn.close()
 
@@ -1110,12 +1110,12 @@ def _audios(monkeypatch, capitulos: list[dict]):
 def test_an_audio_every_episode_has_is_named_without_custom(monkeypatch):
     """Si todos los capítulos traen la misma pista, nombrarla no miente."""
     texto, custom = _audios(monkeypatch, [
-        {"ESP": "DD+ 5.1", "ING": "TrueHD Atmos 7.1"},
-        {"ESP": "DD+ 5.1", "ING": "TrueHD Atmos 7.1"},
+        {"ESP": "DD+ 5.1", "ENG": "TrueHD Atmos 7.1"},
+        {"ESP": "DD+ 5.1", "ENG": "TrueHD Atmos 7.1"},
     ])
     assert custom is False
     # De mejor a peor, igual que dentro de un capítulo.
-    assert texto == "ING TrueHD Atmos 7.1 ESP DD+ 5.1"
+    assert texto == "ENG TrueHD Atmos 7.1 ESP DD+ 5.1"
 
 
 def test_an_audio_that_changes_between_episodes_lists_both_and_marks_custom(monkeypatch):
@@ -1123,22 +1123,22 @@ def test_an_audio_that_changes_between_episodes_lists_both_and_marks_custom(monk
     solo el Atmos mentiría sobre la mitad del pack, así que salen los dos y el
     nombre avisa con CUSTOM."""
     texto, custom = _audios(monkeypatch, [
-        {"ING": "DD+ Atmos 5.1", "ESP": "DD+ 5.1", "JAP": "DD+ 5.1"},
-        {"ING": "DD+ 5.1", "ESP": "DD+ 5.1", "JAP": "DD+ 5.1"},
+        {"ENG": "DD+ Atmos 5.1", "ESP": "DD+ 5.1", "JPN": "DD+ 5.1"},
+        {"ENG": "DD+ 5.1", "ESP": "DD+ 5.1", "JPN": "DD+ 5.1"},
     ])
     assert custom is True
-    assert texto == "ING DD+ Atmos 5.1 ING-ESP-JAP DD+ 5.1"
+    assert texto == "ENG DD+ Atmos 5.1 ENG-ESP-JPN DD+ 5.1"
 
 
 def test_an_audio_missing_from_some_episodes_also_marks_custom(monkeypatch):
     """Un idioma que solo está en algunos capítulos es el mismo problema:
     falta en los demás."""
     texto, custom = _audios(monkeypatch, [
-        {"ESP": "DD+ 5.1", "JAP": "FLAC 2.0"},
+        {"ESP": "DD+ 5.1", "JPN": "FLAC 2.0"},
         {"ESP": "DD+ 5.1"},
     ])
     assert custom is True
-    assert "JAP" in texto and "ESP" in texto
+    assert "JPN" in texto and "ESP" in texto
 
 
 def test_the_same_codec_with_different_channels_is_a_different_track(monkeypatch):
@@ -1154,7 +1154,7 @@ def test_dual_survives_when_the_pack_really_is_dual(monkeypatch):
     """DUAL/MULTI siguen valiendo cuando NO hay CUSTOM: ahí sí es verdad que
     todos los capítulos traen esos idiomas."""
     texto, custom = _audios(monkeypatch, [
-        {"ESP": "DD 5.1", "ING": "DD 5.1"}, {"ESP": "DD 5.1", "ING": "DD 5.1"},
+        {"ESP": "DD 5.1", "ENG": "DD 5.1"}, {"ESP": "DD 5.1", "ENG": "DD 5.1"},
     ])
     assert custom is False and texto == "DUAL DD 5.1"
 

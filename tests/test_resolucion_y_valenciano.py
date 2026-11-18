@@ -81,7 +81,7 @@ def test_el_catalan_sigue_siendo_catalan(codigo):
 
 
 def test_el_valenciano_llega_al_nombre_del_torrent():
-    assert build_audio_string("AAC LC", "spa / cat-valencia / eng", 2) == "ESP-VAL-ING AAC LC 2.0"
+    assert build_audio_string("AAC LC", "spa / cat-valencia / eng", 2) == "ESP-VAL-ENG AAC LC 2.0"
 
 
 # --- Lo que producía "CA-" ---------------------------------------------------
@@ -134,7 +134,7 @@ def test_y_sigue_distinguiendo_el_latino():
     ("spa", "es-x-01", None, "ESP"),     # subetiqueta privada de MAX, no región
     ("spa", "es", "Castellano", "ESP"),
     ("und", None, "Castellano", "ESP"),  # el nombre pone el idioma que falta
-    ("eng", None, "Latino", "ING"),      # pero no contradice la etiqueta
+    ("eng", None, "Latino", "ENG"),      # pero no contradice la etiqueta
     ("cat", "ca-ES-valencia", None, "VAL"),
     ("und", None, None, "UND"),
     (None, None, None, "UND"),

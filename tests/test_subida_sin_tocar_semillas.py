@@ -26,7 +26,7 @@ import pytest
 from emuwarez_uploadrr.services import upload_queue as uq
 
 TITULO_FUENTE = "Fuente [www.web.com]"
-PROPUESTO = "Peli.2024.1080p.WEB-DL.AVC.ESP-ING-EMU"
+PROPUESTO = "Peli.2024.1080p.WEB-DL.AVC.ESP-ENG-EMU"
 REALES = all(shutil.which(t) for t in ("ffmpeg", "mediainfo", "mkvmerge", "mkvpropedit"))
 
 

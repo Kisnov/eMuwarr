@@ -300,7 +300,7 @@ def build_mediainfo_report(path: str, radarr_source: str | None = None,
     # below count DISTINCT languages) while codecs/channels are not. Zipping
     # them shifted every entry after the first repeated language onto the wrong
     # codec and silently dropped the last track — a release with two Japanese
-    # tracks came out as "JAP TrueHD 5.1 CAT DD 5.1 ESP DD+ 2.0", giving
+    # tracks came out as "JPN TrueHD 5.1 CAT DD 5.1 ESP DD+ 2.0", giving
     # Catalan the second Japanese track's codec and losing the fourth track
     # entirely. And this string is not just for show: it goes into the release
     # name (services/source_assistant.py's audio_summary).
@@ -310,8 +310,8 @@ def build_mediainfo_report(path: str, radarr_source: str | None = None,
     # audio tracks where the release states one shared one.
     # Un idioma que viene en varias pistas se queda con UNA sola: la de mejor
     # códec (emu_format.audio_codec_quality). El nombre del release dice qué
-    # calidad ofrece, no cuántas pistas trae, así que "JAP TrueHD 5.1 JAP DD
-    # 5.1" es "JAP TrueHD 5.1": quien lo lea busca lo mejor que va a oír.
+    # calidad ofrece, no cuántas pistas trae, así que "JPN TrueHD 5.1 JPN DD
+    # 5.1" es "JPN TrueHD 5.1": quien lo lea busca lo mejor que va a oír.
     best_by_lang: dict[str, tuple[tuple[int, int], str, str]] = {}
     sin_idioma: list[int] = []
     for i, tr in enumerate(audio_tracks, 1):
@@ -348,7 +348,7 @@ def build_mediainfo_report(path: str, radarr_source: str | None = None,
 
     # La mejor pista de cada idioma, en estructura y no en cadena. El pack de
     # temporada la necesita para comparar capítulo con capítulo: volver a
-    # parsear "ING DD+ Atmos 5.1 ESP-JAP DD+ 5.1" sería frágil, y esto ya está
+    # parsear "ENG DD+ Atmos 5.1 ESP-JPN DD+ 5.1" sería frágil, y esto ya está
     # calculado aquí arriba.
     audio_by_language = {lang: {"codec": best_by_lang[lang][1], "channels": best_by_lang[lang][2]}
                          for lang in langs if lang in best_by_lang}
@@ -362,7 +362,7 @@ def build_mediainfo_report(path: str, radarr_source: str | None = None,
         entries = []
         for (codec, ch), group_langs in groups.items():
             ordered = sorted(group_langs, key=lambda c: (0 if c == "ESP" else 1))
-            if len(ordered) == 2 and "ESP" in ordered and "ING" in ordered:
+            if len(ordered) == 2 and "ESP" in ordered and "ENG" in ordered:
                 token = "DUAL"
             elif len(ordered) >= 4:
                 token = "MULTI"
