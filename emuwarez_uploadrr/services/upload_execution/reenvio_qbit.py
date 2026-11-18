@@ -21,9 +21,7 @@ from ..uploadrr_eventos import (
 )
 from ..uploadrr_progress import parse_uploadrr_progress
 from .comun import QBIT_AÑADIDO, _collect_secrets, _get_db_conn, _now, logger, mensaje_qbit_fallo, redact_secrets
-from .config import (
-    _acquire_staged_config, _release_staged_config, borrar_config_de_la_subida, preparar_config_de_la_subida,
-)
+from .config import borrar_config_de_la_subida, preparar_config_de_la_subida, sin_config_por_subida
 from .consultas import build_uploadrr_execution_command, get_upload_job
 from .ejecucion import _lanzar_uploadrr, _leer_y_esperar, _soltar_proceso
 from .progreso import mark_phase_done
@@ -122,13 +120,12 @@ def _avisar_de_qbit(job_id: int, line: str, secrets: list[str]) -> None:
 
 
 def _lanzar(job_id: int, torrent_id: str, cmd: dict, secrets: list[str]) -> tuple[str, str]:
-    """Prepara el config.yaml, lanza Uploadrr-EMU y espera. Devuelve (resultado, línea final del registro)."""
+    """Prepara el config de la subida, lanza Uploadrr-EMU y espera. Devuelve (resultado, línea final del registro)."""
     append_upload_log(job_id, "info", f"Reenvío a qBittorrent: se vuelve a añadir el torrent {torrent_id} de "
                       "eMuwarez, sin subir nada.", stream="system")
     append_upload_log(job_id, "info", f"Comando: {redact_secrets(cmd.get('command_preview', ''), secrets)}",
                       stream="system")
     cwd = cmd.get("cwd") or "."
-    config = None
     proc = None
     eventos_ruta = cmd.get("eventos")
     estado = EstadoEventos() if eventos_ruta else None
@@ -149,10 +146,10 @@ def _lanzar(job_id: int, torrent_id: str, cmd: dict, secrets: list[str]) -> tupl
             _avisar_de_qbit(job_id, linea, secrets)
 
     try:
-        if os.path.isdir(cwd) and cmd.get("config"):
+        if os.path.isdir(cwd):
+            if not cmd.get("config"):
+                raise sin_config_por_subida(cwd)
             preparar_config_de_la_subida(job_id, cwd, cmd["config"])
-        elif os.path.isdir(cwd):
-            config = _acquire_staged_config(job_id, cwd)
         if eventos_ruta and not preparar_fichero(eventos_ruta):
             estado = seguidor = None  # sin fichero limpio, por texto
         proc = _lanzar_uploadrr(job_id, [cmd["executable"]] + cmd["args"], cwd)
@@ -160,7 +157,6 @@ def _lanzar(job_id: int, torrent_id: str, cmd: dict, secrets: list[str]) -> tupl
             job_id, proc, _TIMEOUT, secrets, _con_linea, seguidor=seguidor)
     finally:
         _soltar_proceso(job_id, proc)
-        _release_staged_config(job_id, config)
         borrar_config_de_la_subida(cmd.get("config"))
         borrar_fichero(eventos_ruta)
     if sin_tiempo:

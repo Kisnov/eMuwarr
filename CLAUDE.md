@@ -85,14 +85,15 @@ came in from `Kisnov/Uploadrr-EMU` with `git subtree add`, history kept; that re
 - Contract with Uploadrr-EMU, change both sides in the same PR: argv in `services/uploadrr_contract.py` (below 720p it
   adds `-avbc`, and Uploadrr-EMU puts its `AVISO_BAJA_CALIDAD` notice at the top of the description;
   `test_contrato_uploadrr_real.py` parses the app's argv with the real `uploadrr-emu/src/args.py`);
-  `config.yaml` keys set by `upload_execution/config.py` with `uploadrr_config_staging.py` / `uploadrr_yaml.py` (among them the stock signature image, replaced by the current one, `AUTO.keep_quiet`, `SCREENS.use_oxipng`/`oxipng_level`, `DEFAULT.always_anon`
-  and `TRACKERS.EMU.anon`, all `false`: only the `-a` flag makes an upload anonymous), on top of the `.bak` if there is one, else
-  `config.yaml`. When the checkout's `contrato_eventos.json` has `"config": true` they go into the job's own file,
+  `config.yaml` keys set by `upload_execution/config.py` with `uploadrr_config.py` / `uploadrr_yaml.py` (among them the stock signature image, replaced by the current one, `AUTO.keep_quiet`, `SCREENS.use_oxipng`/`oxipng_level`, `DEFAULT.always_anon`
+  and `TRACKERS.EMU.anon`, all `false`: only the `-a` flag makes an upload anonymous), on top of the user's
+  `config.yaml`, go into the job's own file,
   `config_uploadrr/<job>.yaml` next to the DB (`<job>-reenvio.yaml` for «Reenviar a qBittorrent»; dir 0700, file 0600 via `O_EXCL`,
   deleted after the process, swept at startup, never in a backup), passed as `--config <absolute path>` (global, like `--eventos`),
-  and the user's files are never written. Otherwise (an older `uploadrr.path`) they are staged into the shared `config.yaml` and restored from
-  `data/config.yaml.bak` after every job, and also at startup and before the next job if one died mid-run
-  (hand edits to `config.yaml` don't survive, edit the `.bak`); `test_config_uploadrr_por_subida.py` pins both to the same golden files;
+  and the user's files are never written (`test_config_uploadrr_por_subida.py` has the golden files). The checkout must have
+  `"config": true` in its `contrato_eventos.json`; an older `uploadrr.path` fails the job with a clear error (`sin_config_por_subida`).
+  At startup `migrar_config_bak` turns the `config.yaml.bak` older versions left into `config.yaml` once (it was the real
+  config) and moves it aside as `config.yaml.migrado`;
   progress and result parsing in `uploadrr_progress.py` / `upload_result_parser.py` match its output lines
   verbatim, but they are now the fallback (one version, then they go): when the checkout has `contrato_eventos.json` (version 1) the
   app launches with `--eventos <absolute path>` (a global flag, after the media path; the file is `eventos_uploadrr/<job>.jsonl`
@@ -134,7 +135,7 @@ came in from `Kisnov/Uploadrr-EMU` with `git subtree add`, history kept; that re
   `requirements.txt`); the Dockerfile and CI install with `-c constraints.txt`. Raising a minimum in the `web` extra
   means updating the pin too (`test_imagen_docker.py` checks they agree); the header of `constraints.txt` says how.
 - Uploadrr-EMU's state in the image: `/opt/Uploadrr/data` is real and refreshes with each image; only `config.yaml`,
-  `config.yaml.bak`, `cookies/` and `tmp` are symlinks, baked at build into `/config/Uploadrr`. The entrypoint just
+  `cookies/` and `tmp` are symlinks, baked at build into `/config/Uploadrr`. The entrypoint just
   creates the targets, and seeds `config.yaml` from the image's example the first time. Nothing under
   `/opt/Uploadrr` is writable except `data/` (1777), so don't make the entrypoint create links there.
 - Building on Windows: `.gitattributes` keeps text files LF, so a new checkout builds with `docker build .`. A checkout

@@ -245,14 +245,16 @@ def fake_uploadrr_emu_dir(tmp_path):
     <dir>/upload.py is a copy of tests/fixtures/fake_uploadrr_emu.py — a
     test-only CLI that accepts the real Uploadrr-EMU flags, never touches
     the network, and never uploads anything real (see that file's docstring).
-    <dir>/data/config.yaml is a minimal placeholder config so config-staging
-    tests (Phase 10F) have something to back up/stage/restore.
+    <dir>/data/config.yaml is a minimal placeholder config, the base of each upload's own
+    config (Phase 10F), and <dir>/contrato_eventos.json the contract copy that announces
+    --config and --eventos (the app does not launch a checkout without it).
 
     Never points at a real Uploadrr-EMU installation.
     """
     uploadrr_dir = tmp_path / "FakeUploadrrEMU"
     uploadrr_dir.mkdir()
     shutil.copy(FAKE_UPLOADRR_EMU_SCRIPT, uploadrr_dir / "upload.py")
+    shutil.copy(FAKE_UPLOADRR_EMU_SCRIPT.parent / "contrato_eventos.json", uploadrr_dir / "contrato_eventos.json")
     data_dir = uploadrr_dir / "data"
     data_dir.mkdir()
     (data_dir / "config.yaml").write_text(

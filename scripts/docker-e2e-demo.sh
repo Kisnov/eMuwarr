@@ -66,6 +66,8 @@ echo "FAKE MKV DEMO — eMuwarr E2E test fixture" \
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 mkdir -p "$E2E_TMPDIR/uploadrr-mount/data" "$E2E_TMPDIR/uploadrr-mount/tmp"
 cp "$REPO_ROOT/tests/fixtures/fake_uploadrr_emu.py" "$E2E_TMPDIR/uploadrr-mount/upload.py"
+# Con la marca de --config: la app no lanza un Uploadrr-EMU que no la tenga.
+cp "$REPO_ROOT/tests/fixtures/contrato_eventos.json" "$E2E_TMPDIR/uploadrr-mount/contrato_eventos.json"
 cat > "$E2E_TMPDIR/uploadrr-data/config.yaml" <<'YAML'
 DEFAULT:
   tmdb: PLACEHOLDER_TMDB_KEY
@@ -434,9 +436,9 @@ if jobs:
 " 2>&1)
 check_ok "Fase 10F — logs capturados del fake runner" \
     grep -q 'Torrent creado correctamente' <<< "$FAKE_JOB_LOGS"
-# config.yaml is staged with the fake tmdb/emu keys during execution and
-# must be restored back to its original placeholder content afterwards.
-check_ok "Fase 10F — config.yaml restaurado al placeholder original" \
+# The fake tmdb/emu keys go into the job's own config (--config): the shared
+# config.yaml must still hold its original placeholder content afterwards.
+check_ok "Fase 10F — config.yaml sin tocar, con el placeholder original" \
     grep -q 'PLACEHOLDER_TMDB_KEY' "${E2E_TMPDIR}/uploadrr-data/config.yaml"
 
 # ── 15. Security check: Uploadrr not in image ─────────────────────────────────

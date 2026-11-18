@@ -158,9 +158,9 @@ eMuwarez; después genera el nombre y lanza la subida. El progreso y los logs es
 ## 6. Uploadrr-EMU
 
 Va dentro de la imagen, en `/opt/Uploadrr`: no hay nada que montar ni configurar. Lo que guarda y tiene que
-sobrevivir a recrear el contenedor está en `/config/Uploadrr`: `config.yaml`, `config.yaml.bak` y `cookies/` en
+sobrevivir a recrear el contenedor está en `/config/Uploadrr`: `config.yaml` y `cookies/` en
 `data/`, y los temporales de cada subida en `tmp/`. La imagen trae los enlaces de `/opt/Uploadrr/data/config.yaml`,
-`config.yaml.bak`, `cookies` y de `/opt/Uploadrr/tmp` a esos sitios, y `docker-entrypoint.sh` crea los destinos; la
+`cookies` y de `/opt/Uploadrr/tmp` a esos sitios, y `docker-entrypoint.sh` crea los destinos; la
 primera vez, `config.yaml` sale del ejemplo de la imagen. El resto de `data/` (servicios, etiquetas, plantillas...)
 se queda en la imagen, así que una versión nueva lo actualiza.
 
@@ -170,10 +170,14 @@ no se aplica.
 
 Antes de cada subida, la app escribe un config solo para ella en `/config/config_uploadrr/` con las claves de TMDb y
 eMuwarez, los hosts de imágenes y qBittorrent, y lo borra al terminar (y al arrancar, si quedó alguno). Lo saca de
-`/config/Uploadrr/data/config.yaml.bak` si existe (lo dejaron las versiones anteriores) y si no de `config.yaml`, y no
-toca ninguno de los dos: si quieres cambiar algo a mano, edita el `.bak` mientras exista y si no `config.yaml`.
-Con un Uploadrr-EMU anterior (otra ruta en `uploadrr.path`) se hace como antes: la app escribe en `config.yaml` y al
-terminar lo restaura desde `config.yaml.bak`, así que un cambio en `config.yaml` se pierde en la siguiente subida.
+`/config/Uploadrr/data/config.yaml` y no lo toca: si quieres cambiar algo a mano, edita `config.yaml`.
+
+Las versiones anteriores escribían las claves en `config.yaml` y guardaban el de verdad en `config.yaml.bak`. La
+primera vez que arranca esta versión, si hay un `.bak` distinto de `config.yaml`, el `.bak` pasa a ser `config.yaml`
+(así no se pierde lo que editaste en él) y después se aparta como `config.yaml.migrado`, que puedes borrar.
+
+Un Uploadrr-EMU anterior a esta versión (otra ruta en `uploadrr.path`) no admite el config por subida: la subida
+falla con un aviso para que lo actualices, en vez de escribir en su `config.yaml`.
 
 ## 7. Actualizar
 
@@ -209,7 +213,7 @@ borra los avisos leídos de más de 30 días y optimiza la base. No toca las sub
 
 El backup no lleva las claves. En la base de datos van vacías las API keys (TMDb, eMuwarez, Radarr/Sonarr, hosts
 de imágenes), la contraseña de qBittorrent, el webhook de Discord, el token de Telegram y la clave del widget de Homepage, y de
-`/config/Uploadrr/data` no entran `config.yaml`, `config.yaml.bak` ni `cookies/`, que pueden llevar claves de
+`/config/Uploadrr/data` no entran `config.yaml`, `config.yaml.migrado` ni `cookies/`, que pueden llevar claves de
 cualquier tracker, ni las configuraciones antiguas de Uploadrr (`config.py`, `config.json`,
 `backup/old_config.py`). Los config de las subidas en curso (`/config/config_uploadrr/`) no van en ninguna copia, tampoco
 en la que lleva las claves. La contraseña de acceso a la app sí va, como hash. Al restaurarlo, las claves que tengas
@@ -288,7 +292,7 @@ docker exec emuwarr ls -la /opt/Uploadrr /opt/Uploadrr/data
 ls -la /srv/emuwarr/config/Uploadrr
 ```
 
-`tmp` tiene que verse como enlace a `/config/Uploadrr/tmp`, y `config.yaml`, `config.yaml.bak` y `cookies` de `data`
+`tmp` tiene que verse como enlace a `/config/Uploadrr/tmp`, y `config.yaml` y `cookies` de `data`
 como enlaces a `/config/Uploadrr/data/...`.
 
 ### Pantalla en blanco o 404 en la raíz

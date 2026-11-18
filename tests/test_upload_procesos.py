@@ -10,6 +10,7 @@ import os
 import signal
 import threading
 import time
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import psutil
@@ -217,24 +218,30 @@ def test_un_job_cancelado_antes_de_arrancar_no_lanza_uploadrr(db_conn, tmp_path)
     assert _estado(db_conn, jid)["status"] == "cancelled"
 
 
-def test_cancelar_mientras_se_stagea_el_config_no_lanza_uploadrr(db_conn, tmp_path, fake_uploadrr_emu_dir):
+def _cmd_emu(uploadrr_dir, tmp_path):
+    """Un Uploadrr-EMU con su config por subida (--config), como lo monta consultas.py."""
+    return _cmd(uploadrr_dir, runtime_type="uploadrr_emu", config=str(tmp_path / "config_uploadrr" / "1.yaml"))
+
+
+def test_cancelar_mientras_se_prepara_el_config_no_lanza_uploadrr(db_conn, tmp_path, fake_uploadrr_emu_dir):
     """Entre marcarlo «en marcha» y el Popen el job no tiene PID: un Cancelar ahí
     solo escribía «cancelled», y el siguiente paso lo volvía a poner «running»."""
     jid = _job(db_conn)
-    original = ue._acquire_staged_config
+    original = ejecucion.preparar_config_de_la_subida
+    config = fake_uploadrr_emu_dir / "data" / "config.yaml"
+    antes = config.read_bytes()
 
-    def cancelar_y_stagear(job_id, cwd):
+    def cancelar_y_preparar(job_id, cwd, ruta):
         _cancelar_en_la_base(job_id)
-        return original(job_id, cwd)
+        return original(job_id, cwd, ruta)
 
-    with patch.object(ejecucion, "_acquire_staged_config", cancelar_y_stagear), patch("subprocess.Popen") as popen:
-        ue._run_uploadrr_subprocess(jid, _cmd(fake_uploadrr_emu_dir, runtime_type="uploadrr_emu"), [])
+    cmd = _cmd_emu(fake_uploadrr_emu_dir, tmp_path)
+    with patch.object(ejecucion, "preparar_config_de_la_subida", cancelar_y_preparar), patch("subprocess.Popen") as popen:
+        ue._run_uploadrr_subprocess(jid, cmd, [])
 
     popen.assert_not_called()
     assert _estado(db_conn, jid)["status"] == "cancelled"
-    assert ue._config_stage_refcount == {}
-    config = fake_uploadrr_emu_dir / "data" / "config.yaml"
-    assert config.read_bytes() == (fake_uploadrr_emu_dir / "data" / "config.yaml.bak").read_bytes()
+    assert not Path(cmd["config"]).exists() and config.read_bytes() == antes
 
 
 def test_cancelar_justo_despues_del_popen_detiene_el_proceso(db_conn, tmp_path):
@@ -281,10 +288,9 @@ def test_un_fallo_al_escribir_el_primer_estado_deja_el_job_fallido(db_conn, tmp_
     assert _estado(db_conn, jid)["status"] == "failed"
 
 
-def test_si_falla_tras_stagear_el_config_se_restaura(db_conn, tmp_path, fake_uploadrr_emu_dir):
-    """El contador subía en _acquire_staged_config y la escritura de estado de
-    después iba fuera del try: si fallaba, nadie lo soltaba y el config.yaml con
-    las claves reales no se restauraba hasta reiniciar."""
+def test_si_falla_tras_preparar_el_config_se_borra(db_conn, tmp_path, fake_uploadrr_emu_dir):
+    """La escritura de estado de después de preparar el config iba fuera del try: si fallaba, el config
+    con las claves reales se quedaba en disco hasta reiniciar."""
     jid = _job(db_conn)
     real = estado._avanzar_job
     llamadas = []
@@ -296,12 +302,13 @@ def test_si_falla_tras_stagear_el_config_se_restaura(db_conn, tmp_path, fake_upl
         return real(*a, **k)
 
     original = (fake_uploadrr_emu_dir / "data" / "config.yaml").read_bytes()
+    cmd = _cmd_emu(fake_uploadrr_emu_dir, tmp_path)
     with patch.object(ejecucion, "_avanzar_job", falla_la_tercera), patch("subprocess.Popen") as popen:
-        ue._run_uploadrr_subprocess(jid, _cmd(fake_uploadrr_emu_dir, runtime_type="uploadrr_emu"), [])
+        ue._run_uploadrr_subprocess(jid, cmd, [])
 
     popen.assert_not_called()
     assert _estado(db_conn, jid)["status"] == "failed"
-    assert ue._config_stage_refcount == {}
+    assert not Path(cmd["config"]).exists()
     assert (fake_uploadrr_emu_dir / "data" / "config.yaml").read_bytes() == original
 
 
@@ -524,18 +531,32 @@ def test_no_se_lanza_uploadrr_una_vez_empezado_el_apagado(db_conn, tmp_path):
 
 # --- Sin config.yaml preparado no se lanza Uploadrr --------------------------------------------
 
-def test_si_no_se_puede_preparar_el_config_el_job_falla_sin_lanzar_uploadrr(db_conn, fake_uploadrr_emu_dir):
+def test_si_no_se_puede_preparar_el_config_el_job_falla_sin_lanzar_uploadrr(db_conn, tmp_path, fake_uploadrr_emu_dir):
     """Preparar el config falló (en la imagen: EPERM al sustituir el enlace) y la
     subida se lanzaba igual, con el config sin las claves: TMDb 401, dupes mal."""
     jid = _job(db_conn)
 
-    with patch.object(cfg, "write_staged_config", side_effect=PermissionError(1, "Operation not permitted")), \
+    with patch.object(cfg, "staged_config_text", side_effect=PermissionError(1, "Operation not permitted")), \
             patch("subprocess.Popen") as popen:
-        ue._run_uploadrr_subprocess(jid, _cmd(fake_uploadrr_emu_dir, runtime_type="uploadrr_emu"), [])
+        ue._run_uploadrr_subprocess(jid, _cmd_emu(fake_uploadrr_emu_dir, tmp_path), [])
 
     popen.assert_not_called()
     fila = db_conn.execute("SELECT status, error_message FROM upload_jobs WHERE id = ?", (jid,)).fetchone()
     assert fila["status"] == "failed"
     assert "No se pudo preparar el config.yaml de Uploadrr" in fila["error_message"]
     assert "No se lanza la subida" in fila["error_message"]
-    assert ue._config_stage_refcount == {}
+
+
+def test_un_uploadrr_emu_sin_config_por_subida_no_se_lanza(db_conn, fake_uploadrr_emu_dir):
+    """Un uploadrr.path anterior (su contrato no anuncia --config): ya no se escribe en su config.yaml."""
+    jid = _job(db_conn)
+    config = fake_uploadrr_emu_dir / "data" / "config.yaml"
+    antes = config.read_bytes()
+
+    with patch("subprocess.Popen") as popen:
+        ue._run_uploadrr_subprocess(jid, _cmd(fake_uploadrr_emu_dir, runtime_type="uploadrr_emu"), [])
+
+    popen.assert_not_called()
+    fila = db_conn.execute("SELECT status, error_message FROM upload_jobs WHERE id = ?", (jid,)).fetchone()
+    assert fila["status"] == "failed" and "es anterior a esta versión de eMuwarr" in fila["error_message"]
+    assert config.read_bytes() == antes and not config.with_name("config.yaml.bak").exists()

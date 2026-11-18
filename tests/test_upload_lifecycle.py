@@ -4,7 +4,9 @@ All subprocess calls are mocked. No real Uploadrr execution.
 """
 from __future__ import annotations
 
+import shutil
 import time
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -19,6 +21,8 @@ from emuwarez_uploadrr.services.upload_execution import (
     retry_upload_job,
     start_upload_job,
 )
+
+CONTRATO = Path(__file__).parent / "fixtures" / "contrato_eventos.json"
 
 
 @pytest.fixture
@@ -69,6 +73,7 @@ def test_completed_job_has_duration(db_conn, tmp_path):
     uploadrr_path = tmp_path / "Uploadrr"
     uploadrr_path.mkdir()
     (uploadrr_path / "upload.py").write_text("# stub")
+    shutil.copy(CONTRATO, uploadrr_path / "contrato_eventos.json")  # anuncia --config: sin él no se lanza
 
     _insert_settings(db_conn, uploadrr_path=str(uploadrr_path))
     jid = _insert_job(db_conn, source_path=str(src))
@@ -95,6 +100,7 @@ def test_completed_job_has_last_success_at(db_conn, tmp_path):
     uploadrr_path = tmp_path / "Uploadrr"
     uploadrr_path.mkdir()
     (uploadrr_path / "upload.py").write_text("# stub")
+    shutil.copy(CONTRATO, uploadrr_path / "contrato_eventos.json")  # anuncia --config: sin él no se lanza
 
     _insert_settings(db_conn, uploadrr_path=str(uploadrr_path))
     jid = _insert_job(db_conn, source_path=str(src))
@@ -118,6 +124,7 @@ def test_failed_job_has_error_message(db_conn, tmp_path):
     uploadrr_path = tmp_path / "Uploadrr"
     uploadrr_path.mkdir()
     (uploadrr_path / "upload.py").write_text("# stub")
+    shutil.copy(CONTRATO, uploadrr_path / "contrato_eventos.json")  # anuncia --config: sin él no se lanza
 
     _insert_settings(db_conn, uploadrr_path=str(uploadrr_path))
     jid = _insert_job(db_conn, source_path=str(src))
@@ -142,6 +149,7 @@ def test_failed_job_has_last_error_at(db_conn, tmp_path):
     uploadrr_path = tmp_path / "Uploadrr"
     uploadrr_path.mkdir()
     (uploadrr_path / "upload.py").write_text("# stub")
+    shutil.copy(CONTRATO, uploadrr_path / "contrato_eventos.json")  # anuncia --config: sin él no se lanza
 
     _insert_settings(db_conn, uploadrr_path=str(uploadrr_path))
     jid = _insert_job(db_conn, source_path=str(src))
@@ -165,6 +173,7 @@ def test_safe_command_json_no_secrets(db_conn, tmp_path):
     uploadrr_path = tmp_path / "Uploadrr"
     uploadrr_path.mkdir()
     (uploadrr_path / "upload.py").write_text("# stub")
+    shutil.copy(CONTRATO, uploadrr_path / "contrato_eventos.json")  # anuncia --config: sin él no se lanza
 
     emu_key = "super_secret_emu_key_123"
     tmdb_key = "tmdb_key_456"
@@ -192,6 +201,7 @@ def test_artifacts_created_on_url_detected(db_conn, tmp_path):
     uploadrr_path = tmp_path / "Uploadrr"
     uploadrr_path.mkdir()
     (uploadrr_path / "upload.py").write_text("# stub")
+    shutil.copy(CONTRATO, uploadrr_path / "contrato_eventos.json")  # anuncia --config: sin él no se lanza
 
     _insert_settings(db_conn, uploadrr_path=str(uploadrr_path))
     jid = _insert_job(db_conn, source_path=str(src))
@@ -259,6 +269,7 @@ def test_retry_creates_new_job_not_mutates(db_conn, tmp_path):
     uploadrr_path = tmp_path / "Uploadrr"
     uploadrr_path.mkdir()
     (uploadrr_path / "upload.py").write_text("# stub")
+    shutil.copy(CONTRATO, uploadrr_path / "contrato_eventos.json")  # anuncia --config: sin él no se lanza
 
     _insert_settings(db_conn, uploadrr_path=str(uploadrr_path))
     jid = _insert_job(db_conn, status="failed", source_path=str(src))
@@ -294,6 +305,7 @@ def test_retry_with_confirmation_creates_job_with_metadata(db_conn, tmp_path):
     uploadrr_path = tmp_path / "Uploadrr"
     uploadrr_path.mkdir()
     (uploadrr_path / "upload.py").write_text("# stub")
+    shutil.copy(CONTRATO, uploadrr_path / "contrato_eventos.json")  # anuncia --config: sin él no se lanza
 
     _insert_settings(db_conn, uploadrr_path=str(uploadrr_path))
     jid = _insert_job(db_conn, status="cancelled", source_path=str(src))

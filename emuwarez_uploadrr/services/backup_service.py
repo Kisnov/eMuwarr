@@ -30,16 +30,16 @@ LIMITE_SUBIDA_BYTES = 1024 ** 3
 # Una carpeta "backups" a cualquier profundidad tampoco: la copia no se mete a sí misma.
 # config_uploadrr/ son los config de las subidas en curso, con claves: ni en la copia con secretos.
 _FUERA_DE_LA_COPIA = (("Uploadrr", "uploads"), ("Uploadrr", "tmp"), ("config_uploadrr",))
-# Lo que solo va en la copia con secretos. El config.yaml de Uploadrr-EMU y su
-# .bak (donde van los cambios a mano) pueden llevar claves de cualquier tracker
-# y con cualquier nombre: taparlas línea a línea no da garantías. Las cookies
+# Lo que solo va en la copia con secretos. El config.yaml de Uploadrr-EMU (y
+# config.yaml.migrado, el .bak que dejaron las versiones anteriores) pueden llevar
+# claves de cualquier tracker y con cualquier nombre: taparlas línea a línea no da garantías. Las cookies
 # son sesiones abiertas. config.py, config.json y backup/old_config.py son
 # configuraciones antiguas de Uploadrr que aún reconoce (su .gitignore las
 # deja fuera por lo mismo). config.json y config.enc.json en la raíz son del
 # CLI antiguo (services/cli_config.py) y llevan la API key de eMuwarez.
 _CON_CLAVES = (
     ("Uploadrr", "data", "config.yaml"),
-    ("Uploadrr", "data", "config.yaml.bak"),
+    ("Uploadrr", "data", "config.yaml.migrado"),
     ("Uploadrr", "data", "cookies"),
     ("Uploadrr", "data", "config.py"),
     ("Uploadrr", "data", "config.json"),

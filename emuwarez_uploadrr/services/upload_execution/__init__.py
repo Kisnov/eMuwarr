@@ -60,14 +60,8 @@ from .estado import (  # noqa: F401
 )
 from .config import (  # noqa: F401
     ConfigNoPreparada,
-    _stage_uploadrr_config,
-    _restore_uploadrr_config,
-    _config_stage_lock,
-    _config_stage_refcount,
-    _acquire_staged_config,
-    restaurar_config_interrumpida,
-    _release_staged_config,
     barrer_configs_de_subidas,
+    migrar_config_bak,
 )
 from .concurrencia import (  # noqa: F401
     get_upload_max_concurrent,

@@ -4,7 +4,7 @@
 # Uploadrr-EMU va dentro de la imagen, en /opt/Uploadrr (ver Dockerfile), no en un
 # montaje. Lo que tiene que sobrevivir a recrear el contenedor se guarda en el
 # volumen /config, y la imagen ya trae los enlaces hacia allí:
-#   data/config.yaml, data/config.yaml.bak, data/cookies/ → /config/Uploadrr/data/
+#   data/config.yaml, data/cookies/ → /config/Uploadrr/data/
 #   tmp/ (torrents, capturas y descripciones de cada subida) → /config/Uploadrr/tmp
 # El resto de data/ (services.json, tags.json, plantillas...) se queda en la imagen:
 # una versión nueva lo actualiza. Aquí solo se crean los destinos; en /opt/Uploadrr
