@@ -4,7 +4,7 @@
 # lee el aviso de actualización de la app, y crea el release con sus PR.
 #
 # A mano (Actions → Publicar versión → Run workflow), o solo los días impares del mes si desde
-# la última versión se han fusionado al menos 3 PR de ramas feat/ o fix/ (aquí o en Uploadrr-EMU). Con «solo prueba», y en
+# la última versión se han fusionado al menos 3 PR de ramas feat/ o fix/. Con «solo prueba», y en
 # cada push a dev que no sea solo de documentación, construye :dev de la punta de dev, sin tests, versión ni manifiesto.
 #
 # Con «ref» (un commit de dev, una rama o una etiqueta) publica la versión de ESE commit: sin tests (la CI solo corre sobre
@@ -88,16 +88,12 @@ jobs:
             echo "accion=prueba" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          # PR fusionados desde el último commit que cambió la versión, aquí y en Uploadrr-EMU (su main solo
-          # llega a la app al construir la imagen): el merge de una rama feat/ o fix/, o el commit feat:/fix:
-          # de un squash o un rebase.
+          # PR fusionados desde el último commit que cambió la versión (también los de uploadrr-emu/): el merge
+          # de una rama feat/ o fix/, o el commit feat:/fix: de un squash o un rebase.
           feat='Merge pull request #[0-9]+ from [^/]+/feat/|feat(\([^)]*\))?!?: '
           fix='Merge pull request #[0-9]+ from [^/]+/fix/|fix(\([^)]*\))?!?: '
           base="$(git log -1 --format=%H -G'^__version__' -- emuwarez_uploadrr/__init__.py)"
           prs="$(git log --first-parent --format=%s "$base"..HEAD | grep -E "^($feat|$fix)" || true)"
-          git clone -q --bare --filter=blob:none --single-branch --no-tags --branch main https://github.com/Kisnov/Uploadrr-EMU.git "$RUNNER_TEMP/uploadrr"
-          commits="$(git -C "$RUNNER_TEMP/uploadrr" log --first-parent --since="$(git log -1 --format=%cI "$base")" --format=%s)"
-          prs="$prs"$'\n'"$(printf '%s\n' "$commits" | grep -E "^($feat|$fix)" || true)"
           n="$(printf '%s' "$prs" | grep -c . || true)"
           echo "$n PR feat/fix desde ${base:0:7}"
           if [ "$EVENTO" = schedule ] && [ "$n" -lt 3 ]; then
@@ -195,9 +191,6 @@ jobs:
       - id: sello
         if: steps.version.outputs.hecha != 'true'
         run: |
-          uploadrr="$(git ls-remote --exit-code https://github.com/Kisnov/Uploadrr-EMU.git refs/heads/main | cut -f1)"
-          test -n "$uploadrr"
-          echo "uploadrr=$uploadrr" >> "$GITHUB_OUTPUT"
           echo "commit=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
           echo "fecha=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
           # Una versión se construye solo con su sha; :X.Y.Z, :latest y :dev llegan cuando dev ya la tiene.
@@ -233,7 +226,6 @@ jobs:
           push: true
           tags: ${{ steps.sello.outputs.tags }}
           build-args: |
-            UPLOADRR_COMMIT=${{ steps.sello.outputs.uploadrr }}
             APP_COMMIT=${{ steps.sello.outputs.commit }}
             APP_BUILD_DATE=${{ steps.sello.outputs.fecha }}
           cache-from: type=gha

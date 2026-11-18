@@ -123,13 +123,11 @@ el código:
 git clone https://github.com/Kisnov/eMuwarr.git
 cd eMuwarr
 cp .env.example .env
-docker compose -f docker-compose.example.yml build \
-  --build-arg UPLOADRR_COMMIT=$(git ls-remote https://github.com/Kisnov/Uploadrr-EMU.git main | cut -f1)
+docker compose -f docker-compose.example.yml build
 docker compose -f docker-compose.example.yml up -d
 ```
 
-`UPLOADRR_COMMIT` hace que Uploadrr-EMU se vuelva a clonar cuando tiene commits nuevos. Sin él, Docker puede
-reutilizar de la caché una copia antigua.
+Uploadrr-EMU sale de la carpeta `uploadrr-emu/` del mismo código: la imagen lleva siempre la versión que va con la app.
 
 ## 5. Primer arranque
 

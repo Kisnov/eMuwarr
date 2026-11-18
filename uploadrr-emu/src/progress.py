@@ -1,0 +1,99 @@
+from contextlib import contextmanager
+from typing import Optional
+
+from rich.console import Group
+from rich.live import Live
+from rich.spinner import Spinner
+from rich.text import Text
+
+from src.utils import eventos
+
+
+class ProgressManager:
+    _instance: Optional["ProgressManager"] = None
+
+    def __new__(cls, *args, **kwargs):
+        if cls._instance is None:
+            cls._instance = super().__new__(cls)
+        return cls._instance
+
+    def __init__(self, console, quiet: bool = False, unattended: bool = False):
+        if not hasattr(self, "_initialized"):  # Prevent re-initialization
+            self.console = console
+            self.quiet = quiet
+            self.unattended = unattended
+            self.live: Optional[Live] = None
+            self.progress_widget = Spinner("dots", text="Initializing...", style="green1")
+            self.progress_group = Group(self.progress_widget)
+            self._last_plain_message: Optional[str] = None
+            self._initialized = True
+
+    @classmethod
+    def get_instance(cls) -> Optional["ProgressManager"]:
+        return cls._instance
+
+    def start(self, total_files: int) -> None:
+        """Start the Live display."""
+        if not self.live:
+            self.live = Live(self.progress_group, console=self.console, transient=True, refresh_per_second=10)
+            self.live.start()
+            self.update(f"Ready to process {total_files} files")
+
+    def stop(self) -> None:
+        """Stop the Live display if running."""
+        if self.live:
+            self.live.stop()
+            self.live = None
+
+    def update(self, message: str, style: Optional[str] = None) -> None:
+        """Update the progress widget text with optional style."""
+        if style:
+            self.progress_widget.text = Text(message, style=style)
+        else:
+            self.progress_widget.text = Text(message)
+
+        if self.live:
+            self.live.update(self.progress_group)
+            # Live(transient=True) writes NOTHING at all when the console
+            # isn't a real terminal (e.g. piped into a log-capturing parent
+            # process, exactly how this runs when launched headlessly) — so
+            # every message routed only through here (hashing %, screenshot
+            # upload counts, etc.) would otherwise vanish from any captured
+            # log entirely. Deduped so a 10Hz refresh doesn't spam a line
+            # per tick — only print when the visible text actually changes.
+            if not self.console.is_terminal and message != self._last_plain_message:
+                self.console.print(message, style=style)
+                self._last_plain_message = message
+
+    def screen_start(self, total_screenshots: int) -> None:
+        """Initialize upload progress with the total number of screenshots."""
+        self.total_screenshots = total_screenshots
+        self.uploaded_screenshots = 0
+        self.update(f"Uploading screenshots: 0/{total_screenshots}")
+        eventos.fase("subida_capturas", "empieza")
+
+    def screen_up(self, count: int = 1) -> None:
+        """Increment the count of uploaded screenshots and update the display."""
+        self.uploaded_screenshots += count
+        self.update(f"Uploading screenshots: {self.uploaded_screenshots}/{self.total_screenshots}")
+        eventos.avance("subida_capturas", 100 * self.uploaded_screenshots / max(self.total_screenshots, 1))
+
+    def screen_done(self) -> None:
+        """Finalize the upload progress display."""
+        self.update("All screenshots uploaded")
+        eventos.fase("subida_capturas", "hecha")
+
+    @contextmanager
+    def pause_for_interaction(self):
+        """Pause Live for user interaction if not unattended, then resume."""
+        if self.live and not self.unattended and not self.quiet:
+            self.live.stop()
+        try:
+            yield
+        finally:
+            if self.live and not self.unattended and not self.quiet:
+                self.live.start()
+
+    async def shutdown(self) -> None:
+        """Clean up the Live instance."""
+        self.stop()
