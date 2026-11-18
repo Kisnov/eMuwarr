@@ -6,7 +6,14 @@
 import { act, useState } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-vi.mock('../../api/estadisticas', () => ({ getEstadisticasCuenta: vi.fn() }))
+vi.mock('../../api/estadisticas', () => ({
+  getEstadisticasCuenta: vi.fn(),
+  // Tus subidas en eMuwarez (MisSubidasEmu) tienen su propia prueba: aquí, sin leer todavía.
+  getMisSubidas: vi.fn(() => Promise.resolve({
+    leido_at: null, torrents: [],
+    totales: { subidas: 0, seeders: 0, leechers: 0, completados: 0, completados_semana: null, sin_seeders: 0 },
+  })),
+}))
 vi.mock('../../api/dashboard', () => ({ getDashboardSummary: vi.fn() }))
 
 import { getDashboardSummary } from '../../api/dashboard'
