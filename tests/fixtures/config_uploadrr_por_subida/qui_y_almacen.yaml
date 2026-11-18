@@ -10,6 +10,8 @@ TRACKERS:
     api_key: sin_useapi
 SCREENS:
   img_hosts: [imgbox]
+  oxipng_level: 2
+  use_oxipng: true
   per_episode: 3
 TORRENT_CLIENTS:
   qbit: {'torrent_storage_dir': 'torrents', 'qui_proxy_url': 'http://qui:7476/proxy/k', 'torrent_client': 'qbit'}
