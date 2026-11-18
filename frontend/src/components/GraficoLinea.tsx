@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
-  describirSerie, diaMasCercano, diasDelTrazado, formatDia, trazar, variacion, type Medidas, type PuntoSerie,
+  describirSerie, diaMasCercano, diasDelTrazado, formatDia, margenIzquierdo, nivelesY, trazar, variacion, type Medidas,
+  type PuntoSerie,
 } from '../utils/graficos'
 import { formatNumero } from '../utils/format'
 
@@ -59,16 +60,17 @@ function useAncho() {
 // en el gráfico) enseña el valor de cada día arriba; la lectura de arriba es la del último día si no se está recorriendo.
 export function GraficoLinea({ titulo, series, formato, desdeCero = false, ancho: ocupaFila = false }: GraficoLineaProps) {
   const { ref, ancho } = useAncho()
-  const medidas: Medidas = { ancho, alto: ALTO, ...MARGENES }
-  const marcasX = Math.max(2, Math.min(8, Math.floor((ancho - MARGENES.izquierda - MARGENES.derecha) / PX_POR_FECHA)))
+  const izquierda = margenIzquierdo(nivelesY(series.map(s => s.puntos), desdeCero).map(formato), MARGENES.izquierda)
+  const medidas: Medidas = { ancho, alto: ALTO, ...MARGENES, izquierda }
+  const marcasX = Math.max(2, Math.min(8, Math.floor((ancho - izquierda - MARGENES.derecha) / PX_POR_FECHA)))
   const trazado = useMemo(
     () => trazar(series.map(s => s.puntos), medidas, desdeCero, marcasX),
     // `series` se rehace en cada render del padre; se compara por sus datos.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [JSON.stringify(series.map(s => s.puntos)), ancho, desdeCero, marcasX])
+    [JSON.stringify(series.map(s => s.puntos)), ancho, izquierda, desdeCero, marcasX])
   const hayDatos = trazado.lineas.some(l => l.puntos.length > 0)
   const dias = useMemo(() => diasDelTrazado(trazado), [trazado])
-  const { izquierda, derecha, abajo } = MARGENES
+  const { derecha, abajo } = MARGENES
   const resumen = series.map(s => describirSerie(s.nombre, s.puntos, formato)).join(' ')
 
   // El día que se recorre (índice en `dias`); null = ninguno, y se lee el último.

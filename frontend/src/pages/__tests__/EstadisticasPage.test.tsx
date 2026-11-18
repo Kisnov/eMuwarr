@@ -13,7 +13,7 @@ import { getDashboardSummary } from '../../api/dashboard'
 import { getEstadisticasCuenta } from '../../api/estadisticas'
 import { SeccionVisible } from '../../context/SeccionVisible'
 import { SyncContext } from '../../context/SyncContext'
-import type { DashboardSummaryResponse, PuntoCuenta } from '../../types/api'
+import type { DashboardSummaryResponse, EstadisticasCuenta, PuntoCuenta, RitmosCuenta } from '../../types/api'
 import { boton, desmontar, esperar, montar, pulsar, texto } from '../../components/__tests__/dom'
 import { TOUR_STEPS } from '../../tour/steps'
 import { EstadisticasPage } from '../EstadisticasPage'
@@ -29,8 +29,14 @@ const resumen = (extra: Partial<DashboardSummaryResponse> = {}): DashboardSummar
 })
 
 const punto = (dia: string, extra: Partial<PuntoCuenta> = {}): PuntoCuenta => ({
-  dia, ratio: 4.1, subido_bytes: 1024 ** 4, bajado_bytes: 300 * 1024 ** 3, bonus: 12345.5, ...extra,
+  dia, ratio: 4.1, subido_bytes: 1024 ** 4, bajado_bytes: 300 * 1024 ** 3, bonus: 12345.5,
+  buffer_bytes: 700 * 1024 ** 3, seeding: 120, leeching: 1, hit_and_runs: 0, grupo: 'Uploader', ...extra,
 })
+
+// Las diez tarjetas que tenía el Panel (biblioteca y peticiones), sin las de ritmo de la cuenta que van debajo.
+const DEL_PANEL = ['biblioteca', 'peticiones'].map(g => `[aria-labelledby="est-grupo-${g}"] .stat-card`).join(', ')
+
+const SIN_RITMOS: RitmosCuenta = { dias: 7, subido_dia: null, bajado_dia: null, bonus_hora: null }
 
 beforeEach(() => {
   pedir.mockReset()
@@ -41,21 +47,22 @@ afterEach(desmontar)
 
 describe('EstadisticasPage', () => {
   it('lleva el objetivo del paso «Estadísticas» del tour', async () => {
-    pedir.mockResolvedValue({ dias: 90, puntos: [] })
+    pedir.mockResolvedValue({ dias: 90, ritmos: SIN_RITMOS, puntos: [] })
     await montar(<EstadisticasPage />)
     const paso = TOUR_STEPS.find(p => p.id === 'stats')!
     expect(paso.tab).toBe('stats')
     expect(document.querySelectorAll(paso.selector)).toHaveLength(1)
   })
 
-  it('con datos pinta los tres gráficos accesibles y la tabla con cifras es-ES', async () => {
-    pedir.mockResolvedValue({ dias: 90, puntos: [punto('2026-10-01'), punto('2026-10-02', { ratio: 4.25 })] })
+  it('con datos pinta los seis gráficos accesibles y la tabla con cifras es-ES', async () => {
+    pedir.mockResolvedValue({ dias: 90, ritmos: SIN_RITMOS, puntos: [punto('2026-10-01'), punto('2026-10-02', { ratio: 4.25 })] })
     await montar(<EstadisticasPage />)
     await esperar(() => document.querySelector('svg[role="img"]'))
 
     expect(pedir).toHaveBeenCalledWith(90)
     const graficos = [...document.querySelectorAll('svg[role="img"]')]
-    expect(graficos).toHaveLength(3)
+    expect(graficos.map(g => g.querySelector('title')!.textContent)).toEqual(
+      ['Subido y bajado', 'Ratio', 'Bonus', 'Buffer', 'Seeding y leeching', 'H&R'])
     // «Subido y bajado» va primero (ocupa toda la fila), luego Ratio y Bonus.
     expect(graficos[0].getAttribute('aria-label')).toContain('Subido: de 1,0 TB')
     expect(graficos[1].getAttribute('aria-label')).toContain('Ratio: de 4,10 el 01/10/2026 a 4,25 el 02/10/2026')
@@ -66,11 +73,14 @@ describe('EstadisticasPage', () => {
     expect(filas[0].textContent).toContain('02/10/2026')   // la más reciente primero
     expect(filas[0].textContent).toContain('4,25')
     expect(filas[0].textContent).toContain('12.346')       // miles con punto
-    expect(document.querySelectorAll('.est-leyenda li')).toHaveLength(2)
+    expect(filas[0].textContent).toContain('700,0\u00A0GB')  // buffer
+    expect(filas[0].textContent).toContain('Uploader')
+    // Los dos gráficos de dos series: «Subido y bajado» y «Seeding y leeching».
+    expect(document.querySelectorAll('.est-leyenda li')).toHaveLength(4)
   })
 
   it('cada gráfico lee su último valor y lo que cambió; con las flechas se lee el de cada día y Escape lo suelta', async () => {
-    pedir.mockResolvedValue({ dias: 90, puntos: [punto('2026-10-01'), punto('2026-10-02', { ratio: 4.25 }), punto('2026-10-03', { ratio: 5.1 })] })
+    pedir.mockResolvedValue({ dias: 90, ritmos: SIN_RITMOS, puntos: [punto('2026-10-01'), punto('2026-10-02', { ratio: 4.25 }), punto('2026-10-03', { ratio: 5.1 })] })
     await montar(<EstadisticasPage />)
     await esperar(() => document.querySelector('.est-plot'))
     const ratioFig = [...document.querySelectorAll('figure.est-grafico')].find(f => f.textContent?.startsWith('Ratio'))!
@@ -93,7 +103,7 @@ describe('EstadisticasPage', () => {
   })
 
   it('un día sin cifra de una serie lo dice al recorrerlo', async () => {
-    pedir.mockResolvedValue({ dias: 90, puntos: [punto('2026-10-01'), punto('2026-10-02', { bajado_bytes: null }), punto('2026-10-03')] })
+    pedir.mockResolvedValue({ dias: 90, ritmos: SIN_RITMOS, puntos: [punto('2026-10-01'), punto('2026-10-02', { bajado_bytes: null }), punto('2026-10-03')] })
     await montar(<EstadisticasPage />)
     await esperar(() => document.querySelector('.est-plot'))
     const plot = document.querySelector('.est-plot')!
@@ -102,11 +112,11 @@ describe('EstadisticasPage', () => {
   })
 
   it('arriba lleva las diez tarjetas que tenía el Panel, con las mismas cifras y los nombres de la franja', async () => {
-    pedir.mockResolvedValue({ dias: 90, puntos: [punto('2026-10-01')] })
+    pedir.mockResolvedValue({ dias: 90, ritmos: SIN_RITMOS, puntos: [punto('2026-10-01')] })
     await montar(<EstadisticasPage />)
     await esperar(() => document.querySelector('.stat-card'))
 
-    const tarjetas = new Map([...document.querySelectorAll('.stat-card')].map(t => [
+    const tarjetas = new Map([...document.querySelectorAll(DEL_PANEL)].map(t => [
       t.querySelector('.stat-card-label')!.textContent, t.querySelector('.stat-card-value')!.textContent]))
     expect(tarjetas.size).toBe(10)
     expect(tarjetas.get('En biblioteca')).toBe('51.372')
@@ -123,7 +133,7 @@ describe('EstadisticasPage', () => {
   })
 
   it('las tarjetas salen aunque aún no haya ninguna instantánea de la cuenta', async () => {
-    pedir.mockResolvedValue({ dias: 90, puntos: [] })
+    pedir.mockResolvedValue({ dias: 90, ritmos: SIN_RITMOS, puntos: [] })
     await montar(<EstadisticasPage />)
     await esperar(() => texto().includes('Todavía no hay datos'))
     expect(document.querySelectorAll('.stat-card')).toHaveLength(10)
@@ -131,11 +141,11 @@ describe('EstadisticasPage', () => {
 
   it('si fallan las cifras, la evolución de la cuenta sale igual', async () => {
     pedirResumen.mockRejectedValue(new Error('503'))
-    pedir.mockResolvedValue({ dias: 90, puntos: [punto('2026-10-01')] })
+    pedir.mockResolvedValue({ dias: 90, ritmos: SIN_RITMOS, puntos: [punto('2026-10-01')] })
     await montar(<EstadisticasPage />)
     await esperar(() => document.querySelector('svg[role="img"]'))
     // Las tarjetas se quedan con «—»: el mismo hueco que mientras cargaban.
-    const cifras = [...document.querySelectorAll('.stat-card-value')].map(c => c.textContent)
+    const cifras = [...document.querySelectorAll(DEL_PANEL)].map(c => c.querySelector('.stat-card-value')!.textContent)
     expect(cifras).toHaveLength(10)
     expect(cifras.every(c => c === '—')).toBe(true)
     // Y una nota lo dice, con Reintentar; al llegar las cifras, la nota se va.
@@ -147,33 +157,33 @@ describe('EstadisticasPage', () => {
   })
 
   it('sin fallo en las cifras no sale ninguna nota', async () => {
-    pedir.mockResolvedValue({ dias: 90, puntos: [punto('2026-10-01')] })
+    pedir.mockResolvedValue({ dias: 90, ritmos: SIN_RITMOS, puntos: [punto('2026-10-01')] })
     await montar(<EstadisticasPage />)
     await esperar(() => document.querySelector('svg[role="img"]'))
     expect(document.querySelector('.est-aviso')).toBeNull()
   })
 
   it('al cambiar de rango se conservan los gráficos (atenuados) hasta que llegan los nuevos, sin pasar por «Cargando»', async () => {
-    pedir.mockResolvedValueOnce({ dias: 90, puntos: [punto('2026-10-01'), punto('2026-10-02')] })
+    pedir.mockResolvedValueOnce({ dias: 90, ritmos: SIN_RITMOS, puntos: [punto('2026-10-01'), punto('2026-10-02')] })
     await montar(<EstadisticasPage />)
     await esperar(() => document.querySelector('svg[role="img"]'))
     expect(document.querySelector('.est-cargando')).toBeNull()
 
-    let entregar: (r: { dias: number; puntos: PuntoCuenta[] }) => void = () => {}
+    let entregar: (r: EstadisticasCuenta) => void = () => {}
     pedir.mockReturnValueOnce(new Promise(r => { entregar = r }))
     await pulsar(boton('365 días'))
-    expect(document.querySelectorAll('svg[role="img"]')).toHaveLength(3)
+    expect(document.querySelectorAll('svg[role="img"]')).toHaveLength(6)
     expect(document.querySelector('.est-cargando')!.getAttribute('aria-busy')).toBe('true')
     expect(texto()).not.toContain('Cargando estadísticas')
     expect(texto()).toContain('de los últimos 90 días')
 
-    await act(async () => { entregar({ dias: 365, puntos: [punto('2026-09-01'), punto('2026-09-02'), punto('2026-09-03')] }) })
+    await act(async () => { entregar({ dias: 365, ritmos: SIN_RITMOS, puntos: [punto('2026-09-01'), punto('2026-09-02'), punto('2026-09-03')] }) })
     expect(document.querySelector('.est-cargando')).toBeNull()
     expect(texto()).toContain('3 de los últimos 365 días')
   })
 
   it('si el rango nuevo falla, enseña el error (no los gráficos del rango anterior)', async () => {
-    pedir.mockResolvedValueOnce({ dias: 90, puntos: [punto('2026-10-01'), punto('2026-10-02')] })
+    pedir.mockResolvedValueOnce({ dias: 90, ritmos: SIN_RITMOS, puntos: [punto('2026-10-01'), punto('2026-10-02')] })
     await montar(<EstadisticasPage />)
     await esperar(() => document.querySelector('svg[role="img"]'))
     pedir.mockRejectedValueOnce(new Error('503'))
@@ -183,14 +193,14 @@ describe('EstadisticasPage', () => {
   })
 
   it('un día sin cifra sale como raya en la tabla y no rompe la línea del resto', async () => {
-    pedir.mockResolvedValue({ dias: 90, puntos: [punto('2026-10-01'), punto('2026-10-02', { ratio: null }), punto('2026-10-03')] })
+    pedir.mockResolvedValue({ dias: 90, ritmos: SIN_RITMOS, puntos: [punto('2026-10-01'), punto('2026-10-02', { ratio: null }), punto('2026-10-03')] })
     await montar(<EstadisticasPage />)
     await esperar(() => document.querySelector('svg[role="img"]'))
     expect(document.querySelectorAll('details table tbody tr')[1].textContent).toContain('—')
   })
 
   it('cambiar de rango vuelve a pedir con ese número de días', async () => {
-    pedir.mockResolvedValue({ dias: 30, puntos: [punto('2026-10-01')] })
+    pedir.mockResolvedValue({ dias: 30, ritmos: SIN_RITMOS, puntos: [punto('2026-10-01')] })
     await montar(<EstadisticasPage />)
     await esperar(() => document.querySelector('svg[role="img"]'))
 
@@ -202,7 +212,7 @@ describe('EstadisticasPage', () => {
   })
 
   it('con un solo día avisa de que la línea llega mañana', async () => {
-    pedir.mockResolvedValue({ dias: 90, puntos: [punto('2026-10-01')] })
+    pedir.mockResolvedValue({ dias: 90, ritmos: SIN_RITMOS, puntos: [punto('2026-10-01')] })
     await montar(<EstadisticasPage />)
     await esperar(() => document.querySelector('svg[role="img"]'))
     expect(texto()).toContain('Solo hay un día guardado')
@@ -210,15 +220,50 @@ describe('EstadisticasPage', () => {
   })
 
   it('una serie sin ningún valor dice que no hay datos en vez de dibujar un eje vacío', async () => {
-    pedir.mockResolvedValue({ dias: 90, puntos: [punto('2026-10-01', { bonus: null }), punto('2026-10-02', { bonus: null })] })
+    pedir.mockResolvedValue({ dias: 90, ritmos: SIN_RITMOS, puntos: [punto('2026-10-01', { bonus: null }), punto('2026-10-02', { bonus: null })] })
     await montar(<EstadisticasPage />)
     await esperar(() => document.querySelector('svg[role="img"]'))
-    expect(document.querySelectorAll('svg[role="img"]')).toHaveLength(2)
+    expect(document.querySelectorAll('svg[role="img"]')).toHaveLength(5)
     expect(texto()).toContain('Sin datos de esto en este rango')
   })
 
+  it('las tarjetas de ritmo enseñan grupo, subido y bajado al día, bonus por hora y el ratio a 30 días', async () => {
+    pedir.mockResolvedValue({
+      dias: 90,
+      ritmos: { dias: 7, subido_dia: 10 * 1024 ** 3, bajado_dia: 1024 ** 3, bonus_hora: 12.5 },
+      puntos: [punto('2026-10-01'), punto('2026-10-02', { subido_bytes: 1000 * 1024 ** 3, bajado_bytes: 100 * 1024 ** 3, grupo: 'Leyenda' })],
+    })
+    await montar(<EstadisticasPage />)
+    await esperar(() => document.querySelector('#est-grupo-ritmo'))
+    const tarjetas = [...document.querySelectorAll('[aria-labelledby="est-grupo-ritmo"] .stat-card')]
+      .map(t => [t.querySelector('.stat-card-label')!.textContent, t.querySelector('.stat-card-value')!.textContent])
+    expect(tarjetas).toEqual([
+      ['Grupo', 'Leyenda'],
+      ['Subido al día', '10,0\u00A0GB'],
+      ['Bajado al día', '1,0\u00A0GB'],
+      ['Bonus por hora', '12,5'],
+      // (1000 + 30·10) / (100 + 30·1) GB
+      ['Ratio en 30 días', '10,00'],
+    ])
+  })
+
+  it('sin ritmos todavía, las tarjetas dicen que no hay dato', async () => {
+    pedir.mockResolvedValue({ dias: 90, ritmos: SIN_RITMOS, puntos: [punto('2026-10-01')] })
+    await montar(<EstadisticasPage />)
+    await esperar(() => document.querySelector('#est-grupo-ritmo'))
+    const valores = [...document.querySelectorAll('[aria-labelledby="est-grupo-ritmo"] .stat-card-value')].map(v => v.textContent)
+    expect(valores).toEqual(['Uploader', '—', '—', '—', '—'])
+  })
+
+  it('un buffer negativo se lee con su signo', async () => {
+    pedir.mockResolvedValue({ dias: 90, ritmos: SIN_RITMOS, puntos: [punto('2026-10-01', { buffer_bytes: -2 * 1024 ** 3 })] })
+    await montar(<EstadisticasPage />)
+    await esperar(() => document.querySelector('details table'))
+    expect(document.querySelector('details table tbody tr')!.textContent).toContain('−2,0\u00A0GB')
+  })
+
   it('sin ninguna instantánea dice que se empieza a guardar hoy', async () => {
-    pedir.mockResolvedValue({ dias: 90, puntos: [] })
+    pedir.mockResolvedValue({ dias: 90, ritmos: SIN_RITMOS, puntos: [] })
     await montar(<EstadisticasPage />)
     await esperar(() => texto().includes('Todavía no hay datos'))
     expect(texto()).toContain('Se empieza a guardar hoy')
@@ -236,14 +281,14 @@ describe('EstadisticasPage', () => {
     await montar(<EstadisticasPage />)
     await esperar(() => texto().includes('No se pudo cargar'))
 
-    pedir.mockResolvedValue({ dias: 90, puntos: [punto('2026-10-01')] })
+    pedir.mockResolvedValue({ dias: 90, ritmos: SIN_RITMOS, puntos: [punto('2026-10-01')] })
     await pulsar(boton('Reintentar'))
     await esperar(() => document.querySelector('svg[role="img"]'))
     expect(pedir).toHaveBeenCalledTimes(2)
   })
 
   it('oculta no pide nada, y al pasar a verse pide una vez', async () => {
-    pedir.mockResolvedValue({ dias: 90, puntos: [] })
+    pedir.mockResolvedValue({ dias: 90, ritmos: SIN_RITMOS, puntos: [] })
     function Seccion() {
       const [visible, setVisible] = useState(false)
       return (
@@ -285,7 +330,7 @@ describe('EstadisticasPage', () => {
       matches: q.includes('hover: none'), addEventListener: vi.fn(), removeEventListener: vi.fn(),
     })) as unknown as typeof window.matchMedia
     try {
-      pedir.mockResolvedValue({ dias: 90, puntos: [punto('2026-10-01'), punto('2026-10-02')] })
+      pedir.mockResolvedValue({ dias: 90, ritmos: SIN_RITMOS, puntos: [punto('2026-10-01'), punto('2026-10-02')] })
       await montar(<EstadisticasPage />)
       await esperar(() => document.querySelector('.est-nota'))
       expect(texto()).toContain('Toca o desliza el dedo por un gráfico')

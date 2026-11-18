@@ -41,6 +41,23 @@ export function formatDia(dia: string, corto = false): string {
 
 const r1 = (n: number) => Math.round(n * 10) / 10
 
+/** Los valores que marca el eje Y: mínimo, medio y máximo de los datos (uno, si son todos iguales). Con `desdeCero`
+ * el mínimo es 0 como mucho. */
+export function nivelesY(series: PuntoSerie[][], desdeCero = false): number[] {
+  const valores = series.flatMap(s => s.flatMap(p => (p.valor === null ? [] : [p.valor])))
+  if (valores.length === 0) return []
+  const alta = Math.max(...valores)
+  const bajo = desdeCero ? Math.min(0, ...valores) : Math.min(...valores)
+  return bajo === alta ? [alta] : [bajo, (bajo + alta) / 2, alta]
+}
+
+// El margen izquierdo que necesitan las cifras del eje Y (a 12 px, cifras tabulares de ~7,2 px; el resto, más
+// estrechas), con un mínimo: «2.169.010» no cabía en el fijo y se cortaba la primera cifra.
+export function margenIzquierdo(etiquetas: string[], minimo: number): number {
+  const ancho = Math.max(0, ...etiquetas.map(t => [...t].reduce((n, c) => n + (/\d/.test(c) ? 7.2 : 4.5), 0)))
+  return Math.max(minimo, Math.ceil(ancho) + 12)
+}
+
 /**
  * Posiciona las series en el recuadro. El eje X es el tiempo real (un día sin instantánea deja hueco, no se
  * estira), y el Y va de lo más bajo a lo más alto de los datos con un margen para que la línea no toque los
@@ -82,9 +99,7 @@ export function trazar(series: PuntoSerie[][], medidas: Medidas, desdeCero = fal
     return { camino: trazos.join(' '), puntos }
   })
 
-  const mitad = (bajo + alta) / 2
-  const niveles = bajo === alta ? [alta] : [bajo, mitad, alta]
-  const ticksY = niveles.map(valor => ({ valor, y: r1(posY(valor)) }))
+  const ticksY = nivelesY(series, desdeCero).map(valor => ({ valor, y: r1(posY(valor)) }))
   // `marcasX` fechas a partes iguales del tiempo (con 3: la primera, la de en medio y la última). Los gráficos anchos
   // piden más; con menos días que marcas, una por día.
   const n = Math.max(1, Math.min(marcasX, dias.length))

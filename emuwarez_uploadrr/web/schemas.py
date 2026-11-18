@@ -559,11 +559,25 @@ class PuntoCuentaResponse(BaseModel):
     subido_bytes: Optional[int] = None
     bajado_bytes: Optional[int] = None
     bonus: Optional[float] = None
+    buffer_bytes: Optional[int] = None
+    seeding: Optional[int] = None
+    leeching: Optional[int] = None
+    hit_and_runs: Optional[int] = None
+    grupo: Optional[str] = None
+
+
+class RitmosCuentaResponse(BaseModel):
+    """Lo que crece tu cuenta, de las instantáneas de los últimos `dias` días; None si aún no hay con qué calcularlo."""
+    dias: int
+    subido_dia: Optional[int] = None
+    bajado_dia: Optional[int] = None
+    bonus_hora: Optional[float] = None
 
 
 class EstadisticasCuentaResponse(BaseModel):
     dias: int
     puntos: list[PuntoCuentaResponse]
+    ritmos: RitmosCuentaResponse
 
 
 # ---------------------------------------------------------------------------
