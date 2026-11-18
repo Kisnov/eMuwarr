@@ -20,6 +20,9 @@ lo valioso (cruce con Radarr/Sonarr, cola, enlaces duros, qBittorrent, Panel, av
 tracker solo cambian la nomenclatura, los ids de categoría/tipo/resolución, las normas (idiomas, duplicados), la
 descripción y el cliente.
 
+- **Todo esto va en la rama `multitracker`**, no en `dev`: sus PR van contra ella, `dev` se fusiona en ella de vez en
+  cuando (nunca rebase) y solo llega a `dev` cuando esté completo. Cada push construye `ghcr.io/kisnov/emuwarr:multitracker`
+  para el NAS de Gabriel; `latest` y `dev` no cambian.
 - **No se borran los trackers que no son EMU de `uploadrr-emu/src/trackers/`**: son la base de los adaptadores (allí ya
   están SP seedpool, RF reelflix, DARK darkpeers, OE onlyencodes, LT lat-team, TTR torrenteros, YU yu-scene,
   IHD infinityhd, RTF retroflix, TL TorrentLeech, HDT hd-torrents y `UNIT3D_TEMPLATE`).
