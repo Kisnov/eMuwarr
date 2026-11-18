@@ -23,6 +23,7 @@ from ..uploadrr_config_staging import (
     stage_image_hosts,
     stage_firma_actual,
     stage_keep_quiet_off,
+    stage_oxipng_on,
     stage_per_episode_screens,
     stage_qbittorrent_config,
     stage_tmdb_key,
@@ -99,6 +100,7 @@ def _stage_uploadrr_config(job_id: int, cwd: str) -> Path | None:
         lines, _msg = stage_per_episode_screens(lines, per_episode_screens)
         lines, _msg = stage_blu_api_off(lines)
         lines, _msg = stage_keep_quiet_off(lines)
+        lines, _msg = stage_oxipng_on(lines)
         lines, _msg = stage_anon_off(lines)
         lines, _msg = stage_firma_actual(lines)
         changed = True
