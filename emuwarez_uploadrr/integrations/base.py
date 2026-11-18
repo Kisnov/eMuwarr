@@ -190,17 +190,24 @@ def request_json(
     # Estos mensajes acaban en app.log, en task_runs y en la respuesta HTTP:
     # eMuwarez y TMDb llevan la clave en la URL, así que nunca va entera.
     safe_url = url_sin_claves(url)
+    # La clave de eMuwarez también puede ir en la cabecera (Authorization: Bearer …).
+    bearer = next((v.partition(" ")[2] for k, v in req_headers.items() if k.lower() == "authorization"), "")
+
+    def _tapar(texto: str) -> str:
+        texto = _tapar_claves(texto, url)
+        return tapar_claves(texto, bearer) if bearer else texto
+
     try:
         return http_cliente.con_plazo(_do_request, timeout + 5)
     except http_cliente.PlazoAgotado:
         raise IntegrationError(f"Tiempo de espera agotado conectando con {safe_url}") from None
     except http_cliente.ErrorHTTP as exc:
         # El cuerpo de error puede repetir la URL pedida, clave incluida.
-        raw = _tapar_claves(exc.texto(), url)
+        raw = _tapar(exc.texto())
         raise IntegrationError(f"HTTP {exc.status} en {safe_url}: {raw[:500]}", status=exc.status,
                                retry_after=exc.headers.get("retry-after")) from None
     except http_cliente.ErrorConexion as exc:
-        raise IntegrationError(f"No se pudo conectar con {safe_url}: {_tapar_claves(exc.motivo, url)}") from None
+        raise IntegrationError(f"No se pudo conectar con {safe_url}: {_tapar(exc.motivo)}") from None
     except json.JSONDecodeError:
         raise IntegrationError(f"Respuesta no JSON desde {safe_url}") from None
     except Exception as exc:

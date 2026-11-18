@@ -4,10 +4,13 @@ El núcleo es puro: `peticion` monta la URL y las cabeceras de cada llamada (la 
 la clave vaya a un enlace del propio tracker; `atributos_torrent` lee /api/torrents/{id}, con o sin el envoltorio
 `data`. Encima, dos fachadas que hacen lo mismo con él: `Cliente` (síncrono, la app: envía con la función que se le
 pasa) y `ClienteAsincrono` (Uploadrr-EMU, sobre un httpx.AsyncClient). Las dos piden turno al limitador antes de cada
-petición y le apuntan cada 429. Ninguna reintenta ni lanza por el código HTTP: eso lo decide quien llama.
+petición y le apuntan cada 429. Ninguna lanza por el código HTTP ni reintenta, salvo una vez por la clave: eso lo
+decide quien llama.
 
-La clave viaja en la URL (?api_token=): nunca se registra una URL entera. Por eso los registros de httpx, que apuntan
-cada petición en INFO con su URL, se quedan en WARNING en cuanto se importa este módulo.
+La clave va en `Authorization: Bearer` (la próxima versión de UNIT3D solo acepta esa). Si el tracker responde 401 o 403,
+la petición se repite una sola vez con la clave en la URL (?api_token=), que es como iba antes. Nunca se registra una
+URL entera: por eso los registros de httpx, que apuntan cada petición en INFO con su URL, se quedan en WARNING en cuanto
+se importa este módulo.
 
 Este fichero existe dos veces, idéntico: emuwarez_uploadrr/integrations/cliente_unit3d.py (la app) y
 uploadrr-emu/src/utils/cliente_unit3d.py (Uploadrr-EMU, que no importa la app). Solo stdlib (en la app nada más
@@ -21,6 +24,7 @@ from dataclasses import dataclass
 from typing import Any, Awaitable, Callable, Dict, Mapping, Optional, Tuple
 
 PARAMETRO_CLAVE = "api_token"
+RECHAZOS_DE_CLAVE = (401, 403)  # con ellos se prueba otra vez con la clave en la URL
 _PUERTOS = {"http": 80, "https": 443}
 
 for _nombre in ("httpx", "httpcore"):
@@ -58,12 +62,14 @@ def mismo_origen(a: Any, b: Any) -> bool:
     return _origen(a) == _origen(b)
 
 
-def peticion(tracker: Tracker, ruta: str, params: Optional[Mapping[str, Any]] = None) -> Tuple[str, Dict[str, str]]:
+def peticion(tracker: Tracker, ruta: str, params: Optional[Mapping[str, Any]] = None, *,
+             en_la_url: bool = False) -> Tuple[str, Dict[str, str]]:
     """(URL, cabeceras) de una llamada.
 
     `ruta` es una ruta de la API ("/api/torrents/filter") o un enlace que ha dado el propio tracker (la página
     siguiente, la descarga del .torrent): si no es de su mismo origen, OtroOrigen. Un valor lista repite el parámetro
-    (`categories[]=1&categories[]=2`) y uno None no va. La clave va la primera, en lugar de la que trajera el enlace."""
+    (`categories[]=1&categories[]=2`) y uno None no va. La clave que trajera el enlace se quita; la nuestra va en
+    `Authorization: Bearer` o, con `en_la_url`, la primera de la consulta."""
     if "://" in ruta:
         if not mismo_origen(ruta, tracker.base_url):
             raise OtroOrigen("el enlace apunta a otro dominio")
@@ -71,14 +77,17 @@ def peticion(tracker: Tracker, ruta: str, params: Optional[Mapping[str, Any]] = 
     else:
         url = f"{tracker.base_url}/{ruta.lstrip('/')}"
     partes = urllib.parse.urlsplit(url)
-    consulta = [(PARAMETRO_CLAVE, tracker.api_key)]
+    consulta = [(PARAMETRO_CLAVE, tracker.api_key)] if en_la_url else []
     consulta += [(k, v) for k, v in urllib.parse.parse_qsl(partes.query, keep_blank_values=True) if k != PARAMETRO_CLAVE]
     for nombre, valor in (params or {}).items():
         for v in valor if isinstance(valor, (list, tuple)) else [valor]:
             if v is not None:
                 consulta.append((nombre, v))
     url = urllib.parse.urlunsplit(partes._replace(query=urllib.parse.urlencode(consulta)))
-    return url, {"User-Agent": tracker.user_agent}
+    cabeceras = {"User-Agent": tracker.user_agent}
+    if not en_la_url:
+        cabeceras["Authorization"] = f"Bearer {tracker.api_key}"
+    return url, cabeceras
 
 
 def atributos_torrent(cuerpo: Any) -> Dict[str, Any]:
@@ -106,14 +115,17 @@ class Cliente:
 
     def pedir(self, metodo: str, ruta: str, params: Optional[Mapping[str, Any]] = None, *,
               prioridad: str = "interactiva", cabeceras: Optional[Mapping[str, str]] = None, **opciones: Any) -> Any:
-        url, propias = peticion(self.tracker, ruta, params)
-        self._turno(prioridad)
-        try:
-            return self._enviar(metodo, url, {**propias, **(cabeceras or {})}, **opciones)
-        except Exception as exc:
-            if getattr(exc, "status", None) == 429:
-                self._apuntar_429(getattr(exc, "retry_after", None))
-            raise
+        for en_la_url in (False, True):
+            url, propias = peticion(self.tracker, ruta, params, en_la_url=en_la_url)
+            self._turno(prioridad)
+            try:
+                return self._enviar(metodo, url, {**propias, **(cabeceras or {})}, **opciones)
+            except Exception as exc:
+                status = getattr(exc, "status", None)
+                if status == 429:
+                    self._apuntar_429(getattr(exc, "retry_after", None))
+                if en_la_url or status not in RECHAZOS_DE_CLAVE:
+                    raise
 
 
 class ClienteAsincrono:
@@ -130,9 +142,12 @@ class ClienteAsincrono:
     async def pedir(self, metodo: str, ruta: str, params: Optional[Mapping[str, Any]] = None, *,
                     prioridad: str = "subida", cabeceras: Optional[Mapping[str, str]] = None,
                     **opciones: Any) -> Any:
-        url, propias = peticion(self.tracker, ruta, params)
-        await self._turno(prioridad)
-        respuesta = await self._cliente.request(metodo, url, headers={**propias, **(cabeceras or {})}, **opciones)
-        if respuesta.status_code == 429:
-            self._apuntar_429(respuesta.headers.get("Retry-After"))
+        for en_la_url in (False, True):
+            url, propias = peticion(self.tracker, ruta, params, en_la_url=en_la_url)
+            await self._turno(prioridad)
+            respuesta = await self._cliente.request(metodo, url, headers={**propias, **(cabeceras or {})}, **opciones)
+            if respuesta.status_code == 429:
+                self._apuntar_429(respuesta.headers.get("Retry-After"))
+            if respuesta.status_code not in RECHAZOS_DE_CLAVE:
+                break
         return respuesta

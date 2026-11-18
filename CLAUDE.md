@@ -113,8 +113,10 @@ came in from `Kisnov/Uploadrr-EMU` with `git subtree add`, history kept; that re
   must stay byte-identical (`test_limitador_compartido.py`); without `fcntl` or a usable directory each process counts alone.
 - One UNIT3D client: every eMuwarez request, the app's (`emu.cliente`) and Uploadrr-EMU's (`Unit3d._cliente`), goes through
   `integrations/cliente_unit3d.py`. It builds URL and headers (`User-Agent: emuwarr/<version>`; `_lanzar_uploadrr` passes the
-  version as `EMUWARR_VERSION`), sends the key only to the tracker's own origin and takes a slot in the limiter first. `uploadrr-emu/src/utils/cliente_unit3d.py` is a byte-identical copy (`test_cliente_unit3d.py`; stdlib only, Python 3.9).
-- eMuwarez and TMDb keys travel in the URL query. Never log or return a raw URL: use
+  version as `EMUWARR_VERSION`), sends the key only to the tracker's own origin and takes a slot in the limiter first. The key goes
+  as `Authorization: Bearer` (the next UNIT3D only takes that); a 401/403 is retried once, with another slot, as `?api_token=`.
+  `uploadrr-emu/src/utils/cliente_unit3d.py` is a byte-identical copy (`test_cliente_unit3d.py`; stdlib only, Python 3.9).
+- TMDb keys travel in the URL query, and so do eMuwarez's on that retry. Never log or return a raw URL: use
   `integrations.base.url_sin_claves`.
 - Image: `ghcr.io/kisnov/emuwarr`, built only when a version is published. `publicar.yml` ("Publicar
   versión": by hand, or on odd days of the month when 3+ PRs from `feat/` or `fix/` branches (merge commits, or `feat:`/`fix:` squash

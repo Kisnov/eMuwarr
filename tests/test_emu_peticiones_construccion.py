@@ -40,7 +40,7 @@ def _pagina_de(url):
 
 def test_probar_conexion_pide_un_solo_torrent(pedidas):
     emu.emu_test_connection("KEY", base_url="https://t.x/")
-    assert _partes(pedidas["urls"][0]) == ("t.x", "/api/torrents/filter", {"api_token": "KEY", "perPage": "1"})
+    assert _partes(pedidas["urls"][0]) == ("t.x", "/api/torrents/filter", {"perPage": "1"})
 
 
 def test_peticiones_abiertas_de_peliculas_series_y_documentales(pedidas):
@@ -48,7 +48,7 @@ def test_peticiones_abiertas_de_peliculas_series_y_documentales(pedidas):
     url = pedidas["urls"][0]
     assert _partes(url)[:2] == ("t.x", "/api/requests/filter")
     assert urllib.parse.parse_qs(urllib.parse.urlsplit(url).query) == {
-        "api_token": ["KEY"], "page": ["3"], "perPage": ["50"],
+        "page": ["3"], "perPage": ["50"],
         "filled": ["0"], "category_id[]": ["1", "2", "4"],
     }
 
@@ -122,11 +122,12 @@ def test_un_429_que_no_se_va_acaba_en_un_error_claro(pedidas):
 
 @pytest.mark.parametrize("estado", [401, 403])
 def test_una_clave_rechazada_para_enseguida(pedidas, estado):
-    pedidas["respuestas"] = [IntegrationError(f"HTTP {estado} en https://emu-warez.com/x: Unauthenticated.", status=estado)]
+    pedidas["respuestas"] = [IntegrationError(f"HTTP {estado} en https://emu-warez.com/x: Unauthenticated.", status=estado)] * 2
     with pytest.raises(IntegrationError) as e:
         emu.emu_fetch_all_pages("KEY")
     assert str(e.value) == "eMuwarez ha rechazado la API key (¿ratio por debajo de 1?)"
-    assert len(pedidas["urls"]) == 1 and pedidas["dormidas"] == []
+    # Bearer y, una vez, con la clave en la URL (cliente_unit3d); nada más
+    assert len(pedidas["urls"]) == 2 and "api_token=KEY" in pedidas["urls"][1] and pedidas["dormidas"] == []
 
 
 @pytest.mark.parametrize("estado, texto", [
@@ -217,10 +218,10 @@ def test_si_el_tracker_rechaza_el_orden_se_sigue_sin_el(pedidas):
 
 
 def test_un_fallo_que_no_es_del_orden_no_se_reintenta_sin_el(pedidas):
-    pedidas["respuestas"] = [IntegrationError("HTTP 401", status=401)]
+    pedidas["respuestas"] = [IntegrationError("HTTP 401", status=401)] * 2
     with pytest.raises(IntegrationError):
         emu.emu_fetch_all_torrents("KEY")
-    assert len(pedidas["urls"]) == 1
+    assert len(pedidas["urls"]) == 2 and all("sortField" in u for u in pedidas["urls"])  # Bearer y en la URL
 
 
 def test_el_recorrido_incremental_no_sigue_sin_orden(pedidas):

@@ -106,7 +106,8 @@ or report their errors unless they break an eMuwarez upload.
 
 ## Secrets and auth
 
-- The tracker API key travels as the `api_token` query param. Never print `params`, full request URLs or
+- The tracker API key travels as `Authorization: Bearer`, and as the `api_token` query param when the tracker answers
+  401/403 to that (one retry, `src/utils/cliente_unit3d.py`). Never print headers, `params`, full request URLs or
   `http_err.request.url`. Plain `print` and raw `logging` handlers skip the redactor: keep them for
   machine-read lines that hold no secrets.
 - Re-downloading the signed `.torrent` after upload (`src/trackers/UNIT3D.py`) must send the same key and

@@ -177,8 +177,21 @@ class TestEmuwarezConnection:
         http_falso.responde(respuesta(200, json={"data": []}))
         assert svc_test_emu(api_key=" key123 ", base_url="https://emu-warez.com/")["ok"] is True
         p = http_falso.ultima
-        assert str(p.url) == "https://emu-warez.com/api/torrents/filter?api_token=key123&perPage=1"
+        assert str(p.url) == "https://emu-warez.com/api/torrents/filter?perPage=1"
+        assert p.headers["Authorization"] == "Bearer key123"
         assert p.headers["User-Agent"] == f"emuwarr/{__version__}" and p.headers["Accept"] == "application/json"
+
+    def test_una_clave_rechazada_como_bearer_se_prueba_una_vez_en_la_url(self, http_falso):
+        from tests.http_falso import respuesta
+        http_falso.responde(lambda req: respuesta(200 if req.url.params.get("api_token") == "key123" else 401)(req))
+        assert svc_test_emu(api_key="key123", base_url="https://emu-warez.com")["ok"] is True
+        primera, segunda = http_falso.peticiones
+        assert "Authorization" not in segunda.headers and "api_token" not in primera.url.params
+
+    def test_una_clave_rechazada_de_las_dos_maneras_es_invalida(self, http_falso):
+        http_falso.responde(_http_error(403))
+        result = svc_test_emu(api_key="key123", base_url="https://emu-warez.com")
+        assert result["status"] == "invalid_key" and len(http_falso.peticiones) == 2
 
     def test_http_tampoco_se_admite_en_loopback(self, http_falso):
         result = svc_test_emu(api_key="key123", base_url="http://localhost:8080")

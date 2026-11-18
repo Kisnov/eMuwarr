@@ -1,7 +1,8 @@
 """eMuwarez API connector.
 
 eMuwarez runs on the UNIT3D platform (https://emu-warez.com). Every request goes out through `cliente`
-(cliente_unit3d, the same client Uploadrr-EMU uses), which also puts the key in the request.
+(cliente_unit3d, the same client Uploadrr-EMU uses), which also puts the key in the request: `Authorization: Bearer`,
+or `?api_token=` once if the tracker rejects that.
 """
 from __future__ import annotations
 
@@ -78,7 +79,7 @@ def cliente(api_key: str, base_url: str | None = None, enviar=None) -> cliente_u
 
 
 def emu_test_connection(api_key: str, base_url: str | None = None, *, interactiva: bool = True) -> dict[str, Any]:
-    """Test connectivity to eMuwarez using UNIT3D ?api_token= auth.
+    """Test connectivity to eMuwarez (GET /api/torrents/filter?perPage=1).
 
     `interactiva=False` cuando es el primer paso de un recorrido largo: espera su turno en vez de fallar."""
     return _pedir(api_key, base_url, "/api/torrents/filter", {"perPage": "1"}, interactiva=interactiva)

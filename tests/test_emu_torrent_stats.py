@@ -59,9 +59,10 @@ def test_id_de_la_ficha(url, esperado):
 
 def test_emu_get_torrent_pide_api_torrents_id_y_devuelve_los_atributos(monkeypatch):
     urls = []
-    monkeypatch.setattr(emu, "request_json", lambda method, url, **kw: urls.append(url) or dict(TORRENTE))
+    monkeypatch.setattr(emu, "request_json", lambda method, url, headers: urls.append((url, headers["Authorization"]))
+                        or dict(TORRENTE))
     assert emu.emu_get_torrent("k", 321)["seeders"] == 7
-    assert urls == ["https://emu-warez.com/api/torrents/321?api_token=k"]
+    assert urls == [("https://emu-warez.com/api/torrents/321", "Bearer k")]
 
 
 def test_emu_get_torrent_tambien_lee_el_envoltorio_data(monkeypatch):

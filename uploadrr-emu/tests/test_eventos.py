@@ -248,7 +248,9 @@ def test_con_config_lee_ese_fichero_y_la_salida_no_cambia(flujo, monkeypatch):
     assert codigo == 0
     assert flujo.normalizar(salida) == _texto_dorado("subida_emu_pelicula.txt")
     assert _resultado(_revisar(flujo)) == ("subido", True)
-    assert [q["api_token"] for q in flujo.tracker.calls("POST", UPLOAD)] == [["clave-de-esta-subida"]]
+    peticiones = zip(flujo.tracker.requests, flujo.tracker.autorizaciones)
+    assert [auth for (metodo, ruta, _), auth in peticiones if (metodo, ruta) == ("POST", UPLOAD)] == [
+        "Bearer clave-de-esta-subida"]
     meta = json.loads((flujo.base / "tmp" / f"{PELICULA}.mkv" / "meta.json").read_text(encoding="utf-8"))
     assert "config" not in meta  # la ruta es de esta ejecución: un --resume trae la suya
 

@@ -32,19 +32,25 @@ def test_los_registros_de_httpx_no_apuntan_las_urls():
 
 # --- Núcleo -----------------------------------------------------------------
 
-def test_una_ruta_lleva_la_clave_la_primera_y_el_user_agent():
+def test_una_ruta_lleva_la_clave_en_bearer_y_el_user_agent():
     url, cabeceras = cu.peticion(TRACKER, "/api/torrents/filter",
                                  {"perPage": 1, "categories[]": [1, 2], "name": "", "uploader": None})
-    assert url.startswith("https://emu.test/api/torrents/filter?api_token=CLAVE%2B%2F1&")
-    assert _consulta(url) == [("api_token", "CLAVE+/1"), ("perPage", "1"), ("categories[]", "1"),
-                              ("categories[]", "2"), ("name", "")]
+    assert url == "https://emu.test/api/torrents/filter?perPage=1&categories%5B%5D=1&categories%5B%5D=2&name="
+    assert cabeceras == {"User-Agent": "emuwarr/1.2.3", "Authorization": "Bearer CLAVE+/1"}
+
+
+def test_en_la_url_la_clave_va_la_primera_y_sin_bearer():
+    url, cabeceras = cu.peticion(TRACKER, "/api/torrents/filter", {"perPage": 1}, en_la_url=True)
+    assert url == "https://emu.test/api/torrents/filter?api_token=CLAVE%2B%2F1&perPage=1"
     assert cabeceras == {"User-Agent": "emuwarr/1.2.3"}
 
 
 def test_un_enlace_del_tracker_conserva_su_consulta_y_cambia_la_clave():
-    url, _ = cu.peticion(TRACKER, "https://emu.test/api/torrents/filter?page=2&api_token=VIEJA&tmdbId=5")
-    assert _consulta(url) == [("api_token", "CLAVE+/1"), ("page", "2"), ("tmdbId", "5")]
-    url, _ = cu.peticion(TRACKER, "https://EMU.test:443/torrent/download/7.abc")
+    enlace = "https://emu.test/api/torrents/filter?page=2&api_token=VIEJA&tmdbId=5"
+    assert _consulta(cu.peticion(TRACKER, enlace)[0]) == [("page", "2"), ("tmdbId", "5")]
+    assert _consulta(cu.peticion(TRACKER, enlace, en_la_url=True)[0]) == [
+        ("api_token", "CLAVE+/1"), ("page", "2"), ("tmdbId", "5")]
+    url, _ = cu.peticion(TRACKER, "https://EMU.test:443/torrent/download/7.abc", en_la_url=True)
     assert url == "https://EMU.test:443/torrent/download/7.abc?api_token=CLAVE%2B%2F1"
 
 
@@ -85,11 +91,14 @@ class ErrorHTTP(Exception):
         self.retry_after = retry_after
 
 
-def _cliente_sync(resultado):
+def _cliente_sync(*resultados):
+    """`resultados`: lo que devuelve (o lanza) cada envío, en orden; el último se repite."""
     pasos = []
+    pendientes = list(resultados)
 
     def enviar(metodo, url, cabeceras, **opciones):
         pasos.append(("enviar", metodo, url, cabeceras, opciones))
+        resultado = pendientes.pop(0) if len(pendientes) > 1 else pendientes[0]
         if isinstance(resultado, Exception):
             raise resultado
         return resultado
@@ -105,8 +114,8 @@ def test_el_cliente_pide_turno_antes_de_cada_peticion():
                          timeout=20) == {"data": []}
     url, _ = cu.peticion(TRACKER, "/api/user")
     assert pasos == [("turno", "recorrido"),
-                     ("enviar", "GET", url, {"User-Agent": "emuwarr/1.2.3", "Accept": "application/json"},
-                      {"timeout": 20})]
+                     ("enviar", "GET", url, {"User-Agent": "emuwarr/1.2.3", "Authorization": "Bearer CLAVE+/1",
+                                             "Accept": "application/json"}, {"timeout": 20})]
 
 
 def test_el_cliente_apunta_el_429_con_su_retry_after_y_lo_relanza():
@@ -118,12 +127,30 @@ def test_el_cliente_apunta_el_429_con_su_retry_after_y_lo_relanza():
     assert pasos[0] == ("turno", "interactiva") and pasos[-1] == ("429", "12")
 
 
-@pytest.mark.parametrize("error", [ErrorHTTP(500), ErrorHTTP(403), OSError("sin red")])
-def test_otros_errores_no_pausan_a_nadie(error):
+@pytest.mark.parametrize("error", [ErrorHTTP(500), ErrorHTTP(404), OSError("sin red")])
+def test_otros_errores_no_pausan_a_nadie_ni_se_repiten(error):
     cliente, pasos = _cliente_sync(error)
     with pytest.raises(type(error)):
         cliente.pedir("GET", "/api/user")
     assert [p[0] for p in pasos] == ["turno", "enviar"]
+
+
+@pytest.mark.parametrize("status", [401, 403])
+def test_una_clave_rechazada_como_bearer_se_prueba_una_vez_en_la_url(status):
+    cliente, pasos = _cliente_sync(ErrorHTTP(status), {"username": "yo"})
+    assert cliente.pedir("GET", "/api/user", prioridad="recorrido") == {"username": "yo"}
+    (t1, e1, t2, e2) = pasos
+    assert t1 == t2 == ("turno", "recorrido")  # el segundo intento también gasta su hueco
+    assert e1[2] == "https://emu.test/api/user" and e1[3]["Authorization"] == "Bearer CLAVE+/1"
+    assert e2[2] == "https://emu.test/api/user?api_token=CLAVE%2B%2F1" and "Authorization" not in e2[3]
+
+
+def test_si_tampoco_vale_en_la_url_sale_el_segundo_error():
+    segundo = ErrorHTTP(403)
+    cliente, pasos = _cliente_sync(ErrorHTTP(401), segundo)
+    with pytest.raises(ErrorHTTP) as info:
+        cliente.pedir("GET", "/api/user")
+    assert info.value is segundo and [p[0] for p in pasos] == ["turno", "enviar", "turno", "enviar"]
 
 
 def test_el_cliente_no_pide_un_enlace_de_otro_origen_ni_gasta_turno():
@@ -154,7 +181,42 @@ def test_el_cliente_asincrono_pide_turno_y_apunta_el_429():
     asyncio.run(probar())
     assert pasos == [("turno", "subida"), ("429", "3"), ("turno", "interactiva")]
     get, post = vistas
-    assert _consulta(str(get.url)) == [("api_token", "CLAVE+/1"), ("tmdbId", "5")]
+    assert _consulta(str(get.url)) == [("tmdbId", "5")] and _consulta(str(post.url)) == []
     assert get.headers["User-Agent"] == post.headers["User-Agent"] == "emuwarr/1.2.3"
+    assert get.headers["Authorization"] == post.headers["Authorization"] == "Bearer CLAVE+/1"
     assert b'name="name"' in post.content and b"d4:infoe" in post.content
-    assert _consulta(str(post.url)) == [("api_token", "CLAVE+/1")]
+
+
+def _asincrono(status, acepta_en_la_url=True):
+    """Un tracker que solo acepta la clave en la URL y responde `status` a la de Bearer; devuelve (pedir, vistas)."""
+    vistas = []
+
+    def responder(request: httpx.Request) -> httpx.Response:
+        vistas.append(request)
+        return httpx.Response(200 if acepta_en_la_url and "api_token" in request.url.params else status)
+
+    async def turno(prioridad):
+        pass
+
+    async def pedir(ruta):
+        async with httpx.AsyncClient(transport=httpx.MockTransport(responder)) as http:
+            cliente = cu.ClienteAsincrono(TRACKER, http, turno=turno, apuntar_429=lambda ra: None)
+            return await cliente.pedir("GET", ruta)
+
+    return pedir, vistas
+
+
+@pytest.mark.parametrize("status", [401, 403])
+def test_el_cliente_asincrono_prueba_una_vez_en_la_url(status):
+    pedir, vistas = _asincrono(status)
+    assert asyncio.run(pedir("/api/user")).status_code == 200
+    primera, segunda = vistas
+    assert "Authorization" in primera.headers and "Authorization" not in segunda.headers
+    assert _consulta(str(segunda.url)) == [("api_token", "CLAVE+/1")]
+
+
+def test_el_cliente_asincrono_devuelve_el_segundo_rechazo_y_no_repite_otros():
+    pedir, vistas = _asincrono(403, acepta_en_la_url=False)
+    assert asyncio.run(pedir("/api/user")).status_code == 403 and len(vistas) == 2
+    pedir, vistas = _asincrono(404)
+    assert asyncio.run(pedir("/api/user")).status_code == 404 and len(vistas) == 1

@@ -53,9 +53,10 @@ def _intento_hace(conn, plazo: timedelta) -> None:
 
 def test_emu_get_user_pide_api_user_con_la_clave(monkeypatch):
     urls = []
-    monkeypatch.setattr(emu, "request_json", lambda method, url, **kw: urls.append(url) or dict(USUARIO))
+    monkeypatch.setattr(emu, "request_json", lambda method, url, headers: urls.append((url, headers["Authorization"]))
+                        or dict(USUARIO))
     assert emu.emu_get_user("k")["group"] == "Uploader"
-    assert urls == ["https://emu-warez.com/api/user?api_token=k"]
+    assert urls == [("https://emu-warez.com/api/user", "Bearer k")]
 
 
 @pytest.mark.parametrize("estado", [401, 403, 429])
