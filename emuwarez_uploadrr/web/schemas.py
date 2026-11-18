@@ -607,6 +607,36 @@ class ObjetivosCuenta(BaseModel):
         return v
 
 
+class MiTorrentResponse(BaseModel):
+    """Una de tus subidas en eMuwarez, en la última lectura."""
+    torrent_id: int
+    nombre: str
+    tamano: Optional[int] = None
+    subido_at: Optional[str] = None
+    seeders: Optional[int] = None
+    leechers: Optional[int] = None
+    completados: Optional[int] = None
+    completados_semana: Optional[int] = None
+    freeleech: Optional[str] = None
+    doble_subida: bool = False
+
+
+class TotalesMisTorrentsResponse(BaseModel):
+    subidas: int
+    seeders: int
+    leechers: int
+    completados: int
+    completados_semana: Optional[int] = None
+    sin_seeders: int
+
+
+class MisTorrentsResponse(BaseModel):
+    """Tus subidas en eMuwarez (las no anónimas); `leido_at` es None si aún no se han leído nunca."""
+    leido_at: Optional[str] = None
+    torrents: list[MiTorrentResponse]
+    totales: TotalesMisTorrentsResponse
+
+
 class EstadisticasCuentaResponse(BaseModel):
     dias: int
     puntos: list[PuntoCuentaResponse]

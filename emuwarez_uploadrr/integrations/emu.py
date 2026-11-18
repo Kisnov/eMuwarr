@@ -181,8 +181,10 @@ def emu_fetch_all_torrents(
     max_pages: int = 500,
     progress=None,
     stop_after_id: int | None = None,
+    uploader: str | None = None,
 ) -> list[dict[str, Any]]:
-    """Fetch eMuwarez torrents (paginated /api/torrents/filter), newest first.
+    """Fetch eMuwarez torrents (paginated /api/torrents/filter), newest first. Con `uploader`, solo los de ese usuario
+    (UNIT3D deja fuera los anónimos).
     Returns the flat list of raw torrent objects ({type, id, attributes}).
 
     Incremental: when `stop_after_id` is given, the walk stops as soon as a
@@ -205,10 +207,11 @@ def emu_fetch_all_torrents(
     page = 1
     reached_known = False
     orden = {"sortField": "created_at", "sortDirection": "desc"}
+    filtro = {"uploader": uploader} if uploader else {}
 
     def pedir(n: int) -> Any:
         return _pedir_pagina(build_url(base, "/api/torrents/filter", {
-            "api_token": api_key, "perPage": str(per_page), "page": str(n), **orden}), api_key)
+            "api_token": api_key, "perPage": str(per_page), "page": str(n), **filtro, **orden}), api_key)
 
     while page <= max_pages and not reached_known:
         try:
@@ -225,7 +228,10 @@ def emu_fetch_all_torrents(
         if isinstance(meta, dict):
             total_pages = meta.get("last_page") or total_pages
             total_items = meta.get("total") or total_items
-        if not isinstance(items, list) or not items:
+        # Una página que no trae la lista no es el final: cortar ahí daría por completa una lectura a medias.
+        if not isinstance(items, list):
+            raise IntegrationError(f"eMuwarez ha devuelto la página {page} en un formato que no se reconoce")
+        if not items:
             break
         if stop_after_id is not None:
             for t in items:

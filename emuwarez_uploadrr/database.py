@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 
 DB_FILE = CONFIG_DIR / "emuwarez_uploadrr.db"
 
-SCHEMA_VERSION = 56
+SCHEMA_VERSION = 57
 
 # Phase 10E: canonical settings namespace fix.
 #
@@ -1376,6 +1376,34 @@ def _migrate_perfil_historial_completo(conn: sqlite3.Connection) -> None:
                 raise
 
 
+def _migrate_mis_torrents(conn: sqlite3.Connection) -> None:
+    """Esquema 57: tus subidas en eMuwarez (services/mis_torrents.py). `emu_mis_torrents` es la última lectura y
+    `emu_mis_torrents_dia` una foto al día de cada torrent, para saber cuánto se ha bajado en la última semana."""
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS emu_mis_torrents (
+            torrent_id INTEGER PRIMARY KEY,
+            nombre TEXT NOT NULL,
+            tamano INTEGER,
+            subido_at TEXT,
+            seeders INTEGER,
+            leechers INTEGER,
+            completados INTEGER,
+            freeleech TEXT,
+            doble_subida INTEGER NOT NULL DEFAULT 0
+        )
+    """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS emu_mis_torrents_dia (
+            dia TEXT NOT NULL,              -- YYYY-MM-DD, local
+            torrent_id INTEGER NOT NULL,
+            seeders INTEGER,
+            leechers INTEGER,
+            completados INTEGER,
+            PRIMARY KEY (torrent_id, dia)
+        )
+    """)
+
+
 def _migrate_imgbox_a_pixhost(conn: sqlite3.Connection) -> None:
     """Esquema 53: imgbox deja de ir siempre el último (lleva meses caído) y pasa a ser un proveedor más, que se puede
     quitar. Quien ya tenía la lista guardada lo tenía de último sin verlo en ella: se cambia por Pixhost, que tampoco
@@ -1992,6 +2020,7 @@ def init_db(conn: Optional[sqlite3.Connection] = None) -> None:
         _migrate_upload_jobs_trailer_estado(conn)
         _migrate_upload_jobs_reenvio_qbit(conn)
         _migrate_perfil_historial_completo(conn)
+        _migrate_mis_torrents(conn)
         set_state(conn, "schema_version", str(SCHEMA_VERSION))
         conn.commit()
     finally:

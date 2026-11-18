@@ -124,6 +124,10 @@
 .est-objetivos-unidad { min-width: 4em; }
 .est-objetivos-botones { display: flex; flex-wrap: wrap; gap: 8px; }
 
+.est-subidas-cab { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px 16px; }
+.est-subidas-orden { width: auto; margin-bottom: 12px; }
+.est-tabla .data-table td.est-sin-seeders { color: var(--color-warning); font-weight: 600; }
+
 .est-pagina h1.page-title { margin: 0; }
 /* Cabecera: si el título, su frase y los rangos no caben en una fila, los rangos bajan. */
 .est-pagina .page-header { flex-wrap: wrap; gap: 12px 20px; }

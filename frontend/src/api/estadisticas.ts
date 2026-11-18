@@ -1,5 +1,5 @@
 import { api } from './client'
-import type { EstadisticasCuenta } from '../types/api'
+import type { EstadisticasCuenta, MisTorrents } from '../types/api'
 import type { ObjetivosCuenta } from '../utils/objetivos'
 
 export async function getEstadisticasCuenta(dias: number): Promise<EstadisticasCuenta> {
@@ -12,4 +12,8 @@ export async function getObjetivos(): Promise<ObjetivosCuenta> {
 
 export async function guardarObjetivos(datos: ObjetivosCuenta): Promise<ObjetivosCuenta> {
   return api.put<ObjetivosCuenta>('/estadisticas/objetivos', datos)
+}
+
+export async function getMisSubidas(): Promise<MisTorrents> {
+  return api.get<MisTorrents>('/estadisticas/mis-subidas')
 }

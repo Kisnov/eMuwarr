@@ -45,6 +45,11 @@ EVENT_TYPES: dict[str, str] = {
     "content_missing_new": "Contenido nuevo faltante",
     "content_unique_changed": "Nuevo contenido único",
     "version_available": "Versión nueva disponible",
+    # services/avisos_cuenta.py: lo que cambia en tu cuenta de eMuwarez entre una lectura del perfil y la siguiente.
+    "cuenta_hr_nuevo": "H&R nuevo en eMuwarez",
+    "cuenta_grupo_cambia": "Cambio de grupo en eMuwarez",
+    "cuenta_buffer_negativo": "Buffer negativo en eMuwarez",
+    "cuenta_seeding_baja": "Bajón de seeding en eMuwarez",
 }
 
 # Eventos que NO se mandan a Discord/Telegram salvo que se pidan a mano.

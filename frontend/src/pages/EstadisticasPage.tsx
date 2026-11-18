@@ -5,6 +5,7 @@ import { EmptyState } from '../components/EmptyState'
 import { ErrorState } from '../components/ErrorState'
 import { GraficoLinea } from '../components/GraficoLinea'
 import { LoadingState } from '../components/LoadingState'
+import { MisSubidasEmu } from '../components/MisSubidasEmu'
 import { ObjetivosCuenta } from '../components/ObjetivosCuenta'
 import { StatCard } from '../components/StatCard'
 import { ICON_UPLOADS, svgIcon, TarjetasDelPanel } from '../components/TarjetasDelPanel'
@@ -214,6 +215,8 @@ export function EstadisticasPage() {
           </details>
         </div>
       )}
+
+      <MisSubidasEmu visible={seVe} />
     </div>
   )
 }

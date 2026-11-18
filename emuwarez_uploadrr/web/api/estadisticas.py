@@ -6,7 +6,7 @@ import sqlite3
 from fastapi import APIRouter, Depends, Query
 
 from ..dependencies import get_db, require_auth
-from ..schemas import EstadisticasCuentaResponse, ObjetivosCuenta
+from ..schemas import EstadisticasCuentaResponse, MisTorrentsResponse, ObjetivosCuenta
 
 router = APIRouter(prefix="/estadisticas", tags=["estadisticas"])
 
@@ -41,3 +41,13 @@ def guardar_objetivos(
     """Sustituye tu fecha de alta y tus objetivos por los que llegan."""
     from emuwarez_uploadrr.services.objetivos_cuenta import guardar
     return ObjetivosCuenta(**guardar(conn, body.fecha_alta, [o.model_dump() for o in body.objetivos]))
+
+
+@router.get("/mis-subidas", response_model=MisTorrentsResponse)
+def estadisticas_mis_subidas(
+    current_user: dict = Depends(require_auth),
+    conn: sqlite3.Connection = Depends(get_db),
+) -> MisTorrentsResponse:
+    """Tus subidas en eMuwarez de la última lectura (la tarea «Leer tus subidas en eMuwarez»), sin llamar al tracker."""
+    from emuwarez_uploadrr.services.mis_torrents import resumen
+    return MisTorrentsResponse(**resumen(conn))

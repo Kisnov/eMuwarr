@@ -11,6 +11,11 @@ vi.mock('../../api/estadisticas', () => ({
   // Los objetivos (ObjetivosCuenta) tienen su propia prueba: aquí, ninguno.
   getObjetivos: vi.fn(() => Promise.resolve({ fecha_alta: null, objetivos: [] })),
   guardarObjetivos: vi.fn(),
+  // Tus subidas en eMuwarez (MisSubidasEmu) tienen su propia prueba: aquí, sin leer todavía.
+  getMisSubidas: vi.fn(() => Promise.resolve({
+    leido_at: null, torrents: [],
+    totales: { subidas: 0, seeders: 0, leechers: 0, completados: 0, completados_semana: null, sin_seeders: 0 },
+  })),
 }))
 vi.mock('../../api/dashboard', () => ({ getDashboardSummary: vi.fn() }))
 
