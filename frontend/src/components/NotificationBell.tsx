@@ -67,6 +67,15 @@ function NuevaVersionIcon() {
   )
 }
 
+function CuentaIcon() {
+  // Una persona: los avisos de tu cuenta de eMuwarez (H&R, grupo, buffer, seeding).
+  return (
+    <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <circle cx="12" cy="8" r="4" /><path d="M5 21a7 7 0 0 1 14 0" />
+    </svg>
+  )
+}
+
 // Small icon to the left of the notification's status title, colored by its
 // severity `level` and matching the event's meaning — reusing the app's own
 // action-button icons (DetailCard.tsx) where one already fits.
@@ -81,6 +90,7 @@ function NotifTitleIcon({ eventType, level }: { eventType: string; level: string
     eventType === 'content_missing_new' ? <MissingWarningIcon /> :
     eventType === 'content_unique_changed' ? <UniqueContentIconSvg size={14} /> :
     eventType === 'version_available' ? <NuevaVersionIcon /> :
+    eventType.startsWith('cuenta_') ? <CuentaIcon /> :
     null
   if (!icon) return null
   return <span style={{ display: 'inline-flex', color, marginRight: 5, verticalAlign: -2 }}>{icon}</span>
