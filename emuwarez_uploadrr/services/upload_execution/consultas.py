@@ -8,7 +8,7 @@ from typing import Any
 
 from ...database import get_setting_canonical, row_to_dict, rows_to_dicts
 from ..upload_states import PREPARATORY_STATUSES
-from ..uploadrr_eventos import admite_eventos, ruta_eventos
+from ..uploadrr_eventos import admite_config, admite_eventos, ruta_eventos
 from ..uploadrr_contract import (
     RUNTIME_EMU,
     build_uploadrr_emu_command,
@@ -16,6 +16,7 @@ from ..uploadrr_contract import (
     render_command_preview,
 )
 from .comun import _get_db_conn
+from .config import ruta_config
 
 
 VIDEO_EXTENSIONS = {
@@ -239,6 +240,10 @@ def build_uploadrr_execution_command(job: dict, conn=None, *, solo_cliente: str 
         eventos = None
         if runtime["runtime_type"] == RUNTIME_EMU and job.get("id") and admite_eventos(uploadrr_path):
             eventos = str(ruta_eventos(job["id"], reenvio=bool(solo_cliente)))
+        # Igual el config de esta subida: sin `--config` se prepara el config.yaml compartido (config.py).
+        config = None
+        if runtime["runtime_type"] == RUNTIME_EMU and job.get("id") and admite_config(uploadrr_path):
+            config = str(ruta_config(job["id"], reenvio=bool(solo_cliente)))
 
         if runtime["runtime_type"] == RUNTIME_EMU:
             python_path = runtime["python_path"] or sys.executable
@@ -259,6 +264,7 @@ def build_uploadrr_execution_command(job: dict, conn=None, *, solo_cliente: str 
                 personal_release=bool(cmd_data.get("personal_release")),
                 solo_cliente=solo_cliente,
                 eventos=eventos,
+                config=config,
             )
             executable = full_argv[0]
             args = full_argv[1:]
@@ -283,6 +289,7 @@ def build_uploadrr_execution_command(job: dict, conn=None, *, solo_cliente: str 
             "timeout": runtime["timeout"],
             "runtime_type": runtime["runtime_type"],
             "eventos": eventos,
+            "config": config,
         }
     finally:
         if own:

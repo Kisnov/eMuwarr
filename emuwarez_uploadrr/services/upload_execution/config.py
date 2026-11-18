@@ -1,10 +1,12 @@
-"""Preparación y restauración del config.yaml de Uploadrr-EMU, compartido entre subidas en paralelo."""
+"""El config.yaml de Uploadrr-EMU de cada subida: un fichero propio (`--config`) o, con un Uploadrr-EMU que no lo admite,
+el compartido, preparado y restaurado entre subidas en paralelo."""
 from __future__ import annotations
 
+import os
 import threading
 from pathlib import Path
 
-from ...database import get_setting_canonical
+from ...database import db_path, get_setting_canonical
 from ...integrations.base import texto_de_error
 from ...integrations.qbittorrent import qbit_configurado
 from ..settings import leer_ajuste
@@ -38,14 +40,11 @@ class ConfigNoPreparada(RuntimeError):
     """El config.yaml de Uploadrr no se pudo preparar: lanzarlo así lo haría fallar con las claves sin poner."""
 
 
-def _stage_uploadrr_config(job_id: int, cwd: str) -> Path | None:
-    """Staging of DEFAULT.tmdb / TRACKERS.EMU.api_key into config.yaml.
+def _lineas_preparadas(job_id: int, cwd: str) -> list[str] | None:
+    """El config de verdad con DEFAULT.tmdb / TRACKERS.EMU.api_key / SCREENS / TORRENT_CLIENTS.qbit de Ajustes.
 
-    Returns the config_path if staging happened (so the caller knows to
-    restore it later), or None if there was nothing to stage (config.yaml
-    missing, or no secrets configured) — in that case there is nothing to
-    restore either. Si preparar el config falla lanza ConfigNoPreparada: el
-    job termina fallido sin lanzar Uploadrr.
+    None si no hay nada que preparar (config.yaml missing, or no secrets configured). Si preparar el config falla lanza
+    ConfigNoPreparada: el job termina fallido sin lanzar Uploadrr.
     """
     config_path = default_uploadrr_config_path(cwd)
     if not config_path.exists():
@@ -124,20 +123,101 @@ def _stage_uploadrr_config(job_id: int, cwd: str) -> Path | None:
                 stream="system",
             )
             return None
+        return lines
+    except Exception as exc:
+        raise _no_preparada(exc) from exc
+
+
+def _no_preparada(exc: Exception) -> ConfigNoPreparada:
+    return ConfigNoPreparada(
+        f"No se pudo preparar el config.yaml de Uploadrr ({texto_de_error(exc)}). No se lanza la subida: con el config sin preparar fallaría."
+    )
+
+
+def _stage_uploadrr_config(job_id: int, cwd: str) -> Path | None:
+    """Staging of DEFAULT.tmdb / TRACKERS.EMU.api_key into config.yaml.
+
+    Returns the config_path if staging happened (so the caller knows to
+    restore it later), or None if there was nothing to stage — in that case
+    there is nothing to restore either.
+    """
+    lines = _lineas_preparadas(job_id, cwd)
+    if lines is None:
+        return None
+    config_path = default_uploadrr_config_path(cwd)
+    try:
         backup_config(config_path)
         if config_path.read_text(encoding="utf-8", errors="ignore") == staged_config_text(lines):
             return config_path  # ya está así: no se reescribe bajo una subida en curso
         write_staged_config(config_path, lines)
-        append_upload_log(
-            job_id, "info",
-            "config.yaml stageado (DEFAULT.tmdb / TRACKERS.EMU.api_key / SCREENS.img_hosts / TORRENT_CLIENTS.qbit). Backup creado.",
-            stream="system",
-        )
-        return config_path
     except Exception as exc:
-        raise ConfigNoPreparada(
-            f"No se pudo preparar el config.yaml de Uploadrr ({texto_de_error(exc)}). No se lanza la subida: con el config sin preparar fallaría."
-        ) from exc
+        raise _no_preparada(exc) from exc
+    append_upload_log(
+        job_id, "info",
+        "config.yaml stageado (DEFAULT.tmdb / TRACKERS.EMU.api_key / SCREENS.img_hosts / TORRENT_CLIENTS.qbit). Backup creado.",
+        stream="system",
+    )
+    return config_path
+
+
+CARPETA_CONFIGS = "config_uploadrr"
+
+
+def ruta_config(job_id: int, *, reenvio: bool = False) -> Path:
+    """El config de Uploadrr-EMU de este trabajo, junto a la base; el reenvío a qBittorrent repite el trabajo con otro nombre."""
+    return db_path().parent / CARPETA_CONFIGS / f"{job_id}{'-reenvio' if reenvio else ''}.yaml"
+
+
+def preparar_config_de_la_subida(job_id: int, cwd: str, ruta: str | os.PathLike) -> None:
+    """Escribe en `ruta` lo mismo que el staging dejaría en config.yaml; el config.yaml del usuario no se toca.
+
+    Lleva claves: la carpeta es 0700 y el fichero nace 0600 (O_EXCL: nunca se abre uno que ya estaba). Sin config.yaml
+    no se escribe nada y Uploadrr-EMU sale con `sin_config`, como sin `--config`.
+    """
+    lines = _lineas_preparadas(job_id, cwd)
+    if lines is None:
+        return
+    ruta = Path(ruta)
+    try:
+        ruta.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+        os.chmod(ruta.parent, 0o700)  # mkdir no lo cambia si ya existía
+        ruta.unlink(missing_ok=True)  # el de un intento que no se borró
+        with os.fdopen(os.open(ruta, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600), "wb") as destino:
+            destino.write(staged_config_text(lines).encode("utf-8"))
+    except Exception as exc:
+        borrar_config_de_la_subida(ruta)
+        raise _no_preparada(exc) from exc
+    append_upload_log(
+        job_id, "info",
+        "Config de Uploadrr-EMU preparado para esta subida (DEFAULT.tmdb / TRACKERS.EMU.api_key / SCREENS.img_hosts / "
+        "TORRENT_CLIENTS.qbit).",
+        stream="system",
+    )
+
+
+def borrar_config_de_la_subida(ruta: str | os.PathLike | None) -> None:
+    if ruta:
+        try:
+            Path(ruta).unlink(missing_ok=True)
+        except OSError:
+            logger.warning("No se pudo borrar el config de Uploadrr-EMU de una subida")
+
+
+def barrer_configs_de_subidas() -> int:
+    """Al arrancar no hay ninguna subida viva: los config que quedan son de una que murió con la aplicación."""
+    carpeta = db_path().parent / CARPETA_CONFIGS
+    borrados = 0
+    try:
+        ficheros = [f for f in carpeta.iterdir() if f.is_file() or f.is_symlink()]
+    except OSError:
+        return 0
+    for fichero in ficheros:
+        try:
+            fichero.unlink()
+            borrados += 1
+        except OSError:
+            logger.warning("No se pudo borrar un config de Uploadrr-EMU de una subida interrumpida")
+    return borrados
 
 
 def _restore_uploadrr_config(job_id: int, config_path: Path | None) -> None:

@@ -168,9 +168,12 @@ Si vienes de una versión anterior, las copias de esos ficheros que quedaron en 
 usan, y no se borran solas. Si alguna vez editaste a mano `services.json`, `tags.json` o una plantilla, ese cambio ya
 no se aplica.
 
-Antes de cada subida, la app escribe en `config.yaml` las claves de TMDb y eMuwarez, los hosts de imágenes y
-qBittorrent, y al terminar lo restaura desde `config.yaml.bak`. Si quieres tocar algo a mano, edita
-`/config/Uploadrr/data/config.yaml.bak`: un cambio en `config.yaml` se pierde en la siguiente subida.
+Antes de cada subida, la app escribe un config solo para ella en `/config/config_uploadrr/` con las claves de TMDb y
+eMuwarez, los hosts de imágenes y qBittorrent, y lo borra al terminar (y al arrancar, si quedó alguno). Lo saca de
+`/config/Uploadrr/data/config.yaml.bak` si existe (lo dejaron las versiones anteriores) y si no de `config.yaml`, y no
+toca ninguno de los dos: si quieres cambiar algo a mano, edita el `.bak` mientras exista y si no `config.yaml`.
+Con un Uploadrr-EMU anterior (otra ruta en `uploadrr.path`) se hace como antes: la app escribe en `config.yaml` y al
+terminar lo restaura desde `config.yaml.bak`, así que un cambio en `config.yaml` se pierde en la siguiente subida.
 
 ## 7. Actualizar
 
@@ -208,7 +211,8 @@ El backup no lleva las claves. En la base de datos van vacías las API keys (TMD
 de imágenes), la contraseña de qBittorrent, el webhook de Discord, el token de Telegram y la clave del widget de Homepage, y de
 `/config/Uploadrr/data` no entran `config.yaml`, `config.yaml.bak` ni `cookies/`, que pueden llevar claves de
 cualquier tracker, ni las configuraciones antiguas de Uploadrr (`config.py`, `config.json`,
-`backup/old_config.py`). La contraseña de acceso a la app sí va, como hash. Al restaurarlo, las claves que tengas
+`backup/old_config.py`). Los config de las subidas en curso (`/config/config_uploadrr/`) no van en ninguna copia, tampoco
+en la que lleva las claves. La contraseña de acceso a la app sí va, como hash. Al restaurarlo, las claves que tengas
 puestas y esos ficheros se quedan como están; en una instalación nueva, vuelve a poner las claves en Configuración.
 
 Desde la línea de comandos se crea el mismo backup. Con `--include-secrets` lleva también las claves y esos

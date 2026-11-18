@@ -1,6 +1,7 @@
 {
   "version": 1,
   "descripcion": "Eventos JSON Lines que escribe `upload.py --eventos RUTA` (una línea por evento, UTF-8). Sin secretos.",
+  "config": true,
   "comunes": {
     "v": {"tipo": "integer", "valor": 1},
     "ts": {"tipo": "string"},

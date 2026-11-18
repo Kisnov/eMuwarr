@@ -360,13 +360,26 @@ def test_reenvio_con_eventos_bien(db_conn, tmp_path, uploadrr, avisos, monkeypat
                   {"ev": "fase", "clave": "cliente", "estado": "hecha"},
                   {"ev": "cliente", "ok": True, "cliente": "qbit", "ruta": "/d"},
                   {"ev": "resultado", "ok": True, "codigo": "cliente_ok"}]
+    (uploadrr / "data").mkdir()
+    (uploadrr / "data" / "config.yaml").write_text("DEFAULT:\n  tmdb: ''\n", encoding="utf-8")
+    lanzar, leidos = _proc_con_eventos(eventos_ok), []
+
+    def lanzar_y_leer_config(argv, **kw):
+        leidos.append(Path(argv[argv.index("--config") + 1]).read_text(encoding="utf-8"))
+        return lanzar(argv, **kw)
+
     # El texto no dice nada de «Added to:»: con eventos lo que cuenta es `cliente_ok`.
-    with patch(POPEN, side_effect=_proc_con_eventos(eventos_ok)) as popen:
+    with patch(POPEN, side_effect=lanzar_y_leer_config) as popen:
         assert reenviar_a_qbittorrent(jid, wait=True)["ok"] is True
 
     argv = popen.call_args.args[0]
-    assert argv[-5:-2] == ["--resume", "--solo-cliente", "4242"] and argv[-2] == "--eventos"
-    assert Path(argv[-1]).name == f"{jid}-reenvio.jsonl" and not Path(argv[-1]).exists()
+    assert argv[-7:-4] == ["--resume", "--solo-cliente", "4242"] and argv[-4] == "--eventos" and argv[-2] == "--config"
+    assert Path(argv[-3]).name == f"{jid}-reenvio.jsonl" and not Path(argv[-3]).exists()
+    # Su propio config, con las claves de Ajustes, borrado al terminar; el config.yaml del usuario no se toca.
+    assert Path(argv[-1]).name == f"{jid}-reenvio.yaml" and not Path(argv[-1]).exists()
+    assert f"api_key: '{CLAVE_EMU}'" in leidos[0]
+    assert (uploadrr / "data" / "config.yaml").read_text(encoding="utf-8") == "DEFAULT:\n  tmdb: ''\n"
+    assert not (uploadrr / "data" / "config.yaml.bak").exists()
     assert _fila(db_conn, jid)["reenvio_qbit_estado"] == "ok"
     assert _fase(jid, "qbittorrent_add") == "done"
     mensajes = _mensajes(jid)

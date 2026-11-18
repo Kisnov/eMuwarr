@@ -21,7 +21,9 @@ from ..uploadrr_eventos import (
 )
 from ..uploadrr_progress import parse_uploadrr_progress
 from .comun import QBIT_AÑADIDO, _collect_secrets, _get_db_conn, _now, logger, mensaje_qbit_fallo, redact_secrets
-from .config import _acquire_staged_config, _release_staged_config
+from .config import (
+    _acquire_staged_config, _release_staged_config, borrar_config_de_la_subida, preparar_config_de_la_subida,
+)
 from .consultas import build_uploadrr_execution_command, get_upload_job
 from .ejecucion import _lanzar_uploadrr, _leer_y_esperar, _soltar_proceso
 from .progreso import mark_phase_done
@@ -147,7 +149,9 @@ def _lanzar(job_id: int, torrent_id: str, cmd: dict, secrets: list[str]) -> tupl
             _avisar_de_qbit(job_id, linea, secrets)
 
     try:
-        if os.path.isdir(cwd):
+        if os.path.isdir(cwd) and cmd.get("config"):
+            preparar_config_de_la_subida(job_id, cwd, cmd["config"])
+        elif os.path.isdir(cwd):
             config = _acquire_staged_config(job_id, cwd)
         if eventos_ruta and not preparar_fichero(eventos_ruta):
             estado = seguidor = None  # sin fichero limpio, por texto
@@ -157,6 +161,7 @@ def _lanzar(job_id: int, torrent_id: str, cmd: dict, secrets: list[str]) -> tupl
     finally:
         _soltar_proceso(job_id, proc)
         _release_staged_config(job_id, config)
+        borrar_config_de_la_subida(cmd.get("config"))
         borrar_fichero(eventos_ruta)
     if sin_tiempo:
         return FALLIDO, f"Reenvío a qBittorrent fallido: no terminó en {_TIMEOUT} s."

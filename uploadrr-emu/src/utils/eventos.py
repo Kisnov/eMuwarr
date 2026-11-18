@@ -17,12 +17,12 @@ _resultado = False  # ya hay un resultado para el ítem en curso
 _pct: dict = {}  # último porcentaje emitido por fase
 
 
-def ruta_de_argv(argv: List[str]) -> Optional[str]:
-    """La RUTA de ``--eventos RUTA`` o ``--eventos=RUTA`` en argv, antes de analizar nada más."""
+def ruta_de_argv(argv: List[str], bandera: str = "--eventos") -> Optional[str]:
+    """La RUTA de ``bandera RUTA`` o ``bandera=RUTA`` en argv (``--eventos``, ``--config``), antes de analizar nada más."""
     for i, arg in enumerate(argv):
-        if arg == "--eventos" and i + 1 < len(argv):
+        if arg == bandera and i + 1 < len(argv):
             return argv[i + 1]
-        if arg.startswith("--eventos="):
+        if arg.startswith(bandera + "="):
             return arg.split("=", 1)[1]
     return None
 

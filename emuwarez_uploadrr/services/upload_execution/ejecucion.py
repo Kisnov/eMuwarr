@@ -40,7 +40,13 @@ from .comun import (
     redact_secrets,
 )
 from .concurrencia import _upload_concurrency_gate
-from .config import ConfigNoPreparada, _acquire_staged_config, _release_staged_config
+from .config import (
+    ConfigNoPreparada,
+    _acquire_staged_config,
+    _release_staged_config,
+    borrar_config_de_la_subida,
+    preparar_config_de_la_subida,
+)
 from .consultas import build_uploadrr_execution_command, get_upload_job, validate_upload_job_start
 from .estado import (
     _avanzar_job,
@@ -113,6 +119,7 @@ def _run_uploadrr_subprocess_body(job_id: int, cmd: dict, secrets: list[str]) ->
     staged_config_path: Path | None = None
     proc: subprocess.Popen | None = None
     eventos_ruta = cmd.get("eventos")
+    config_ruta = cmd.get("config")
     try:
         def _cancelado() -> None:
             append_upload_log(job_id, "info", "Subida cancelada antes de lanzar Uploadrr; no se lanza.", stream="system")
@@ -145,14 +152,16 @@ def _run_uploadrr_subprocess_body(job_id: int, cmd: dict, secrets: list[str]) ->
                 path=cmd["source_path"],
             )
 
-        # Phase 10F: stage DEFAULT.tmdb / TRACKERS.EMU.api_key into Uploadrr-EMU's
-        # own config.yaml before running, and always restore it afterwards
-        # (success, failure, timeout, or cancellation) via the finally block.
+        # Phase 10F: las claves de Ajustes van al config de esta subida (--config) o, con un Uploadrr-EMU que no lo
+        # admite, al config.yaml compartido; el finally lo borra o lo restaura (éxito, fallo, timeout o cancelación).
         if cmd.get("runtime_type") == RUNTIME_EMU and os.path.isdir(cwd):
             if not _avanzar_job(job_id, "running", stage="config_staging"):
                 _cancelado()
                 return
-            staged_config_path = _acquire_staged_config(job_id, cwd)
+            if config_ruta:
+                preparar_config_de_la_subida(job_id, cwd, config_ruta)
+            else:
+                staged_config_path = _acquire_staged_config(job_id, cwd)
         if not _avanzar_job(job_id, "running", stage="running"):
             _cancelado()
             return
@@ -463,6 +472,7 @@ def _run_uploadrr_subprocess_body(job_id: int, cmd: dict, secrets: list[str]) ->
     finally:
         _soltar_proceso(job_id, proc)
         _release_staged_config(job_id, staged_config_path)
+        borrar_config_de_la_subida(config_ruta)
         borrar_fichero(eventos_ruta)
 
 

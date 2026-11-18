@@ -20,6 +20,9 @@ Failure/slowness simulation (for exercising cancel/timeout/failed paths):
   FAKE_UPLOADRR_LINES=N       print N more stdout lines (enough to fill the pipe)
   --eventos F                 (como el Uploadrr-EMU real) escribe en F los eventos JSON Lines del contrato; el flujo fijo
                               emite la secuencia real de una subida buena (o `resultado` de fallo con --fake-fail)
+  --config F                  (como el Uploadrr-EMU real) lee ese config en vez de data/config.yaml; si no existe sale con 1
+                              y `resultado` sin_config
+  FAKE_UPLOADRR_CONFIG_COPIA=F  escribe en F un JSON con el contenido y los permisos del config de --config, para el test
   FAKE_UPLOADRR_GRANDCHILD=F  start a child that keeps stdout/stderr open for 60 s
                               (like mkbrr/ffmpeg) and write its pid to file F
 
@@ -108,6 +111,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("-fd", dest="full_dir", action="store_true")
     parser.add_argument("--resume", "-rs", dest="resume", action="store_true")
     parser.add_argument("--eventos", dest="eventos", default=None)
+    parser.add_argument("--config", dest="config", default=None)
     parser.add_argument("--fake-fail", dest="fake_fail", action="store_true")
     parser.add_argument("--fake-sleep", dest="fake_sleep", type=float, default=None)
     args, _unknown = parser.parse_known_args(argv)
@@ -119,6 +123,17 @@ def main(argv: list[str] | None = None) -> int:
             sleep_s = float(os.environ.get("FAKE_UPLOADRR_SLEEP", "0") or 0)
         except ValueError:
             sleep_s = 0.0
+
+    if args.config:
+        if not os.path.isfile(args.config):
+            print(f"No Config detected at {args.config}", file=sys.stderr, flush=True)
+            _escribir_evento(args.eventos, {"ev": "resultado", "ok": False, "codigo": "sin_config"})
+            return 1
+        copia = os.environ.get("FAKE_UPLOADRR_CONFIG_COPIA")
+        if copia:
+            with open(args.config, encoding="utf-8") as f, open(copia, "w", encoding="utf-8") as destino:
+                json.dump({"contenido": f.read(), "modo": os.stat(args.config).st_mode & 0o777,
+                           "modo_carpeta": os.stat(os.path.dirname(args.config)).st_mode & 0o777}, destino)
 
     pidfile = os.environ.get("FAKE_UPLOADRR_GRANDCHILD")
     if pidfile:
