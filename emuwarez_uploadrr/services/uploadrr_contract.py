@@ -32,9 +32,9 @@ from typing import Optional
 # (like mediainfo/ffmpeg) — the user configures nothing. These defaults point
 # at the in-image location and interpreter; both can still be overridden by a
 # setting or an env var for local development.
-DEFAULT_UPLOADRR_PATH = os.environ.get("UPLOADRR_PATH", "/opt/Uploadrr")
 DEFAULT_UPLOADRR_PYTHON = os.environ.get("UPLOADRR_PYTHON", sys.executable)
 
+from ..constants import DEFAULT_UPLOADRR_PATH
 from ..database import get_setting_canonical
 from .filesystem_apply import ensure_path_under_base
 

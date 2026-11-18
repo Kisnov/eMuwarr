@@ -1,6 +1,9 @@
 from typing import Any, Dict
 
 from src.trackers.UNIT3D import Unit3d
+from src.utils.ids_tracker import cargar_ids, ids_por_token
+
+_IDS = cargar_ids("EMU")
 
 
 class EMU(Unit3d):
@@ -10,29 +13,21 @@ class EMU(Unit3d):
     allowed_imghosts = []
     banned_groups = [""]
 
-    # Los del formulario de subida: el 7 es 540p (no 576i) y no hay 480i. El SD entrelazado va como el progresivo.
-    resolution_ids = {
-        "4320p": "1",
-        "2160p": "2",
-        "1440p": "3",
-        "1080p": "3",
-        "1080i": "4",
-        "720p": "5",
-        "576p": "6",
-        "576i": "6",
-        "540p": "7",
-        "480p": "8",
-        "480i": "8",
-    }
+    # De data/trackers/EMU.json, la tabla que también lee la app. Resolución: el 7 es 540p (no 576i), no hay 480i y
+    # el SD entrelazado va como el progresivo. Tipo: el 7 es SD (en UNIT3D, FLAC).
+    category_ids = ids_por_token(_IDS, "categories", str.upper)
+    resolution_ids = ids_por_token(_IDS, "resolutions", str.lower)
+    type_ids = ids_por_token(_IDS, "types", lambda t: t.upper().replace("-", ""))
+    resolution_groups = [[str(i) for i in grupo] for grupo in _IDS["search"]["resolution_groups"]]
+
+    async def get_cat_id(self, meta: Dict[str, Any]) -> str:
+        return self.category_ids.get(meta["category"], str(_IDS["defaults"]["categories"]))
 
     async def get_res_id(self, meta: Dict[str, Any]) -> str:
-        return self.resolution_ids.get(meta["resolution"], "10")
-
-    # También del formulario: el 7 es SD (en UNIT3D, FLAC).
-    type_ids = {"DISC": "1", "REMUX": "2", "ENCODE": "3", "WEBDL": "4", "WEBRIP": "5", "HDTV": "6", "SD": "7"}
+        return self.resolution_ids.get(meta["resolution"], str(_IDS["defaults"]["resolutions"]))
 
     async def get_type_id(self, meta: Dict[str, Any]) -> str:
-        return self.type_ids.get(meta["type"], "0")
+        return self.type_ids.get(meta["type"], str(_IDS["defaults"]["types"]))
 
     def edit_name(self, meta: Dict[str, Any]) -> str:
         built_name = meta["name"]

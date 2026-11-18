@@ -6,21 +6,49 @@ UNIT3D API authentication uses ?api_token=<key> as a query parameter.
 from __future__ import annotations
 
 import json
+import logging
 import re
+from pathlib import Path
 from typing import Any, Iterable, Optional
 
 from . import emu_limitador
 from .base import IntegrationError, build_url, request_json
 from .emu_limitador import EMU_ESPERA_429
-from ..constants import EMU_BASE_URL
+from ..constants import DEFAULT_UPLOADRR_PATH, EMU_BASE_URL
 from ..models import RequestItem
 
-# Ids de UNIT3D en eMuwarez. El filtro de categorías de la API sale de EMU_CATEGORIAS.
-EMU_CATEGORIAS = {1: "Películas", 2: "Series", 4: "Documentales"}
-EMU_TIPOS = {1: "Full Disc", 2: "Remux", 3: "Encode", 4: "WEB-DL", 5: "WEBRIP", 6: "HDTV", 7: "SD", 8: "STEAMRIP"}
-EMU_RESOLUCIONES = {
-    1: "4320p", 2: "2160p", 3: "1080p", 4: "1080i", 5: "720p", 6: "576p", 7: "540p", 8: "480p", 10: "Otras",
-}
+logger = logging.getLogger("emuwarez.emu")
+
+# La tabla de ids de eMuwarez es la de Uploadrr-EMU: la de la imagen o, en el repo, la de uploadrr-emu/.
+_CANDIDATAS_IDS = [Path(c) / "data" / "trackers" / "EMU.json"
+                   for c in (DEFAULT_UPLOADRR_PATH, Path(__file__).resolve().parents[2] / "uploadrr-emu")]
+RUTA_IDS_EMU = next((r for r in _CANDIDATAS_IDS if r.is_file()), _CANDIDATAS_IDS[0])
+
+
+def _cargar_etiquetas(ruta: Path) -> Optional[dict[str, dict[int, str]]]:
+    """id -> etiqueta por sección (las entradas sin `label` no se enseñan); None y un aviso si no se puede leer."""
+    try:
+        tabla = json.loads(ruta.read_text(encoding="utf-8"))
+        return {s: {e["id"]: e["label"] for e in tabla[s] if "label" in e} for s in ("categories", "types", "resolutions")}
+    except (OSError, ValueError, KeyError, TypeError) as exc:
+        logger.warning("No se puede leer la tabla de ids de eMuwarez (%s): las peticiones llevarán el id, no el nombre",
+                       exc)
+        return None
+
+
+_ETIQUETAS = _cargar_etiquetas(RUTA_IDS_EMU)
+# El filtro de categorías de la API sale de EMU_CATEGORIAS.
+EMU_CATEGORIAS = (_ETIQUETAS or {}).get("categories", {})
+EMU_TIPOS = (_ETIQUETAS or {}).get("types", {})
+EMU_RESOLUCIONES = (_ETIQUETAS or {}).get("resolutions", {})
+
+
+def _etiqueta(tabla: dict[int, str], nombre: str, valor: Any) -> Optional[str]:
+    """Sin tabla, «Categoría 4» en vez de nada."""
+    n = _entero(valor)
+    if n is None:
+        return None
+    return tabla.get(n) if _ETIQUETAS is not None else f"{nombre} {n}"
 
 
 # ---------------------------------------------------------------------------
@@ -291,9 +319,9 @@ def normalize_request(raw: dict[str, Any]) -> RequestItem:
         id=None,
         emu_id=emu_id,
         title=titulo,
-        category=EMU_CATEGORIAS.get(_entero(raw.get("category_id"))),
-        requested_source=EMU_TIPOS.get(_entero(raw.get("type_id"))),
-        requested_resolution=EMU_RESOLUCIONES.get(_entero(raw.get("resolution_id"))),
+        category=_etiqueta(EMU_CATEGORIAS, "Categoría", raw.get("category_id")),
+        requested_source=_etiqueta(EMU_TIPOS, "Tipo", raw.get("type_id")),
+        requested_resolution=_etiqueta(EMU_RESOLUCIONES, "Resolución", raw.get("resolution_id")),
         emu_status=raw.get("status"),
         points=_entero(raw.get("bounty")),
         created_at=raw.get("created"),

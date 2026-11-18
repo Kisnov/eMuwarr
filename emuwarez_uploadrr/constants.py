@@ -5,6 +5,7 @@ dependencias, y cualquier import que se le añada puede crear un ciclo.
 """
 from __future__ import annotations
 
+import os
 import re
 from pathlib import Path
 
@@ -16,6 +17,9 @@ CONFIG_ENC_FILE = CONFIG_DIR / "config.enc.json"
 LOG_DIR = CONFIG_DIR / "logs"
 
 EMU_BASE_URL = "https://emu-warez.com"
+
+# Uploadrr-EMU en la imagen; el ajuste uploadrr.path lo cambia para subir (services/uploadrr_contract.py).
+DEFAULT_UPLOADRR_PATH = os.environ.get("UPLOADRR_PATH", "/opt/Uploadrr")
 
 # La tabla de idiomas vive en services/emu_format.py (resolve_language): era
 # la segunda copia, y la que contaba un es-MX como castellano.

@@ -66,6 +66,17 @@ def test_uploadrr_emu_sale_de_este_repo_y_no_de_un_clon():
         assert patron in ignorado
 
 
+def test_la_tabla_de_ids_llega_a_la_imagen():
+    """Sin data/trackers/EMU.json, EMU no se carga y la app enseña ids en vez de nombres: ni el .dockerignore la
+    deja fuera ni un enlace a /config la tapa."""
+    from fnmatch import fnmatch
+
+    ignorado = (RAIZ / ".dockerignore").read_text(encoding="utf-8").splitlines()
+    tabla = "uploadrr-emu/data/trackers/EMU.json"
+    assert not [p for p in ignorado if p and not p.startswith(("#", "!")) and fnmatch(tabla, p.rstrip("/") + "*")]
+    assert "/opt/Uploadrr/data/trackers" not in DOCKERFILE
+
+
 def test_node_26_en_la_imagen_y_en_los_workflows():
     assert "FROM --platform=$BUILDPLATFORM node:26-alpine AS frontend-builder" in DOCKERFILE
     for nombre in ("ci.yml", "bundle.yml"):
