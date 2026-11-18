@@ -156,4 +156,25 @@ describe('ObjetivosCuenta', () => {
     expect(texto()).toContain('Subido')
     expect(boton('Editar')).toBeTruthy()
   })
+
+  it('un «Reintentar» pulsado mientras se guarda no pisa lo guardado', async () => {
+    leer.mockResolvedValueOnce({ fecha_alta: null, objetivos: [{ tipo: 'bonus', valor: 5000 }] })
+    await montar(<ConInterruptor />)
+    await pulsar(await esperar(() => boton('Editar')))
+    // La vuelta a la sección falla: sale «Reintentar» con el editor abierto.
+    leer.mockRejectedValueOnce(new Error('503'))
+    await pulsar(boton('alternar'))
+    await pulsar(boton('alternar'))
+    await esperar(() => boton('Reintentar'))
+    let terminarGuardado: (d: Awaited<ReturnType<typeof guardarObjetivos>>) => void = () => {}
+    guardar.mockReturnValueOnce(new Promise(r => { terminarGuardado = r }))
+    await pulsar(boton('Guardar')!)
+    let entregar: (d: Awaited<ReturnType<typeof getObjetivos>>) => void = () => {}
+    leer.mockReturnValueOnce(new Promise(r => { entregar = r }))
+    await pulsar(boton('Reintentar'))
+    await act(async () => { terminarGuardado({ fecha_alta: null, objetivos: [{ tipo: 'ratio', valor: 3 }] }) })
+    await act(async () => { entregar({ fecha_alta: null, objetivos: [{ tipo: 'bonus', valor: 5000 }] }) })
+    expect(texto()).toContain('Ratio')
+    expect(texto()).not.toContain('Bonus')
+  })
 })

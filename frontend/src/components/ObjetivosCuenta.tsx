@@ -69,10 +69,12 @@ export function ObjetivosCuenta({ visible, ultimo, ritmos }: {
     setError(null)
     generacion.current++
     try {
-      setDatos(await guardarObjetivos({
+      const guardados = await guardarObjetivos({
         fecha_alta: editando.fecha_alta || null,
         objetivos: editando.objetivos.map(({ tipo, valor }) => ({ tipo, valor })),
-      }))
+      })
+      generacion.current++   // también lo que se pidió mientras se guardaba (con «Reintentar») llega tarde
+      setDatos(guardados)
       setEditando(null)
     } catch {
       setError('No se pudieron guardar. Revisa que cada cifra sea mayor que 0 y la fecha no sea futura.')
