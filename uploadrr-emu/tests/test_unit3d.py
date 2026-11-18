@@ -797,6 +797,35 @@ def test_ids_de_tipo_del_formulario_de_emu(emu, meta, tipo, type_id):
     assert run(emu.get_type_id({**meta, "type": tipo})) == type_id
 
 
+# Todos los ids que llegan hoy a eMuwarez, para cada valor que puede traer meta: la tabla de data/trackers/EMU.json
+# no puede cambiar ninguno.
+CATEGORIAS_ENVIADAS = {"MOVIE": "1", "TV": "2", "MUSIC": "3", "FANRES": "0", "SPORTS": "0", "DOC": "0", "": "0"}
+TIPOS_ENVIADOS = {
+    "DISC": "1", "REMUX": "2", "ENCODE": "3", "WEBDL": "4", "WEBRIP": "5", "HDTV": "6", "SD": "7",
+    "FLAC": "0", "STEAMRIP": "0", "DVDRIP": "0", "": "0",
+}
+RESOLUCIONES_ENVIADAS = {
+    "8640p": "10", "4320p": "1", "2160p": "2", "1440p": "3", "1080p": "3", "1080i": "4", "720p": "5", "576p": "6",
+    "576i": "6", "540p": "7", "480p": "8", "480i": "8", "other": "10", "OTHER": "10", "": "10",
+}
+
+
+def test_ids_enviados_a_emu(emu, meta):
+    assert {c: run(emu.get_cat_id({**meta, "category": c})) for c in CATEGORIAS_ENVIADAS} == CATEGORIAS_ENVIADAS
+    assert {t: run(emu.get_type_id({**meta, "type": t})) for t in TIPOS_ENVIADOS} == TIPOS_ENVIADOS
+    assert {r: run(emu.get_res_id({**meta, "resolution": r})) for r in RESOLUCIONES_ENVIADAS} == RESOLUCIONES_ENVIADAS
+
+
+def test_resoluciones_de_la_busqueda_de_duplicados(tracker, emu, meta):
+    tracker.routes[("GET", SEARCH)] = lambda q: (200, {"data": [], "links": {"next": None}})
+    for resolucion in RESOLUCIONES_ENVIADAS:
+        run(emu.search_existing({**meta, "resolution": resolucion}))
+    enviadas = {r: q["resolutions[]"] for r, q in zip(RESOLUCIONES_ENVIADAS, tracker.calls("GET", SEARCH))}
+    assert enviadas == {
+        r: ["3", "4"] if res_id in ("3", "4") else [res_id] for r, res_id in RESOLUCIONES_ENVIADAS.items()
+    }
+
+
 # Eventos: la subida recuperada tras perder la respuesta se anuncia una sola vez
 
 
