@@ -32,6 +32,13 @@ def test_la_app_y_uploadrr_leen_el_mismo_fichero(ids_uploadrr):
         assert etiquetas == {e["id"]: e["label"] for e in tabla[seccion] if "label" in e}
 
 
+def test_cada_tipo_que_la_app_da_por_bueno_tiene_id_en_la_tabla(ids_uploadrr):
+    """La comprobación «tipo» deja subir solo con un `-t` de _UPLOADRR_TYPES: ninguno puede acabar en el tipo 0."""
+    from emuwarez_uploadrr.services.uploadrr_contract import _UPLOADRR_TYPES
+    tokens = {t for e in ids_uploadrr.cargar_ids("EMU")["types"] for t in e["tokens"]}
+    assert set(_UPLOADRR_TYPES.values()) <= tokens
+
+
 def test_las_etiquetas_no_cambian():
     assert emu.EMU_CATEGORIAS == {1: "Películas", 2: "Series", 4: "Documentales"}
     assert emu.EMU_TIPOS == {

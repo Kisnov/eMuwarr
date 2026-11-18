@@ -65,7 +65,7 @@ export function PasoSubida({ a }: { a: Asistente }) {
           checks?.checks.map(c => <CheckRow key={c.id} c={c} />)
         )}
         {!checksLoading && (
-          <button className="btn btn-secondary btn-sm asist-mt-12 asist-t12" onClick={runChecks} type="button">
+          <button className="btn btn-secondary btn-sm asist-mt-12 asist-t12" onClick={() => runChecks()} type="button">
             ↻ Volver a comprobar
           </button>
         )}

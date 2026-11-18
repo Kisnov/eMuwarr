@@ -89,6 +89,11 @@ def validate_upload_preconditions(library_item: dict, proposal: dict | None = No
             conn.close()
 
 
+def formato_de_subida(library_item: dict, proposal: dict | None) -> str | None:
+    """El mismo formato que lleva el nombre del release (`-t` en Uploadrr-EMU)."""
+    return (proposal or {}).get("source") or library_item.get("release_format") or library_item.get("source")
+
+
 def build_uploadrr_command_preview(
     library_item: dict,
     proposal: dict | None = None,
@@ -148,8 +153,7 @@ def build_uploadrr_command_preview(
             (v for v in (prop.get("episode"), library_item.get("episode"), library_item.get("episode_number")) if v is not None),
             None,
         )
-        # El mismo formato que lleva el nombre del release (`-t` en Uploadrr-EMU).
-        release_format = prop.get("source") or library_item.get("release_format") or library_item.get("source")
+        release_format = formato_de_subida(library_item, prop)
 
         category = "tv" if media_type in ("tv", "series", "anime", "season", "episode") else "movie"
 

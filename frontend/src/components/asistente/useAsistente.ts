@@ -261,7 +261,7 @@ export function useAsistente({ item, onClose: onCloseProp, onDone, onNavigate, p
   const [preparing, setPreparing] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [uploadMsg, setUploadMsg] = useState<string | null>(null)
-  const { checks, checksLoading, checksError, liveChecks, runChecks } = useComprobaciones(targetId, proveedorElegido)
+  const { checks, checksLoading, checksError, liveChecks, runChecks: comprobar } = useComprobaciones(targetId, proveedorElegido)
 
   // --- Step 0: load seasons (series) or episodes (season) ---
   useEffect(() => {
@@ -312,8 +312,14 @@ export function useAsistente({ item, onClose: onCloseProp, onDone, onNavigate, p
   } = useComprobacionesTanda({
     step, batchQueue, batchPhase, proveedorElegido,
     // Un pack da su nombre con lo editado a mano (no los capítulos, que lo calculan useNombresTanda).
-    ajustesDe: id => batchIsEpisodes ? undefined : ajustesDeLaTanda(id),
+    ajustesDe: id => batchIsEpisodes ? sourceEditado(id) : ajustesDeLaTanda(id),
   })
+  // El Source editado en el paso 1 de un capítulo de la tanda, que no se guarda hasta «Subir todos»: de él sale el
+  // tipo de la copia que se comprueba.
+  function sourceEditado(id: number): Ajustes | undefined {
+    const source = conAjustes(ajustesPorId, targetId, camposDe.current, ajustesDeFields()).get(id)?.source
+    return source && source !== episodeFieldsById.get(id)?.fields?.source ? { source } : undefined
+  }
   // Lo editado a mano para un elemento de la tanda, tal como lo aplica «Subir todas/todos»: lo de ese elemento (el
   // activo, lo que hay en `fields`), con el Título, que es de la serie, igual para todos.
   function ajustesDeLaTanda(id: number): Ajustes | undefined {
@@ -930,6 +936,22 @@ export function useAsistente({ item, onClose: onCloseProp, onDone, onNavigate, p
   const elegirAnonimo = (v: boolean) => setOpcionesTracker(o => ({ ...o, anonimo: v }))
   const elegirPersonalRelease = (v: boolean) => setOpcionesTracker(o => ({ ...o, personalRelease: v }))
 
+  // Un pack no guarda sus campos antes de comprobar: si su Source no es el del plan, se le pasa, porque de él sale el
+  // tipo de la copia.
+  const runChecks = (source = fields.source) =>
+    comprobar(targetIsSeason && source && source !== seasonPlan?.source ? { source } : undefined)
+
+  // El tipo elegido en el Resumen cuando no se sabe: es el Source, el mismo que el del paso 1 (y el del nombre).
+  const elegirTipo = async (source: string) => {
+    if (targetId == null) return
+    setField('source', source)
+    if (!targetIsSeason) {
+      const nuevos = { ...fields, source, ...(PROVIDER_SOURCES.has(source) ? {} : { provider: null }) }
+      try { await saveNomenclatureFields(targetId, nuevos) } catch { /* «Subir» lo vuelve a guardar */ }
+    }
+    await runChecks(source)
+  }
+
   const canUpload = !!checks?.ready
   // Queues the upload and hands off to Subidas immediately — nomenclature
   // rename, track remux, and the actual Uploadrr start all run server-side
@@ -1114,7 +1136,7 @@ export function useAsistente({ item, onClose: onCloseProp, onDone, onNavigate, p
     idiomasPackEnVuelo, idiomasPorTemporada, elegirIdiomaPack, detalles,
     goToUpload, preparing,
     // Paso 2
-    checks, checksLoading, checksError, liveChecks, runChecks, canUpload, uploading, uploadMsg, doUpload,
+    checks, checksLoading, checksError, liveChecks, runChecks, elegirTipo, canUpload, uploading, uploadMsg, doUpload,
     anonimoMarcado, personalReleaseMarcado, elegirAnonimo, elegirPersonalRelease, opcionesTracker,
     batchQueue, batchIsEpisodes, batchItemTitle, batchPhase, batchIndex, batchResults,
     batchViewId, setBatchViewId, batchEnvChecks, batchContentChecks, batchChecksLoading, batchChecksIndex,
