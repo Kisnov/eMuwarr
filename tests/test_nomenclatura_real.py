@@ -51,7 +51,7 @@ CASOS = {
                 "Pelicula 2024 1080p WEB-DL x264 ESP-JAP DD 5.1-EMUWAREZ"),
     "mudo": (dict(audios=()), "Pelicula 2024 1080p WEB-DL x264-EMUWAREZ"),
     "tres": (dict(audios=({"lang": "es"}, {"lang": "en"}, {"lang": "fr"})),
-             "Pelicula 2024 1080p WEB-DL x264 ESP-ING-FRA DD 5.1-EMUWAREZ"),
+             "Pelicula 2024 1080p WEB-DL x264 ESP-ENG-FRA DD 5.1-EMUWAREZ"),
     "compatibilidad": (dict(audios=({"lang": "es", "codec": "eac3"}, {"lang": "en", "codec": "eac3"},
                                     {"lang": "es", "codec": "ac3"})),
                        "Pelicula 2024 1080p WEB-DL x264 DUAL DD+ 5.1-EMUWAREZ"),
@@ -96,9 +96,9 @@ def test_el_latino_sale_LAT_en_todas_partes(pista, tmp_path):
     ruta = str(hacer_mkv(tmp_path / "Peli.mkv", audios=(pista, {"lang": "en"})))
 
     informe = build_mediainfo_report(ruta)
-    assert informe["audio_summary"] == "LAT-ING DD 5.1"
+    assert informe["audio_summary"] == "LAT-ENG DD 5.1"
     resumen = read_media_info_summary(ruta)
-    assert resumen["audio_languages"] == "LAT / ING"
+    assert resumen["audio_languages"] == "LAT / ENG"
     assert has_castellano(resumen["audio_languages"]) == 0
 
     plan = build_track_plan(read_tracks_json(ruta)["data"])
@@ -137,7 +137,7 @@ def test_el_idioma_elegido_en_el_asistente_llega_al_nombre_y_a_la_pista(conn, tm
     item = _fila(conn, title="Peli", year=2024, path=str(ruta), resolution="1080p")
 
     sin_elegir = build_editable_nomenclature_fields(item["id"], conn=conn)
-    assert sin_elegir["fields"]["audio_summary"] == "ING DD 5.1"
+    assert sin_elegir["fields"]["audio_summary"] == "ENG DD 5.1"
     assert "pista de audio 1" in sin_elegir["audio_warning"]
     elegido = build_editable_nomenclature_fields(item["id"], conn=conn, idiomas_audio={1: "spa"})
     assert elegido["fields"]["audio_summary"] == "DUAL DD 5.1" and elegido["audio_warning"] is None

@@ -22,3 +22,18 @@ def test_the_guide_lists_the_same_codec_priority_as_the_code():
     assert listados == list(_AUDIO_CODEC_QUALITY), (
         f"\nGuía:   {listados}\nCódigo: {list(_AUDIO_CODEC_QUALITY)}"
     )
+
+
+def test_el_ingles_se_escribe_eng_como_los_grupos_de_emuwarez():
+    from emuwarez_uploadrr.services.emu_format import build_audio_string, resolve_language
+    assert resolve_language("eng") == resolve_language("en") == resolve_language("und", title="English") == "ENG"
+    assert build_audio_string("EAC3", "cat / eng", 2) == "CAT-ENG DD+ 2.0"
+    assert build_audio_string("EAC3", "eng / spa", 6) == "DUAL DD+ 5.1"
+
+
+def test_una_lista_guardada_con_el_ing_de_antes_sigue_dando_dual():
+    """La biblioteca guarda la lectura de MediaInfo con los códigos de la app ("ING / ESP" antes de pasar a ENG)."""
+    from emuwarez_uploadrr.services.emu_format import _split_languages, build_audio_string
+    assert _split_languages("ING / ESP") == ["ESP", "ENG"]
+    assert build_audio_string("EAC3", "ING / ESP", 6) == "DUAL DD+ 5.1"
+    assert build_audio_string("EAC3", "ESP / CAT / ING", 6) == "ESP-CAT-ENG DD+ 5.1"

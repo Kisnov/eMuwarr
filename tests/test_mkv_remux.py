@@ -724,7 +724,7 @@ def test_reorder_off_keeps_the_file_order_but_still_renames_and_marks():
     by_id = {t["id"]: t for t in plan["ordered_tracks"]}
     # El castellano queda marcado, esté donde esté.
     assert by_id[2]["default_after"] is True     # audio ESP
-    assert by_id[1]["default_after"] is False    # audio ING
+    assert by_id[1]["default_after"] is False    # audio ENG
     # Con doblaje castellano no se activa ningún subtítulo (no hay forzado).
     assert by_id[4]["default_after"] is False
     assert by_id[3]["default_after"] is False

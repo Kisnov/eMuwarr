@@ -1,11 +1,11 @@
 {
  "S01E01.mkv": {
   "audio_by_language": {
-   "ESP": {
+   "ENG": {
     "channels": "Mono",
     "codec": "DD"
    },
-   "ING": {
+   "ESP": {
     "channels": "Mono",
     "codec": "DD"
    }
@@ -41,7 +41,7 @@
     "mediainfo": "AVC (x264)"
    },
    {
-    "emu": "ING DD Mono",
+    "emu": "ENG DD Mono",
     "field": "Audio 1",
     "help": null,
     "mediainfo": "AC-3 en 1"
@@ -111,16 +111,16 @@
  },
  "S01E02.mkv": {
   "audio_by_language": {
+   "ENG": {
+    "channels": "Mono",
+    "codec": "DD+"
+   },
    "ESP": {
     "channels": "Mono",
     "codec": "DD"
-   },
-   "ING": {
-    "channels": "Mono",
-    "codec": "DD+"
    }
   },
-  "audio_summary": "ING DD+ Mono ESP DD Mono",
+  "audio_summary": "ENG DD+ Mono ESP DD Mono",
   "available": true,
   "message": null,
   "pistas_sin_idioma": [],
@@ -151,7 +151,7 @@
     "mediainfo": "AVC (x264)"
    },
    {
-    "emu": "ING DD+ Mono",
+    "emu": "ENG DD+ Mono",
     "field": "Audio 1",
     "help": null,
     "mediainfo": "E-AC-3 en 1"
@@ -163,7 +163,7 @@
     "mediainfo": "AC-3 es 1"
    },
    {
-    "emu": "ING DD+ Mono ESP DD Mono",
+    "emu": "ENG DD+ Mono ESP DD Mono",
     "field": "Audio (eMuwarez)",
     "help": null,
     "mediainfo": "2 pista(s)"

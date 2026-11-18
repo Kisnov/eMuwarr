@@ -348,7 +348,7 @@ def build_mediainfo_report(path: str, radarr_source: str | None = None,
 
     # La mejor pista de cada idioma, en estructura y no en cadena. El pack de
     # temporada la necesita para comparar capítulo con capítulo: volver a
-    # parsear "ING DD+ Atmos 5.1 ESP-JAP DD+ 5.1" sería frágil, y esto ya está
+    # parsear "ENG DD+ Atmos 5.1 ESP-JAP DD+ 5.1" sería frágil, y esto ya está
     # calculado aquí arriba.
     audio_by_language = {lang: {"codec": best_by_lang[lang][1], "channels": best_by_lang[lang][2]}
                          for lang in langs if lang in best_by_lang}
@@ -362,7 +362,7 @@ def build_mediainfo_report(path: str, radarr_source: str | None = None,
         entries = []
         for (codec, ch), group_langs in groups.items():
             ordered = sorted(group_langs, key=lambda c: (0 if c == "ESP" else 1))
-            if len(ordered) == 2 and "ESP" in ordered and "ING" in ordered:
+            if len(ordered) == 2 and "ESP" in ordered and "ENG" in ordered:
                 token = "DUAL"
             elif len(ordered) >= 4:
                 token = "MULTI"

@@ -2,7 +2,7 @@
 
 Normalizes MediaInfo *and* Radarr/Sonarr raw values (which come in a different
 shape) to the official eMuwarez naming spec: resolution + suffix, video codec
-(AVC/HEVC/…), HDR/DV tokens, audio codec (DD+/DD/…), languages (ESP/ING/DUAL/
+(AVC/HEVC/…), HDR/DV tokens, audio codec (DD+/DD/…), languages (ESP/ENG/DUAL/
 MULTI…), channels (5.1/7.1…) and SUBS.
 
 All functions are pure and never raise.
@@ -17,7 +17,9 @@ from typing import Optional
 LANG_MAP: dict[str, str] = {
     "es": "ESP", "spa": "ESP", "spanish": "ESP", "castellano": "ESP", "castilian": "ESP", "es-es": "ESP",
     "es-419": "LAT", "latino": "LAT", "latam": "LAT", "latin american spanish": "LAT", "spa-lat": "LAT",
-    "en": "ING", "eng": "ING", "english": "ING",
+    "en": "ENG", "eng": "ENG", "english": "ENG",
+    # El código que usaba la app antes: una lista ya guardada en la biblioteca lo puede traer.
+    "ing": "ENG",
     "fr": "FRA", "fra": "FRA", "fre": "FRA", "french": "FRA",
     "de": "ALE", "deu": "ALE", "ger": "ALE", "german": "ALE",
     "ja": "JAP", "jpn": "JAP", "japanese": "JAP",
@@ -179,7 +181,7 @@ _IDIOMA_POR_TITULO = (
     (("valenci",), "VAL"),
     (("castellano", "español", "espanol", "castilian"), "ESP"),
     (("catal",), "CAT"),
-    (("english", "inglés", "ingles"), "ING"),
+    (("english", "inglés", "ingles"), "ENG"),
 )
 
 
@@ -359,9 +361,9 @@ def build_audio_string(
 ) -> Optional[str]:
     """Build the audio segment per the eMuwarez spec, in the order
     '{idioma} {códec} {canales}'. Applies the DUAL/MULTI rules:
-      - 2 langs including ESP+ING (same codec) → 'DUAL {codec} {channels}'
+      - 2 langs including ESP+ENG (same codec) → 'DUAL {codec} {channels}'
       - 4+ langs → 'MULTI {codec} {channels}'
-      - 2-3 langs → 'ESP-ING {codec} {channels}'
+      - 2-3 langs → 'ESP-ENG {codec} {channels}'
       - 1 lang → '{lang} {codec} {channels}'
     We only have aggregate codec/channels (not per-track) from Radarr/Sonarr,
     so per-track V.O./VOSE/comment distinctions are approximated.
@@ -374,7 +376,7 @@ def build_audio_string(
         lang_token = None
     elif len(langs) >= 4:
         lang_token = "MULTI"
-    elif len(langs) == 2 and "ESP" in langs and "ING" in langs:
+    elif len(langs) == 2 and "ESP" in langs and "ENG" in langs:
         lang_token = "DUAL"
     else:
         lang_token = "-".join(langs)

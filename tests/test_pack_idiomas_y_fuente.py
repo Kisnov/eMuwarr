@@ -85,7 +85,7 @@ def test_el_idioma_elegido_llega_al_nombre_del_pack_y_a_cada_capitulo(isolated_d
 
     sin = build_season_pack_plan(temporada, conn=conn)
     assert sin["status"] == "valid"
-    assert " ING DD 5.1" in sin["season_pack_title"]
+    assert " ENG DD 5.1" in sin["season_pack_title"]
     assert "Capítulo(s) 1, 2" in sin["audio_warning"]
     assert [(p["posicion"], p["capitulos"], p["idioma"]) for p in sin["pistas_sin_idioma"]] == [(1, [1, 2], None)]
     assert sin["pistas_sin_idioma"][0]["pista"] == "DD 5.1"
@@ -259,4 +259,4 @@ def test_el_idioma_elegido_no_pisa_una_pista_que_ya_lo_trae(tmp_path):
         patch.object(svc.media_probe, "run_mediainfo_json", return_value=info),
     ):
         informe = svc.build_mediainfo_report(str(f), idiomas_audio={1: "spa"})
-    assert informe["audio_summary"] == "ING DD 5.1"
+    assert informe["audio_summary"] == "ENG DD 5.1"

@@ -328,7 +328,7 @@ def test_dashboard_recommendations_llevan_grupo_de_release_e_idiomas_de_la_copia
     items = client.get("/api/dashboard/recommendations", headers=auth_headers).json()["items"]
     pedida, unica = items[0], items[1]
     assert (pedida["release_group"], pedida["audio_languages"], pedida["subtitle_languages"]) == (
-        "Ryodan", ["ESP", "ING", "CAT"], ["ESP"])
+        "Ryodan", ["ESP", "ENG", "CAT"], ["ESP"])
     # Sin grupo ni subtítulos: None y lista vacía, no una raya.
     assert (unica["release_group"], unica["audio_languages"], unica["subtitle_languages"]) == (None, ["ESP"], [])
 

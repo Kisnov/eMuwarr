@@ -63,8 +63,8 @@ def test_read_media_info_summary_parses_real_tracks(tmp_path):
     # legacy.audio_codec() maps the raw "E-AC-3" format string to its
     # commercial name (Dolby Digital Plus), not passed through verbatim.
     assert result["audio_codec"] == "DD+"
-    assert result["audio_languages"] == "ING / ESP"
-    assert result["subtitle_languages"] == "ING / ESP"
+    assert result["audio_languages"] == "ENG / ESP"
+    assert result["subtitle_languages"] == "ENG / ESP"
 
 
 def test_read_media_info_summary_never_prompts_on_unknown_language(tmp_path):
@@ -285,7 +285,7 @@ def test_every_track_keeps_its_own_codec(tmp_path):
         {"Format": "DTS", "Language": "es", "Channels": "6"},
         {"Format": "AC-3", "Language": "en", "Channels": "2"},
     ])
-    assert summary == "ESP DTS 5.1 ING DD 2.0"
+    assert summary == "ESP DTS 5.1 ENG DD 2.0"
 
 
 def test_identical_tracks_are_not_listed_twice(tmp_path):
@@ -380,5 +380,5 @@ def test_una_pista_sin_idioma_no_entra_en_el_nombre_hasta_elegirlo(tmp_path):
     ):
         sin = svc.build_mediainfo_report(str(f))
         con = svc.build_mediainfo_report(str(f), idiomas_audio={1: "spa"})
-    assert (sin["audio_summary"], sin["pistas_sin_idioma"]) == ("ING DD 5.1", [1])
+    assert (sin["audio_summary"], sin["pistas_sin_idioma"]) == ("ENG DD 5.1", [1])
     assert (con["audio_summary"], con["pistas_sin_idioma"]) == ("DUAL DD 5.1", [])
