@@ -117,7 +117,8 @@
 .est-objetivo-cifras { color: var(--text-secondary); font-variant-numeric: tabular-nums; }
 .est-objetivo-plazo { color: var(--text-muted); }
 .est-objetivo-cumplido { color: var(--color-available); font-weight: 600; }
-.est-objetivos-form { display: grid; gap: 10px; max-width: 560px; }
+.est-objetivos-form { max-width: 560px; }
+.est-objetivos-campos { display: grid; gap: 10px; border: 0; margin: 0; padding: 0; min-width: 0; }
 .est-objetivos-fila { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 13px; color: var(--text-secondary); }
 .est-objetivos-fila .form-input { width: auto; }
 .est-objetivos-fila input[type="number"] { width: 9em; }

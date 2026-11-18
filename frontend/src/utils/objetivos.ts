@@ -30,18 +30,36 @@ function diaLocal(fecha: string): Date {
   return new Date(a, m - 1, d)
 }
 
-/** Meses (con decimales) desde la fecha de alta hasta `hoy`. */
+// Días de calendario, sin horas: un cambio de hora no quita ni pone un día.
+const diaN = (d: Date) => Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) / DIA_MS
+
+/** El aniversario mensual número `meses` de la fecha de alta; el 31 cae en el último día de un mes más corto. */
+function aniversario(alta: Date, meses: number): Date {
+  const ultimoDia = new Date(alta.getFullYear(), alta.getMonth() + meses + 1, 0).getDate()
+  return new Date(alta.getFullYear(), alta.getMonth() + meses, Math.min(alta.getDate(), ultimoDia))
+}
+
+/** Meses de calendario enteros desde el alta hasta `hoy`. */
+function mesesCompletos(alta: Date, hoy: Date): number {
+  let meses = (hoy.getFullYear() - alta.getFullYear()) * 12 + hoy.getMonth() - alta.getMonth()
+  if (diaN(aniversario(alta, meses)) > diaN(hoy)) meses--
+  return meses
+}
+
+/** Meses (con decimales) desde la fecha de alta hasta `hoy`: los enteros de calendario, y la parte del mes en curso.
+ * El día del aniversario da la cifra exacta (12, no 11,99). */
 export function mesesDesde(fecha: string, hoy: Date): number {
-  return (hoy.getTime() - diaLocal(fecha).getTime()) / DIA_MS / DIAS_MES
+  const alta = diaLocal(fecha)
+  const meses = mesesCompletos(alta, hoy)
+  const desde = diaN(aniversario(alta, meses))
+  return meses + (diaN(hoy) - desde) / (diaN(aniversario(alta, meses + 1)) - desde)
 }
 
 /** La antigüedad como la escribe un tracker: «1 año, 2 meses y 3 semanas». */
 export function antiguedadTexto(fecha: string, hoy: Date): string {
   const alta = diaLocal(fecha)
-  let meses = (hoy.getFullYear() - alta.getFullYear()) * 12 + hoy.getMonth() - alta.getMonth()
-  if (hoy.getDate() < alta.getDate()) meses--
-  const desde = new Date(alta.getFullYear(), alta.getMonth() + meses, alta.getDate())
-  const semanas = Math.floor((hoy.getTime() - desde.getTime()) / DIA_MS / 7)
+  const meses = mesesCompletos(alta, hoy)
+  const semanas = Math.floor((diaN(hoy) - diaN(aniversario(alta, meses))) / 7)
   const partes: string[] = []
   const anos = Math.floor(meses / 12)
   if (anos) partes.push(`${anos} ${anos === 1 ? 'año' : 'años'}`)

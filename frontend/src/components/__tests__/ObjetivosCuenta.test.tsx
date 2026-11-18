@@ -78,4 +78,50 @@ describe('ObjetivosCuenta', () => {
     await esperar(() => document.querySelector('[role="alert"]'))
     expect(boton('Cancelar')).toBeTruthy()
   })
+
+  it('si no se pueden cargar, lo dice y deja reintentar', async () => {
+    leer.mockRejectedValueOnce(new Error('503'))
+    await montar(<ObjetivosCuenta visible ultimo={ultimo} ritmos={ritmos} />)
+    await esperar(() => texto().includes('No se pudieron cargar tus objetivos'))
+    leer.mockResolvedValueOnce({ fecha_alta: null, objetivos: [] })
+    await pulsar(boton('Reintentar'))
+    await esperar(() => boton('Añadir objetivos'))
+    expect(texto()).not.toContain('No se pudieron cargar')
+  })
+
+  it('cambiar el tipo no rehace la fila (no se pierde el foco)', async () => {
+    leer.mockResolvedValue({ fecha_alta: null, objetivos: [{ tipo: 'subido', valor: 150 }] })
+    await montar(<ObjetivosCuenta visible ultimo={ultimo} ritmos={ritmos} />)
+    await pulsar(await esperar(() => boton('Editar')))
+    const antes = document.querySelector<HTMLSelectElement>('select[aria-label="Tipo de objetivo"]')!
+    await act(async () => { escribir(antes, 'ratio') })
+    expect(document.querySelector('select[aria-label="Tipo de objetivo"]')).toBe(antes)
+    expect(antes.value).toBe('ratio')
+  })
+
+  it('mientras guarda no se puede tocar el formulario', async () => {
+    leer.mockResolvedValue({ fecha_alta: null, objetivos: [{ tipo: 'bonus', valor: 5000 }] })
+    let terminar: (d: Awaited<ReturnType<typeof guardarObjetivos>>) => void = () => {}
+    guardar.mockReturnValueOnce(new Promise(r => { terminar = r }))
+    await montar(<ObjetivosCuenta visible ultimo={ultimo} ritmos={ritmos} />)
+    await pulsar(await esperar(() => boton('Editar')))
+    await pulsar(boton('Guardar')!)
+    expect(document.querySelector<HTMLFieldSetElement>('fieldset')!.disabled).toBe(true)
+    await act(async () => { terminar({ fecha_alta: null, objetivos: [{ tipo: 'bonus', valor: 5000 }] }) })
+    expect(document.querySelector('fieldset')).toBeNull()
+  })
+
+  it('sin cifra actual la barra no anuncia un 0 %', async () => {
+    leer.mockResolvedValue({ fecha_alta: null, objetivos: [{ tipo: 'bonus', valor: 5000 }] })
+    await montar(<ObjetivosCuenta visible ultimo={{ ...ultimo, bonus: null }} ritmos={ritmos} />)
+    await esperar(() => document.querySelector('[role="progressbar"]'))
+    expect(document.querySelector('[role="progressbar"]')!.hasAttribute('aria-valuenow')).toBe(false)
+  })
+
+  it('si el redondeo iguala la cifra y la meta sin estar cumplida, enseña más decimales', async () => {
+    leer.mockResolvedValue({ fecha_alta: null, objetivos: [{ tipo: 'ratio', valor: 1.234 }] })
+    await montar(<ObjetivosCuenta visible ultimo={{ ...ultimo, ratio: 1.231 }} ritmos={ritmos} />)
+    await esperar(() => document.querySelector('.est-objetivo-cifras'))
+    expect(document.querySelector('.est-objetivo-cifras')!.textContent).toContain('1,23100 / 1,23400')
+  })
 })

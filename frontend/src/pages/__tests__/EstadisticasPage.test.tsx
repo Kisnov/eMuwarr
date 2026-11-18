@@ -142,6 +142,13 @@ describe('EstadisticasPage', () => {
     expect(texto()).toContain('141 películas')
   })
 
+  it('sin ninguna instantánea, los objetivos se pueden poner igual', async () => {
+    pedir.mockResolvedValue({ dias: 90, ritmos: SIN_RITMOS, puntos: [] })
+    await montar(<EstadisticasPage />)
+    await esperar(() => texto().includes('Todavía no hay datos'))
+    await esperar(() => boton('Añadir objetivos'))
+  })
+
   it('las tarjetas salen aunque aún no haya ninguna instantánea de la cuenta', async () => {
     pedir.mockResolvedValue({ dias: 90, ritmos: SIN_RITMOS, puntos: [] })
     await montar(<EstadisticasPage />)

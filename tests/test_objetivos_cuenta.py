@@ -18,7 +18,8 @@ def test_sin_nada_guardado(client, auth_headers):
 
 
 def test_guarda_y_devuelve(client, auth_headers):
-    cuerpo = {"fecha_alta": "2026-02-20", "objetivos": [{"tipo": "subido", "valor": 150}, {"tipo": "antiguedad", "valor": 12}]}
+    cuerpo = {"fecha_alta": "2026-02-20", "objetivos": [{"tipo": "subido", "valor": 150}, {"tipo": "ratio", "valor": 2.5},
+                                                         {"tipo": "antiguedad", "valor": 12}]}
     assert client.put(URL, json=cuerpo, headers=auth_headers).json() == cuerpo
     assert client.get(URL, headers=auth_headers).json() == cuerpo
     # Se sustituye entero: lo que no llega se quita.
@@ -27,9 +28,12 @@ def test_guarda_y_devuelve(client, auth_headers):
 
 @pytest.mark.parametrize("cuerpo", [
     {"fecha_alta": "20/02/2026"},
+    {"fecha_alta": "2026-W08-5"},
     {"fecha_alta": (date.today() + timedelta(days=30)).isoformat()},   # lejos: el parametrize se evalúa al recoger
     {"objetivos": [{"tipo": "ratio", "valor": 0}]},
     {"objetivos": [{"tipo": "ratio", "valor": -1}]},
+    {"objetivos": [{"tipo": "ratio", "valor": True}]},
+    {"objetivos": [{"tipo": "ratio", "valor": "2"}]},
     {"objetivos": [{"tipo": "invitaciones", "valor": 3}]},
     {"objetivos": [{"tipo": "ratio", "valor": 2}, {"tipo": "ratio", "valor": 3}]},
 ])

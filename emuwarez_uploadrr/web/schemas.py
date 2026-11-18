@@ -577,7 +577,7 @@ class RitmosCuentaResponse(BaseModel):
 class ObjetivoCuenta(BaseModel):
     """Un objetivo de tu cuenta. `valor` en TB para el subido, en meses para la antigüedad y en su cifra el resto."""
     tipo: Literal["subido", "ratio", "bonus", "seeding", "antiguedad"]
-    valor: float = Field(gt=0, le=1e9)
+    valor: float = Field(strict=True, gt=0, le=1e9)   # strict: `true` no cuela como 1.0
 
 
 class ObjetivosCuenta(BaseModel):
@@ -594,7 +594,10 @@ class ObjetivosCuenta(BaseModel):
         try:
             dia = date.fromisoformat(v)
         except ValueError:
-            raise ValueError("La fecha de alta debe ser YYYY-MM-DD") from None
+            dia = None
+        # fromisoformat también acepta «2021-W01-1»: solo vale la forma YYYY-MM-DD.
+        if dia is None or dia.isoformat() != v:
+            raise ValueError("La fecha de alta debe ser YYYY-MM-DD")
         if dia > date.today():
             raise ValueError("La fecha de alta no puede ser futura")
         return dia.isoformat()

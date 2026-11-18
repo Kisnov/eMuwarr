@@ -9,9 +9,16 @@ import {
 const ORDEN_TIPOS = Object.keys(TIPOS) as TipoObjetivo[]
 const DECIMALES: Record<TipoObjetivo, number> = { subido: 2, ratio: 2, bonus: 0, seeding: 0, antiguedad: 1 }
 
-const cifra = (tipo: TipoObjetivo, n: number) => {
+const cifra = (tipo: TipoObjetivo, n: number, extra = 0) => {
   const unidad = TIPOS[tipo].unidad
-  return `${formatNumero(n, DECIMALES[tipo])}${unidad ? ` ${unidad}` : ''}`
+  return `${formatNumero(n, DECIMALES[tipo] + extra)}${unidad ? ` ${unidad}` : ''}`
+}
+
+/** «actual / meta»; si el redondeo las iguala sin estar cumplida (1,231 y 1,234 → «1,23 / 1,23»), con más decimales. */
+function cifras(tipo: TipoObjetivo, actual: number | null, meta: number, cumplido: boolean): string {
+  if (actual === null) return `— / ${cifra(tipo, meta)}`
+  const extra = !cumplido && cifra(tipo, actual) === cifra(tipo, meta) ? 3 : 0
+  return `${cifra(tipo, actual, extra)} / ${cifra(tipo, meta, extra)}`
 }
 
 const hoyIso = () => {
@@ -19,24 +26,35 @@ const hoyIso = () => {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
+// En el editor cada fila lleva un id propio: con el tipo como clave, cambiar el tipo rehacía el selector y perdía el foco.
+type Fila = Objetivo & { id: number }
+type Borrador = { fecha_alta: string | null; objetivos: Fila[] }
+let siguienteId = 0
+const borradorDe = (d: Datos): Borrador => ({ ...d, objetivos: d.objetivos.map(o => ({ ...o, id: ++siguienteId })) })
+
 // Tus objetivos en eMuwarez y tu antigüedad (la fecha de alta la escribes tú: la API no la da). El progreso sale de la
 // última instantánea, y cuándo llegas, de los ritmos de la última semana. Se piden cada vez que se entra (`visible`).
 export function ObjetivosCuenta({ visible, ultimo, ritmos }: {
   visible: boolean; ultimo: PuntoCuenta | undefined; ritmos: RitmosCuenta | null
 }) {
   const [datos, setDatos] = useState<Datos | null>(null)
-  const [editando, setEditando] = useState<Datos | null>(null)
+  const [falloCarga, setFalloCarga] = useState(false)
+  const [intento, setIntento] = useState(0)
+  const [editando, setEditando] = useState<Borrador | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [guardando, setGuardando] = useState(false)
 
   useEffect(() => {
     if (!visible) return
     let vigente = true
-    getObjetivos().then(d => { if (vigente) setDatos(d) }).catch(() => { /* sin objetivos guardados no se enseña nada */ })
+    getObjetivos().then(
+      d => { if (vigente) { setDatos(d); setFalloCarga(false) } },
+      () => { if (vigente) setFalloCarga(true) },
+    )
     return () => { vigente = false }
-  }, [visible])
+  }, [visible, intento])
 
-  if (!datos) return null
+  if (!datos && !falloCarga) return null
   const hoy = new Date()
 
   const guardar = async () => {
@@ -44,7 +62,10 @@ export function ObjetivosCuenta({ visible, ultimo, ritmos }: {
     setGuardando(true)
     setError(null)
     try {
-      setDatos(await guardarObjetivos({ ...editando, fecha_alta: editando.fecha_alta || null }))
+      setDatos(await guardarObjetivos({
+        fecha_alta: editando.fecha_alta || null,
+        objetivos: editando.objetivos.map(({ tipo, valor }) => ({ tipo, valor })),
+      }))
       setEditando(null)
     } catch {
       setError('No se pudieron guardar. Revisa que cada cifra sea mayor que 0 y la fecha no sea futura.')
@@ -53,52 +74,62 @@ export function ObjetivosCuenta({ visible, ultimo, ritmos }: {
     }
   }
 
-  const cambiar = (i: number, o: Partial<Objetivo>) =>
-    setEditando(e => e && { ...e, objetivos: e.objetivos.map((x, j) => (j === i ? { ...x, ...o } : x)) })
-  const libres = (e: Datos) => ORDEN_TIPOS.filter(t => !e.objetivos.some(o => o.tipo === t))
+  const cambiar = (id: number, o: Partial<Objetivo>) =>
+    setEditando(e => e && { ...e, objetivos: e.objetivos.map(x => (x.id === id ? { ...x, ...o } : x)) })
+  const libres = (e: Borrador) => ORDEN_TIPOS.filter(t => !e.objetivos.some(o => o.tipo === t))
 
   return (
     <section className="est-objetivos" aria-labelledby="est-grupo-objetivos">
       <div className="est-objetivos-cab">
         <h2 className="est-grupo-titulo" id="est-grupo-objetivos">Objetivos</h2>
-        {!editando && (
-          <button type="button" className="btn btn-ghost btn-sm" onClick={() => setEditando(datos)}>
+        {datos && !editando && (
+          <button type="button" className="btn btn-ghost btn-sm" onClick={() => setEditando(borradorDe(datos))}>
             {datos.objetivos.length || datos.fecha_alta ? 'Editar' : 'Añadir objetivos'}
           </button>
         )}
       </div>
 
-      {editando ? (
+      {falloCarga && (
+        <p className="est-nota est-aviso" role="status">
+          No se pudieron cargar tus objetivos{datos ? '; se enseñan los de la última vez' : ''}.{' '}
+          <button type="button" className="btn btn-ghost btn-sm" onClick={() => setIntento(n => n + 1)}>Reintentar</button>
+        </p>
+      )}
+
+      {!datos ? null : editando ? (
         <form className="est-objetivos-form" onSubmit={e => { e.preventDefault(); void guardar() }}>
-          <label className="est-objetivos-fila">
-            <span>Fecha de alta en eMuwarez</span>
-            <input type="date" className="form-input" aria-label="Fecha de alta en eMuwarez" max={hoyIso()} value={editando.fecha_alta ?? ''}
-              onChange={e => setEditando({ ...editando, fecha_alta: e.target.value || null })} />
-          </label>
-          {editando.objetivos.map((o, i) => (
-            <div className="est-objetivos-fila" key={o.tipo}>
-              <select className="form-input form-select" aria-label="Tipo de objetivo" value={o.tipo}
-                onChange={e => cambiar(i, { tipo: e.target.value as TipoObjetivo })}>
-                {[o.tipo, ...libres(editando)].map(t => <option key={t} value={t}>{TIPOS[t].nombre}</option>)}
-              </select>
-              <input type="number" className="form-input" min="0" step="any" aria-label={`Objetivo de ${TIPOS[o.tipo].nombre}`}
-                value={Number.isNaN(o.valor) ? '' : o.valor} onChange={e => cambiar(i, { valor: e.target.valueAsNumber })} />
-              <span className="est-objetivos-unidad">{TIPOS[o.tipo].unidad}</span>
-              <button type="button" className="btn btn-ghost btn-sm" aria-label={`Quitar el objetivo de ${TIPOS[o.tipo].nombre}`}
-                onClick={() => setEditando({ ...editando, objetivos: editando.objetivos.filter((_, j) => j !== i) })}>Quitar</button>
+          {/* Mientras se guarda no se toca nada: lo que se cambiara después de enviar se perdería al cerrar. */}
+          <fieldset className="est-objetivos-campos" disabled={guardando}>
+            <label className="est-objetivos-fila">
+              <span>Fecha de alta en eMuwarez</span>
+              <input type="date" className="form-input" aria-label="Fecha de alta en eMuwarez" max={hoyIso()}
+                value={editando.fecha_alta ?? ''} onChange={e => setEditando({ ...editando, fecha_alta: e.target.value || null })} />
+            </label>
+            {editando.objetivos.map(o => (
+              <div className="est-objetivos-fila" key={o.id}>
+                <select className="form-input form-select" aria-label="Tipo de objetivo" value={o.tipo}
+                  onChange={e => cambiar(o.id, { tipo: e.target.value as TipoObjetivo })}>
+                  {[o.tipo, ...libres(editando)].map(t => <option key={t} value={t}>{TIPOS[t].nombre}</option>)}
+                </select>
+                <input type="number" className="form-input" min="0" step="any" aria-label={`Objetivo de ${TIPOS[o.tipo].nombre}`}
+                  value={Number.isNaN(o.valor) ? '' : o.valor} onChange={e => cambiar(o.id, { valor: e.target.valueAsNumber })} />
+                <span className="est-objetivos-unidad">{TIPOS[o.tipo].unidad}</span>
+                <button type="button" className="btn btn-ghost btn-sm" aria-label={`Quitar el objetivo de ${TIPOS[o.tipo].nombre}`}
+                  onClick={() => setEditando({ ...editando, objetivos: editando.objetivos.filter(x => x.id !== o.id) })}>Quitar</button>
+              </div>
+            ))}
+            {error && <p className="est-nota est-aviso" role="alert">{error}</p>}
+            <div className="est-objetivos-botones">
+              {libres(editando).length > 0 && (
+                <button type="button" className="btn btn-secondary btn-sm"
+                  onClick={() => setEditando({ ...editando, objetivos: [...editando.objetivos, { tipo: libres(editando)[0], valor: NaN, id: ++siguienteId }] })}>
+                  Añadir objetivo
+                </button>
+              )}
+              <button type="submit" className="btn btn-primary btn-sm">Guardar</button>
+              <button type="button" className="btn btn-ghost btn-sm" onClick={() => { setEditando(null); setError(null) }}>Cancelar</button>
             </div>
-          ))}
-          {error && <p className="est-nota est-aviso" role="alert">{error}</p>}
-          <div className="est-objetivos-botones">
-            {libres(editando).length > 0 && (
-              <button type="button" className="btn btn-secondary btn-sm"
-                onClick={() => setEditando({ ...editando, objetivos: [...editando.objetivos, { tipo: libres(editando)[0], valor: NaN }] })}>
-                Añadir objetivo
-              </button>
-            )}
-            <button type="submit" className="btn btn-primary btn-sm" disabled={guardando}>Guardar</button>
-            <button type="button" className="btn btn-ghost btn-sm" onClick={() => { setEditando(null); setError(null) }}>Cancelar</button>
-          </div>
+          </fieldset>
         </form>
       ) : (
         <>
@@ -118,12 +149,15 @@ export function ObjetivosCuenta({ visible, ultimo, ritmos }: {
                   <div className="est-objetivo-texto">
                     <span className="est-objetivo-nombre">{TIPOS[o.tipo].nombre}</span>
                     <span className="est-objetivo-cifras">
-                      {p.actual === null ? '—' : cifra(o.tipo, p.actual)} / {cifra(o.tipo, o.valor)}
+                      {cifras(o.tipo, p.actual, o.valor, p.cumplido)}
                       <span className={p.cumplido ? 'est-objetivo-cumplido' : 'est-objetivo-plazo'}> · {plazo}</span>
                     </span>
                   </div>
+                  {/* Sin cifra actual no se anuncia un 0 %: la barra queda vacía y sin valor. El avance va en scaleX,
+                      como en el resto de .progress-bar (dashboard.css). */}
                   <div className="progress-bar" role="progressbar" aria-label={`${TIPOS[o.tipo].nombre}: progreso`}
-                    aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round((p.fraccion ?? 0) * 100)}>
+                    aria-valuemin={0} aria-valuemax={100}
+                    aria-valuenow={p.fraccion === null ? undefined : Math.round(p.fraccion * 100)}>
                     <div className="progress-fill" style={{ transform: `scaleX(${p.fraccion ?? 0})` }} />
                   </div>
                 </li>

@@ -20,6 +20,8 @@ def leer(conn: sqlite3.Connection) -> dict[str, Any]:
 
 
 def guardar(conn: sqlite3.Connection, fecha_alta: str | None, objetivos: list[dict[str, Any]]) -> dict[str, Any]:
-    set_json_state(conn, ESTADO, {"fecha_alta": fecha_alta, "objetivos": objetivos})
+    """Guarda y devuelve lo que se ha escrito (no lo vuelve a leer: otra petición podría haber escrito entre medias)."""
+    datos = {"fecha_alta": fecha_alta, "objetivos": objetivos}
+    set_json_state(conn, ESTADO, datos)
     conn.commit()
-    return leer(conn)
+    return datos

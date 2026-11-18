@@ -66,8 +66,20 @@ describe('antigüedad en palabras', () => {
     expect(antiguedadTexto(alta, HOY)).toBe(texto)
   })
 
-  it('mesesDesde cuenta meses con decimales', () => {
-    expect(mesesDesde('2025-11-18', HOY)).toBeCloseTo(12, 1)
+  it('mesesDesde cuenta meses de calendario: el aniversario da la cifra exacta', () => {
+    expect(mesesDesde('2025-11-18', HOY)).toBe(12)
+    expect(mesesDesde('2026-10-03', HOY)).toBeCloseTo(1 + 15 / 30)   // del 3/11 al 3/12 hay 30 días
+    expect(progreso({ tipo: 'antiguedad', valor: 12 }, punto, ritmos, '2025-11-18', HOY).cumplido).toBe(true)
+  })
+
+  it('un alta a final de mes no da semanas negativas', () => {
+    expect(antiguedadTexto('2026-01-31', new Date(2026, 2, 1))).toBe('1 mes')
+    expect(antiguedadTexto('2026-01-31', new Date(2026, 2, 7))).toBe('1 mes y 1 semana')
+  })
+
+  it('el cambio de hora no se come una semana', () => {
+    // El 29/03/2026 se adelanta el reloj en España: del 23/03 al 30/03 hay 167 horas, pero son 7 días.
+    expect(antiguedadTexto('2026-02-23', new Date(2026, 2, 30))).toBe('1 mes y 1 semana')
   })
 })
 
