@@ -146,7 +146,9 @@ describe('EstadisticasPage', () => {
     pedir.mockResolvedValue({ dias: 90, ritmos: SIN_RITMOS, puntos: [] })
     await montar(<EstadisticasPage />)
     await esperar(() => texto().includes('Todavía no hay datos'))
-    await esperar(() => boton('Añadir objetivos'))
+    await pulsar(await esperar(() => boton('Añadir objetivos')))
+    expect(document.querySelector('input[type="date"]')).toBeTruthy()
+    expect(boton('Guardar')).toBeTruthy()
   })
 
   it('las tarjetas salen aunque aún no haya ninguna instantánea de la cuenta', async () => {

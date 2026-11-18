@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { getObjetivos, guardarObjetivos } from '../api/estadisticas'
 import type { PuntoCuenta, RitmosCuenta } from '../types/api'
 import { formatNumero } from '../utils/format'
@@ -14,10 +14,12 @@ const cifra = (tipo: TipoObjetivo, n: number, extra = 0) => {
   return `${formatNumero(n, DECIMALES[tipo] + extra)}${unidad ? ` ${unidad}` : ''}`
 }
 
-/** «actual / meta»; si el redondeo las iguala sin estar cumplida (1,231 y 1,234 → «1,23 / 1,23»), con más decimales. */
+/** «actual / meta»; si el redondeo las iguala sin estar cumplida (1,231 y 1,234 → «1,23 / 1,23»), con los decimales
+ * que hagan falta para distinguirlas (hasta 12). */
 function cifras(tipo: TipoObjetivo, actual: number | null, meta: number, cumplido: boolean): string {
   if (actual === null) return `— / ${cifra(tipo, meta)}`
-  const extra = !cumplido && cifra(tipo, actual) === cifra(tipo, meta) ? 3 : 0
+  let extra = 0
+  while (!cumplido && extra < 12 && cifra(tipo, actual, extra) === cifra(tipo, meta, extra)) extra++
   return `${cifra(tipo, actual, extra)} / ${cifra(tipo, meta, extra)}`
 }
 
@@ -43,13 +45,17 @@ export function ObjetivosCuenta({ visible, ultimo, ritmos }: {
   const [editando, setEditando] = useState<Borrador | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [guardando, setGuardando] = useState(false)
+  // Cada guardado cambia la generación: una lectura que salió antes y llega después no pisa lo recién guardado.
+  const generacion = useRef(0)
 
   useEffect(() => {
     if (!visible) return
     let vigente = true
+    const gen = generacion.current
+    const vale = () => vigente && gen === generacion.current
     getObjetivos().then(
-      d => { if (vigente) { setDatos(d); setFalloCarga(false) } },
-      () => { if (vigente) setFalloCarga(true) },
+      d => { if (vale()) { setDatos(d); setFalloCarga(false) } },
+      () => { if (vale()) setFalloCarga(true) },
     )
     return () => { vigente = false }
   }, [visible, intento])
@@ -61,6 +67,7 @@ export function ObjetivosCuenta({ visible, ultimo, ritmos }: {
     if (!editando) return
     setGuardando(true)
     setError(null)
+    generacion.current++
     try {
       setDatos(await guardarObjetivos({
         fecha_alta: editando.fecha_alta || null,

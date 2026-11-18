@@ -2,7 +2,7 @@
 /**
  * Objetivos de la cuenta en Estadísticas: lo que enseña, y el editor que guarda la fecha de alta y las metas.
  */
-import { act } from 'react'
+import { act, useState } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('../../api/estadisticas', () => ({ getObjetivos: vi.fn(), guardarObjetivos: vi.fn() }))
@@ -21,6 +21,12 @@ const ultimo: PuntoCuenta = {
   seeding: 770, leeching: 0, hit_and_runs: 2, grupo: 'InsaneUser',
 }
 const ritmos: RitmosCuenta = { dias: 7, subido_dia: 0.5 * TB, bajado_dia: 0, bonus_hora: 10 }
+
+// Entrar y salir de Estadísticas: `visible` pasa a falso y vuelve a verdadero.
+function ConInterruptor() {
+  const [visible, setVisible] = useState(true)
+  return <><button type="button" onClick={() => setVisible(v => !v)}>alternar</button><ObjetivosCuenta visible={visible} ultimo={ultimo} ritmos={ritmos} /></>
+}
 
 function escribir(el: HTMLInputElement | HTMLSelectElement, valor: string) {
   const proto = el instanceof HTMLSelectElement ? HTMLSelectElement.prototype : HTMLInputElement.prototype
@@ -122,6 +128,32 @@ describe('ObjetivosCuenta', () => {
     leer.mockResolvedValue({ fecha_alta: null, objetivos: [{ tipo: 'ratio', valor: 1.234 }] })
     await montar(<ObjetivosCuenta visible ultimo={{ ...ultimo, ratio: 1.231 }} ritmos={ritmos} />)
     await esperar(() => document.querySelector('.est-objetivo-cifras'))
-    expect(document.querySelector('.est-objetivo-cifras')!.textContent).toContain('1,23100 / 1,23400')
+    expect(document.querySelector('.est-objetivo-cifras')!.textContent).toContain('1,231 / 1,234')
+  })
+
+  it('añade los decimales que hagan falta: 1 TB menos 1 MiB no es 1 TB', async () => {
+    leer.mockResolvedValue({ fecha_alta: null, objetivos: [{ tipo: 'subido', valor: 1 }] })
+    await montar(<ObjetivosCuenta visible ultimo={{ ...ultimo, subido_bytes: TB - 1024 ** 2 }} ritmos={ritmos} />)
+    await esperar(() => document.querySelector('.est-objetivo-cifras'))
+    const [actual, meta] = document.querySelector('.est-objetivo-cifras')!.textContent!.split(' · ')[0].split(' / ')
+    expect(actual).not.toBe(meta)
+  })
+
+  it('una lectura que sale antes de guardar y llega después no pisa lo guardado', async () => {
+    let entregar: (d: Awaited<ReturnType<typeof getObjetivos>>) => void = () => {}
+    leer.mockResolvedValueOnce({ fecha_alta: null, objetivos: [] })
+    guardar.mockImplementation(async d => d)
+    await montar(<ConInterruptor />)
+    await pulsar(await esperar(() => boton('Añadir objetivos')))
+    // Salir y volver a entrar lanza otra lectura, que se queda colgada.
+    leer.mockReturnValueOnce(new Promise(r => { entregar = r }))
+    await pulsar(boton('alternar'))
+    await pulsar(boton('alternar'))
+    await pulsar(boton('Añadir objetivo')!)
+    await act(async () => { escribir(document.querySelector<HTMLInputElement>('input[type="number"]')!, '150') })
+    await pulsar(boton('Guardar')!)
+    await act(async () => { entregar({ fecha_alta: null, objetivos: [] }) })
+    expect(texto()).toContain('Subido')
+    expect(boton('Editar')).toBeTruthy()
   })
 })
