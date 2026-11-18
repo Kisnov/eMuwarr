@@ -143,6 +143,7 @@ def test_si_se_vio_subido_el_fallo_conserva_la_ficha():
 @pytest.mark.parametrize("codigo, marca", [
     ("duplicado", "Potential duplicate on"), ("busqueda_caida", "Dupe search failed"), ("tmdb", "TMDb ID not found"),
     ("grupo_prohibido", "Banned group on"), ("contenido_prohibido", "Banned content on"),
+    ("tipo_desconocido", "Unknown type on"),
 ])
 def test_los_fallos_por_elemento_siguen_siendo_fallos_por_elemento_para_los_lotes(codigo, marca):
     """lotes.motivo_de_fallo decide por estas marcas si un fallo frena el lote entero: no pueden perderse."""

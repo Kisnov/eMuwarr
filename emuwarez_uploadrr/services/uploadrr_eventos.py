@@ -143,6 +143,7 @@ MENSAJES_RESULTADO: dict[str, str] = {
     "sin_config": "Uploadrr-EMU no encuentra su config.yaml",
     "config_invalida": "El config.yaml de Uploadrr-EMU no es válido",
     "interrumpido": "Uploadrr-EMU fue interrumpido",
+    "tipo_desconocido": "eMuwarez no tiene el tipo de esta copia (Unknown type on EMU)",
 }
 
 

@@ -38,6 +38,7 @@ CODIGOS_CHECKS = (
     ("Banned group", "grupo_prohibido"),
     ("Banned content", "contenido_prohibido"),
     ("No such tracker", "tracker_invalido"),
+    ("Unknown type", "tipo_desconocido"),
 )
 python_cmd = sys.executable
 base_dir = Path(__file__).resolve().parent

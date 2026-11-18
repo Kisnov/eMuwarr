@@ -352,6 +352,7 @@ _MARCAS_DE_UPLOADRR: tuple[str, ...] = (
     "Exact size match",
     "Banned group on",
     "Banned content on",
+    "Unknown type on",
     "TMDb ID not found",
     "has already been taken",  # el nombre ya está en eMuwarez
     "trump",  # eMuwarez rechaza una copia peor que la que ya tiene

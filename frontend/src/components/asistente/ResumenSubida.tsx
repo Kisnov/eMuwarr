@@ -19,6 +19,7 @@ export function ResumenSubida({ a }: { a: Asistente }) {
     preview, seasonDisplayTitle, seasonPlan, fields, remuxPreview, remuxEdits, modoPistasAjuste,
     checks, batchContentChecks, nombresTanda, requestId, preselect,
     anonimoMarcado, personalReleaseMarcado, elegirAnonimo, elegirPersonalRelease, opcionesTracker, uploading,
+    sources, elegirTipo,
   } = a
   const esTanda = batchQueue.length > 1
   const ids = esTanda ? batchQueue : targetId != null ? [targetId] : []
@@ -55,6 +56,8 @@ export function ResumenSubida({ a }: { a: Asistente }) {
     const c = batchContentChecks.get(id)
     return c ? c.nombre ?? null : undefined
   }
+  // Sin un tipo que eMuwarez conozca no se sube (la comprobación «tipo»): aquí se elige, con el Source.
+  const tipoDesconocido = !esTanda && checks?.checks.some(c => c.id === 'tipo' && c.status === 'fail')
   const idTitulo = useId()
   const idYaHay = useId()
   return (
@@ -82,6 +85,19 @@ export function ResumenSubida({ a }: { a: Asistente }) {
           })}</dd>
           <dt>Categoría</dt>
           <dd>{textoCategoria(tipo !== 'movie', esTanda ? null : fields.source, esTanda ? null : fields.resolution)}</dd>
+          {tipoDesconocido && (
+            <>
+              <dt>Tipo</dt>
+              <dd className="asist-aviso-dato">
+                <select className="form-input form-select" aria-label="Tipo de la copia" value="" disabled={uploading}
+                  onChange={e => elegirTipo(e.target.value)}>
+                  <option value="" disabled>No se sabe: elige el Source…</option>
+                  {sources.map(s => <option key={s.code} value={s.code}>{s.label}</option>)}
+                </select>
+                <span className="asist-dato-nota">El tipo de eMuwarez sale del Source, que también va en el nombre.</span>
+              </dd>
+            </>
+          )}
           <dt>Petición</dt>
           <dd className={peticion?.aviso ? 'asist-aviso-dato' : undefined}>{peticion?.texto ?? '…'}</dd>
           <dt>Pistas</dt>
