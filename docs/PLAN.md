@@ -74,8 +74,8 @@ Todo lo de interfaz se ha comprobado en Chromium (con emulación táctil), no en
   packs, nunca por capítulos.
 - Detectar el toque real con `pointerType` para los objetivos táctiles.
 - Subir los documentales a la categoría Documentales (4) de eMuwarez: Prowlarr la mapea a TV/Documentary (5080), así
-  que Radarr y Sonarr no la buscan por defecto, y mezcla películas y series. Siguen yendo a Películas o Series, como
-  ya hace el staff (decidido el 18/11).
+  que Radarr y Sonarr no la buscan por defecto, y mezcla películas y series. Siguen yendo a Películas o Series (en
+  eMuwarez hay muy pocos en Documentales, y una serie documental subida como serie no tuvo pegas; decidido el 18/11).
 
 ## Criterios de diseño
 
