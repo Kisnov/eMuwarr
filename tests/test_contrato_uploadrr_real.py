@@ -112,6 +112,23 @@ def test_el_flag_de_eventos_llega_como_global_con_la_ruta_absoluta(parser_upload
     assert _parsear(parser_uploadrr, _cmd()).eventos is None
 
 
+def test_el_config_de_la_subida_llega_como_global_con_la_ruta_absoluta(parser_uploadrr, args_uploadrr, tmp_path):
+    archivo = tmp_path / "Peli.2024.1080p.WEB-DL.mkv"
+    archivo.write_bytes(b"x")
+    destino = tmp_path / "config_uploadrr" / "7.yaml"
+    destino.parent.mkdir()
+    destino.write_text("DEFAULT: {}\n", encoding="utf-8")  # la app lo crea antes de lanzar
+    for cambios in ({}, dict(solo_cliente="4242", eventos=str(tmp_path / "7.jsonl")),
+                    dict(category="tv", season=1, anonimo=True, reanudar=True)):
+        argv = _cmd(prepared_path=str(archivo), config=str(destino), **cambios)
+        items, globales = args_uploadrr.group_args_by_path(argv)
+        assert items == [([], str(archivo.resolve()))] and "--config" in globales
+        ns = parser_uploadrr.parse_args(globales)
+        args_uploadrr.enforce_global_only(ns, is_global=True, parser=parser_uploadrr)
+        assert ns.config == str(destino)
+    assert _parsear(parser_uploadrr, _cmd()).config is None
+
+
 def _choices(parser: argparse.ArgumentParser, opcion: str) -> set[str]:
     (accion,) = [a for a in parser._actions if opcion in a.option_strings]
     return set(accion.choices)

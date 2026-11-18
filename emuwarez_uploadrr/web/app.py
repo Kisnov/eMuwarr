@@ -74,9 +74,13 @@ def _reconcile_interrupted_jobs() -> None:
 
 def _restore_interrupted_config() -> None:
     """El config.yaml de Uploadrr-EMU que dejó stageado (claves reales dentro)
-    una subida que murió con la aplicación. Best-effort: nunca bloquea el arranque."""
+    una subida que murió con la aplicación, y los config propios de las subidas que quedaron.
+    Best-effort: nunca bloquea el arranque."""
     try:
-        from emuwarez_uploadrr.services.upload_execution import restaurar_config_interrumpida
+        from emuwarez_uploadrr.services.upload_execution import barrer_configs_de_subidas, restaurar_config_interrumpida
+        if barrer_configs_de_subidas():
+            logging.getLogger("emuwarez.web").warning(
+                "Borrados los config de Uploadrr-EMU que dejaron subidas interrumpidas")
         if restaurar_config_interrumpida():
             logging.getLogger("emuwarez.web").warning(
                 "config.yaml de Uploadrr-EMU restaurado desde el backup: lo dejó stageado una subida interrumpida")

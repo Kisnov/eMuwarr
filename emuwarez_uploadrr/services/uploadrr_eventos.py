@@ -25,15 +25,26 @@ NOMBRE_CONTRATO = "contrato_eventos.json"
 VERSIONES_CONOCIDAS = (1,)
 
 
-def admite_eventos(carpeta_uploadrr: str | os.PathLike | None) -> bool:
-    """Si el checkout de Uploadrr-EMU trae `contrato_eventos.json` con una versión que la app conoce."""
+def _contrato(carpeta_uploadrr: str | os.PathLike | None) -> dict:
+    """El `contrato_eventos.json` del checkout de Uploadrr-EMU si su versión es una que la app conoce; si no, {}."""
     if not carpeta_uploadrr:
-        return False
+        return {}
     try:
         with open(Path(carpeta_uploadrr) / NOMBRE_CONTRATO, encoding="utf-8") as f:
-            return json.load(f).get("version") in VERSIONES_CONOCIDAS
+            contrato = json.load(f)
+        return contrato if contrato.get("version") in VERSIONES_CONOCIDAS else {}
     except (OSError, ValueError, AttributeError):
-        return False
+        return {}
+
+
+def admite_eventos(carpeta_uploadrr: str | os.PathLike | None) -> bool:
+    """Si el checkout de Uploadrr-EMU trae `contrato_eventos.json` con una versión que la app conoce."""
+    return bool(_contrato(carpeta_uploadrr))
+
+
+def admite_config(carpeta_uploadrr: str | os.PathLike | None) -> bool:
+    """Si además admite `--config RUTA` (`"config": true`): cada subida lleva su propio config (upload_execution/config.py)."""
+    return _contrato(carpeta_uploadrr).get("config") is True
 
 
 def ruta_eventos(job_id: int, *, reenvio: bool = False) -> Path:

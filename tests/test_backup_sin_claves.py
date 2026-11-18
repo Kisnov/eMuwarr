@@ -142,6 +142,13 @@ def test_ni_las_configuraciones_antiguas_de_uploadrr(cfg):
     assert "Uploadrr/data/config.py" in _miembros(con_secretos["archive_path"])
 
 
+def test_los_config_de_las_subidas_no_van_ni_en_la_copia_con_secretos(cfg):
+    (cfg / "config_uploadrr").mkdir()
+    (cfg / "config_uploadrr" / "7.yaml").write_text("TRACKERS:\n  EMU:\n    api_key: de-una-subida\n")
+    for copia in (create_config_backup(), create_config_backup(include_secrets=True, confirmation=RESTORE_CONFIRMATION)):
+        assert not any(m.startswith("config_uploadrr") for m in _miembros(copia["archive_path"]))
+
+
 def test_ni_el_config_del_cli_antiguo(cfg):
     (cfg / "config.json").write_text('{"emu_api_key": "cli-antiguo"}')
     (cfg / "config.enc.json").write_text("{}")

@@ -195,6 +195,7 @@ def build_uploadrr_emu_command(
     personal_release: bool = False,
     solo_cliente: Optional[int | str] = None,
     eventos: Optional[str] = None,
+    config: Optional[str] = None,
 ) -> list[str]:
     """Build the real Uploadrr-EMU argv. Always a list[str], never a shell string.
 
@@ -210,6 +211,9 @@ def build_uploadrr_emu_command(
 
     `eventos` añade `--eventos <ruta absoluta>`: Uploadrr-EMU escribe ahí un evento JSON por línea (uploadrr_eventos.py).
     Es una bandera global: va tras la ruta del vídeo, con las demás.
+
+    `config` añade `--config <ruta absoluta>`: Uploadrr-EMU lee ese config.yaml (el de esta subida) en vez del suyo.
+    También es global.
 
     Una `resolution` de menos de 720p añade `-avbc` (ver pide_aviso_baja_calidad).
 
@@ -255,6 +259,8 @@ def build_uploadrr_emu_command(
         cmd += ["--solo-cliente", str(solo_cliente)]
     if eventos:
         cmd += ["--eventos", os.path.abspath(eventos)]
+    if config:
+        cmd += ["--config", os.path.abspath(config)]
     return cmd
 
 

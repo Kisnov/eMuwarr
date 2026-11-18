@@ -28,7 +28,8 @@ LIMITE_SUBIDA_BYTES = 1024 ** 3
 # Lo que no va en la copia: las copias anteriores, los enlaces de subida y los
 # temporales de Uploadrr (capturas, torrents; en una instalación real, 1,7 GB).
 # Una carpeta "backups" a cualquier profundidad tampoco: la copia no se mete a sí misma.
-_FUERA_DE_LA_COPIA = (("Uploadrr", "uploads"), ("Uploadrr", "tmp"))
+# config_uploadrr/ son los config de las subidas en curso, con claves: ni en la copia con secretos.
+_FUERA_DE_LA_COPIA = (("Uploadrr", "uploads"), ("Uploadrr", "tmp"), ("config_uploadrr",))
 # Lo que solo va en la copia con secretos. El config.yaml de Uploadrr-EMU y su
 # .bak (donde van los cambios a mano) pueden llevar claves de cualquier tracker
 # y con cualquier nombre: taparlas línea a línea no da garantías. Las cookies

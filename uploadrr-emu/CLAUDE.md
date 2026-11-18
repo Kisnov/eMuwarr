@@ -72,7 +72,12 @@ or report their errors unless they break an eMuwarez upload.
 - The `.torrent` is hashed with mkbrr when it is on `PATH` (the app image installs a pinned one), torf otherwise.
   The mkbrr result must list exactly the files torf would pick, or it is rebuilt with torf. When mkbrr warns of
   an incomplete season pack, `print` writes `Incomplete season pack: season N, missing episodes A, B`.
-- `config.yaml` keys the app stages before each run and restores afterwards: `DEFAULT.tmdb`,
+- `--config RUTA` (global, not in `meta`): read that YAML instead of `data/config.yaml`; missing, it is `sin_config` (exit 1)
+  like a missing `data/config.yaml`. `main()` pre-reads it with `eventos.ruta_de_argv(argv, "--config")`, because `build_parser`
+  needs the config. Without it nothing changes. `"config": true` in `contrato_eventos.json` says it is supported: only then does
+  the app pass it, with the absolute path of a per-job file it creates before launching and deletes afterwards.
+- `config.yaml` keys the app writes into that per-job file (or, without `--config`, stages in `data/config.yaml` before each run
+  and restores afterwards): `DEFAULT.tmdb`,
   `DEFAULT.add_logo`, `DEFAULT.always_anon`, `TRACKERS.EMU.anon` and `AUTO.keep_quiet` (all three forced to `false`: only `-a` makes an upload
   anonymous, and the app needs the console output), `TRACKERS.EMU.api_key`, `TRACKERS.BLU.useAPI` (forced to `false`), `SCREENS.img_hosts`,
   `SCREENS.API_KEYS`, `SCREENS.per_episode` (`0`, only the first episode of a pack, unless the app is set to screenshot
