@@ -66,7 +66,7 @@ def emu(tracker, monkeypatch):
     monkeypatch.setattr(unit3d, "UPLOAD_RETRY_DELAYS", (0, 0))
     monkeypatch.setattr(unit3d, "DOWNLOAD_RETRY_DELAYS", (0, 0, 0))
     instance = EMU(config={"TRACKERS": {"EMU": {"api_key": TOKEN}}, "DEFAULT": {}})
-    instance.search_url = tracker.url + SEARCH
+    instance.domain = tracker.url
     instance.upload_url = tracker.url + UPLOAD
     return instance
 
@@ -93,6 +93,18 @@ def test_search_follows_next_links(tracker, emu, meta):
     assert first["perPage"] == ["100"]
     assert first["name"] == [""]  # la edición ya no filtra por nombre
     assert second["cursor"] == ["2"] and second["api_token"] == [TOKEN]
+
+
+def test_search_next_link_goes_with_our_key_only(tracker, emu, meta):
+    """La clave del enlace de la página siguiente se cambia por la nuestra (src/utils/cliente_unit3d.py)."""
+    def search(query):
+        if "page" not in query:
+            return 200, {"data": [], "links": {"next": f"{tracker.url}{SEARCH}?page=2&api_token=otra"}}
+        return 200, {"data": [], "links": {"next": None}}
+
+    tracker.routes[("GET", SEARCH)] = search
+    run(emu.search_existing(meta))
+    assert tracker.calls("GET", SEARCH)[1]["api_token"] == [TOKEN]
 
 
 def test_search_other_resolutions_alone(tracker, emu, meta):
@@ -178,7 +190,7 @@ def test_search_connection_refused_raises(emu, meta):
     with socket.socket() as libre:
         libre.bind(("127.0.0.1", 0))
         puerto = libre.getsockname()[1]
-    emu.search_url = f"http://localhost:{puerto}{SEARCH}"  # nadie escucha ahí
+    emu.domain = f"http://localhost:{puerto}"  # nadie escucha ahí
     with pytest.raises(DupeSearchError) as error:
         run(emu.search_existing(meta))
     assert TOKEN not in str(error.value)

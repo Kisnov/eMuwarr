@@ -69,6 +69,9 @@ or report their errors unless they break an eMuwarez upload.
   per-key budget the app shares, in `LIMITADOR_DIR` (set by the app) or `CONFIG_DIR/limitador`, and a 429 pauses every
   process for its `Retry-After`. Without either variable it does nothing. The module is a byte-identical copy of the app's
   `integrations/limitador_compartido.py` (stdlib only, Python 3.9): change both together.
+- Tracker API client: the dupe search and the `--solo-cliente` lookup go through `src/utils/cliente_unit3d.py`
+  (`Unit3d._cliente`), which builds URL and headers, sends the key only to the tracker's own origin and takes a limiter
+  slot before each request. It is a byte-identical copy of the app's `integrations/cliente_unit3d.py`: change both together.
 - The `.torrent` is hashed with mkbrr when it is on `PATH` (the app image installs a pinned one), torf otherwise.
   The mkbrr result must list exactly the files torf would pick, or it is rebuilt with torf. When mkbrr warns of
   an incomplete season pack, `print` writes `Incomplete season pack: season N, missing episodes A, B`.

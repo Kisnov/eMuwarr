@@ -12,7 +12,7 @@ import httpx
 import torf
 from rich.pretty import Pretty
 
-from src.utils import eventos, limitador
+from src.utils import cliente_unit3d, eventos, limitador
 from src.utils.console import console, log
 from src.utils.descgen import DescGenerator
 from src.utils.meta import save_meta
@@ -26,6 +26,7 @@ UPLOAD_429_MAX_WAIT = 60  # tope de la espera pedida por Retry-After en la subid
 # Errores del servidor o de Cloudflare en los que la subida se repite.
 RETRY_STATUSES = {500, 502, 503, 504, 520, 521, 522, 523, 524}
 MAX_SEARCH_PAGES = 20
+USER_AGENT = f"Uploadrr / v2.0 ({platform.system()} {platform.release()})"
 COMENTARIO_TORRENT = "Torrent descargado de la comunidad eMuwarez."
 
 
@@ -71,6 +72,7 @@ class Unit3d:
         self.config = config
         self.type = "unit3d"
         self.timeout = httpx.Timeout(45.0)
+        # Los usan los otros trackers; EMU va por src/utils/cliente_unit3d.py.
         self.upload_url = f"{self.domain}/api/torrents/upload"
         self.search_url = f"{self.domain}/api/torrents/filter"
 
@@ -338,23 +340,20 @@ class Unit3d:
 
     async def descargar_subido(self, meta: Dict[str, Any], torrent_id: int) -> Optional[Path]:
         """--solo-cliente: guarda, como tras subirlo, el .torrent firmado de un torrent que ya está en el tracker."""
-        headers = {"User-Agent": f"Uploadrr / v2.0 ({platform.system()} {platform.release()})"}
+        headers = {"User-Agent": USER_AGENT}
         params = {"api_token": self.config["TRACKERS"][self.tracker]["api_key"].strip()}
         try:
             async with httpx.AsyncClient(timeout=self.timeout) as client:
-                await self._turno()
-                response = await client.get(f"{self.domain}/api/torrents/{torrent_id}", params=params, headers=headers)
+                response = await self._cliente(client).pedir("GET", f"/api/torrents/{torrent_id}")
         except httpx.HTTPError as e:
             console.print(f"[red]{self.tracker}: no se pudo consultar el torrent {torrent_id}: {type(e).__name__}")
             return None
-        self._apuntar_429(response)
         if response.status_code != 200:
             console.print(f"[red]{self.tracker}: la API devolvió HTTP {response.status_code} para el torrent {torrent_id}")
             return None
         try:
-            body = response.json()
-            link = body.get("data", body)["attributes"]["download_link"]  # con o sin el envoltorio data
-        except (ValueError, KeyError, TypeError, AttributeError):
+            link = cliente_unit3d.atributos_torrent(response.json()).get("download_link")
+        except ValueError:
             link = None
         if not isinstance(link, str) or not link:
             console.print(f"[red]{self.tracker}: la API no da enlace de descarga para el torrent {torrent_id}")
@@ -428,9 +427,16 @@ class Unit3d:
                     await asyncio.sleep(delay)
         return None, error
 
-    async def _turno(self) -> None:
+    def _cliente(self, client: httpx.AsyncClient) -> cliente_unit3d.ClienteAsincrono:
+        """El cliente de la API del tracker (el mismo que usa la app) sobre `client`, con el límite de peticiones."""
+        clave = self.config["TRACKERS"][self.tracker]["api_key"]
+        return cliente_unit3d.ClienteAsincrono(
+            cliente_unit3d.Tracker(self.domain, clave, USER_AGENT), client, turno=self._turno,
+            apuntar_429=lambda retry_after: limitador.apuntar_429(self.tracker, clave, retry_after, avisar=_avisar))
+
+    async def _turno(self, prioridad: str = "subida") -> None:
         """Hueco en el límite de peticiones por minuto que esta key comparte con la app y otros Uploadrr-EMU."""
-        await limitador.esperar(self.tracker, self.config["TRACKERS"][self.tracker]["api_key"], avisar=_avisar)
+        await limitador.esperar(self.tracker, self.config["TRACKERS"][self.tracker]["api_key"], prioridad, avisar=_avisar)
 
     def _apuntar_429(self, response: httpx.Response) -> None:
         """Un 429 pausa a todos los procesos que usan esta key, lo que diga Retry-After."""
@@ -483,10 +489,8 @@ class Unit3d:
 
         Si alguna página falla no se sabe si ya está subido: DupeSearchError, nunca "nada encontrado".
         """
-        token = self.config["TRACKERS"][self.tracker]["api_key"].strip()
         resolution_id = await self.get_res_id(meta)
-        params = {
-            "api_token": token,
+        ruta, params = "/api/torrents/filter", {
             "tmdbId": meta.get("tmdb", 0),
             "categories[]": await self.get_cat_id(meta),
             "types[]": await self.get_type_id(meta),
@@ -494,20 +498,16 @@ class Unit3d:
             "name": name,
             "perPage": 100,
         }
-        url = httpx.URL(self.search_url)
-        origin = (url.scheme, url.host, url.port)
         items = []
-        headers = {"User-Agent": f"Uploadrr / v2.0 ({platform.system()} {platform.release()})"}
         attempts = len(SEARCH_RETRY_DELAYS) + 1
         async with httpx.AsyncClient(timeout=self.timeout) as client:
+            cliente = self._cliente(client)
             for _ in range(MAX_SEARCH_PAGES):
                 for attempt in range(1, attempts + 1):
-                    await self._turno()
                     try:
-                        response = await client.get(url, params=params, headers=headers)
+                        response = await cliente.pedir("GET", ruta, params)
                     except httpx.HTTPError as e:
                         raise DupeSearchError(f"No se pudo buscar duplicados en {self.tracker}: {e!r}") from e
-                    self._apuntar_429(response)
                     if response.status_code != 429 or attempt == attempts:
                         break
                     retry_after = response.headers.get("Retry-After", "")
@@ -534,14 +534,14 @@ class Unit3d:
                     next_url = (links or {}).get("next")
                     if next_url is None:
                         return items
-                    # El enlace de la página siguiente ya lleva los filtros (params lo vaciaría).
-                    url = httpx.URL(next_url)
-                except (ValueError, KeyError, TypeError, AttributeError, httpx.InvalidURL) as e:
+                    if not isinstance(next_url, str):
+                        raise TypeError("next no es una URL")
+                    # La API key solo va a su propio dominio.
+                    otro_dominio = not cliente_unit3d.mismo_origen(next_url, self.domain)
+                except (ValueError, KeyError, TypeError, AttributeError) as e:
                     raise DupeSearchError(f"La búsqueda de duplicados en {self.tracker} devolvió una respuesta inesperada") from e
-                # La API key solo va a su propio dominio.
-                if (url.scheme, url.host, url.port) != origin:
+                if otro_dominio:
                     raise DupeSearchError(f"La búsqueda de duplicados en {self.tracker} pagina hacia otro dominio")
-                if "api_token" not in url.params:
-                    url = url.copy_add_param("api_token", token)
-                params = None
+                # El enlace de la página siguiente ya lleva los filtros.
+                ruta, params = next_url, None
         raise DupeSearchError(f"La búsqueda de duplicados en {self.tracker} tiene más de {MAX_SEARCH_PAGES} páginas")
