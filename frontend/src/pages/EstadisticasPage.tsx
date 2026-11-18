@@ -4,6 +4,7 @@ import { getEstadisticasCuenta } from '../api/estadisticas'
 import { EmptyState } from '../components/EmptyState'
 import { ErrorState } from '../components/ErrorState'
 import { GraficoLinea } from '../components/GraficoLinea'
+import { IconoAviso } from '../components/Iconos'
 import { LoadingState } from '../components/LoadingState'
 import { MisSubidasEmu } from '../components/MisSubidasEmu'
 import { ObjetivosCuenta } from '../components/ObjetivosCuenta'
@@ -156,6 +157,13 @@ export function EstadisticasPage() {
         <div className={enCurso ? 'est-cargando' : undefined} aria-busy={enCurso}>
           {resultado.ritmos && <TarjetasDeRitmo puntos={puntos} ritmos={resultado.ritmos} />}
           <ObjetivosCuenta visible={seVe} ultimo={puntos[puntos.length - 1]} ritmos={resultado.ritmos} />
+          {/* Los H&R casi nunca cambian y lo normal es 0: un aviso cuando hay alguno, no un gráfico. */}
+          {(puntos[puntos.length - 1]?.hit_and_runs ?? 0) > 0 && (
+            <p className="est-nota est-aviso" role="status">
+              <IconoAviso /> Tienes {formatNumero(puntos[puntos.length - 1].hit_and_runs!)} H&amp;R en eMuwarez: siembra esos
+              torrents hasta cumplir el tiempo mínimo antes de que se acumulen.
+            </p>
+          )}
           {puntos.length === 1 ? (
             <p className="est-nota" role="status">Solo hay un día guardado: la línea aparecerá a partir de mañana.</p>
           ) : (
@@ -182,8 +190,6 @@ export function EstadisticasPage() {
                 { nombre: 'Seeding', clase: 'est-serie-seeding', puntos: serie(puntos, 'seeding') },
                 { nombre: 'Leeching', clase: 'est-serie-leeching', puntos: serie(puntos, 'leeching') },
               ]} />
-            <GraficoLinea titulo="H&R" formato={entero} desdeCero
-              series={[{ nombre: 'H&R', clase: 'est-serie-hr', puntos: serie(puntos, 'hit_and_runs') }]} />
           </div>
 
           <details className="est-tabla">

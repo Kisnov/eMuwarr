@@ -85,7 +85,6 @@
 .est-serie-seeding { --est-color: var(--color-available-soft); }
 .est-serie-leeching { --est-color: var(--color-warning-soft); }
 .est-serie-leeching .est-linea { stroke-dasharray: 6 4; }
-.est-serie-hr { --est-color: var(--color-error-soft); }
 
 .est-tabla { margin-bottom: 20px; }
 .est-tabla summary { cursor: pointer; min-height: 24px; font-size: 13px; color: var(--text-secondary); margin-bottom: 10px; }

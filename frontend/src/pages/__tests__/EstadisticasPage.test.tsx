@@ -64,7 +64,7 @@ describe('EstadisticasPage', () => {
     expect(document.querySelectorAll(paso.selector)).toHaveLength(1)
   })
 
-  it('con datos pinta los seis gráficos accesibles y la tabla con cifras es-ES', async () => {
+  it('con datos pinta los cinco gráficos accesibles y la tabla con cifras es-ES', async () => {
     pedir.mockResolvedValue({ dias: 90, ritmos: SIN_RITMOS, puntos: [punto('2026-10-01'), punto('2026-10-02', { ratio: 4.25 })] })
     await montar(<EstadisticasPage />)
     await esperar(() => document.querySelector('svg[role="img"]'))
@@ -72,7 +72,8 @@ describe('EstadisticasPage', () => {
     expect(pedir).toHaveBeenCalledWith(90)
     const graficos = [...document.querySelectorAll('svg[role="img"]')]
     expect(graficos.map(g => g.querySelector('title')!.textContent)).toEqual(
-      ['Subido y bajado', 'Ratio', 'Bonus', 'Buffer', 'Seeding y leeching', 'H&R'])
+      ['Subido y bajado', 'Ratio', 'Bonus', 'Buffer', 'Seeding y leeching'])
+    expect(document.body.textContent).not.toContain('H&R en eMuwarez')  // sin H&R, ni gráfico ni aviso
     // «Subido y bajado» va primero (ocupa toda la fila), luego Ratio y Bonus.
     expect(graficos[0].getAttribute('aria-label')).toContain('Subido: de 1,0 TB')
     expect(graficos[1].getAttribute('aria-label')).toContain('Ratio: de 4,10 el 01/10/2026 a 4,25 el 02/10/2026')
@@ -87,6 +88,14 @@ describe('EstadisticasPage', () => {
     expect(filas[0].textContent).toContain('Uploader')
     // Los dos gráficos de dos series: «Subido y bajado» y «Seeding y leeching».
     expect(document.querySelectorAll('.est-leyenda li')).toHaveLength(4)
+  })
+
+  it('con H&R avisa del último número en vez de dibujar un gráfico', async () => {
+    pedir.mockResolvedValue({ dias: 90, ritmos: SIN_RITMOS, puntos: [punto('2026-10-01'), punto('2026-10-02', { hit_and_runs: 2 })] })
+    await montar(<EstadisticasPage />)
+    await esperar(() => document.body.textContent?.includes('H&R en eMuwarez'))
+    expect(document.body.textContent).toContain('Tienes 2 H&R en eMuwarez')
+    expect([...document.querySelectorAll('svg[role="img"] title')].map(t => t.textContent)).not.toContain('H&R')
   })
 
   it('cada gráfico lee su último valor y lo que cambió; con las flechas se lee el de cada día y Escape lo suelta', async () => {
@@ -191,7 +200,7 @@ describe('EstadisticasPage', () => {
     let entregar: (r: EstadisticasCuenta) => void = () => {}
     pedir.mockReturnValueOnce(new Promise(r => { entregar = r }))
     await pulsar(boton('365 días'))
-    expect(document.querySelectorAll('svg[role="img"]')).toHaveLength(6)
+    expect(document.querySelectorAll('svg[role="img"]')).toHaveLength(5)
     expect(document.querySelector('.est-cargando')!.getAttribute('aria-busy')).toBe('true')
     expect(texto()).not.toContain('Cargando estadísticas')
     expect(texto()).toContain('de los últimos 90 días')
@@ -242,7 +251,7 @@ describe('EstadisticasPage', () => {
     pedir.mockResolvedValue({ dias: 90, ritmos: SIN_RITMOS, puntos: [punto('2026-10-01', { bonus: null }), punto('2026-10-02', { bonus: null })] })
     await montar(<EstadisticasPage />)
     await esperar(() => document.querySelector('svg[role="img"]'))
-    expect(document.querySelectorAll('svg[role="img"]')).toHaveLength(5)
+    expect(document.querySelectorAll('svg[role="img"]')).toHaveLength(4)
     expect(texto()).toContain('Sin datos de esto en este rango')
   })
 
