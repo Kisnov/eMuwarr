@@ -27,7 +27,7 @@ def test_guarda_y_devuelve(client, auth_headers):
 
 @pytest.mark.parametrize("cuerpo", [
     {"fecha_alta": "20/02/2026"},
-    {"fecha_alta": (date.today() + timedelta(days=1)).isoformat()},
+    {"fecha_alta": (date.today() + timedelta(days=30)).isoformat()},   # lejos: el parametrize se evalúa al recoger
     {"objetivos": [{"tipo": "ratio", "valor": 0}]},
     {"objetivos": [{"tipo": "ratio", "valor": -1}]},
     {"objetivos": [{"tipo": "invitaciones", "valor": 3}]},
