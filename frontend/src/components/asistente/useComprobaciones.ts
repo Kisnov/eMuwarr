@@ -22,7 +22,8 @@ export function useComprobaciones(targetId: number | null, proveedorElegido: Pro
   const objetivo = useRef(targetId)
   objetivo.current = targetId
 
-  const runChecks = useCallback(async () => {
+  // `ajustes`: lo elegido en el asistente que las comprobaciones no pueden leer de lo guardado (el Source de un pack).
+  const runChecks = useCallback(async (ajustes?: AjustesComprobacion) => {
     if (targetId == null) return
     const esta = ++pasada.current
     setChecks(null)
@@ -39,7 +40,12 @@ export function useComprobaciones(targetId: number | null, proveedorElegido: Pro
       'comprobaciones-progreso', a => a.item_id === targetId, pedir, 400)
     let resultado: UploadChecksResult | null = null
     let fallo: string | null = null
-    try { resultado = await runUploadChecks(targetId, undefined, proveedorParaServidor(proveedorElegido, targetId)) }
+    const proveedor = proveedorParaServidor(proveedorElegido, targetId)
+    try {
+      resultado = ajustes
+        ? await runUploadChecks(targetId, undefined, proveedor, ajustes)
+        : await runUploadChecks(targetId, undefined, proveedor)
+    }
     catch (e: unknown) { fallo = e instanceof Error ? e.message : 'Error comprobando' }
     finally {
       dejarDeSeguir()

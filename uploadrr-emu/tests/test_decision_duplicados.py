@@ -90,6 +90,16 @@ def test_una_busqueda_que_falla_no_se_toma_por_sin_duplicados(tracker, entorno, 
     assert tracker.calls("POST", UPLOAD) == []
 
 
+def test_un_tipo_que_emu_no_tiene_no_se_sube_ni_se_busca(tracker, entorno):
+    entorno[0]["type"] = "FLAC"  # sin id en data/trackers/EMU.json: iría como type_id 0
+
+    ok, skipped = _comprobar(entorno)
+
+    assert ok == {"EMU": False}
+    assert skipped[-1][1] == "Unknown type on EMU: FLAC"
+    assert tracker.calls("GET", SEARCH) == [] and tracker.calls("POST", UPLOAD) == []
+
+
 def test_sin_duplicados_se_comprueba_y_se_sube(tracker, entorno, signed_torrent, capsys):  # noqa: F811
     tracker.routes[("POST", UPLOAD)] = lambda q: (200, {"success": True, "data": download_url(tracker)})
     serve_download(tracker, signed_torrent)

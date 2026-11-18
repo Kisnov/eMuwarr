@@ -1,6 +1,7 @@
 {
   "version": 1,
   "descripcion": "Eventos JSON Lines que escribe `upload.py --eventos RUTA` (una línea por evento, UTF-8). Sin secretos.",
+  "config": true,
   "comunes": {
     "v": {"tipo": "integer", "valor": 1},
     "ts": {"tipo": "string"},
@@ -19,7 +20,8 @@
     "codigo_resultado": [
       "subido", "cliente_ok", "duplicado", "busqueda_caida", "rechazado", "tmdb", "sin_video", "cliente_fallido", "excepcion",
       "grupo_prohibido", "contenido_prohibido", "tracker_invalido", "checks_fallidos", "cancelado", "torrent_viejo", "tmp_sucio",
-      "error_prep", "args_invalidos", "salida_inesperada", "sin_rutas", "sin_trackers", "sin_config", "config_invalida", "interrumpido"
+      "error_prep", "args_invalidos", "salida_inesperada", "sin_rutas", "sin_trackers", "sin_config", "config_invalida", "interrumpido",
+      "tipo_desconocido"
     ]
   },
   "eventos": {

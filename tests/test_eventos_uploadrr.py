@@ -143,6 +143,7 @@ def test_si_se_vio_subido_el_fallo_conserva_la_ficha():
 @pytest.mark.parametrize("codigo, marca", [
     ("duplicado", "Potential duplicate on"), ("busqueda_caida", "Dupe search failed"), ("tmdb", "TMDb ID not found"),
     ("grupo_prohibido", "Banned group on"), ("contenido_prohibido", "Banned content on"),
+    ("tipo_desconocido", "Unknown type on"),
 ])
 def test_los_fallos_por_elemento_siguen_siendo_fallos_por_elemento_para_los_lotes(codigo, marca):
     """lotes.motivo_de_fallo decide por estas marcas si un fallo frena el lote entero: no pueden perderse."""
@@ -285,10 +286,12 @@ def test_el_comando_del_trabajo_lleva_eventos_solo_con_contrato(db_conn, tmp_pat
 
     shutil.copy(CONTRATO, fake_uploadrr_emu_dir / "contrato_eventos.json")
     con = build_uploadrr_execution_command(job, conn=db_conn)
-    assert con["args"] == sin["args"] + ["--eventos", str(ruta_eventos(jid))] and con["eventos"] == str(ruta_eventos(jid))
+    # (tras él va `--config`, que el contrato también anuncia: test_config_uploadrr_por_subida.py)
+    assert con["args"][:len(sin["args"]) + 2] == sin["args"] + ["--eventos", str(ruta_eventos(jid))]
+    assert con["eventos"] == str(ruta_eventos(jid))
     # El reenvío a qBittorrent usa su propio fichero: puede repetirse sobre el mismo trabajo.
     reenvio = build_uploadrr_execution_command(job, conn=db_conn, solo_cliente="4242")
-    assert reenvio["args"][-2:] == ["--eventos", str(ruta_eventos(jid, reenvio=True))]
+    assert reenvio["args"][-4:-2] == ["--eventos", str(ruta_eventos(jid, reenvio=True))]
     assert ruta_eventos(jid) != ruta_eventos(jid, reenvio=True)
 
 

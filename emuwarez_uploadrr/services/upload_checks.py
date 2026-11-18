@@ -46,7 +46,7 @@ def _set_checks_progress(item_id: int, *, checks: list[dict], done: bool = False
 # con 30 capítulos elegidos, preguntarle 30 veces a eMuwarez si está vivo no
 # aporta nada y multiplica por 30 la espera.
 CONTENT_CHECK_IDS = ("accesible", "season_pack", "capitulos_accesibles",
-                     "carpeta_subida", "renameable", "spanish")
+                     "carpeta_subida", "renameable", "spanish", "tipo")
 ENVIRONMENT_CHECK_IDS = ("output", "qbittorrent", "imghosts", "emuwarez")
 
 
@@ -192,6 +192,7 @@ def run_upload_checks(conn: sqlite3.Connection, item_id: int, *, scope: str = "a
         msg = "; ".join(plan["errors"]) if not ok else (
             f"Pack listo: {len(plan['episodes'])} episodio(s) → {plan.get('pack_folder')}"
         )
+        formato = plan.get("source")  # el `-t` del pack (upload_queue._populate_ready)
         if not add("season_pack", "Se puede preparar el pack de temporada",
                    "No se puede preparar el pack de temporada", ok, msg):
             return done()
@@ -310,6 +311,24 @@ def run_upload_checks(conn: sqlite3.Connection, item_id: int, *, scope: str = "a
             )
         if not add("spanish", "Tiene castellano", "No tiene castellano",
                    has_audio_es or has_subs_es, spanish_msg):
+            return done()
+
+        # El formato del `-t` de la subida: el Source elegido en el asistente, el que leerá el comando de la propuesta
+        # guardada o, sin ella, el que se le deducirá al encolar.
+        from .nomenclature import _infer_source_from_item, get_latest_nomenclature_proposal
+        from .upload_preflight import formato_de_subida
+        propuesta = get_latest_nomenclature_proposal(item_id, conn=conn)
+        formato = (ajustes or {}).get("source") or (
+            formato_de_subida(item, propuesta) if propuesta else _infer_source_from_item(item))
+
+    # Sin tipo, Uploadrr-EMU lo adivina del nombre y eMuwarez puede recibir el tipo 0.
+    if scope != "environment":
+        from .uploadrr_contract import tipo_de_subida
+        donde = "elígelo en el resumen" if scope == "all" else "elige su Source en el asistente de subida"
+        cual = f"Source «{formato}»" if formato else "sin Source"
+        if not add("tipo", "Se sabe el tipo de la copia", "No se sabe el tipo de la copia",
+                   bool(tipo_de_subida(formato)),
+                   formato if tipo_de_subida(formato) else f"No se sabe el tipo de esta copia ({cual}): {donde}"):
             return done()
 
     if scope == "content":

@@ -55,6 +55,26 @@ def test_solo_cliente_lleva_el_id_y_conserva_tmp_como_resume(tmp_path):
     assert _meta([])["solo_cliente"] is None and _meta([])["resume"] is False
 
 
+def test_config_es_global_y_se_lee_antes_que_el_resto(tmp_path):
+    from src.utils.eventos import ruta_de_argv
+
+    video, config = tmp_path / "Peli.mkv", tmp_path / "7.yaml"
+    video.write_bytes(b"")
+    config.write_text("DEFAULT: {}\n", encoding="utf-8")
+    for ruta in (config, tmp_path / "no-existe.yaml"):  # la app lo crea antes, pero ni así pasaría por una ruta
+        argv = [str(video), "-tk", "EMU", "-ua", "--config", str(ruta), "--eventos", str(tmp_path / "e.jsonl")]
+        items, global_argv = group_args_by_path(argv)
+        parser = build_parser({})
+        ns = parser.parse_args(global_argv)
+        enforce_global_only(ns, is_global=True, parser=parser)
+        assert items == [([], str(video.resolve()))] and ns.config == str(ruta)
+        assert ruta_de_argv(argv, "--config") == str(ruta) and ruta_de_argv(argv) == str(tmp_path / "e.jsonl")
+    assert ruta_de_argv(["x", "--config=/c/7.yaml"], "--config") == "/c/7.yaml"
+    assert ruta_de_argv(["x", "--eventos", "e"], "--config") is None and _meta([])["config"] is None
+    with pytest.raises(ValueError, match="--config is global-only"):
+        enforce_global_only(parser.parse_args(["--config", "x.yaml"]), is_global=False, parser=parser)
+
+
 def test_las_banderas_antes_de_una_ruta_son_de_esa_ruta(tmp_path):
     a, b = tmp_path / "a.mkv", tmp_path / "b.mkv"
     a.write_bytes(b"")

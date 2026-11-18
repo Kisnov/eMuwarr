@@ -13,6 +13,7 @@ import torf
 
 import upload
 from contrato_eventos import validar, validar_linea_final
+from src.trackers.EMU import EMU
 from flujo_emu import (
     EPISODIO,
     GOLDEN,
@@ -20,6 +21,7 @@ from flujo_emu import (
     NOMBRE_PELICULA,
     PELICULA,
     SEARCH,
+    TOKEN,
     UPLOAD,
     Flujo,
     FakeTracker,
@@ -135,6 +137,20 @@ def test_la_busqueda_de_duplicados_cae(flujo):
     assert flujo.tracker.calls("POST", UPLOAD) == []
 
 
+def test_un_tipo_sin_id_en_emu_no_se_sube_con_el_tipo_0(flujo, monkeypatch):
+    flujo.tracker_que_acepta()
+    monkeypatch.setattr(EMU, "type_ids", {k: v for k, v in EMU.type_ids.items() if k != "WEBDL"})
+
+    codigo, salida = _correr(flujo, flujo.crear_video(PELICULA), ARGV_PELICULA)
+
+    assert codigo == 1
+    assert "Unknown type on EMU: WEBDL" in salida  # el título de su panel en el resumen
+    eventos = _revisar(flujo)
+    assert _resultado(eventos) == ("tipo_desconocido", False)
+    assert eventos[-1]["detalle"] == "Unknown type on EMU: WEBDL"
+    assert flujo.tracker.calls("GET", SEARCH) == [] and flujo.tracker.calls("POST", UPLOAD) == []
+
+
 def test_login_de_qbittorrent_fallido_no_deshace_la_subida(flujo, monkeypatch):
     flujo.tracker_que_acepta()
 
@@ -204,6 +220,46 @@ def test_argumentos_invalidos_ya_tienen_resultado(flujo):
 
     assert codigo == 1
     assert _resultado(_revisar(flujo)) == ("sin_rutas", False)
+
+
+# --config: el config de esta subida en vez de data/config.yaml
+
+
+def _solo_con_config_propio(flujo, monkeypatch):
+    """Mueve el config de la prueba fuera de data/: si se leyera el de siempre, no habría ninguno."""
+    propio = flujo.raiz / "config-de-la-subida.yaml"
+    preparar = flujo.preparar
+
+    def preparar_y_mover():
+        preparar()
+        (flujo.base / "config.yaml").replace(propio)
+        propio.write_text(propio.read_text(encoding="utf-8").replace(TOKEN, "clave-de-esta-subida"), encoding="utf-8")
+
+    monkeypatch.setattr(flujo, "preparar", preparar_y_mover)
+    return propio
+
+
+def test_con_config_lee_ese_fichero_y_la_salida_no_cambia(flujo, monkeypatch):
+    propio = _solo_con_config_propio(flujo, monkeypatch)
+    flujo.tracker_que_acepta()
+
+    codigo, salida = _correr(flujo, flujo.crear_video(PELICULA), [*ARGV_PELICULA, "--config", str(propio)])
+
+    assert codigo == 0
+    assert flujo.normalizar(salida) == _texto_dorado("subida_emu_pelicula.txt")
+    assert _resultado(_revisar(flujo)) == ("subido", True)
+    assert [q["api_token"] for q in flujo.tracker.calls("POST", UPLOAD)] == [["clave-de-esta-subida"]]
+    meta = json.loads((flujo.base / "tmp" / f"{PELICULA}.mkv" / "meta.json").read_text(encoding="utf-8"))
+    assert "config" not in meta  # la ruta es de esta ejecución: un --resume trae la suya
+
+
+def test_un_config_que_no_existe_es_sin_config(flujo, monkeypatch):
+    propio = _solo_con_config_propio(flujo, monkeypatch)
+
+    codigo, _ = _correr(flujo, flujo.crear_video(PELICULA), [*ARGV_PELICULA, "--config=" + str(propio) + ".no"])
+
+    assert codigo == 1
+    assert _resultado(_revisar(flujo)) == ("sin_config", False)
 
 
 # --solo-cliente de punta a punta

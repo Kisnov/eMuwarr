@@ -1,0 +1,36 @@
+# Config de prueba: los comentarios tienen que sobrevivir.
+DEFAULT:
+  tmdb: 'TMDB_NUEVA'
+  add_logo: false
+  always_anon: false
+  default_torrent_client: 'qbit'
+  screens: 4
+
+AUTO:
+  keep_quiet: false
+  delay: 0
+
+SIGNATURES:
+  use_global_sigs: default
+  movie: "[img]https://i.ibb.co/3yXzn45j/emuwarr-firma-animada.webp[/img]"
+  tv: "[img]https://i.ibb.co/3yXzn45j/emuwarr-firma-animada.webp[/img]"
+
+SCREENS:
+  img_hosts: [pixhost, imgbb, lensdump]
+  API_KEYS: {'imgbb': 'IMGBB_CLAVE', 'lensdump': 'LENS_CLAVE'}
+  per_episode: 0
+  screen_count: 6
+
+TRACKERS:
+  default_trackers: EMU
+  BLU:
+    useAPI: false
+    api_key: BLU_FALSA
+  EMU:
+    api_key: 'EMU_NUEVA'
+    anon: false
+    qbit_tag: emu
+
+TORRENT_CLIENTS:
+  qbit: {'torrent_client': 'qbit', 'enable_search': false, 'qbit_url': 'http://qbit.local', 'qbit_port': '8090', 'qbit_tag': 'emuwarr', 'content_layout': 'Original', 'qbit_user': 'admin', 'qbit_pass': 'pa:ss#1'}
+  watch: {'torrent_client': 'watch', 'watch_folder': '/tmp/watch'}

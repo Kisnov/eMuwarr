@@ -85,10 +85,14 @@ came in from `Kisnov/Uploadrr-EMU` with `git subtree add`, history kept; that re
 - Contract with Uploadrr-EMU, change both sides in the same PR: argv in `services/uploadrr_contract.py` (below 720p it
   adds `-avbc`, and Uploadrr-EMU puts its `AVISO_BAJA_CALIDAD` notice at the top of the description;
   `test_contrato_uploadrr_real.py` parses the app's argv with the real `uploadrr-emu/src/args.py`);
-  `config.yaml` keys staged by `uploadrr_config_staging.py` / `uploadrr_yaml.py` (among them the stock signature image, replaced by the current one, `AUTO.keep_quiet`, `SCREENS.use_oxipng`/`oxipng_level`, `DEFAULT.always_anon`
-  and `TRACKERS.EMU.anon`, all `false`: only the `-a` flag makes an upload anonymous) and restored from
+  `config.yaml` keys set by `upload_execution/config.py` with `uploadrr_config_staging.py` / `uploadrr_yaml.py` (among them the stock signature image, replaced by the current one, `AUTO.keep_quiet`, `SCREENS.use_oxipng`/`oxipng_level`, `DEFAULT.always_anon`
+  and `TRACKERS.EMU.anon`, all `false`: only the `-a` flag makes an upload anonymous), on top of the `.bak` if there is one, else
+  `config.yaml`. When the checkout's `contrato_eventos.json` has `"config": true` they go into the job's own file,
+  `config_uploadrr/<job>.yaml` next to the DB (`<job>-reenvio.yaml` for «Reenviar a qBittorrent»; dir 0700, file 0600 via `O_EXCL`,
+  deleted after the process, swept at startup, never in a backup), passed as `--config <absolute path>` (global, like `--eventos`),
+  and the user's files are never written. Otherwise (an older `uploadrr.path`) they are staged into the shared `config.yaml` and restored from
   `data/config.yaml.bak` after every job, and also at startup and before the next job if one died mid-run
-  (hand edits to `config.yaml` don't survive, edit the `.bak`);
+  (hand edits to `config.yaml` don't survive, edit the `.bak`); `test_config_uploadrr_por_subida.py` pins both to the same golden files;
   progress and result parsing in `uploadrr_progress.py` / `upload_result_parser.py` match its output lines
   verbatim, but they are now the fallback (one version, then they go): when the checkout has `contrato_eventos.json` (version 1) the
   app launches with `--eventos <absolute path>` (a global flag, after the media path; the file is `eventos_uploadrr/<job>.jsonl`

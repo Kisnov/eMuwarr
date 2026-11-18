@@ -27,13 +27,14 @@ def db_conn(isolated_db):
 # Defaults to Castilian audio: the checks now require Castilian one way or the
 # other (upload_checks' "spanish" check), so a film without it isn't a normal
 # uploadable film any more. The Castilian tests pass their own values.
+# Y con el Source de Radarr, que da el tipo de la copia (la comprobación "tipo").
 def _movie_with_path(conn, path: str, *, audio_languages: str | None = "spa",
-                     subtitle_languages: str | None = None) -> int:
+                     subtitle_languages: str | None = None, source: str | None = "WEB-DL") -> int:
     conn.execute(
         """INSERT INTO library_items (item_type, title, local_status, request_status, nomenclature_status,
-            path, size_bytes, audio_languages, subtitle_languages, updated_at)
-           VALUES ('movie', 'X', 'Disponible', 'Sin petición', 'N/A', ?, 100, ?, ?, CURRENT_TIMESTAMP)""",
-        (path, audio_languages, subtitle_languages),
+            path, size_bytes, audio_languages, subtitle_languages, source, updated_at)
+           VALUES ('movie', 'X', 'Disponible', 'Sin petición', 'N/A', ?, 100, ?, ?, ?, CURRENT_TIMESTAMP)""",
+        (path, audio_languages, subtitle_languages, source),
     )
     conn.commit()
     return conn.execute("SELECT id FROM library_items ORDER BY id DESC LIMIT 1").fetchone()["id"]
@@ -96,7 +97,7 @@ def test_all_green_when_everything_passes(db_conn, tmp_path, monkeypatch):
     iid = _movie_with_path(db_conn, str(f))
     r = uc.run_upload_checks(db_conn, iid)
     ids = [c["id"] for c in r["checks"]]
-    assert ids == ["accesible", "carpeta_subida", "renameable", "spanish",
+    assert ids == ["accesible", "carpeta_subida", "renameable", "spanish", "tipo",
                    "output", "qbittorrent", "imghosts", "emuwarez"]
     # Un archivo de la biblioteca no se renombra: esa no bloquea.
     assert {c["id"]: c["status"] for c in r["checks"]}["renameable"] == "skip"
@@ -299,3 +300,86 @@ def test_qui_alone_counts_as_configured_qbit(db_conn, tmp_path, monkeypatch):
 
     r = uc.run_upload_checks(db_conn, _movie_with_path(db_conn, str(f)))
     assert {c["id"]: c for c in r["checks"]}["qbittorrent"]["status"] != "skip"
+
+
+# ---------------------------------------------------------------------------
+# El tipo de la copia: sin un `-t` que eMuwarez conozca no se sube (iría con el tipo 0)
+# ---------------------------------------------------------------------------
+
+def _tipo(r):
+    return next(c for c in r["checks"] if c["id"] == "tipo")
+
+
+def _propuesta(conn, item_id, source):
+    conn.execute("INSERT INTO nomenclature_proposals (library_item_id, status, source) VALUES (?, 'draft', ?)",
+                 (item_id, source))
+    conn.commit()
+
+
+@pytest.mark.parametrize("source, cual", [(None, "sin Source"), ("DVD", "Source «DVD»")])
+def test_sin_tipo_conocido_bloquea_y_dice_donde_elegirlo(db_conn, tmp_path, source, cual):
+    f = tmp_path / "movie.mkv"; f.write_bytes(b"x")
+    iid = _movie_with_path(db_conn, str(f), source=source)
+    r = uc.run_upload_checks(db_conn, iid)
+    assert r["ready"] is False and r["checks"][-1]["id"] == "tipo"  # se para aquí: ni qBittorrent ni eMuwarez
+    assert _tipo(r) == {"id": "tipo", "label": "No se sabe el tipo de la copia", "status": "fail",
+                        "message": f"No se sabe el tipo de esta copia ({cual}): elígelo en el resumen"}
+    contenido = uc.run_upload_checks(db_conn, iid, scope="content")
+    assert _tipo(contenido)["message"].endswith(": elige su Source en el asistente de subida")
+
+
+def test_el_tipo_sale_del_source_de_la_propuesta_guardada(db_conn, tmp_path):
+    f = tmp_path / "movie.mkv"; f.write_bytes(b"x")
+    iid = _movie_with_path(db_conn, str(f), source=None)
+    _propuesta(db_conn, iid, "BDRemux")
+    assert _tipo(uc.run_upload_checks(db_conn, iid, scope="content"))["status"] == "ok"
+
+
+def test_sin_propuesta_vale_el_source_que_se_deducira_del_nombre(db_conn, tmp_path):
+    f = tmp_path / "Peli.2020.1080p.WEB-DL.mkv"; f.write_bytes(b"x")
+    iid = _movie_with_path(db_conn, str(f), source=None)
+    assert _tipo(uc.run_upload_checks(db_conn, iid, scope="content"))["status"] == "ok"
+
+
+def test_el_source_elegido_en_el_asistente_desbloquea(db_conn, tmp_path):
+    f = tmp_path / "movie.mkv"; f.write_bytes(b"x")
+    iid = _movie_with_path(db_conn, str(f), source=None)
+    r = uc.run_upload_checks(db_conn, iid, scope="content", ajustes={"source": "BluRay"})
+    assert (_tipo(r)["status"], _tipo(r)["message"], r["ready"]) == ("ok", "BluRay", True)
+
+
+@pytest.mark.parametrize("source", ["", None, "WEB-DL", "BluRay", "DVD", "Full BluRay"])
+def test_la_comprobacion_y_el_comando_dicen_lo_mismo(db_conn, tmp_path, source):
+    """Pasa si y solo si el comando lleva `-t`: los dos leen el formato de la misma propuesta."""
+    from emuwarez_uploadrr.services.nomenclature import get_latest_nomenclature_proposal
+    from emuwarez_uploadrr.services.upload_preflight import build_uploadrr_command_preview
+    f = tmp_path / "movie.mkv"; f.write_bytes(b"x")
+    iid = _movie_with_path(db_conn, str(f), source=None)
+    _propuesta(db_conn, iid, source)
+    item = dict(db_conn.execute("SELECT * FROM library_items WHERE id = ?", (iid,)).fetchone())
+    comando = build_uploadrr_command_preview(item, get_latest_nomenclature_proposal(iid, conn=db_conn), conn=db_conn)
+    pasa = _tipo(uc.run_upload_checks(db_conn, iid, scope="content"))["status"] == "ok"
+    assert pasa == ("-t" in comando["command_args"])
+
+
+@pytest.mark.parametrize("plan_source, ajustes, estado", [
+    (None, None, "fail"), ("WEB-DL", None, "ok"), ("BluRay", {"source": "BluRay"}, "ok")])
+def test_un_pack_toma_el_tipo_de_su_plan(db_conn, tmp_path, monkeypatch, plan_source, ajustes, estado):
+    from emuwarez_uploadrr.services import season_pack
+    cap = tmp_path / "S01E01.mkv"; cap.write_bytes(b"x")
+    vistos = []
+
+    def plan(item_id, **kw):
+        vistos.append(kw.get("source_override"))
+        return {"status": "valid", "errors": [], "episodes": [{"source_path": str(cap), "episode_number": 1}],
+                "pack_folder": str(tmp_path), "source": plan_source}
+
+    monkeypatch.setattr(season_pack, "build_season_pack_plan", plan)
+    db_conn.execute("""INSERT INTO library_items (item_type, title, local_status, request_status, nomenclature_status,
+                       season_number, updated_at)
+                       VALUES ('season', 'Serie - Temporada 1', 'Disponible', '', 'N/A', 1, CURRENT_TIMESTAMP)""")
+    db_conn.commit()
+    iid = db_conn.execute("SELECT id FROM library_items ORDER BY id DESC LIMIT 1").fetchone()["id"]
+    r = uc.run_upload_checks(db_conn, iid, scope="content", **({"ajustes": ajustes} if ajustes else {}))
+    assert _tipo(r)["status"] == estado
+    assert vistos == [(ajustes or {}).get("source")]  # el Source elegido llega al plan, del que sale el `-t`

@@ -100,6 +100,9 @@ const PISTAS: TrackRemuxPreview = {
 
 const LISTO = { ready: true, checks: [{ id: 'renameable', label: 'Se puede renombrar', status: 'pass', message: '' }] }
 const ENTORNO = { ready: true, checks: [{ id: 'emuwarez', label: 'eMuwarez responde', status: 'pass', message: '' }] }
+const SIN_TIPO = { ready: false, checks: [{ id: 'tipo', label: 'No se sabe el tipo de la copia', status: 'fail',
+  message: 'No se sabe el tipo de esta copia (sin Source): elígelo en el resumen' }] }
+const selectorDeTipo = () => document.querySelector<HTMLSelectElement>('select[aria-label="Tipo de la copia"]')
 
 function plan(extra: Partial<SeasonPackPlanResponse> = {}): SeasonPackPlanResponse {
   return {
@@ -226,6 +229,27 @@ describe('película', () => {
     expect(subidas.queueUpload).toHaveBeenCalledWith(
       10, {}, LISTO, { ordered_tracks: PISTAS.ordered_tracks }, undefined, undefined, undefined,
       { anonimo: true, personalRelease: null })
+  })
+
+  it('sin tipo conocido, el Resumen deja elegirlo con el Source, lo guarda y vuelve a comprobar', async () => {
+    m(subidas.runUploadChecks).mockResolvedValueOnce(SIN_TIPO as never)
+    await abrir(PELICULA)
+    await esperar(() => texto().includes('Dune WEB-DL AMZN [GRP]'))
+    await pulsar(boton('Continuar'))
+    const tipo = await esperar(selectorDeTipo)
+    expect(boton('Subir a eMuwarez')!.disabled).toBe(true)
+    expect([...tipo.options].map(o => o.value)).toEqual(['', 'WEB-DL', 'BluRay'])
+
+    await elegir(tipo, 'BluRay')
+    await esperar(() => texto().includes('✓ Todo listo para subir'))
+    expect(nom.saveNomenclatureFields).toHaveBeenLastCalledWith(10, expect.objectContaining({ source: 'BluRay', provider: null }))
+    expect(m(subidas.runUploadChecks).mock.calls).toEqual([[10, undefined, undefined], [10, undefined, undefined]])
+    expect(selectorDeTipo()).toBeNull()
+    await esperar(() => texto().includes('Dune BluRay [GRP]'))  // el Source va también en el nombre
+
+    await pulsar(boton('Subir a eMuwarez'))
+    await esperar(() => onClose.mock.calls.length > 0)
+    expect(nom.saveNomenclatureFields).toHaveBeenLastCalledWith(10, expect.objectContaining({ source: 'BluRay' }))
   })
 
   it('un source que no es WEB-DL quita el proveedor', async () => {
@@ -430,6 +454,25 @@ describe('pack de temporada', () => {
     await elegir(campo('Proveedor'), 'NF')
     await esperar(() => texto().includes('✓ 2 capítulo(s) listos'))
     expect(temporada.previewSeasonPack).toHaveBeenLastCalledWith(20, 'NF', undefined)
+  })
+
+  it('sin tipo conocido, el Source elegido en el Resumen va a las comprobaciones y a la cola', async () => {
+    m(temporada.previewSeasonPack).mockResolvedValue(plan({ source: null, provider: null, pistas_sin_idioma: [] }))
+    m(subidas.runUploadChecks).mockResolvedValueOnce(SIN_TIPO as never)
+    await abrir(TEMPORADA)
+    await pulsar(await esperar(() => tarjeta('Temporada entera')))
+    await pulsar(boton('Continuar'))
+    await esperar(() => texto().includes('✓ 2 capítulo(s) listos'))
+    await pulsar(boton('Continuar'))
+
+    await elegir(await esperar(selectorDeTipo), 'BluRay')
+    await esperar(() => texto().includes('✓ Todo listo para subir'))
+    expect(m(subidas.runUploadChecks).mock.calls).toEqual([[20, undefined, undefined], [20, undefined, undefined, { source: 'BluRay' }]])
+    expect(nom.saveNomenclatureFields).not.toHaveBeenCalled()
+
+    await pulsar(boton('Subir a eMuwarez'))
+    await esperar(() => onClose.mock.calls.length > 0)
+    expect(m(subidas.queueUpload).mock.calls[0][4]).toEqual(expect.objectContaining({ source: 'BluRay' }))
   })
 })
 

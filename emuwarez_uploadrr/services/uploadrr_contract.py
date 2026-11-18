@@ -121,6 +121,11 @@ _UPLOADRR_TYPES = {
 }
 
 
+def tipo_de_subida(release_format) -> Optional[str]:
+    """El `-t` de un formato de la nomenclatura; None si eMuwarez no tiene tipo para él."""
+    return _UPLOADRR_TYPES.get(str(release_format or "").strip())
+
+
 def _format_season(value) -> str:
     if isinstance(value, int):
         return f"S{value:02d}"
@@ -195,6 +200,7 @@ def build_uploadrr_emu_command(
     personal_release: bool = False,
     solo_cliente: Optional[int | str] = None,
     eventos: Optional[str] = None,
+    config: Optional[str] = None,
 ) -> list[str]:
     """Build the real Uploadrr-EMU argv. Always a list[str], never a shell string.
 
@@ -210,6 +216,9 @@ def build_uploadrr_emu_command(
 
     `eventos` añade `--eventos <ruta absoluta>`: Uploadrr-EMU escribe ahí un evento JSON por línea (uploadrr_eventos.py).
     Es una bandera global: va tras la ruta del vídeo, con las demás.
+
+    `config` añade `--config <ruta absoluta>`: Uploadrr-EMU lee ese config.yaml (el de esta subida) en vez del suyo.
+    También es global.
 
     Una `resolution` de menos de 720p añade `-avbc` (ver pide_aviso_baja_calidad).
 
@@ -238,7 +247,7 @@ def build_uploadrr_emu_command(
         cmd += ["-season", _format_season(season)]
     if episode is not None and episode != "":
         cmd += ["-episode", _format_episode(episode)]
-    release_type = _UPLOADRR_TYPES.get(str(release_format or "").strip())
+    release_type = tipo_de_subida(release_format)
     if release_type:
         cmd += ["-t", release_type]
     # Un pack es una carpeta: sin -fd, Uploadrr-EMU cambia una carpeta con un
@@ -255,6 +264,8 @@ def build_uploadrr_emu_command(
         cmd += ["--solo-cliente", str(solo_cliente)]
     if eventos:
         cmd += ["--eventos", os.path.abspath(eventos)]
+    if config:
+        cmd += ["--config", os.path.abspath(config)]
     return cmd
 
 

@@ -1,0 +1,17 @@
+DEFAULT:
+  default_torrent_client: 'qbit'
+  always_anon: false
+  add_logo: true
+  tmdb: x
+TRACKERS:
+  EMU:
+    anon: false
+  BLU:
+    api_key: sin_useapi
+SCREENS:
+  img_hosts: [imgbox]
+  per_episode: 3
+TORRENT_CLIENTS:
+  qbit: {'torrent_storage_dir': 'torrents', 'qui_proxy_url': 'http://qui:7476/proxy/k', 'torrent_client': 'qbit'}
+AUTO:
+  keep_quiet: false

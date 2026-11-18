@@ -38,6 +38,7 @@ CODIGOS_CHECKS = (
     ("Banned group", "grupo_prohibido"),
     ("Banned content", "contenido_prohibido"),
     ("No such tracker", "tracker_invalido"),
+    ("Unknown type", "tipo_desconocido"),
 )
 python_cmd = sys.executable
 base_dir = Path(__file__).resolve().parent
@@ -115,6 +116,7 @@ class Uploadrr:
 
         global_meta = normalize_args(global_ns)
         global_meta.pop("eventos", None)  # la ruta ya está en el emisor y no va a meta.json
+        global_meta.pop("config", None)  # ya se leyó en main(); un --resume no tiene por qué traer la misma
         global_meta = apply_special_logic({**base_meta, **global_meta})
 
         # =====================================================================
@@ -401,15 +403,17 @@ async def main() -> None:
     start_time = time.perf_counter()
     eventos.configurar(eventos.ruta_de_argv(sys.argv[1:]))
     check_python_version()
-    if not config_path.exists():
+    # --config: el config que preparó la app para esta subida; el parser lo necesita antes de leer argv.
+    ruta_config = Path(eventos.ruta_de_argv(sys.argv[1:], "--config") or config_path)
+    if not ruta_config.exists():
         eventos.resultado(False, "sin_config")
         if legacy_config.exists():
             log.error("Legacy Config detected, please create a new yaml config, thank you!")
             sys.exit(1)
         else:
-            log.error(f"No Config detected at {config_path}: copy data/backup/example_config.yaml to data/config.yaml and fill in your keys.")
+            log.error(f"No Config detected at {ruta_config}: copy data/backup/example_config.yaml to data/config.yaml and fill in your keys.")
             sys.exit(1)
-    config = load_yaml_config(config_path)
+    config = load_yaml_config(ruta_config)
     redactor.load_from_config(config)
     redactor.add_rule(str(base_dir), "Uploadrr")
     # Con HOME=/ (contenedor sin usuario) cada / de la salida acababa en <HOME>.
