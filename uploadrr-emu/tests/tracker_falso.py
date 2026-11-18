@@ -24,10 +24,12 @@ def partes_multipart(content_type: str, cuerpo: bytes) -> tuple[dict, dict]:
 class FakeTracker:
     """Cada prueba pone en routes[(método, ruta)] una función query -> (status, cuerpo, *(cabecera, valor)).
 
-    `bodies` guarda, por cada POST, (campos, ficheros); `last_body` es el del que se está contestando."""
+    `bodies` guarda, por cada POST, (campos, ficheros); `last_body` es el del que se está contestando; `agentes`, el
+    User-Agent de cada petición."""
 
     def __init__(self):
         self.requests = []
+        self.agentes = []
         self.bodies = []
         self.last_body = ({}, {})
         self.routes = {}
@@ -39,6 +41,7 @@ class FakeTracker:
                 query = parse_qs(parts.query, keep_blank_values=True)
                 cuerpo = self.rfile.read(int(self.headers.get("Content-Length", 0)))
                 tracker.requests.append((self.command, parts.path, query))
+                tracker.agentes.append(self.headers.get("User-Agent"))
                 if self.command == "POST":
                     tracker.last_body = partes_multipart(self.headers.get("Content-Type", ""), cuerpo)
                     tracker.bodies.append(tracker.last_body)

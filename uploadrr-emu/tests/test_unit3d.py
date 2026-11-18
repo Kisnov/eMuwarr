@@ -67,7 +67,6 @@ def emu(tracker, monkeypatch):
     monkeypatch.setattr(unit3d, "DOWNLOAD_RETRY_DELAYS", (0, 0, 0))
     instance = EMU(config={"TRACKERS": {"EMU": {"api_key": TOKEN}}, "DEFAULT": {}})
     instance.domain = tracker.url
-    instance.upload_url = tracker.url + UPLOAD
     return instance
 
 
@@ -345,6 +344,15 @@ def test_upload_sends_season_and_episode_of_an_episode(tracker, emu, upload_meta
     assert (fields["season_number"], fields["episode_number"]) == ("2", "7")
 
 
+def test_every_request_goes_with_the_emuwarr_user_agent(tracker, emu, upload_meta, signed_torrent):
+    """La subida, su descarga y la búsqueda de antes (src/utils/cliente_unit3d.py), con la versión que pasa la app."""
+    tracker.routes[("POST", UPLOAD)] = lambda q: (200, {"success": True, "data": download_url(tracker)})
+    serve_download(tracker, signed_torrent)
+    assert run(emu.upload(upload_meta)) is True
+    assert len(tracker.agentes) == 3 and set(tracker.agentes) == {unit3d.USER_AGENT}
+    assert unit3d.USER_AGENT.startswith("emuwarr/")
+
+
 def test_upload_retries_server_errors(tracker, emu, upload_meta, signed_torrent):
     answers = iter([(502, b"bad gateway"), (520, b"cloudflare"), (200, {"success": True, "data": download_url(tracker)})])
     tracker.routes[("POST", UPLOAD)] = lambda q: next(answers)
@@ -558,13 +566,13 @@ def test_upload_ok_with_invalid_link_counts_as_uploaded(tracker, emu, upload_met
 )
 def test_upload_never_sends_the_key_to_another_origin(tracker, emu, upload_meta, capsys, monkeypatch, link):
     requested = []
-    real_get = httpx.AsyncClient.get
+    real_request = httpx.AsyncClient.request
 
-    async def spy(self, url, *args, **kwargs):
+    async def spy(self, method, url, *args, **kwargs):
         requested.append(str(url))
-        return await real_get(self, url, *args, **kwargs)
+        return await real_request(self, method, url, *args, **kwargs)
 
-    monkeypatch.setattr(httpx.AsyncClient, "get", spy)
+    monkeypatch.setattr(httpx.AsyncClient, "request", spy)
     url = link(tracker.server.server_address[1])
     tracker.routes[("POST", UPLOAD)] = lambda q: (200, {"success": True, "data": url})
 

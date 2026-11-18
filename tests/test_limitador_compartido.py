@@ -11,6 +11,7 @@ from pathlib import Path
 
 import pytest
 
+from emuwarez_uploadrr import __version__
 from emuwarez_uploadrr.integrations import emu, emu_limitador, limitador_compartido as lc
 from emuwarez_uploadrr.integrations.base import IntegrationError
 from emuwarez_uploadrr.integrations.emu_limitador import Limitador
@@ -308,3 +309,4 @@ def test_uploadrr_recibe_el_directorio_del_limitador(monkeypatch, tmp_path):
     finally:
         ejecucion._PROCESOS.pop(987654, None)
     assert lanzados[0]["LIMITADOR_DIR"] == str(tmp_path / "limitador")  # CONFIG_DIR = tmp_path en los tests
+    assert lanzados[0]["EMUWARR_VERSION"] == __version__  # el User-Agent de Uploadrr-EMU
