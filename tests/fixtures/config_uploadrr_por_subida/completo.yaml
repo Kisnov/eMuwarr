@@ -16,6 +16,8 @@ SIGNATURES:
   tv: "[img]https://i.ibb.co/3yXzn45j/emuwarr-firma-animada.webp[/img]"
 
 SCREENS:
+  oxipng_level: 2
+  use_oxipng: true
   img_hosts: [pixhost, imgbb, lensdump]
   API_KEYS: {'imgbb': 'IMGBB_CLAVE', 'lensdump': 'LENS_CLAVE'}
   per_episode: 0

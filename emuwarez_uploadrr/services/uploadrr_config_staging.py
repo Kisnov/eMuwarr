@@ -188,6 +188,13 @@ def stage_per_episode_screens(lines: list[str], all_episodes: bool) -> tuple[lis
     return staged, set_block_key(staged, "SCREENS", "per_episode", "0")
 
 
+def stage_oxipng_on(lines: list[str]) -> tuple[list[str], str]:
+    """Stage SCREENS.use_oxipng a true y SCREENS.oxipng_level a 2: PNG sin pérdida, mucho más rápido que el 4 por casi el mismo tamaño."""
+    staged = list(lines)
+    set_block_key(staged, "SCREENS", "use_oxipng", "true")
+    return staged, set_block_key(staged, "SCREENS", "oxipng_level", "2")
+
+
 def stage_keep_quiet_off(lines: list[str]) -> tuple[list[str], str]:
     """Stage AUTO.keep_quiet a false: a true silencia el progreso, `Added to:` y los avisos de qBittorrent que la app lee."""
     staged = list(lines)
@@ -388,6 +395,7 @@ __all__ = [
     "stage_anon_off",
     "stage_firma_actual",
     "stage_keep_quiet_off",
+    "stage_oxipng_on",
     "stage_per_episode_screens",
     "stage_blu_api_off",
     "stage_image_hosts",
