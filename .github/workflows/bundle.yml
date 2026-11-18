@@ -3,7 +3,7 @@ name: Bundle
 
 on:
   push:
-    branches: [dev]
+    branches: [dev, multitracker]
     paths: ['frontend/**', '.github/workflows/bundle.yml']
 
 permissions: {}

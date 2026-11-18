@@ -6,6 +6,7 @@
 # A mano (Actions → Publicar versión → Run workflow), o solo los días impares del mes si desde
 # la última versión se han fusionado al menos 3 PR de ramas feat/ o fix/. Con «solo prueba», y en
 # cada push a dev que no sea solo de documentación, construye :dev de la punta de dev, sin tests, versión ni manifiesto.
+# Igual en la rama multitracker (trabajo de Gabriel que aún no va a dev): construye :multitracker, y nunca publica una versión.
 #
 # Con «ref» (un commit de dev, una rama o una etiqueta) publica la versión de ESE commit: sin tests (la CI solo corre sobre
 # la punta), con la versión y su etiqueta en la rama release/vX.Y.Z en vez de en dev (que ya avanzó; se fusiona después), sin
@@ -36,7 +37,7 @@ on:
         type: string
         required: false
   push:
-    branches: [dev]
+    branches: [dev, multitracker]
     paths-ignore: ["docs/**", "**.md"]
   schedule:
     - cron: "17 4 */2 * *"
@@ -49,7 +50,7 @@ concurrency:
 
 jobs:
   decidir:
-    if: github.ref == 'refs/heads/dev'
+    if: github.ref == 'refs/heads/dev' || github.ref == 'refs/heads/multitracker'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -69,6 +70,7 @@ jobs:
       - id: d
         env:
           EVENTO: ${{ github.event_name }}
+          RAMA: ${{ github.ref_name }}
           ESCALA: ${{ inputs.escala || 'auto' }}
           PRUEBA: ${{ inputs.solo_prueba || false }}
           REF: ${{ inputs.ref }}
@@ -82,6 +84,10 @@ jobs:
           # El flujo ejecuta los scripts del commit elegido: uno anterior a --solo-comprobar no sirve.
           if [ -n "$REF" ] && ! grep -q -- '--solo-comprobar' scripts/publicar_version.py 2>/dev/null; then
             echo "::error::El commit de ref es demasiado antiguo: su scripts/publicar_version.py no admite --solo-comprobar."
+            exit 1
+          fi
+          if [ "$RAMA" = multitracker ] && [ "$PRUEBA" != true ] && [ "$EVENTO" != push ]; then
+            echo "::error::Desde multitracker solo se construye :multitracker (solo_prueba); las versiones salen de dev."
             exit 1
           fi
           if [ "$PRUEBA" = true ] || [ "$EVENTO" = push ]; then
@@ -190,6 +196,8 @@ jobs:
 
       - id: sello
         if: steps.version.outputs.hecha != 'true'
+        env:
+          RAMA: ${{ github.ref_name }}
         run: |
           echo "commit=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
           echo "fecha=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
@@ -198,7 +206,8 @@ jobs:
           if [ "$ACCION" = publicar ]; then
             echo "tags=$imagen:$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
           else
-            echo "tags=$imagen:dev" >> "$GITHUB_OUTPUT"
+            # Una prueba lleva el nombre de su rama: :dev o :multitracker.
+            echo "tags=$imagen:$RAMA" >> "$GITHUB_OUTPUT"
           fi
 
       # arm64 por emulación: el frontend se compila en la plataforma nativa (--platform=$BUILDPLATFORM en el Dockerfile).
