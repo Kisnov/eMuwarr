@@ -241,3 +241,11 @@ def test_una_pagina_sin_lista_no_es_el_final(monkeypatch):
     monkeypatch.setattr(emu, "_pedir_pagina", lambda url, api_key: next(paginas))
     with pytest.raises(IntegrationError, match="página 2"):
         emu.emu_fetch_all_torrents("clave", uploader="Kisnov")
+
+
+def test_una_subida_del_mismo_dia_del_corte_sin_foto_cuenta_entera(conn, tracker):
+    corte = AHORA - timedelta(days=7)
+    tracker["torrents"] = [_torrent(1, 4, subido=corte.replace(hour=12).astimezone(timezone.utc).strftime(
+        "%Y-%m-%dT%H:%M:%S.000000Z"))]
+    sincronizar(conn, AHORA)
+    assert resumen(conn)["torrents"][0]["completados_semana"] == 4

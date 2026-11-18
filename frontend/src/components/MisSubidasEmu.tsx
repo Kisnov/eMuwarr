@@ -21,19 +21,21 @@ export function MisSubidasEmu({ visible }: { visible: boolean }) {
   const [datos, setDatos] = useState<MisTorrents | null>(null)
   const [fallo, setFallo] = useState(false)
   const [orden, setOrden] = useState<Orden>('completados')
+  const [intento, setIntento] = useState(0)
 
   useEffect(() => {
     if (!visible) return
     let vigente = true
     getMisSubidas().then(d => { if (vigente) { setDatos(d); setFallo(false) } }, () => { if (vigente) setFallo(true) })
     return () => { vigente = false }
-  }, [visible])
+  }, [visible, intento])
 
   const filas = useMemo(() => (datos ? [...datos.torrents].sort(ORDENES[orden].comparar) : []), [datos, orden])
 
   const aviso = fallo && (
     <p className="est-nota est-aviso" role="status">
-      No se pudieron cargar tus subidas en eMuwarez{datos ? '; se enseñan las de la última vez' : ''}.
+      No se pudieron cargar tus subidas en eMuwarez{datos ? '; se enseñan las de la última vez' : ''}.{' '}
+      <button type="button" className="btn btn-ghost btn-sm" onClick={() => setIntento(n => n + 1)}>Reintentar</button>
     </p>
   )
   if (!datos) return aviso || null
@@ -50,7 +52,7 @@ export function MisSubidasEmu({ visible }: { visible: boolean }) {
             <StatCard label="Subidas" value={formatNumero(t.subidas)} />
             <StatCard label="Completadas" value={formatNumero(t.completados)} info="Veces que alguien ha terminado de bajar alguna de tus subidas." />
             <StatCard label="Completadas esta semana" value={cifra(t.completados_semana)}
-              info="En los últimos 7 días. Sale a partir de la semana de lecturas: antes, solo cuentan las subidas de esta semana." />
+              info="En los 7 días anteriores a la última lectura. Sale a partir de una semana de lecturas: antes, solo cuentan las subidas de esa semana." />
             <StatCard label="Seeders" value={formatNumero(t.seeders)} info="La suma de los seeders de todas tus subidas." />
             <StatCard label="Sin seeders" value={formatNumero(t.sin_seeders)} accentColor={t.sin_seeders ? 'var(--color-warning)' : undefined}
               info="Subidas que nadie siembra ahora mismo: si las tienes, vuelve a sembrarlas." />

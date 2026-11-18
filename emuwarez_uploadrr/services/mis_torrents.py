@@ -124,8 +124,8 @@ VACIO = {"subidas": 0, "seeders": 0, "leechers": 0, "completados": 0, "completad
 
 def resumen(conn: sqlite3.Connection) -> dict[str, Any]:
     """Tus subidas de la última lectura, con lo completado en los 7 días anteriores a esa lectura, y sus totales. Lo de
-    la semana es la diferencia con la foto del día de corte; un torrent subido después del corte cuenta entero, y uno
-    más antiguo sin foto de ese día queda a None. Si la lectura es de otro usuario que el de Ajustes, no se enseña."""
+    la semana es la diferencia con la foto del día de corte; un torrent subido ese día o después, sin foto de entonces,
+    cuenta entero, y uno más antiguo sin foto de ese día queda a None. Si la lectura es de otro usuario que el de Ajustes, no se enseña."""
     estado = get_json_state(conn, ESTADO) or {}
     usuario = (get_setting_canonical(conn, "emu.username") or "").strip()
     if not estado.get("leido_at") or estado.get("usuario") != usuario:
@@ -140,7 +140,7 @@ def resumen(conn: sqlite3.Connection) -> dict[str, Any]:
            FROM emu_mis_torrents t ORDER BY t.completados DESC, t.torrent_id DESC""", (corte,))]
     for f in filas:
         antes = f.pop("completados_antes")
-        if antes is None and _dia_local(f["subido_at"]) > corte:
+        if antes is None and _dia_local(f["subido_at"]) >= corte:
             antes = 0
         f["completados_semana"] = (f["completados"] - antes
                                    if f["completados"] is not None and antes is not None else None)
