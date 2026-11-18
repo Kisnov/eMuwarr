@@ -13,6 +13,35 @@ fichero en el mismo PR que cierra un punto: bórralo.**
     resumen del lote);
   - la caja interior de las tarjetas de Tareas.
 
+## Por hacer: subir a más trackers (decidido el 18/11)
+
+eMuwarr subirá también a otros trackers, no solo a eMuwarez. **Un solo repo con un adaptador por tracker**, no un clon:
+lo valioso (cruce con Radarr/Sonarr, cola, enlaces duros, qBittorrent, Panel, avisos) no depende del tracker; por
+tracker solo cambian la nomenclatura, los ids de categoría/tipo/resolución, las normas (idiomas, duplicados), la
+descripción y el cliente.
+
+- **No se borran los trackers que no son EMU de `uploadrr-emu/src/trackers/`**: son la base de los adaptadores (allí ya
+  están SP seedpool, RF reelflix, DARK darkpeers, OE onlyencodes, LT lat-team, TTR torrenteros, YU yu-scene,
+  IHD infinityhd, RTF retroflix, TL TorrentLeech, HDT hd-torrents y `UNIT3D_TEMPLATE`).
+- **Por orden:**
+  1. Lo que sí queda del «paso 2» de la unión con Uploadrr-EMU, pensado ya para varios trackers: una sola tabla de ids,
+     un solo cliente UNIT3D, el limitador de llamadas compartido entre la app y el subproceso (uno por tracker) y la
+     configuración por subida en vez del `config.yaml` compartido.
+  2. **Fase A:** el tracker pasa a ser un dato. Base de datos (cada subida, petición, catálogo y estadística lleva su
+     tracker), ajustes por tracker (URL, clave, usuario, grupos, anónimo), cola y Panel. eMuwarez queda como el primer
+     adaptador, sin cambiar lo que ve hoy quien solo usa eMuwarez.
+  3. **Fase B: NOBS (nobs.rawsmoke.net) y Milnueve (tracker.milnueve.cc).** Los dos son UNIT3D y ya se sube a ellos con
+     otras herramientas: se puede empezar (Gabriel les avisa). El primero valida la abstracción.
+  4. Después, los internacionales que ya tienen código en `uploadrr-emu/`, solo para contenido con el audio en inglés y
+     donde haya permiso.
+- **Esperando permiso:** Torrentland (torrentland.li; no acepta automatizaciones: hace falta el OK del staff por
+  escrito antes de subir por API) y HDZero (hdzero.org, permiso improbable). Los cuatro son UNIT3D (`/api/torrents/filter`
+  anónimo → 401 JSON, comprobado el 18/11).
+- **Por resolver en la fase A:** de dónde salen los ids de cada tracker (su formulario de subida o el staff), una
+  nomenclatura por tracker y un nombre de fichero por tracker (un enlace duro por tracker en la carpeta de subidas, sin
+  ocupar más), etiqueta/categoría de qBittorrent por tracker, peticiones y catálogo por tracker sin pasar del límite de
+  cada API, y si la app cambia de nombre (hoy «eMuwarr» es de eMuwarez).
+
 ## Por probar en el NAS (`:dev`)
 
 - El límite compartido entre la CLI y el servidor (`flock` sobre el volumen de `CONFIG_DIR`).
