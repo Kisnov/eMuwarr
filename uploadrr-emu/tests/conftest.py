@@ -29,6 +29,13 @@ def sin_red_ni_procesos(monkeypatch):
     monkeypatch.setattr(asyncio, "create_subprocess_shell", _bloquear)
 
 
+@pytest.fixture(autouse=True)
+def sin_limitador_compartido(monkeypatch):
+    """Sin directorio el límite de peticiones compartido (src/utils/limitador.py) no hace nada; quien lo prueba lo pone."""
+    monkeypatch.delenv("LIMITADOR_DIR", raising=False)
+    monkeypatch.delenv("CONFIG_DIR", raising=False)
+
+
 class FicheroFalso:
     """Sustituto de un fichero de aiofiles: guarda lo que se escribe."""
 

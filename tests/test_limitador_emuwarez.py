@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import logging
 import threading
-import time
 
 import pytest
 
@@ -333,8 +332,3 @@ def test_la_prueba_de_conexion_de_ajustes_pasa_por_el_limitador(http_falso, limi
     assert segundo["ok"] is False and segundo["status"] == "rate_limited"
     assert len(http_falso.peticiones) == 1  # el 429 pausa: la segunda no sale
     assert CLAVE not in str(segundo)
-
-
-def test_el_limitador_de_la_aplicacion_usa_el_reloj_monotono():
-    import inspect
-    assert inspect.signature(Limitador).parameters["reloj"].default is time.monotonic

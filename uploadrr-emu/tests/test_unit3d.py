@@ -2,6 +2,7 @@
 
 import asyncio
 import io
+import json
 import socket
 import subprocess
 import time
@@ -15,6 +16,7 @@ import src.trackers.UNIT3D as unit3d
 import upload
 from src.trackers.EMU import EMU
 from src.trackers.UNIT3D import DupeSearchError
+from src.utils import limitador
 from tracker_falso import FakeTracker
 
 TOKEN = "clave-de-prueba"
@@ -830,8 +832,6 @@ def test_resoluciones_de_la_busqueda_de_duplicados(tracker, emu, meta):
 
 
 def test_upload_recuperada_emite_subido_una_vez_y_lo_guarda_en_meta(tracker, emu, upload_meta, signed_torrent, tmp_path):
-    import json
-
     from src.utils import eventos
 
     emu.timeout = httpx.Timeout(0.5)
@@ -861,3 +861,69 @@ def test_upload_recuperada_emite_subido_una_vez_y_lo_guarda_en_meta(tracker, emu
     assert [(e["torrent_id"], e["url"]) for e in lineas if e["ev"] == "subido"] == [(42, f"{emu.domain}/torrents/42")]
     guardado = json.loads((tmp_path / "tmp" / "u" / "meta.json").read_text(encoding="utf-8"))
     assert guardado["subido"] == {"id": 42, "url": f"{emu.domain}/torrents/42"}
+
+
+# Límite de peticiones por minuto compartido con la app (src/utils/limitador.py)
+
+
+@pytest.fixture
+def turnos(tmp_path, monkeypatch, tracker):
+    """Con LIMITADOR_DIR: por cada turno pedido, cuántas peticiones había recibido ya el tracker."""
+    monkeypatch.setenv("LIMITADOR_DIR", str(tmp_path / "limitador"))
+    vistos = []
+    reservar = limitador.reservar
+
+    def espia(*args, **kwargs):
+        vistos.append(len(tracker.requests))
+        return reservar(*args, **kwargs)
+
+    monkeypatch.setattr(limitador, "reservar", espia)
+    return vistos
+
+
+def fichero_limitador(tmp_path):
+    return json.loads(limitador.ruta(tmp_path / "limitador", "EMU", TOKEN).read_text())
+
+
+def test_cada_peticion_de_una_subida_pide_turno_antes(tracker, emu, upload_meta, signed_torrent, turnos, tmp_path):
+    answers = iter([(502, b"bad gateway"), (200, {"success": True, "data": download_url(tracker)})])
+    tracker.routes[("POST", UPLOAD)] = lambda q: next(answers)
+    serve_download(tracker, signed_torrent, failures=1)
+
+    assert run(emu.search_existing(upload_meta)) == {}
+    assert run(emu.upload(upload_meta)) is True
+    # duplicados, nombre, dos POST y dos descargas: un turno justo antes de cada una
+    assert len(tracker.requests) == 6 and turnos == list(range(6))
+    assert len(fichero_limitador(tmp_path)["marcas"]) == 6
+
+
+def test_solo_cliente_pide_turno_antes_de_cada_peticion(tracker, upload_meta, signed_torrent, solo_cliente, turnos):
+    recurso = {"attributes": {"name": NAME, "download_link": download_url(tracker)}}
+    tracker.routes[("GET", API_TORRENT)] = lambda q: (200, {"data": recurso})
+    serve_download(tracker, signed_torrent)
+
+    assert solo_cliente(ClienteFalso()) is None
+    assert len(tracker.requests) == 2 and turnos == [0, 1]
+
+
+def test_un_429_pausa_a_los_demas_procesos(tracker, emu, meta, turnos, tmp_path):
+    answers = iter([(429, b"", ("Retry-After", "0")), (200, {"data": [], "links": {"next": None}})])
+    tracker.routes[("GET", SEARCH)] = lambda q: next(answers)
+    antes = time.time()
+
+    assert run(emu.search_existing(meta)) == {}
+    estado = fichero_limitador(tmp_path)
+    assert antes + 1 <= estado["penalizado_hasta"] <= time.time() + 1  # Retry-After y un segundo, para todos
+    assert turnos[0] == 0 and set(turnos) == {0, 1}  # el reintento puede mirar más de una vez si queda pausa
+
+
+def test_con_el_limite_lleno_la_subida_espera_y_luego_pide(tracker, emu, meta, turnos, tmp_path, monkeypatch, capsys):
+    limitador.penalizar(tmp_path / "limitador", "EMU", TOKEN, 60)  # otro proceso recibió un 429
+    monkeypatch.setattr(limitador, "ESPERA_MAXIMA_SUBIDA", 0.3)
+    tracker.routes[("GET", SEARCH)] = lambda q: (200, {"data": [], "links": {"next": None}})
+
+    inicio = time.monotonic()
+    assert run(emu.search_existing(meta)) == {}
+    assert time.monotonic() - inicio >= 0.3 and len(tracker.requests) == 1
+    out = capsys.readouterr().out
+    assert "espera de 60 s" in out and "se pide igualmente" in out and TOKEN not in out

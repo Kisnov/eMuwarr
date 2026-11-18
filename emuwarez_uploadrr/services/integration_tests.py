@@ -246,6 +246,7 @@ def test_emuwarez_connection(
     # Va por el mismo limitador que el resto de peticiones a eMuwarez, como consulta interactiva.
     from ..integrations import emu_limitador
     from ..integrations.base import IntegrationError
+    from ..integrations.limitador_compartido import segundos_retry_after
     try:
         emu_limitador.esperar_turno(_key, interactiva=True)
     except IntegrationError as exc:
@@ -257,7 +258,7 @@ def test_emuwarez_connection(
         return _ok("emuwarez", details={"base_url": url_sin_claves(_base), "http_status": resp.status_code})
     except http_cliente.ErrorHTTP as exc:
         if exc.status == 429:
-            emu_limitador.penalizar(_key)
+            emu_limitador.penalizar(_key, segundos_retry_after(exc.headers.get("retry-after")))
         if exc.status in (401, 403):
             return _fail("emuwarez", "invalid_key", "API key de eMuwarez inválida o no autorizada")
         return _fail("emuwarez", "connection_error", f"Error HTTP {exc.status} al conectar con eMuwarez")

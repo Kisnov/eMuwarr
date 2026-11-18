@@ -12,7 +12,7 @@ import httpx
 import torf
 from rich.pretty import Pretty
 
-from src.utils import eventos
+from src.utils import eventos, limitador
 from src.utils.console import console, log
 from src.utils.descgen import DescGenerator
 from src.utils.meta import save_meta
@@ -27,6 +27,10 @@ UPLOAD_429_MAX_WAIT = 60  # tope de la espera pedida por Retry-After en la subid
 RETRY_STATUSES = {500, 502, 503, 504, 520, 521, 522, 523, 524}
 MAX_SEARCH_PAGES = 20
 COMENTARIO_TORRENT = "Torrent descargado de la comunidad eMuwarez."
+
+
+def _avisar(texto: str) -> None:
+    console.print(f"[yellow]{texto}")
 
 
 class DupeSearchError(RuntimeError):
@@ -338,10 +342,12 @@ class Unit3d:
         params = {"api_token": self.config["TRACKERS"][self.tracker]["api_key"].strip()}
         try:
             async with httpx.AsyncClient(timeout=self.timeout) as client:
+                await self._turno()
                 response = await client.get(f"{self.domain}/api/torrents/{torrent_id}", params=params, headers=headers)
         except httpx.HTTPError as e:
             console.print(f"[red]{self.tracker}: no se pudo consultar el torrent {torrent_id}: {type(e).__name__}")
             return None
+        self._apuntar_429(response)
         if response.status_code != 200:
             console.print(f"[red]{self.tracker}: la API devolvió HTTP {response.status_code} para el torrent {torrent_id}")
             return None
@@ -375,7 +381,9 @@ class Unit3d:
                     for field, (fname, path, mime) in extra_files_meta.items():
                         files[field] = (fname, stack.enter_context(open(path, "rb")), mime)
                     try:
+                        await self._turno()
                         response = await client.post(self.upload_url, data=data, files=files, headers=headers, params=params)
+                        self._apuntar_429(response)
                         error = f"HTTP {response.status_code}" if response.status_code in RETRY_STATUSES | {429} else None
                     except httpx.HTTPError as e:
                         response, error = None, type(e).__name__
@@ -401,11 +409,13 @@ class Unit3d:
         attempts = len(DOWNLOAD_RETRY_DELAYS) + 1
         async with httpx.AsyncClient(timeout=self.timeout) as client:
             for attempt in range(1, attempts + 1):
+                await self._turno()
                 try:
                     response = await client.get(url, params=params, headers=headers)
                 except (httpx.HTTPError, httpx.InvalidURL) as e:
                     error = type(e).__name__
                 else:
+                    self._apuntar_429(response)
                     if response.status_code != 200:
                         error = f"HTTP {response.status_code}"
                     elif not response.content.startswith(b"d"):
@@ -417,6 +427,16 @@ class Unit3d:
                     console.print(f"[yellow]{self.tracker}: {error} al descargar el .torrent, reintento en {delay}s")
                     await asyncio.sleep(delay)
         return None, error
+
+    async def _turno(self) -> None:
+        """Hueco en el límite de peticiones por minuto que esta key comparte con la app y otros Uploadrr-EMU."""
+        await limitador.esperar(self.tracker, self.config["TRACKERS"][self.tracker]["api_key"], avisar=_avisar)
+
+    def _apuntar_429(self, response: httpx.Response) -> None:
+        """Un 429 pausa a todos los procesos que usan esta key, lo que diga Retry-After."""
+        if response.status_code == 429:
+            limitador.apuntar_429(self.tracker, self.config["TRACKERS"][self.tracker]["api_key"],
+                                  response.headers.get("Retry-After"), avisar=_avisar)
 
     async def _links_named(self, meta: Dict[str, Any], name: str) -> Optional[set]:
         """(enlace de descarga, tamaño) de los torrents llamados exactamente name, o None si no se puede buscar."""
@@ -482,10 +502,12 @@ class Unit3d:
         async with httpx.AsyncClient(timeout=self.timeout) as client:
             for _ in range(MAX_SEARCH_PAGES):
                 for attempt in range(1, attempts + 1):
+                    await self._turno()
                     try:
                         response = await client.get(url, params=params, headers=headers)
                     except httpx.HTTPError as e:
                         raise DupeSearchError(f"No se pudo buscar duplicados en {self.tracker}: {e!r}") from e
+                    self._apuntar_429(response)
                     if response.status_code != 429 or attempt == attempts:
                         break
                     retry_after = response.headers.get("Retry-After", "")
