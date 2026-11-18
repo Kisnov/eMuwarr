@@ -170,6 +170,16 @@ class TestEmuwarezConnection:
         assert len(http_falso.peticiones) == 1  # no se pidió el otro servidor
         assert "key123" not in str(result)
 
+    def test_pide_por_el_cliente_de_emuwarez(self, http_falso):
+        """La misma petición que el resto de eMuwarez (integrations/emu.py), con lo que pide la prueba."""
+        from emuwarez_uploadrr import __version__
+        from tests.http_falso import respuesta
+        http_falso.responde(respuesta(200, json={"data": []}))
+        assert svc_test_emu(api_key=" key123 ", base_url="https://emu-warez.com/")["ok"] is True
+        p = http_falso.ultima
+        assert str(p.url) == "https://emu-warez.com/api/torrents/filter?api_token=key123&perPage=1"
+        assert p.headers["User-Agent"] == f"emuwarr/{__version__}" and p.headers["Accept"] == "application/json"
+
     def test_http_tampoco_se_admite_en_loopback(self, http_falso):
         result = svc_test_emu(api_key="key123", base_url="http://localhost:8080")
         assert result["status"] == "insecure_url"

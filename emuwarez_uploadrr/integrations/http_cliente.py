@@ -58,6 +58,7 @@ class ErrorHTTP(Exception):
         self.respuesta = respuesta
         self.status = respuesta.status_code
         self.headers = respuesta.headers
+        self.retry_after = respuesta.headers.get("retry-after")
         self.contenido = respuesta.content
 
     def texto(self, limite: Optional[int] = None) -> str:

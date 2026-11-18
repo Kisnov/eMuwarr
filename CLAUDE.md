@@ -111,6 +111,9 @@ came in from `Kisnov/Uploadrr-EMU` with `git subtree add`, history kept; that re
   The 30-calls-a-minute eMuwarez budget is shared by the server, the CLI and every Uploadrr-EMU: `_lanzar_uploadrr` sets
   `LIMITADOR_DIR` (`CONFIG_DIR/limitador`), and `integrations/limitador_compartido.py` and `uploadrr-emu/src/utils/limitador.py`
   must stay byte-identical (`test_limitador_compartido.py`); without `fcntl` or a usable directory each process counts alone.
+- One UNIT3D client: the app's eMuwarez requests go through `integrations/cliente_unit3d.py` (`emu.cliente`), which builds
+  URL and headers (`User-Agent: emuwarr/<version>`), sends the key only to the tracker's own origin and takes a slot in the
+  limiter first. `uploadrr-emu/src/utils/cliente_unit3d.py` is a byte-identical copy (`test_cliente_unit3d.py`; stdlib only, Python 3.9).
 - eMuwarez and TMDb keys travel in the URL query. Never log or return a raw URL: use
   `integrations.base.url_sin_claves`.
 - Image: `ghcr.io/kisnov/emuwarr`, built only when a version is published. `publicar.yml` ("Publicar

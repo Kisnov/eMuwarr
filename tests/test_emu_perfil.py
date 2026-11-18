@@ -53,14 +53,14 @@ def _intento_hace(conn, plazo: timedelta) -> None:
 
 def test_emu_get_user_pide_api_user_con_la_clave(monkeypatch):
     urls = []
-    monkeypatch.setattr(emu, "request_json", lambda method, url: urls.append(url) or dict(USUARIO))
+    monkeypatch.setattr(emu, "request_json", lambda method, url, **kw: urls.append(url) or dict(USUARIO))
     assert emu.emu_get_user("k")["group"] == "Uploader"
     assert urls == ["https://emu-warez.com/api/user?api_token=k"]
 
 
 @pytest.mark.parametrize("estado", [401, 403, 429])
 def test_emu_get_user_no_ensena_la_url(monkeypatch, estado):
-    def falso(method, url):
+    def falso(method, url, **kw):
         raise IntegrationError(f"HTTP {estado} en {url}", status=estado)
 
     monkeypatch.setattr(emu, "request_json", falso)
@@ -70,7 +70,7 @@ def test_emu_get_user_no_ensena_la_url(monkeypatch, estado):
 
 
 def test_emu_get_user_rechaza_una_respuesta_sin_usuario(monkeypatch):
-    monkeypatch.setattr(emu, "request_json", lambda method, url: {"message": "Unauthenticated."})
+    monkeypatch.setattr(emu, "request_json", lambda method, url, **kw: {"message": "Unauthenticated."})
     with pytest.raises(IntegrationError, match="formato"):
         emu.emu_get_user("k")
 

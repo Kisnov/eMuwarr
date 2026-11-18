@@ -59,9 +59,24 @@ def test_id_de_la_ficha(url, esperado):
 
 def test_emu_get_torrent_pide_api_torrents_id_y_devuelve_los_atributos(monkeypatch):
     urls = []
-    monkeypatch.setattr(emu, "request_json", lambda method, url: urls.append(url) or dict(TORRENTE))
+    monkeypatch.setattr(emu, "request_json", lambda method, url, **kw: urls.append(url) or dict(TORRENTE))
     assert emu.emu_get_torrent("k", 321)["seeders"] == 7
     assert urls == ["https://emu-warez.com/api/torrents/321?api_token=k"]
+
+
+def test_emu_get_torrent_tambien_lee_el_envoltorio_data(monkeypatch):
+    """Como lo lee Uploadrr-EMU (--solo-cliente): el mismo cliente_unit3d.atributos_torrent."""
+    monkeypatch.setattr(emu, "request_json", lambda method, url, **kw: {"data": dict(TORRENTE)})
+    assert emu.emu_get_torrent("k", 321)["seeders"] == 7
+
+
+def test_emu_va_con_el_user_agent_de_emuwarr(http_falso):
+    from emuwarez_uploadrr import __version__
+    from tests.http_falso import respuesta
+    http_falso.responde(respuesta(200, json=TORRENTE))
+    emu.emu_get_torrent("k", 321)
+    assert http_falso.ultima.headers["User-Agent"] == f"emuwarr/{__version__}"
+    assert http_falso.ultima.headers["Accept"] == "application/json"
 
 
 def test_las_estadisticas_se_resumen_y_se_guardan_cinco_minutos(conn, llamadas):
