@@ -49,6 +49,12 @@ async def pre_upload_checks(
                 tracker_upload_ok[tracker] = False
                 continue
 
+        # eMuwarez no tiene tipo 0: sin un tipo de data/trackers/EMU.json no se sube ni se buscan duplicados con él.
+        if tracker == "EMU" and await tracker_instance.get_type_id(meta) == "0":
+            skipped_details.append((path, f"Unknown type on {tracker}: {meta.get('type') or '?'}"))
+            tracker_upload_ok[tracker] = False
+            continue
+
         if not meta.get("skip_dupe_check", False):
             try:
                 dupes = await tracker_instance.search_existing(meta)

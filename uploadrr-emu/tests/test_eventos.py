@@ -13,6 +13,7 @@ import torf
 
 import upload
 from contrato_eventos import validar, validar_linea_final
+from src.trackers.EMU import EMU
 from flujo_emu import (
     EPISODIO,
     GOLDEN,
@@ -133,6 +134,20 @@ def test_la_busqueda_de_duplicados_cae(flujo):
     eventos = _revisar(flujo)
     assert _resultado(eventos) == ("busqueda_caida", False)
     assert flujo.tracker.calls("POST", UPLOAD) == []
+
+
+def test_un_tipo_sin_id_en_emu_no_se_sube_con_el_tipo_0(flujo, monkeypatch):
+    flujo.tracker_que_acepta()
+    monkeypatch.setattr(EMU, "type_ids", {k: v for k, v in EMU.type_ids.items() if k != "WEBDL"})
+
+    codigo, salida = _correr(flujo, flujo.crear_video(PELICULA), ARGV_PELICULA)
+
+    assert codigo == 1
+    assert "Unknown type on EMU: WEBDL" in salida  # el título de su panel en el resumen
+    eventos = _revisar(flujo)
+    assert _resultado(eventos) == ("tipo_desconocido", False)
+    assert eventos[-1]["detalle"] == "Unknown type on EMU: WEBDL"
+    assert flujo.tracker.calls("GET", SEARCH) == [] and flujo.tracker.calls("POST", UPLOAD) == []
 
 
 def test_login_de_qbittorrent_fallido_no_deshace_la_subida(flujo, monkeypatch):
