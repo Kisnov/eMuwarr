@@ -63,8 +63,8 @@ def test_read_media_info_summary_parses_real_tracks(tmp_path):
     # legacy.audio_codec() maps the raw "E-AC-3" format string to its
     # commercial name (Dolby Digital Plus), not passed through verbatim.
     assert result["audio_codec"] == "DD+"
-    assert result["audio_languages"] == "ING / ESP"
-    assert result["subtitle_languages"] == "ING / ESP"
+    assert result["audio_languages"] == "ENG / ESP"
+    assert result["subtitle_languages"] == "ENG / ESP"
 
 
 def test_read_media_info_summary_never_prompts_on_unknown_language(tmp_path):
@@ -226,7 +226,7 @@ def test_repeated_language_keeps_only_its_best_codec(tmp_path):
     ])
     # La japonesa se queda en TrueHD (mejor que DD); catalán y castellano
     # comparten códec Y canales, así que son UNA entrada.
-    assert summary == "JAP TrueHD 5.1 ESP-CAT DD+ 2.0"
+    assert summary == "JPN TrueHD 5.1 ESP-CAT DD+ 2.0"
 
 
 def test_languages_sharing_a_codec_join_with_a_hyphen(tmp_path):
@@ -261,7 +261,7 @@ def test_the_worse_track_is_dropped_whatever_order_it_comes_in(tmp_path):
         {"Format": "MLP FBA", "Format_Commercial_IfAny": "Dolby TrueHD",
          "Language": "ja", "Channels": "6"},
     ])
-    assert peor_primero == "JAP TrueHD 5.1"
+    assert peor_primero == "JPN TrueHD 5.1"
 
 
 def test_every_audio_track_still_shows_in_the_technical_card(tmp_path):
@@ -275,9 +275,9 @@ def test_every_audio_track_still_shows_in_the_technical_card(tmp_path):
     ])
     import re as _re
     filas = [r for r in report["rows"] if _re.fullmatch(r"Audio \d+", str(r["field"]))]
-    assert [f["emu"] for f in filas] == ["JAP TrueHD 5.1", "JAP DD 5.1"], filas
+    assert [f["emu"] for f in filas] == ["JPN TrueHD 5.1", "JPN DD 5.1"], filas
     # Y el segmento que va al nombre sí se queda con una sola.
-    assert report["audio_summary"] == "JAP TrueHD 5.1"
+    assert report["audio_summary"] == "JPN TrueHD 5.1"
 
 
 def test_every_track_keeps_its_own_codec(tmp_path):
@@ -285,7 +285,7 @@ def test_every_track_keeps_its_own_codec(tmp_path):
         {"Format": "DTS", "Language": "es", "Channels": "6"},
         {"Format": "AC-3", "Language": "en", "Channels": "2"},
     ])
-    assert summary == "ESP DTS 5.1 ING DD 2.0"
+    assert summary == "ESP DTS 5.1 ENG DD 2.0"
 
 
 def test_identical_tracks_are_not_listed_twice(tmp_path):
@@ -305,7 +305,7 @@ def test_dual_applies_per_entry_not_to_the_whole_file(tmp_path):
         {"Format": "E-AC-3", "Language": "es", "Channels": "2"},
         {"Format": "E-AC-3", "Language": "en", "Channels": "2"},
     ])
-    assert summary == "JAP DTS 5.1 DUAL DD+ 2.0"
+    assert summary == "JPN DTS 5.1 DUAL DD+ 2.0"
 
 
 def test_dual_shortcut_still_applies(tmp_path):
@@ -380,5 +380,5 @@ def test_una_pista_sin_idioma_no_entra_en_el_nombre_hasta_elegirlo(tmp_path):
     ):
         sin = svc.build_mediainfo_report(str(f))
         con = svc.build_mediainfo_report(str(f), idiomas_audio={1: "spa"})
-    assert (sin["audio_summary"], sin["pistas_sin_idioma"]) == ("ING DD 5.1", [1])
+    assert (sin["audio_summary"], sin["pistas_sin_idioma"]) == ("ENG DD 5.1", [1])
     assert (con["audio_summary"], con["pistas_sin_idioma"]) == ("DUAL DD 5.1", [])

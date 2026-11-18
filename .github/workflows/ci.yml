@@ -21,7 +21,8 @@ jobs:
   python:
     # La distro fija (no `latest`): de ella salen las versiones de mediainfo, mkvtoolnix y ffmpeg.
     runs-on: ubuntu-24.04
-    timeout-minutes: 25
+    # Los tests tardan ~14 min; el apt-get de abajo, de 1 a 20 según vaya el mirror de Ubuntu.
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

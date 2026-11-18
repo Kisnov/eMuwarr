@@ -846,3 +846,27 @@ def test_stage_uploadrr_config_stages_qbit_with_only_the_url(tmp_path, monkeypat
     conn.close()
     ue._stage_uploadrr_config(1, str(tmp_path / "Uploadrr"))
     assert get_block_key(read_config_lines(config), "DEFAULT", "default_torrent_client") == QBIT_CLIENT_KEY
+
+
+def test_stage_oxipng_on_activa_oxipng_con_nivel_2():
+    from emuwarez_uploadrr.services.uploadrr_config_staging import stage_oxipng_on
+    from emuwarez_uploadrr.services.uploadrr_yaml import get_block_key
+    staged, _ = stage_oxipng_on(["SCREENS:", "  use_oxipng: false", "  oxipng_level: 4"])
+    assert get_block_key(staged, "SCREENS", "use_oxipng") == "true"
+    assert get_block_key(staged, "SCREENS", "oxipng_level") == "2"
+    staged, _ = stage_oxipng_on(["DEFAULT:", "  tmdb: x"])
+    assert get_block_key(staged, "SCREENS", "use_oxipng") == "true"
+    assert get_block_key(staged, "SCREENS", "oxipng_level") == "2"
+
+
+def test_stage_uploadrr_config_fuerza_oxipng(tmp_path, monkeypatch):
+    from emuwarez_uploadrr.services.upload_execution import config as ue
+    from emuwarez_uploadrr.services.uploadrr_yaml import get_block_key
+    config = tmp_path / "Uploadrr" / "data" / "config.yaml"
+    config.parent.mkdir(parents=True)
+    config.write_text("SCREENS:\n  use_oxipng: false\n", encoding="utf-8")
+    monkeypatch.setattr(ue, "append_upload_log", lambda *a, **k: None)
+    ue._stage_uploadrr_config(1, str(tmp_path / "Uploadrr"))
+    lineas = read_config_lines(config)
+    assert get_block_key(lineas, "SCREENS", "use_oxipng") == "true"
+    assert get_block_key(lineas, "SCREENS", "oxipng_level") == "2"

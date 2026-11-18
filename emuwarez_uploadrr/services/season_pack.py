@@ -351,8 +351,8 @@ def _aggregate_pack_fields(episode_entries: list[dict], conn=None,
     toma el de más capítulos y el plan avisa. Con el resto:
 
     - Los idiomas de audio se SUMAN. El pack CONTIENE todos, así que
-      anunciarlos todos es exacto: un capítulo con "ESP" y otro con "ESP-ING"
-      dan un pack "ESP-ING".
+      anunciarlos todos es exacto: un capítulo con "ESP" y otro con "ESP-ENG"
+      dan un pack "ESP-ENG".
     - Lo que aun así difiera se deja VACÍO. Un nombre que dijera "x264 x265"
       anunciaría dos códecs para un solo release y no describiría nada; mejor
       no decir nada que decir algo falso.

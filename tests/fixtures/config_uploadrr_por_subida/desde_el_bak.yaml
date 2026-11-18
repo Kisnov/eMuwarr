@@ -3,6 +3,8 @@ DEFAULT:
   tmdb: ''
   add_logo: true
 SCREENS:
+  oxipng_level: 2
+  use_oxipng: true
   per_episode: 0
   img_hosts: [pixhost]
 
