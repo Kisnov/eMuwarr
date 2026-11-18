@@ -279,7 +279,7 @@ def test_apply_plan_prefers_real_media_info_over_synced_values(isolated_db, tmp_
 
     real_media_info = {
         "video_codec": "HEVC", "audio_codec": "DD+",
-        "audio_languages": "ING / ESP", "subtitle_languages": "ING / ESP",
+        "audio_languages": "ENG / ESP", "subtitle_languages": "ENG / ESP",
     }
     with patch(
         "emuwarez_uploadrr.services.media_info_service.read_media_info_summary",
@@ -322,7 +322,7 @@ def test_apply_plan_preserves_manually_edited_source_despite_mediainfo_mismatch(
 
     real_media_info = {
         "video_codec": "HEVC", "audio_codec": "DD+",
-        "audio_languages": "ING / ESP", "subtitle_languages": "ING / ESP",
+        "audio_languages": "ENG / ESP", "subtitle_languages": "ENG / ESP",
     }
     with patch(
         "emuwarez_uploadrr.services.media_info_service.read_media_info_summary",

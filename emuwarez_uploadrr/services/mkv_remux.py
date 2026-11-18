@@ -79,7 +79,7 @@ def _get_target_path(library_item_id: int, conn) -> tuple[str | None, bool]:
 
 # Spanish display names for a track's language, keyed by normalized ISO 639-1/
 # 639-2 (both bibliographic and terminological where they differ) codes —
-# mirrors the ESP/CAT/ING/... codes emu_format.LANG_MAP already uses elsewhere
+# mirrors the ESP/CAT/ENG/... codes emu_format.LANG_MAP already uses elsewhere
 # in the app, spelled out here for a track-selector menu. Covers the ISO 639-1
 # set (not just the handful realistic for a Spanish tracker) so an unusual
 # language still gets a proper Spanish name instead of falling back to the
@@ -183,7 +183,7 @@ _PRIORITY_CASTILIAN, _PRIORITY_CATALAN, _PRIORITY_ENGLISH, _PRIORITY_OTHER = 0, 
 _NOMBRE_POR_CODIGO = {
     "ESP": "Español (Castellano)", "LAT": _LATIN_SPANISH_NAME,
     "CAT": "Català", "VAL": _VALENCIAN_NAME,
-    "ING": "Inglés", "UND": _UNKNOWN_LANG_NAME,
+    "ENG": "Inglés", "UND": _UNKNOWN_LANG_NAME,
 }
 
 
@@ -270,7 +270,7 @@ def lang_priority(lang: str | None, lang_ietf: str | None = None, existing_name:
         return _PRIORITY_CASTILIAN
     if codigo in ("CAT", "VAL"):
         return _PRIORITY_CATALAN
-    if codigo == "ING":
+    if codigo == "ENG":
         return _PRIORITY_ENGLISH
     return _PRIORITY_OTHER
 

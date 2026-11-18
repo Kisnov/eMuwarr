@@ -181,6 +181,48 @@ def test_build_proposal_uses_real_media_info_columns(db_conn):
     assert not any("codec" in w.lower() for w in warnings)
 
 
+
+def test_el_ingles_va_como_eng_en_el_nombre(db_conn):
+    """Los grupos de eMuwarez escriben el inglés ENG, no ING (caso real)."""
+    cursor = db_conn.execute(
+        """INSERT INTO library_items
+           (item_type, title, year, local_status, request_status, path, quality, resolution, source,
+            video_codec, audio_codec, audio_languages, audio_channels, release_group)
+           VALUES ('movie', 'Asesinato en el Orient Express', 1974, 'Disponible', 'Sin petición',
+                   '/movies/Murder.on.the.Orient.Express.1974.720p.AMZN.WEB-DL.mkv', 'WEBDL-720p', '720p',
+                   'WEB-DL', 'h264', 'EAC3', 'cat / eng', '2.0', 'GRUPO')""",
+    )
+    db_conn.commit()
+    result = build_nomenclature_proposal(cursor.lastrowid, conn=db_conn)
+    assert result["proposed_filename"] == "Asesinato.en.el.Orient.Express.1974.720p.AMZN.WEB-DL.AVC.CAT-ENG.DD+.2.0-GRUPO"
+
+
+def test_un_ing_guardado_de_antes_sigue_dando_dual(db_conn):
+    """audio_languages guardado por una lectura de MediaInfo anterior al cambio, con ING."""
+    cursor = db_conn.execute(
+        """INSERT INTO library_items
+           (item_type, title, local_status, request_status, path, quality,
+            video_codec, audio_codec, audio_languages, audio_channels)
+           VALUES ('movie', 'Ad Astra', 'Disponible', 'Sin petición', '/fake/Ad Astra.mkv',
+                   'WEBDL-1080p', 'x265', 'EAC3', 'ING / ESP', '5.1')""",
+    )
+    db_conn.commit()
+    assert build_nomenclature_proposal(cursor.lastrowid, conn=db_conn)["audio_summary"] == "DUAL DD+ 5.1"
+
+
+def test_japones_coreano_y_aleman_van_como_jpn_kor_y_ger_en_el_nombre(db_conn):
+    cursor = db_conn.execute(
+        """INSERT INTO library_items
+           (item_type, title, year, local_status, request_status, path, quality, resolution, source,
+            video_codec, audio_codec, audio_languages, audio_channels, release_group)
+           VALUES ('movie', 'Pelicula', 2024, 'Disponible', 'Sin petición', '/movies/Pelicula.2024.1080p.WEB-DL.mkv',
+                   'WEBDL-1080p', '1080p', 'WEB-DL', 'h264', 'EAC3', 'jpn / kor / ger', '5.1', 'GRP')""",
+    )
+    db_conn.commit()
+    result = build_nomenclature_proposal(cursor.lastrowid, conn=db_conn)
+    assert result["proposed_filename"] == "Pelicula.2024.1080p.WEB-DL.AVC.JPN-KOR-GER.DD+.5.1-GRP"
+
+
 def test_get_latest_proposal(db_conn):
     item_id = _insert_item(db_conn, local_status="Disponible")
     build_nomenclature_proposal(item_id, conn=db_conn)

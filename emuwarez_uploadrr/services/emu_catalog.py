@@ -64,7 +64,7 @@ _CODEC_LABEL = {"AV1": "AV1", "HEVC": "H.265", "X265": "H.265", "H265": "H.265",
 _CODEC_RE = re.compile(r"\b(AV1|x265|H\.?265|HEVC|x264|H\.?264|AVC|VP9)\b", re.I)
 
 _ES_TOKENS = {"ESP", "CAST", "CASTELLANO", "ESPANOL", "LATINO", "LAT", "DUAL", "MULTI"}
-_ORIG_TOKENS = {"ING", "ENG", "JAP", "JPN", "KOR", "ITA", "FRA", "GER", "RUS", "POR", "VO", "VOSE", "VOST", "VOSTFR"}
+_ORIG_TOKENS = {"ING", "ENG", "JAP", "JPN", "COR", "KOR", "ITA", "FRA", "ALE", "GER", "RUS", "POR", "VO", "VOSE", "VOST", "VOSTFR"}
 _SEASON_RE = re.compile(r"\bS(\d{1,3})(?:E\d{1,4})?\b", re.I)
 _SEASON_RANGE_RE = re.compile(r"\bS(\d{1,3})\s*-\s*S?(\d{1,3})\b", re.I)
 _SEASON_WORD_RE = re.compile(r"\b(?:temporadas?|seasons?)\s+(\d{1,3})(?:\s*-\s*(\d{1,3}))?\b", re.I)
