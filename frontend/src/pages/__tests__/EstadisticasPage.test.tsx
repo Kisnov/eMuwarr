@@ -235,7 +235,7 @@ describe('EstadisticasPage', () => {
   it('las tarjetas de ritmo enseñan grupo, subido y bajado al día, bonus por hora y el ratio a 30 días', async () => {
     pedir.mockResolvedValue({
       dias: 90,
-      ritmos: { dias: 7, subido_dia: 10 * 1024 ** 3, bajado_dia: 1024 ** 3, bonus_hora: 12.5 },
+      ritmos: { dias: 7, subido_dia: 20 * 1024 ** 3, bajado_dia: 1024 ** 3, bonus_hora: 12.5 },
       puntos: [punto('2026-10-01'), punto('2026-10-02', { subido_bytes: 1000 * 1024 ** 3, bajado_bytes: 100 * 1024 ** 3, grupo: 'Leyenda' })],
     })
     await montar(<EstadisticasPage />)
@@ -244,11 +244,11 @@ describe('EstadisticasPage', () => {
       .map(t => [t.querySelector('.stat-card-label')!.textContent, t.querySelector('.stat-card-value')!.textContent])
     expect(tarjetas).toEqual([
       ['Grupo', 'Leyenda'],
-      ['Subido al día', '10,0\u00A0GB'],
+      ['Subido al día', '20,0\u00A0GB'],
       ['Bajado al día', '1,0\u00A0GB'],
       ['Bonus por hora', '12,5'],
-      // (1000 + 30·10) / (100 + 30·1) GB
-      ['Ratio en 30 días', '10,00'],
+      // (1000 + 30·20) / (100 + 30·1) GB: distinto del ratio de ahora (10)
+      ['Ratio en 30 días', '12,31'],
     ])
   })
 
