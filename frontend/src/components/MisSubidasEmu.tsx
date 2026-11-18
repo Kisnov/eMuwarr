@@ -31,12 +31,17 @@ export function MisSubidasEmu({ visible }: { visible: boolean }) {
 
   const filas = useMemo(() => (datos ? [...datos.torrents].sort(ORDENES[orden].comparar) : []), [datos, orden])
 
-  if (fallo) return <p className="est-nota est-aviso" role="status">No se pudieron cargar tus subidas en eMuwarez.</p>
-  if (!datos) return null
+  const aviso = fallo && (
+    <p className="est-nota est-aviso" role="status">
+      No se pudieron cargar tus subidas en eMuwarez{datos ? '; se enseñan las de la última vez' : ''}.
+    </p>
+  )
+  if (!datos) return aviso || null
   const t = datos.totales
   return (
     <section aria-labelledby="est-grupo-mis-subidas">
       <h2 className="est-grupo-titulo" id="est-grupo-mis-subidas">Tus subidas en eMuwarez</h2>
+      {aviso}
       {datos.leido_at === null ? (
         <p className="est-nota">Aún no se han leído: la tarea «Leer tus subidas en eMuwarez» lo hace cada 6 horas, y en Tareas se puede ejecutar ahora.</p>
       ) : (
@@ -76,7 +81,7 @@ export function MisSubidasEmu({ visible }: { visible: boolean }) {
                       <th scope="row">
                         <a href={`${EMU_URL}/torrents/${f.torrent_id}`} target="_blank" rel="noreferrer">{f.nombre}</a>
                       </th>
-                      <td className={f.seeders ? undefined : 'est-sin-seeders'}>{cifra(f.seeders)}</td>
+                      <td className={f.seeders === 0 ? 'est-sin-seeders' : undefined}>{cifra(f.seeders)}</td>
                       <td>{cifra(f.leechers)}</td>
                       <td>{cifra(f.completados)}</td>
                       <td>{cifra(f.completados_semana)}</td>

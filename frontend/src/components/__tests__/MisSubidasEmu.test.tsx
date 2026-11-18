@@ -2,7 +2,7 @@
 /**
  * Tus subidas en eMuwarez, en Estadísticas: sin leer todavía, con datos (totales, tabla, orden y enlaces) y si falla.
  */
-import { act } from 'react'
+import { act, useState } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('../../api/estadisticas', () => ({ getMisSubidas: vi.fn() }))
@@ -10,7 +10,13 @@ vi.mock('../../api/estadisticas', () => ({ getMisSubidas: vi.fn() }))
 import { getMisSubidas } from '../../api/estadisticas'
 import type { MiTorrent, MisTorrents } from '../../types/api'
 import { MisSubidasEmu } from '../MisSubidasEmu'
-import { desmontar, esperar, montar, texto } from './dom'
+import { boton, desmontar, esperar, montar, pulsar, texto } from './dom'
+
+// Entrar y salir de Estadísticas: `visible` pasa a falso y vuelve a verdadero.
+function ConInterruptor() {
+  const [visible, setVisible] = useState(true)
+  return <><button type="button" onClick={() => setVisible(v => !v)}>alternar</button><MisSubidasEmu visible={visible} /></>
+}
 
 const pedir = vi.mocked(getMisSubidas)
 
@@ -78,6 +84,25 @@ describe('MisSubidasEmu', () => {
     expect(nombres()).toEqual(['Torrent 2', 'Torrent 3', 'Torrent 1'])
     await elegir('recientes')
     expect(nombres()).toEqual(['Torrent 3', 'Torrent 2', 'Torrent 1'])
+  })
+
+  it('si falla al volver, se queda la última lectura con el aviso', async () => {
+    pedir.mockResolvedValueOnce(respuesta([torrent(1)]))
+    await montar(<ConInterruptor />)
+    await esperar(() => document.querySelector('tbody'))
+    pedir.mockRejectedValueOnce(new Error('503'))
+    await pulsar(boton('alternar'))
+    await pulsar(boton('alternar'))
+    await esperar(() => texto().includes('se enseñan las de la última vez'))
+    expect(nombres()).toEqual(['Torrent 1'])
+  })
+
+  it('una subida sin cifra de seeders no se marca como sin seeders', async () => {
+    pedir.mockResolvedValue(respuesta([torrent(1, { seeders: null }), torrent(2, { seeders: 0 })]))
+    await montar(<MisSubidasEmu visible />)
+    await esperar(() => document.querySelector('tbody'))
+    expect([...document.querySelectorAll('.est-sin-seeders')].map(c => c.closest('tr')!.querySelector('th')!.textContent))
+      .toEqual(['Torrent 2'])
   })
 
   it('si falla, lo dice sin romper la página', async () => {
