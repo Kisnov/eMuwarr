@@ -116,3 +116,33 @@ def test_la_lectura_del_perfil_avisa_comparando_con_la_anterior(conn, monkeypatc
     conn.commit()
     perfil_emu(conn)
     assert [a[0] for a in _avisos(conn)] == ["cuenta_hr_nuevo"]
+
+
+def test_los_avisos_salen_despues_de_guardar_la_lectura_y_quedan_guardados(conn, monkeypatch):
+    """La lectura se confirma antes de avisar (Discord/Telegram no esperan con la transacción abierta), y cada aviso
+    se confirma solo: otra conexión ya lo ve."""
+    set_setting(conn, "emu.api_key", "clave")
+    conn.commit()
+    lecturas = iter([dict(PERFIL), {**PERFIL, "hit_and_runs": 2}])
+    monkeypatch.setattr(emu_perfil, "emu_get_user", lambda api_key, base_url=None: next(lecturas))
+    perfil_emu(conn)
+    guardado = get_json_state(conn, emu_perfil.PERFIL_STATE_KEY)
+    guardado["intento_at"] = (datetime.now(timezone.utc) - timedelta(hours=2)).isoformat()
+    set_json_state(conn, emu_perfil.PERFIL_STATE_KEY, guardado)
+    conn.commit()
+
+    vista_al_avisar = []
+    emitir = avisos_cuenta.emit
+
+    def emit_que_mira(c, *a, **k):
+        otra = connect(db_path())
+        vista_al_avisar.append(get_json_state(otra, emu_perfil.PERFIL_STATE_KEY)["perfil"]["hit_and_runs"])
+        otra.close()
+        return emitir(c, *a, **k)
+
+    monkeypatch.setattr(avisos_cuenta, "emit", emit_que_mira)
+    perfil_emu(conn)
+    assert vista_al_avisar == [2]
+    otra = connect(db_path())
+    assert otra.execute("SELECT COUNT(*) FROM notifications WHERE event_type = 'cuenta_hr_nuevo'").fetchone()[0] == 1
+    otra.close()

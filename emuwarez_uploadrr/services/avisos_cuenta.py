@@ -45,19 +45,18 @@ def avisar_cambios(conn: sqlite3.Connection, antes: Optional[dict[str, Any]], ah
             emit(conn, EVENTO_HR,
                  "Tienes un H&R nuevo en eMuwarez" if nuevos == 1 else f"Tienes {nuevos} H&R nuevos en eMuwarez",
                  f"Ahora tienes {hr_ahora}. Mira en eMuwarez de qué torrent es y siémbralo hasta cumplir el tiempo "
-                 "mínimo.", level="warning", commit=False)
+                 "mínimo.", level="warning")
 
         grupo_antes, grupo_ahora = antes.get("group"), ahora.get("group")
         if grupo_antes and grupo_ahora and grupo_antes != grupo_ahora:
-            emit(conn, EVENTO_GRUPO, "Tu grupo en eMuwarez ha cambiado", f"De {grupo_antes} a {grupo_ahora}.",
-                 commit=False)
+            emit(conn, EVENTO_GRUPO, "Tu grupo en eMuwarez ha cambiado", f"De {grupo_antes} a {grupo_ahora}.")
 
         # El buffer de UNIT3D es lo que puedes bajar sin quedar por debajo del ratio mínimo del tracker.
         buffer_antes, buffer_ahora = bytes_de_texto(antes.get("buffer")), bytes_de_texto(ahora.get("buffer"))
         if buffer_antes is not None and buffer_ahora is not None and buffer_antes >= 0 > buffer_ahora:
             emit(conn, EVENTO_BUFFER, "Tu buffer en eMuwarez es negativo",
                  f"Estás por debajo del ratio mínimo del tracker ({ahora.get('buffer')}). Sube o siembra antes de "
-                 "bajar nada más.", level="error", commit=False)
+                 "bajar nada más.", level="error")
 
         seeding_antes, seeding_ahora = _entero(antes.get("seeding")), _entero(ahora.get("seeding"))
         if seeding_antes is not None and seeding_ahora is not None:
@@ -65,6 +64,6 @@ def avisar_cambios(conn: sqlite3.Connection, antes: Optional[dict[str, Any]], ah
             if caida >= max(CAIDA_SEEDING_MINIMA, seeding_antes * CAIDA_SEEDING):
                 emit(conn, EVENTO_SEEDING, "Siembras menos torrents en eMuwarez",
                      f"{seeding_ahora} ahora, {seeding_antes} en la lectura anterior. ¿Se ha parado qBittorrent o ha "
-                     "perdido torrents?", level="warning", commit=False)
+                     "perdido torrents?", level="warning")
     except Exception:
         logger.warning("No se pudieron comprobar los avisos de la cuenta", exc_info=True)
