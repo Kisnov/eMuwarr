@@ -1,6 +1,6 @@
 import { EMU_URL } from '../constants/emu'
 
-// Ids de categoría de eMuwarez (EMU_CATEGORIAS en integrations/emu.py).
+// Ids de categoría de eMuwarez (uploadrr-emu/data/trackers/EMU.json; lo vigila tests/test_copias_frontend.py).
 const CATEGORY_IDS: Record<string, string> = { movie: '1', tv: '2', doc: '4' }
 
 /** El formulario de crear petición de eMuwarez, rellenado con los parámetros

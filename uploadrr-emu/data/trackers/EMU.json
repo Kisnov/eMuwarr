@@ -1,0 +1,34 @@
+{
+  "version": 1,
+  "tracker": "EMU",
+  "description": "Ids de UNIT3D de eMuwarez. Uploadrr-EMU envía el id del token que recibe (-c, -t, -res o lo que deduce); la app pone la etiqueta a los ids de las peticiones. Una entrada sin tokens solo se etiqueta, nunca se envía.",
+  "categories": [
+    {"id": 1, "label": "Películas", "tokens": ["movie"]},
+    {"id": 2, "label": "Series", "tokens": ["tv"]},
+    {"id": 3, "tokens": ["music"], "note": "Heredado de la tabla genérica de UNIT3D; la app nunca pasa -c music."},
+    {"id": 4, "label": "Documentales", "tokens": []}
+  ],
+  "types": [
+    {"id": 1, "label": "Full Disc", "tokens": ["disc"]},
+    {"id": 2, "label": "Remux", "tokens": ["remux"]},
+    {"id": 3, "label": "Encode", "tokens": ["encode"]},
+    {"id": 4, "label": "WEB-DL", "tokens": ["webdl", "web-dl"]},
+    {"id": 5, "label": "WEBRIP", "tokens": ["webrip"]},
+    {"id": 6, "label": "HDTV", "tokens": ["hdtv"]},
+    {"id": 7, "label": "SD", "tokens": ["sd"]},
+    {"id": 8, "label": "STEAMRIP", "tokens": []}
+  ],
+  "resolutions": [
+    {"id": 1, "label": "4320p", "tokens": ["4320p"]},
+    {"id": 2, "label": "2160p", "tokens": ["2160p"]},
+    {"id": 3, "label": "1080p", "tokens": ["1080p", "1440p"]},
+    {"id": 4, "label": "1080i", "tokens": ["1080i"]},
+    {"id": 5, "label": "720p", "tokens": ["720p"]},
+    {"id": 6, "label": "576p", "tokens": ["576p", "576i"]},
+    {"id": 7, "label": "540p", "tokens": ["540p"]},
+    {"id": 8, "label": "480p", "tokens": ["480p", "480i"]},
+    {"id": 10, "label": "Otras", "tokens": ["other"]}
+  ],
+  "defaults": {"categories": 0, "types": 0, "resolutions": 10},
+  "search": {"resolution_groups": [[3, 4]]}
+}

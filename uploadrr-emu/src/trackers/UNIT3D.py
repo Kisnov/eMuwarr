@@ -70,6 +70,9 @@ class Unit3d:
         self.upload_url = f"{self.domain}/api/torrents/upload"
         self.search_url = f"{self.domain}/api/torrents/filter"
 
+    # Ids que compiten por el mismo hueco en la búsqueda de duplicados: 1080p y 1080i.
+    resolution_groups = [["3", "4"]]
+
     # fmt: off
     async def get_cat_id(self, meta: Dict[str, Any]) -> str:
         category_name = meta["category"]
@@ -467,8 +470,7 @@ class Unit3d:
             "tmdbId": meta.get("tmdb", 0),
             "categories[]": await self.get_cat_id(meta),
             "types[]": await self.get_type_id(meta),
-            # 1080p y 1080i compiten por el mismo hueco.
-            "resolutions[]": ["3", "4"] if resolution_id in ("3", "4") else resolution_id,
+            "resolutions[]": next((g for g in self.resolution_groups if resolution_id in g), resolution_id),
             "name": name,
             "perPage": 100,
         }

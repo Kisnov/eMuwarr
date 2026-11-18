@@ -16,6 +16,7 @@ en package.json), así que esta es la única red posible hoy sin montarla.
 """
 from __future__ import annotations
 
+import json
 import pathlib
 import re
 
@@ -255,14 +256,22 @@ def test_las_dos_mitades_de_cada_modo_coinciden():
 
 def test_las_categorias_de_la_peticion_coinciden():
     """El enlace para crear una petición en eMuwarez lleva el id de categoría
-    escrito a mano en utils/peticionEmu.ts; el backend los tiene en
-    EMU_CATEGORIAS."""
-    from emuwarez_uploadrr.integrations.emu import EMU_CATEGORIAS
+    escrito a mano en utils/peticionEmu.ts, y RequestFormModal.tsx su nombre; la
+    tabla es uploadrr-emu/data/trackers/EMU.json. Se compara cada clave con su id,
+    no solo el conjunto: cambiar movie por tv también tiene que fallar."""
+    from emuwarez_uploadrr.services.uploadrr_contract import VALID_CATEGORIES
 
-    fuente = _texto("utils/peticionEmu.ts")
-    m = re.search(r"CATEGORY_IDS[^=]*=\s*\{(.*?)\}", fuente, re.S)
+    tabla = json.loads((RAIZ / "uploadrr-emu/data/trackers/EMU.json").read_text(encoding="utf-8"))["categories"]
+    m = re.search(r"CATEGORY_IDS[^=]*=\s*\{(.*?)\}", _texto("utils/peticionEmu.ts"), re.S)
     assert m, "no se encontró CATEGORY_IDS"
-    assert set(map(int, re.findall(r"'(\d+)'", m.group(1)))) == set(EMU_CATEGORIAS)
+    ids = {k: int(v) for k, v in re.findall(r"(\w+):\s*'(\d+)'", m.group(1))}
+    m = re.search(r"CATEGORY_LABELS[^=]*=\s*\{(.*?)\}", _texto("components/RequestFormModal.tsx"), re.S)
+    assert m, "no se encontró CATEGORY_LABELS"
+    nombres = dict(re.findall(r"(\w+):\s*'([^']+)'", m.group(1)))
+    # Cada clave del frontend, con el id de la entrada de su nombre; las que la app pasa con -c, con el de su token.
+    assert ids == {k: next(e["id"] for e in tabla if e.get("label") == nombre) for k, nombre in nombres.items()}
+    assert all(ids[c] == next(e["id"] for e in tabla if c in e["tokens"]) for c in VALID_CATEGORIES)
+    assert set(ids.values()) == {e["id"] for e in tabla if "label" in e}
 
 
 def test_los_dominios_de_proveedor_coinciden():
