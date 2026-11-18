@@ -30,9 +30,6 @@ jobs:
         env:
           PR: ${{ github.event.pull_request.number }}
         run: |
-          uploadrr="$(git ls-remote --exit-code https://github.com/Kisnov/Uploadrr-EMU.git refs/heads/main | cut -f1)"
-          test -n "$uploadrr"
-          echo "uploadrr=$uploadrr" >> "$GITHUB_OUTPUT"
           echo "commit=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
           echo "fecha=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
           echo "tags=ghcr.io/kisnov/emuwarr:pr-$PR" >> "$GITHUB_OUTPUT"
@@ -52,7 +49,6 @@ jobs:
           push: true
           tags: ${{ steps.sello.outputs.tags }}
           build-args: |
-            UPLOADRR_COMMIT=${{ steps.sello.outputs.uploadrr }}
             APP_COMMIT=${{ steps.sello.outputs.commit }}
             APP_BUILD_DATE=${{ steps.sello.outputs.fecha }}
           cache-from: type=gha
