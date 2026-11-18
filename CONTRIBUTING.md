@@ -25,8 +25,9 @@ para quien usa la aplicación: `fix: la subida usa el enlace de la carpeta de su
 Pasa los tests del backend y las comprobaciones del frontend (los comandos están en
 [Desarrollo](README.md#desarrollo)). Los tests del backend necesitan Linux: hardlinks, `mediainfo` y `mkvtoolnix`.
 
-Si el cambio toca el contrato con [Uploadrr-EMU](https://github.com/Kisnov/Uploadrr-EMU) (argumentos, claves de
-`config.yaml` o líneas de salida que se leen), cambia los dos repos a la vez: [`CLAUDE.md`](CLAUDE.md) explica cómo.
+Si el cambio toca el contrato con [Uploadrr-EMU](uploadrr-emu/) (argumentos, claves de `config.yaml` o líneas de
+salida que se leen), cambia los dos lados en el mismo PR: [`CLAUDE.md`](CLAUDE.md) explica cómo. Un cambio en
+`uploadrr-emu/` pasa también sus tests.
 
 ## Revisión
 

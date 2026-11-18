@@ -20,3 +20,13 @@ Uploadrr/
 dist/
 build/
 .env
+# De uploadrr-emu/ la imagen solo lleva el código y data/: ni sus tests ni la configuración local de quien construye.
+uploadrr-emu/tests/
+uploadrr-emu/Dockerfile
+uploadrr-emu/data/config.yaml*
+uploadrr-emu/data/cookies/*
+!uploadrr-emu/data/cookies/README.md
+uploadrr-emu/data/*_index.json
+uploadrr-emu/tmp/
+uploadrr-emu/**/__pycache__/
+uploadrr-emu/.*_cache/

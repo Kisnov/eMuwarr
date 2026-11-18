@@ -1,19 +1,11 @@
 #!/usr/bin/env bash
 # Construye, publica y anuncia una versión, en ese orden y sin pasos sueltos.
 #
-# Existe porque los dos build-args de este Dockerfile son fáciles de olvidar y
-# fallan en silencio, cada uno a su manera:
-#
-#   UPLOADRR_COMMIT  Docker cachea el `git clone` del fork por el texto del
-#                    comando, no por lo que hay al otro lado de la red. Sin
-#                    este argumento la imagen sale con una copia vieja del
-#                    fork sin avisar. Ya pasó, varias veces.
-#
-#   APP_COMMIT       Es el sello que la tarjeta de Diagnóstico compara con el
-#                    manifiesto publicado. Sin él la imagen se construye
-#                    igual, pero "Comprobar versión" queda Omitido para
-#                    siempre, diciendo que estás ejecutando desde el código
-#                    fuente aunque estés en la imagen. También pasó.
+# Existe porque el build-arg APP_COMMIT es fácil de olvidar y falla en silencio:
+# es el sello que la tarjeta de Diagnóstico compara con el manifiesto publicado.
+# Sin él la imagen se construye igual, pero "Comprobar versión" queda Omitido
+# para siempre, diciendo que estás ejecutando desde el código fuente aunque
+# estés en la imagen. Ya pasó.
 #
 # Uso:
 #   scripts/desplegar.sh --notas "Lo que cambia, en una línea"
@@ -33,7 +25,6 @@
 set -euo pipefail
 
 IMAGEN="ghcr.io/kisnov/emuwarr"
-FORK="https://github.com/Kisnov/Uploadrr-EMU.git"
 RAIZ="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # En Git Bash de Windows no hay python3.
 PYTHON="$(command -v python3 || command -v python)" || { echo "No encuentro python3 ni python en el PATH." >&2; exit 1; }
@@ -165,20 +156,10 @@ if [[ "$PRUEBA" -eq 0 ]]; then
   fi
 fi
 
-echo "Resolviendo el HEAD del fork…"
-COMMIT_FORK="$(git ls-remote "$FORK" refs/heads/main | cut -f1)"
-if [[ -z "$COMMIT_FORK" ]]; then
-  echo "No se pudo leer el HEAD del fork. Sin eso la caché de Docker serviría" >&2
-  echo "una copia vieja sin avisar, así que paramos aquí." >&2
-  exit 1
-fi
-echo "Fork ........ $COMMIT_FORK"
-
 REGISTRO="$(mktemp -t desplegar-XXXXXX.log)"
 echo "Construyendo (registro en $REGISTRO)…"
 # Desde el commit y no desde el árbol: en Windows (autocrlf) el entrypoint iría con CRLF y el contenedor no arrancaría.
 if ! git -c core.autocrlf=false archive HEAD | docker build --pull \
-    --build-arg "UPLOADRR_COMMIT=$COMMIT_FORK" \
     --build-arg "APP_COMMIT=$COMMIT" \
     --build-arg "APP_BUILD_DATE=$FECHA" \
     -t "$IMAGEN:$COMMIT" - > "$REGISTRO" 2>&1; then
