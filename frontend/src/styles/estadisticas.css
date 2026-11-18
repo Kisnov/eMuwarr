@@ -108,6 +108,23 @@
 [aria-labelledby="est-grupo-ritmo"] .stat-card-text { min-width: 0; }
 [aria-labelledby="est-grupo-ritmo"] .stat-card-value { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
+/* Objetivos: una fila por meta, con su barra; el editor, en filas de campo. */
+.est-objetivos { margin-bottom: 20px; }
+.est-objetivos-cab { display: flex; align-items: baseline; gap: 12px; }
+.est-objetivos-lista { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; max-width: 720px; }
+.est-objetivo-texto { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 16px; font-size: 13px; margin-bottom: 6px; }
+.est-objetivo-nombre { font-weight: 600; color: var(--text-primary); }
+.est-objetivo-cifras { color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+.est-objetivo-plazo { color: var(--text-muted); }
+.est-objetivo-cumplido { color: var(--color-available); font-weight: 600; }
+.est-objetivos-form { max-width: 560px; }
+.est-objetivos-campos { display: grid; gap: 10px; border: 0; margin: 0; padding: 0; min-width: 0; }
+.est-objetivos-fila { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 13px; color: var(--text-secondary); }
+.est-objetivos-fila .form-input { width: auto; }
+.est-objetivos-fila input[type="number"] { width: 9em; }
+.est-objetivos-unidad { min-width: 4em; }
+.est-objetivos-botones { display: flex; flex-wrap: wrap; gap: 8px; }
+
 .est-subidas-cab { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px 16px; }
 .est-subidas-orden { width: auto; margin-bottom: 12px; }
 .est-tabla .data-table td.est-sin-seeders { color: var(--color-warning); font-weight: 600; }

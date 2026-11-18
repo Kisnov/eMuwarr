@@ -6,6 +6,7 @@ import { ErrorState } from '../components/ErrorState'
 import { GraficoLinea } from '../components/GraficoLinea'
 import { LoadingState } from '../components/LoadingState'
 import { MisSubidasEmu } from '../components/MisSubidasEmu'
+import { ObjetivosCuenta } from '../components/ObjetivosCuenta'
 import { StatCard } from '../components/StatCard'
 import { ICON_UPLOADS, svgIcon, TarjetasDelPanel } from '../components/TarjetasDelPanel'
 import { useSeccionVisible } from '../context/SeccionVisible'
@@ -138,16 +139,23 @@ export function EstadisticasPage() {
 
       {sinMostrar ? (
         <LoadingState label="Cargando estadísticas…" />
-      ) : resultado.error ? (
-        <ErrorState message={resultado.error} onRetry={() => { setResultado(null); setIntento(n => n + 1) }} />
-      ) : puntos.length === 0 ? (
-        <EmptyState
-          title="Todavía no hay datos"
-          body="Se empieza a guardar hoy: la primera instantánea sale en cuanto se lea tu perfil de eMuwarez, como mucho en una hora (hace falta su API key en Configuración)."
-        />
+      ) : resultado.error || puntos.length === 0 ? (
+        // Sin instantáneas los objetivos se pueden poner igual (la fecha de alta, las metas): el progreso llegará con ellas.
+        <>
+          {resultado.error ? (
+            <ErrorState message={resultado.error} onRetry={() => { setResultado(null); setIntento(n => n + 1) }} />
+          ) : (
+            <EmptyState
+              title="Todavía no hay datos"
+              body="Se empieza a guardar hoy: la primera instantánea sale en cuanto se lea tu perfil de eMuwarez, como mucho en una hora (hace falta su API key en Configuración)."
+            />
+          )}
+          <ObjetivosCuenta visible={seVe} ultimo={undefined} ritmos={null} />
+        </>
       ) : (
         <div className={enCurso ? 'est-cargando' : undefined} aria-busy={enCurso}>
           {resultado.ritmos && <TarjetasDeRitmo puntos={puntos} ritmos={resultado.ritmos} />}
+          <ObjetivosCuenta visible={seVe} ultimo={puntos[puntos.length - 1]} ritmos={resultado.ritmos} />
           {puntos.length === 1 ? (
             <p className="est-nota" role="status">Solo hay un día guardado: la línea aparecerá a partir de mañana.</p>
           ) : (
