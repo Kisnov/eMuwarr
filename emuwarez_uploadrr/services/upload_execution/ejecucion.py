@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Callable
 
 from ...database import get_setting_canonical
+from ...integrations.emu_limitador import directorio_compartido
 from ...integrations.qbittorrent import qbit_configurado
 from ..subida_pasos import leer_subpasos, subpaso_de_linea
 from ..upload_result_parser import build_error_summary, classify_upload_result
@@ -469,6 +470,8 @@ def _run_uploadrr_subprocess_body(job_id: int, cmd: dict, secrets: list[str]) ->
 def _lanzar_uploadrr(job_id: int, argv: list[str], cwd: str) -> subprocess.Popen:
     """Lanza Uploadrr-EMU en su propia sesión y lo apunta en _PROCESOS (la subida y el reenvío a qBittorrent)."""
     env = {k: v for k, v in os.environ.items()}
+    # Uploadrr-EMU cuenta sus peticiones a eMuwarez en el mismo fichero que la app (src/utils/limitador.py).
+    env["LIMITADOR_DIR"] = str(directorio_compartido())
 
     # Sesión propia: Cancelar y el timeout señalan el grupo entero (Uploadrr,
     # mkbrr, ffmpeg…) y no solo el PID de Python.

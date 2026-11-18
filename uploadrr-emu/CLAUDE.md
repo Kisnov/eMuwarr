@@ -65,6 +65,10 @@ or report their errors unless they break an eMuwarez upload.
   `--resume` inherits it, nothing in this repo acts on it). The schema is `contrato_eventos.json` (the app copies it and
   its presence means `--eventos` is supported); `src/utils/eventos.py` emits, `tests/golden/*.jsonl` and
   `tests/test_eventos.py` pin it. A new event, field or code goes into the schema, the goldens and the app together.
+- Rate limit: before each eMuwarez request (`src/trackers/UNIT3D.py`) `src/utils/limitador.py` waits for a slot in the
+  per-key budget the app shares, in `LIMITADOR_DIR` (set by the app) or `CONFIG_DIR/limitador`, and a 429 pauses every
+  process for its `Retry-After`. Without either variable it does nothing. The module is a byte-identical copy of the app's
+  `integrations/limitador_compartido.py` (stdlib only, Python 3.9): change both together.
 - The `.torrent` is hashed with mkbrr when it is on `PATH` (the app image installs a pinned one), torf otherwise.
   The mkbrr result must list exactly the files torf would pick, or it is rebuilt with torf. When mkbrr warns of
   an incomplete season pack, `print` writes `Incomplete season pack: season N, missing episodes A, B`.

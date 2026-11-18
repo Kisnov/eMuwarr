@@ -47,7 +47,11 @@ descripción y el cliente.
 
 ## Por probar en el NAS (`:dev`)
 
-- El límite compartido entre la CLI y el servidor (`flock` sobre el volumen de `CONFIG_DIR`).
+- El límite de «Subidas en paralelo» compartido entre la CLI y el servidor (`flock` sobre `CONFIG_DIR/plazas`).
+- El límite de peticiones a eMuwarez compartido entre el servidor, la CLI y cada Uploadrr-EMU (`flock` sobre
+  `CONFIG_DIR/limitador`): con un catálogo largo en marcha y dos subidas a la vez no debería llegar ningún 429, y una
+  espera larga sale en el registro de la subida («límite de peticiones por minuto de la API; espera de N s»). Si el
+  registro de la subida o `app.log` dicen que el límite compartido «no está disponible», `flock` no funciona en ese volumen.
 - El campo y el enlace de qBittorrent.
 - La subida por lotes: un duplicado real en Uploadrr-EMU, 50 hilos en el NAS y la rejilla con 200 seleccionadas.
 - «Reenviar a qBittorrent».

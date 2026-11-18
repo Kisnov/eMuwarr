@@ -14,6 +14,7 @@ from typing import Any, Iterable, Optional
 from . import emu_limitador
 from .base import IntegrationError, build_url, request_json
 from .emu_limitador import EMU_ESPERA_429
+from .limitador_compartido import segundos_retry_after
 from ..constants import DEFAULT_UPLOADRR_PATH, EMU_BASE_URL
 from ..models import RequestItem
 
@@ -165,9 +166,9 @@ def emu_fetch_all_pages(
 
 # eMuwarez limita la API a 30 peticiones por minuto por clave (x-ratelimit-limit: 30) y perPage a 100, así que el
 # catálogo entero (~13k torrents) son ~130 páginas seguidas. El ritmo lo pone emu_limitador, compartido por todas
-# las peticiones del proceso: cada recorrido ya no se pausa por su cuenta.
+# las peticiones de la key, también las de otros procesos: cada recorrido ya no se pausa por su cuenta.
 EMU_PETICIONES_MAX_PAGINAS = 50
-# Si aun así llega un 429, el limitador pausa a todos EMU_ESPERA_429 s y la página se repite.
+# Si aun así llega un 429, el limitador pausa a todos lo que pida Retry-After (o EMU_ESPERA_429 s) y la página se repite.
 EMU_REINTENTOS_429 = 3
 
 # Con estos estados, en la primera página, se prueba otra vez sin pedir un orden (puede ser lo que rechaza).
@@ -188,7 +189,7 @@ def _pedir(url: str, api_key: str, *, interactiva: bool) -> Any:
         return request_json("GET", url)
     except IntegrationError as e:
         if e.status == 429:
-            emu_limitador.penalizar(api_key, EMU_ESPERA_429)
+            emu_limitador.penalizar(api_key, segundos_retry_after(e.retry_after, EMU_ESPERA_429))
         raise
 
 

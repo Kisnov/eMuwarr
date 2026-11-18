@@ -13,9 +13,10 @@ logger = logging.getLogger(__name__)
 
 
 class IntegrationError(RuntimeError):
-    def __init__(self, mensaje: str = "", *, status: Optional[int] = None):
+    def __init__(self, mensaje: str = "", *, status: Optional[int] = None, retry_after: Optional[str] = None):
         super().__init__(mensaje)
         self.status = status  # código HTTP, si la respuesta llegó
+        self.retry_after = retry_after  # cabecera Retry-After de esa respuesta, tal cual
 
 
 def es_lista_de_fichas(data: Any) -> bool:
@@ -196,7 +197,8 @@ def request_json(
     except http_cliente.ErrorHTTP as exc:
         # El cuerpo de error puede repetir la URL pedida, clave incluida.
         raw = _tapar_claves(exc.texto(), url)
-        raise IntegrationError(f"HTTP {exc.status} en {safe_url}: {raw[:500]}", status=exc.status) from None
+        raise IntegrationError(f"HTTP {exc.status} en {safe_url}: {raw[:500]}", status=exc.status,
+                               retry_after=exc.headers.get("retry-after")) from None
     except http_cliente.ErrorConexion as exc:
         raise IntegrationError(f"No se pudo conectar con {safe_url}: {_tapar_claves(exc.motivo, url)}") from None
     except json.JSONDecodeError:
