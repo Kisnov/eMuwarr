@@ -342,6 +342,28 @@ def test_migrar_con_un_bak_distinto_lo_pone_en_config_y_lo_aparta(tmp_path):
     assert ue.migrar_config_bak() is False  # una sola vez
 
 
+def test_migrar_si_falla_a_medias_no_deja_el_config_cortado(tmp_path, monkeypatch):
+    """Se escribe aparte y se renombra: un fallo (disco lleno) deja config.yaml y el .bak como estaban."""
+    from emuwarez_uploadrr.services.upload_execution import config as cfg
+
+    uploadrr = _uploadrr(tmp_path, "completo")
+    _uploadrr_en_ajustes(uploadrr)
+    data = uploadrr / "data"
+    antes = b"DEFAULT:\n  tmdb: CLAVE_STAGEADA\n"
+    (data / "config.yaml").write_bytes(antes)
+    (data / "config.yaml.bak").write_bytes(b"DEFAULT:\n  tmdb: ''\n")
+
+    def disco_lleno(*_a):
+        raise OSError(28, "No space left on device")
+
+    monkeypatch.setattr(cfg.os, "replace", disco_lleno)
+    with pytest.raises(OSError):
+        ue.migrar_config_bak()
+
+    assert (data / "config.yaml").read_bytes() == antes
+    assert sorted(f.name for f in data.iterdir()) == ["config.yaml", "config.yaml.bak"]  # sin el temporal
+
+
 def test_migrar_con_un_bak_igual_solo_lo_renombra(tmp_path):
     uploadrr = _uploadrr(tmp_path, "completo")
     _uploadrr_en_ajustes(uploadrr)

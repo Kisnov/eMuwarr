@@ -67,6 +67,7 @@ def cfg(tmp_path, monkeypatch):
     (data / "templates").mkdir()
     (data / "config.yaml").write_text("api_key: tracker-en-config\n")
     (data / "config.yaml.migrado").write_text("api_key: tracker-en-bak\n")
+    (data / "config.yaml.bak").write_text("api_key: tracker-en-bak-sin-migrar\n")  # si la migración falló
     (data / "cookies" / "EMU.pkl").write_bytes(b"cookie-de-sesion")
     (data / "templates" / "plantilla.txt").write_text("sin claves\n")
     return d
@@ -119,6 +120,7 @@ def test_la_copia_normal_no_lleva_los_ficheros_con_claves_de_uploadrr(cfg):
     miembros = _miembros(create_config_backup()["archive_path"])
     assert "Uploadrr/data/config.yaml" not in miembros
     assert "Uploadrr/data/config.yaml.migrado" not in miembros
+    assert "Uploadrr/data/config.yaml.bak" not in miembros
     assert not any(m.startswith("Uploadrr/data/cookies") for m in miembros)
     assert "Uploadrr/data/templates/plantilla.txt" in miembros
     assert "emuwarez_uploadrr.db" in miembros
@@ -169,7 +171,7 @@ def test_la_copia_con_secretos_lo_lleva_todo(cfg, tmp_path):
     assert r["ok"] and r["archive_name"].endswith("_with_secrets.tar.gz")
     miembros = _miembros(r["archive_path"])
     assert "Uploadrr/data/config.yaml" in miembros
-    assert "Uploadrr/data/config.yaml.migrado" in miembros
+    assert "Uploadrr/data/config.yaml.migrado" in miembros and "Uploadrr/data/config.yaml.bak" in miembros
     assert "Uploadrr/data/cookies/EMU.pkl" in miembros
     conn = _abrir(_base_de_la_copia(r["archive_path"], tmp_path))
     for key, value in CLAVES.items():

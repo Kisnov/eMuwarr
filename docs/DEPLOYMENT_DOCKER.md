@@ -213,7 +213,7 @@ borra los avisos leídos de más de 30 días y optimiza la base. No toca las sub
 
 El backup no lleva las claves. En la base de datos van vacías las API keys (TMDb, eMuwarez, Radarr/Sonarr, hosts
 de imágenes), la contraseña de qBittorrent, el webhook de Discord, el token de Telegram y la clave del widget de Homepage, y de
-`/config/Uploadrr/data` no entran `config.yaml`, `config.yaml.migrado` ni `cookies/`, que pueden llevar claves de
+`/config/Uploadrr/data` no entran `config.yaml`, `config.yaml.bak`, `config.yaml.migrado` ni `cookies/`, que pueden llevar claves de
 cualquier tracker, ni las configuraciones antiguas de Uploadrr (`config.py`, `config.json`,
 `backup/old_config.py`). Los config de las subidas en curso (`/config/config_uploadrr/`) no van en ninguna copia, tampoco
 en la que lleva las claves. La contraseña de acceso a la app sí va, como hash. Al restaurarlo, las claves que tengas

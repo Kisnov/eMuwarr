@@ -3,7 +3,7 @@ que no se toca."""
 from __future__ import annotations
 
 import os
-import shutil
+import stat
 from pathlib import Path
 
 from ...database import db_path, get_setting_canonical
@@ -216,10 +216,20 @@ def migrar_config_bak() -> bool:
     bak = config.with_name("config.yaml.bak")
     if not bak.is_file():
         return False
-    if not config.is_file() or config.read_bytes() != bak.read_bytes():
-        nuevo = not config.exists()
-        shutil.copyfile(bak, config)  # en el fichero que ya había, con su modo
-        if nuevo:
-            shutil.copymode(bak, config)
+    contenido = bak.read_bytes()
+    if not config.is_file() or config.read_bytes() != contenido:
+        # Aparte y renombrado: un fallo a medias (disco lleno) no deja config.yaml cortado. Toma el modo del que
+        # sustituye (o el del .bak), que os.replace no conserva; el temporal nace privado.
+        modo = stat.S_IMODE((config if config.is_file() else bak).stat().st_mode)
+        temporal = config.with_name("config.yaml.migrando")
+        temporal.unlink(missing_ok=True)
+        try:
+            with os.fdopen(os.open(temporal, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600), "wb") as destino:
+                destino.write(contenido)
+            os.chmod(temporal, modo)
+            os.replace(temporal, config)
+        except OSError:
+            temporal.unlink(missing_ok=True)
+            raise
     bak.replace(config.with_name("config.yaml.migrado"))
     return True
