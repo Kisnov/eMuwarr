@@ -57,6 +57,14 @@ describe('StatsTrackerBloque', () => {
     expect(texto()).toContain('eMuwarez no responde')
   })
 
+  it('pendiente de moderación enseña el mensaje como nota, no como error', async () => {
+    m.mockResolvedValue(stats({ disponible: false, pendiente_moderacion: true, mensaje: 'Las cifras salen cuando lo aprueben.', seeders: undefined }))
+    await montar(<StatsTrackerBloque job={subida()} />)
+    await esperar(() => texto().includes('Pendiente de moderación'))
+    expect(texto()).toContain('Las cifras salen cuando lo aprueben.')
+    expect(texto()).not.toContain('Sin datos de eMuwarez')
+  })
+
   it('un fallo de red deja el mensaje genérico, y «Actualizar» se salta la caché', async () => {
     m.mockRejectedValueOnce(new Error('red'))
     await montar(<StatsTrackerBloque job={subida()} />)

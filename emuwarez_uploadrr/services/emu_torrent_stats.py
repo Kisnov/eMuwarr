@@ -26,6 +26,8 @@ logger = logging.getLogger(__name__)
 TTL_CACHE = 300.0       # segundos que vale una lectura buena
 TTL_FALLO = 30.0        # y una fallida
 _FICHA = re.compile(r"/torrents/(\d+)(?:[/?#]|$)")
+MENSAJE_SIN_APROBAR = ("eMuwarez aún no enseña este torrent: estará pendiente de moderación (o lo han retirado). "
+                       "Las cifras salen cuando lo aprueben.")
 
 _lock = threading.Lock()
 _cache: dict[tuple[str, int], tuple[float, dict[str, Any]]] = {}
@@ -79,8 +81,13 @@ def estadisticas_de_la_subida(conn: sqlite3.Connection, job_id: int, *, refresca
         atributos = emu_get_torrent(clave, torrent_id)
         resultado = {"disponible": True, "actualizado": datetime.now(timezone.utc).isoformat(), **_resumir(atributos)}
     except IntegrationError as exc:
-        logger.warning("No se pudieron leer las estadísticas del torrent %s en eMuwarez: %s", torrent_id, texto_de_error(exc))
-        resultado = {"disponible": False, "mensaje": texto_de_error(exc)}
+        if exc.status == 404:
+            # Lo normal: aún no la ha aprobado un moderador, y hasta entonces eMuwarez no la enseña.
+            resultado = {"disponible": False, "pendiente_moderacion": True, "mensaje": MENSAJE_SIN_APROBAR}
+        else:
+            logger.warning("No se pudieron leer las estadísticas del torrent %s en eMuwarez: %s", torrent_id,
+                           texto_de_error(exc))
+            resultado = {"disponible": False, "mensaje": texto_de_error(exc)}
     with _lock:
         _cache[llave] = (time.monotonic(), resultado)
     return {**base, **resultado}

@@ -42,7 +42,7 @@ export function StatsTrackerBloque({ job }: { job: UploadJob }) {
       <div className="detail-card dsub-caja seeding-caja">
         {sinDatos ? (
           <div className="seeding-sin-datos">
-            <strong>Sin datos de eMuwarez</strong>
+            <strong>{datos?.pendiente_moderacion ? 'Pendiente de moderación' : 'Sin datos de eMuwarez'}</strong>
             <span className="sub-muted sub-t12">
               {datos?.mensaje ?? (cargando ? 'Consultando…' : 'No se pudo consultar. Esto no afecta a la subida.')}
             </span>
