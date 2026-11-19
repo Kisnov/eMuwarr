@@ -48,6 +48,8 @@ export interface TaskRunLogEntry {
 export interface TaskRunLogsResponse {
   task_key: string
   logs: TaskRunLogEntry[]
+  // La tarea no guarda historial (correría cada pocos minutos): `logs` es solo su última ejecución.
+  sin_historial?: boolean
 }
 
 export function getScheduledTasks(): Promise<ScheduledTask[]> {

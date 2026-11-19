@@ -113,3 +113,50 @@ def test_run_response_never_leaks_secrets(client, auth_headers):
     # string, not a raw dump of instance errors, so a leaked key in an
     # instance-level error message would not automatically appear here.
     assert secret not in resp.text
+
+
+# --- «Ver logs» de las tareas que no apuntaban sus ejecuciones como ellas mismas --------------------------------------
+
+def _logs(client, auth_headers, task_key):
+    resp = client.get(f"/api/tasks/scheduled/{task_key}/logs", headers=auth_headers)
+    assert resp.status_code == 200
+    return resp.json()
+
+
+def test_leer_tus_subidas_deja_su_ejecucion_en_ver_logs(client, auth_headers):
+    with patch("emuwarez_uploadrr.services.mis_torrents.sincronizar", return_value=("completed", "85 subidas, 0 sin seeders")):
+        client.post("/api/tasks/scheduled/leer-mis-subidas-emu/run", headers=auth_headers)
+    datos = _logs(client, auth_headers, "leer-mis-subidas-emu")
+    assert [(r["status"], r["summary"]) for r in datos["logs"]] == [("completed", "85 subidas, 0 sin seeders")]
+    assert datos["sin_historial"] is False
+
+
+def test_con_una_subida_en_marcha_no_se_apunta_cada_intento(client, auth_headers):
+    with patch("emuwarez_uploadrr.services.mis_torrents.sincronizar", return_value=("busy", "Hay una subida en marcha")):
+        client.post("/api/tasks/scheduled/leer-mis-subidas-emu/run", headers=auth_headers)
+    assert _logs(client, auth_headers, "leer-mis-subidas-emu")["logs"] == []
+
+
+def test_la_descarga_completa_del_catalogo_ensena_las_lecturas_del_catalogo(client, auth_headers):
+    from emuwarez_uploadrr.database import connect, db_path
+    from emuwarez_uploadrr.services.tasks import finish_task, start_task
+    conn = connect(db_path())
+    try:
+        finish_task(conn, start_task(conn, "sync-emu-catalog", "Sincronizando catálogo eMuwarez (completo)"), "completed",
+                    "13000 torrents")
+    finally:
+        conn.close()
+    assert [r["summary"] for r in _logs(client, auth_headers, "sync-emu-catalog-full")["logs"]] == ["13000 torrents"]
+
+
+def test_las_tareas_sin_historial_ensenan_su_ultima_ejecucion(client, auth_headers):
+    antes = _logs(client, auth_headers, "vigilar-instancias")
+    assert antes == {"task_key": "vigilar-instancias", "logs": [], "sin_historial": True}
+    with patch("emuwarez_uploadrr.services.vigilancia_instancias.vigilar_instancias",
+               return_value=("completed", "2 instancias responden")):
+        client.post("/api/tasks/scheduled/vigilar-instancias/run", headers=auth_headers)
+    datos = _logs(client, auth_headers, "vigilar-instancias")
+    assert datos["sin_historial"] is True
+    assert [(r["status"], r["summary"]) for r in datos["logs"]] == [("completed", "2 instancias responden")]
+    assert datos["logs"][0]["started_at"]
+

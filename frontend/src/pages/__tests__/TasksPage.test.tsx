@@ -12,7 +12,7 @@ vi.mock('../../api/scheduledTasks', () => ({
 }))
 vi.mock('../../hooks/useRefrescoPorAvisos', () => ({ useRefrescoPorAvisos: () => {} }))
 
-import { getScheduledTasks, updateScheduledTaskSchedule, updateScheduledTaskOptions } from '../../api/scheduledTasks'
+import { getScheduledTasks, getScheduledTaskLogs, updateScheduledTaskSchedule, updateScheduledTaskOptions } from '../../api/scheduledTasks'
 import { TasksPage } from '../TasksPage'
 
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
@@ -91,6 +91,22 @@ describe('Tareas', () => {
     expect(enlace.getAttribute('href')).toBe('/settings')
     await act(async () => { enlace.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })) })
     expect(navegar).toHaveBeenCalledWith('settings')
+  })
+
+  it('«Ver logs» de una tarea sin historial lo dice y enseña su última ejecución', async () => {
+    vi.mocked(getScheduledTaskLogs).mockResolvedValue({
+      task_key: 'sync-emu-requests', sin_historial: true,
+      logs: [{ id: 0, name: 'sync-emu-requests', status: 'completed', started_at: '2026-11-19T14:55:00+00:00',
+        finished_at: '2026-11-19T14:55:00+00:00', summary: '2 instancias responden', details: null }],
+    })
+    await montar()
+    const boton = [...contenedor.querySelectorAll('button')].find(b => b.textContent === 'Ver logs')!
+    await act(async () => { boton.click() })
+    await esperar()
+    const cuerpo = document.body.textContent ?? ''
+    expect(cuerpo).toContain('no guarda historial')
+    expect(cuerpo).toContain('2 instancias responden')
+    expect(cuerpo).not.toContain('Sin ejecuciones registradas todavía')
   })
 
   it('una tarea que va bien no enseña el enlace', async () => {

@@ -26,6 +26,12 @@ def finish_task(conn: sqlite3.Connection, task_id: int, status: str, summary: Op
     conn.commit()
 
 
+def discard_task(conn: sqlite3.Connection, task_id: int) -> None:
+    """Quita una ejecución que no llegó a hacer nada (una tarea que espera turno y se reintenta al minuto siguiente)."""
+    conn.execute("DELETE FROM task_runs WHERE id = ?", (task_id,))
+    conn.commit()
+
+
 def list_tasks(conn: sqlite3.Connection, limit: int = 20) -> list[dict]:
     rows = conn.execute(
         "SELECT * FROM task_runs ORDER BY id DESC LIMIT ?",

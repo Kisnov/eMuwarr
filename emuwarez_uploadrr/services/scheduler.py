@@ -310,7 +310,7 @@ def _run_emu_cuenta(conn: sqlite3.Connection) -> tuple[str, str]:
 
 def _run_emu_mis_subidas(conn: sqlite3.Connection) -> tuple[str, str]:
     from .mis_torrents import sincronizar
-    return sincronizar(conn)
+    return _con_registro(conn, TASK_EMU_MIS_SUBIDAS, lambda: sincronizar(conn))
 
 
 # Clave donde se recuerda de qué versión ya se avisó, para no repetir el aviso
@@ -374,8 +374,9 @@ def _comprobar_version(conn: sqlite3.Connection) -> tuple[str, str]:
 
 
 def _con_registro(conn: sqlite3.Connection, task_key: str, trabajo: Callable[[], tuple[str, str]]) -> tuple[str, str]:
-    """Deja constancia en `task_runs` (lo que enseña «Ver logs»), como la comprobación de versión."""
-    from .tasks import finish_task, start_task
+    """Deja constancia en `task_runs` (lo que enseña «Ver logs»), como la comprobación de versión. Un `busy` (una subida en
+    marcha: se reintenta cada minuto) no se apunta."""
+    from .tasks import discard_task, finish_task, start_task
 
     run_id = start_task(conn, task_key, "En marcha…")
     try:
@@ -383,8 +384,35 @@ def _con_registro(conn: sqlite3.Connection, task_key: str, trabajo: Callable[[],
     except Exception as exc:
         finish_task(conn, run_id, "failed", texto_de_error(exc))
         raise
-    finish_task(conn, run_id, estado, resumen)
+    if estado == "busy":
+        discard_task(conn, run_id)
+    else:
+        finish_task(conn, run_id, estado, resumen)
     return estado, resumen
+
+
+# Lo que enseña «Ver logs» de cada tarea son sus filas de `task_runs`, con su task_key como nombre, salvo:
+# - la descarga completa del catálogo, que apunta cada lectura del catálogo (completa o de lo nuevo) como «sync-emu-catalog»;
+# - las que corren tan a menudo que llenarían «Últimas tareas ejecutadas»: de ellas, la última ejecución, la de la tarea.
+NOMBRE_EN_TASK_RUNS = {TASK_EMU_CATALOG_FULL: "sync-emu-catalog"}
+SIN_HISTORIAL = frozenset({TASK_INSTANCE_WATCH, TASK_EMU_CUENTA})
+
+
+def historial_de_tarea(conn: sqlite3.Connection, task_key: str, limit: int = 20) -> dict:
+    """{"logs": [...], "sin_historial": bool} para «Ver logs». ValueError si la tarea no existe."""
+    from .tasks import list_tasks_by_name
+
+    task = get_scheduled_task(conn, task_key)
+    if not task:
+        raise ValueError(f"Tarea desconocida: {task_key}")
+    if task_key not in SIN_HISTORIAL:
+        return {"logs": list_tasks_by_name(conn, NOMBRE_EN_TASK_RUNS.get(task_key, task_key), limit=limit),
+                "sin_historial": False}
+    ultima = [] if not task.get("last_run_at") else [{
+        "id": 0, "name": task_key, "status": task.get("last_status") or "completed", "started_at": task["last_run_at"],
+        "finished_at": task["last_run_at"], "summary": task.get("last_summary"), "details": None,
+    }]
+    return {"logs": ultima, "sin_historial": True}
 
 
 def _run_backup(conn: sqlite3.Connection) -> tuple[str, str]:

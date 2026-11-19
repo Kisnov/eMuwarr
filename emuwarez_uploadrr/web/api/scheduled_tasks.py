@@ -119,11 +119,10 @@ def get_scheduled_task_logs(
     limit: int = Query(default=20, ge=1, le=200),
     current_user: dict = Depends(require_auth),
 ) -> TaskRunLogsResponse:
-    from emuwarez_uploadrr.services.scheduler import get_scheduled_task
-    from emuwarez_uploadrr.services.tasks import list_tasks_by_name
+    from emuwarez_uploadrr.services.scheduler import historial_de_tarea
     with _get_conn() as conn:
-        task = get_scheduled_task(conn, task_key)
-        if not task:
-            raise HTTPException(status_code=404, detail=f"Tarea desconocida: {task_key}")
-        logs = list_tasks_by_name(conn, task_key, limit=limit)
-    return TaskRunLogsResponse(task_key=task_key, logs=logs)
+        try:
+            historial = historial_de_tarea(conn, task_key, limit=limit)
+        except ValueError:
+            raise HTTPException(status_code=404, detail=f"Tarea desconocida: {task_key}") from None
+    return TaskRunLogsResponse(task_key=task_key, **historial)
