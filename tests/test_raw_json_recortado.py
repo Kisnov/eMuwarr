@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import re
+import sqlite3
 import types
 from pathlib import Path
 
@@ -173,6 +174,47 @@ def test_sin_sitio_para_compactar_recorta_pero_no_compacta(conn, monkeypatch, ca
     assert _libres(conn) > 0
     assert "No hay sitio para compactar" in caplog.text
     assert conn.execute("PRAGMA secure_delete").fetchone()[0] == 1  # el recorte lo deja como estaba
+
+
+def _falla(monkeypatch, cual, error="database or disk is full"):
+    """La sentencia que cumpla `cual` falla como lo haría con el disco lleno a medias."""
+    original = database._Conexion.execute
+
+    def execute(self, sql, *args):
+        if cual(sql.strip()):
+            raise sqlite3.OperationalError(error)
+        return original(self, sql, *args)
+    monkeypatch.setattr(database._Conexion, "execute", execute)
+
+
+def _version(conn) -> str:
+    return conn.execute("SELECT value FROM app_state WHERE key = 'schema_version'").fetchone()[0]
+
+
+def test_si_el_disco_se_llena_al_recortar_arranca_igual_y_no_deshace_lo_de_antes(conn, monkeypatch, caplog):
+    _biblioteca_como_antes(conn)
+    conn.execute("UPDATE library_items SET arr_queue_raw_json = '{}'")  # lo vacía otra migración de la cascada (48)
+    _falla(monkeypatch, lambda sql: sql.startswith("UPDATE library_items SET raw_json"))
+
+    _migrar_desde_57(conn)
+
+    assert _version(conn) == "58"
+    assert conn.execute("SELECT COUNT(*) FROM library_items WHERE arr_queue_raw_json IS NOT NULL").fetchone()[0] == 0
+    assert _raw(conn, "series") == [SERIE]
+    assert "No se pudo recortar raw_json" in caplog.text
+
+
+@pytest.mark.parametrize("sentencia, aviso", [("VACUUM", "No se pudo compactar"),
+                                              ("PRAGMA wal_checkpoint(TRUNCATE)", "No se pudo vaciar el WAL")])
+def test_si_falla_la_compactacion_arranca_igual(conn, monkeypatch, caplog, sentencia, aviso):
+    _biblioteca_como_antes(conn)
+    _falla(monkeypatch, lambda sql: sql == sentencia, "disk I/O error")
+
+    _migrar_desde_57(conn)
+
+    assert _version(conn) == "58"
+    assert _raw(conn, "series") == [{"added": "2023-05-01T10:00:00Z"}]
+    assert aviso in caplog.text
 
 
 # raw_json de otras tablas, que esta lista blanca no toca: request_items (claimed_by) y nomenclature_proposals.
