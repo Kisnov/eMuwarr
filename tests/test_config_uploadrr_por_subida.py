@@ -342,25 +342,45 @@ def test_migrar_con_un_bak_distinto_lo_pone_en_config_y_lo_aparta(tmp_path):
     assert ue.migrar_config_bak() is False  # una sola vez
 
 
-def test_migrar_si_falla_a_medias_no_deja_el_config_cortado(tmp_path, monkeypatch):
-    """Se escribe aparte y se renombra: un fallo (disco lleno) deja config.yaml y el .bak como estaban."""
+@pytest.mark.parametrize("donde", ["al escribir", "al sustituir"])
+def test_migrar_si_falla_a_medias_no_deja_el_config_cortado(tmp_path, monkeypatch, donde):
+    """Se escribe aparte y se renombra: un fallo (disco lleno) a media escritura o al sustituir deja config.yaml y
+    el .bak como estaban."""
     from emuwarez_uploadrr.services.upload_execution import config as cfg
 
     uploadrr = _uploadrr(tmp_path, "completo")
     _uploadrr_en_ajustes(uploadrr)
     data = uploadrr / "data"
-    antes = b"DEFAULT:\n  tmdb: CLAVE_STAGEADA\n"
+    antes, bak = b"DEFAULT:\n  tmdb: CLAVE_STAGEADA\n", b"DEFAULT:\n  tmdb: ''\n  add_logo: false\n"
     (data / "config.yaml").write_bytes(antes)
-    (data / "config.yaml.bak").write_bytes(b"DEFAULT:\n  tmdb: ''\n")
+    (data / "config.yaml.bak").write_bytes(bak)
+    fdopen = cfg.os.fdopen
+
+    class EscribeLaMitad:
+        def __init__(self, fd, modo):
+            self.fichero = fdopen(fd, modo)
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_exc):
+            self.fichero.close()
+
+        def write(self, datos):
+            self.fichero.write(datos[: len(datos) // 2])
+            raise OSError(28, "No space left on device")
 
     def disco_lleno(*_a):
         raise OSError(28, "No space left on device")
 
-    monkeypatch.setattr(cfg.os, "replace", disco_lleno)
+    if donde == "al escribir":
+        monkeypatch.setattr(cfg.os, "fdopen", EscribeLaMitad)
+    else:
+        monkeypatch.setattr(cfg.os, "replace", disco_lleno)
     with pytest.raises(OSError):
         ue.migrar_config_bak()
 
-    assert (data / "config.yaml").read_bytes() == antes
+    assert (data / "config.yaml").read_bytes() == antes and (data / "config.yaml.bak").read_bytes() == bak
     assert sorted(f.name for f in data.iterdir()) == ["config.yaml", "config.yaml.bak"]  # sin el temporal
 
 
