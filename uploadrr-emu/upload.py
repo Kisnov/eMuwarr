@@ -382,7 +382,7 @@ class Uploadrr:
         if torrent is None:
             eventos.cliente_fallo(motivo)
             if motivo == "no_visible":
-                return "EMU aún no da el torrent (¿pendiente de moderación?)"
+                return "EMU no da el torrent (¿pendiente de moderación o retirado?)"
             return "No se pudo bajar el .torrent de EMU"
         # La subida son hardlinks a la biblioteca: con otros ficheros, qBittorrent descargaría encima de los originales.
         distinto = fichero_distinto(torrent, Path(meta["path"]))

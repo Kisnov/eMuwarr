@@ -28,10 +28,11 @@ QBIT_LOGIN_INCORRECTO = (
 
 
 QBIT_NO_VISIBLE = (
-    "qBittorrent: no se añadió el torrent porque eMuwarez aún no lo enseña: estará pendiente de moderación. "
-    "Vuelve a reenviarlo cuando lo aprueben."
+    "qBittorrent: no se añadió el torrent porque eMuwarez no lo enseña: estará pendiente de moderación (o lo han "
+    "retirado). Si está pendiente, vuelve a reenviarlo cuando lo aprueben."
 )
-QBIT_REENVIO_SIN_TORRENT = "qBittorrent: no se añadió el torrent porque no se pudo descargar el .torrent firmado desde eMuwarez."
+QBIT_REENVIO_SIN_TORRENT = ("qBittorrent: no se añadió el torrent porque no se pudo descargar de eMuwarez el .torrent "
+                            "firmado o guardarlo.")
 
 
 def mensaje_qbit_fallo(motivo: str | None, *, reenvio: bool = False) -> str:

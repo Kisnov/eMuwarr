@@ -24,7 +24,7 @@ import {
   UPLOAD_TYPE_LABEL, STATUS_CLASS, statusLabel, phaseLabel, currentPhaseInfo,
   progressCounter, queuedWaitText, formatSecondsHM, ACTIVE_JOB_STATUSES, fundirPorId, conservarIguales,
 } from '../utils/uploadStatus'
-import { PENDIENTE_MODERACION } from '../utils/estadoDeSubida'
+import { ChipPendienteModeracion } from '../components/ChipPendienteModeracion'
 import { useSeeding, type SeedingEstado } from '../hooks/useSeeding'
 import { SeedingCelda } from '../components/SaludSeeding'
 import { useRefrescoPorAvisos, AVISOS_SUBIDA, AVISOS_SUBIDA_PROGRESO } from '../hooks/useRefrescoPorAvisos'
@@ -175,9 +175,7 @@ function EstadoDeFila({ job }: { job: UploadJob }) {
   return (
     <div className="sub-estado">
       <span className={parpadea ? `${clase} badge-blink` : clase}>{statusLabel(job.status)}</span>
-      {job.status === 'completed' && job.pendiente_moderacion && (
-        <span className={PENDIENTE_MODERACION.clase} title={PENDIENTE_MODERACION.ayuda}>{PENDIENTE_MODERACION.texto}</span>
-      )}
+      {job.status === 'completed' && job.pendiente_moderacion && <ChipPendienteModeracion />}
       {job.status === 'staging' && <span className="sub-estado-pie">Generando nomenclatura</span>}
       {job.status === 'queued' && <span className="sub-estado-pie">{queuedWaitText(job)}</span>}
       {viva && (

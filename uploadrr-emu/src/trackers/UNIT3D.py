@@ -347,8 +347,8 @@ class Unit3d:
             console.print(f"[red]{self.tracker}: no se pudo consultar el torrent {torrent_id}: {type(e).__name__}")
             return None, "sin_torrent"
         if response.status_code == 404:
-            console.print(f"[red]{self.tracker}: la API no da el torrent {torrent_id} (HTTP 404): si está pendiente de "
-                          "moderación, reenvíalo cuando lo aprueben")
+            console.print(f"[red]{self.tracker}: la API no da el torrent {torrent_id} (HTTP 404): estará pendiente de "
+                          "moderación o lo han retirado; si está pendiente, reenvíalo cuando lo aprueben")
             return None, "no_visible"
         if response.status_code != 200:
             console.print(f"[red]{self.tracker}: la API devolvió HTTP {response.status_code} para el torrent {torrent_id}")

@@ -110,7 +110,7 @@ MOTIVOS_CLIENTE: dict[str, str] = {
     "no_confirmado": "Uploadrr-EMU no pudo confirmar que se añadiera",
     "no_seed": "no hay nada que sembrar",
     "sin_torrent": "no se pudo descargar el .torrent firmado desde eMuwarez",
-    "no_visible": "eMuwarez aún no enseña el torrent: estará pendiente de moderación",
+    "no_visible": "eMuwarez no enseña el torrent: estará pendiente de moderación (o lo han retirado)",
     "sin_cliente": "Uploadrr-EMU no tiene cliente de torrents configurado",
     "solo_cliente_no_qbit": "el cliente de Uploadrr-EMU no es qBittorrent",
     "cliente_no_soportado": "el cliente de torrents no está soportado",
