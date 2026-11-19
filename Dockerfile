@@ -11,7 +11,7 @@ COPY frontend/ ./
 RUN npm run build
 
 # ── Stage 2: Python runtime ───────────────────────────────────────────────────
-FROM python:3.12-slim AS runtime
+FROM python:3.15-slim AS runtime
 
 LABEL org.opencontainers.image.title="eMuwarr"
 LABEL org.opencontainers.image.description="Upload manager for eMuwarez with Radarr/Sonarr integration"
