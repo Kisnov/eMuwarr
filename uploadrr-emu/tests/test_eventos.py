@@ -267,7 +267,7 @@ def test_un_config_que_no_existe_es_sin_config(flujo, monkeypatch):
 # --solo-cliente de punta a punta
 
 
-def _solo_cliente(flujo, monkeypatch, enlace_ok=True):
+def _solo_cliente(flujo, monkeypatch, enlace_ok=True, sin_enlace=(404, b"")):
     ruta = flujo.crear_video(PELICULA)
     flujo.tracker_que_acepta()
     torrent = torf.Torrent(path=ruta, private=True)
@@ -276,7 +276,7 @@ def _solo_cliente(flujo, monkeypatch, enlace_ok=True):
     firmado = torrent.dump(validate=False)
     descarga = f"{flujo.tracker.url}/torrent/download/42.rsskey"
     atributos = {"name": NOMBRE_PELICULA, "download_link": descarga}
-    flujo.tracker.routes[("GET", "/api/torrents/42")] = lambda q: (200, {"data": {"attributes": atributos}}) if enlace_ok else (404, b"")
+    flujo.tracker.routes[("GET", "/api/torrents/42")] = lambda q: (200, {"data": {"attributes": atributos}}) if enlace_ok else sin_enlace
     flujo.tracker.routes[("GET", "/torrent/download/42.rsskey")] = lambda q: (200, firmado)
 
     monkeypatch.setattr("src.clients.ESPERA_INICIO_COMPROBACION", 0)  # el qBittorrent falso nunca «comprueba»
@@ -295,13 +295,17 @@ def test_solo_cliente_bueno(flujo, monkeypatch):
     assert len(cliente) == 1 and cliente[0]["ok"] is True and cliente[0]["cliente"] == "qbit"
 
 
-def test_solo_cliente_sin_torrent_que_bajar(flujo, monkeypatch):
-    codigo, _ = _solo_cliente(flujo, monkeypatch, enlace_ok=False)
+@pytest.mark.parametrize("sin_enlace, motivo", [
+    ((404, b""), "no_visible"),  # la API aún no lo da: en eMuwarez, pendiente de moderación
+    ((200, {"data": {"attributes": {}}}), "sin_torrent"),
+], ids=["404", "sin-enlace"])
+def test_solo_cliente_sin_torrent_que_bajar(flujo, monkeypatch, sin_enlace, motivo):
+    codigo, _ = _solo_cliente(flujo, monkeypatch, enlace_ok=False, sin_enlace=sin_enlace)
 
     assert codigo == 1
     eventos = _revisar(flujo)
     assert _resultado(eventos) == ("cliente_fallido", False)
-    assert _codigos(eventos, "cliente")[0]["motivo"] == "sin_torrent"
+    assert _codigos(eventos, "cliente")[0]["motivo"] == motivo
     assert not Qbit.anadidos
 
 

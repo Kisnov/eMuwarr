@@ -136,7 +136,7 @@ def _lanzar(job_id: int, torrent_id: str, cmd: dict, secrets: list[str]) -> tupl
             if efecto[0] == "qbit_ok":
                 append_upload_log(job_id, "info", QBIT_AÑADIDO, stream="system")
             elif efecto[0] == "qbit_fallo":
-                append_upload_log(job_id, "error", mensaje_qbit_fallo(efecto[1]), stream="system")
+                append_upload_log(job_id, "error", mensaje_qbit_fallo(efecto[1], reenvio=True), stream="system")
 
     def _con_linea(linea: str) -> None:
         # Con eventos el texto solo se registra (ver _run_uploadrr_subprocess_body).

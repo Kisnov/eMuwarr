@@ -14,7 +14,7 @@
     "paso": ["screenshots", "torrent"],
     "motivo": [
       "login", "ya_estaba", "no_aceptado", "no_parado", "no_arrancado", "no_confirmado", "no_seed", "sin_torrent",
-      "sin_cliente", "solo_cliente_no_qbit", "cliente_no_soportado", "sin_emu", "no_coincide", "error"
+      "no_visible", "sin_cliente", "solo_cliente_no_qbit", "cliente_no_soportado", "sin_emu", "no_coincide", "error"
     ],
     "codigo_aviso": ["pack_incompleto"],
     "codigo_resultado": [

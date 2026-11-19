@@ -42,7 +42,8 @@ or report their errors unless they break an eMuwarez upload.
 - `--solo-cliente ID` (`-sc`, `meta["solo_cliente"]`, an int, in `overwrite_keys`): the app adds it (plus `--resume`) to
   the usual argv when the torrent is already on eMuwarez but not in qBittorrent. After prep (and the TMDb check) the item
   skips screenshots, dupe search, confirmation, hashing and upload; it implies `resume` (no wipe). It reads
-  `attributes.download_link` from `GET /api/torrents/ID` (with or without the `data` wrapper), saves
+  `attributes.download_link` from `GET /api/torrents/ID` (with or without the `data` wrapper; a 404 there, which is what eMuwarez
+  answers while the torrent waits for moderation, is the `cliente` reason `no_visible`, anything else `sin_torrent`), saves
   `[EMU]<clean_name>.torrent` like an upload, checks its root name, file names and sizes against `PATH` (hardlinks into
   the library: a mismatch deletes it and exits 1) and calls `add_to_client`. Only in this mode qBittorrent gets it
   stopped and unchecked-skip (`is_stopped=True`, `is_skip_checking=False`), it is rechecked, and it is started only at

@@ -336,33 +336,39 @@ class Unit3d:
         await edit_torrent(torrent_path=new_torrent, comment=f"{COMENTARIO_TORRENT}\n{url}" if url else COMENTARIO_TORRENT)
         return new_torrent
 
-    async def descargar_subido(self, meta: Dict[str, Any], torrent_id: int) -> Optional[Path]:
-        """--solo-cliente: guarda, como tras subirlo, el .torrent firmado de un torrent que ya está en el tracker."""
+    async def descargar_subido(self, meta: Dict[str, Any], torrent_id: int) -> Tuple[Optional[Path], str]:
+        """--solo-cliente: guarda, como tras subirlo, el .torrent firmado de un torrent que ya está en el tracker.
+        Devuelve (fichero, "") o (None, motivo del evento `cliente`): `no_visible` si la API no lo da (en eMuwarez, uno
+        pendiente de moderación), `sin_torrent` si no."""
         try:
             async with httpx.AsyncClient(timeout=self.timeout) as client:
                 response = await self._cliente(client).pedir("GET", f"/api/torrents/{torrent_id}")
         except httpx.HTTPError as e:
             console.print(f"[red]{self.tracker}: no se pudo consultar el torrent {torrent_id}: {type(e).__name__}")
-            return None
+            return None, "sin_torrent"
+        if response.status_code == 404:
+            console.print(f"[red]{self.tracker}: la API no da el torrent {torrent_id} (HTTP 404): si está pendiente de "
+                          "moderación, reenvíalo cuando lo aprueben")
+            return None, "no_visible"
         if response.status_code != 200:
             console.print(f"[red]{self.tracker}: la API devolvió HTTP {response.status_code} para el torrent {torrent_id}")
-            return None
+            return None, "sin_torrent"
         try:
             link = cliente_unit3d.atributos_torrent(response.json()).get("download_link")
         except ValueError:
             link = None
         if not isinstance(link, str) or not link:
             console.print(f"[red]{self.tracker}: la API no da enlace de descarga para el torrent {torrent_id}")
-            return None
+            return None, "sin_torrent"
         content, error = await self._download_torrent(link)
         if error:
             console.print(f"[red]{self.tracker}: no se pudo descargar el .torrent {torrent_id}: {error}")
-            return None
+            return None, "sin_torrent"
         try:
-            return await self._guardar_torrent(meta, content, f"{self.domain}/torrents/{torrent_id}")
+            return await self._guardar_torrent(meta, content, f"{self.domain}/torrents/{torrent_id}"), ""
         except Exception as e:
             console.print(f"[red]{self.tracker}: no se pudo guardar el .torrent {torrent_id}: {e}")
-            return None
+            return None, "sin_torrent"
 
     async def _post_upload(self, data, torrent_path, nfo_file, extra_files_meta):
         """POST de la subida, repetido ante cortes y errores 5xx. Devuelve (respuesta o None, intentos)."""

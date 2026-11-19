@@ -27,12 +27,22 @@ QBIT_LOGIN_INCORRECTO = (
 )
 
 
-def mensaje_qbit_fallo(motivo: str | None) -> str:
-    """Lo que ve el usuario cuando Uploadrr-EMU dice (evento `cliente`, ok:false) por qué el torrent no entró en qBittorrent."""
+QBIT_NO_VISIBLE = (
+    "qBittorrent: no se añadió el torrent porque eMuwarez aún no lo enseña: estará pendiente de moderación. "
+    "Vuelve a reenviarlo cuando lo aprueben."
+)
+QBIT_REENVIO_SIN_TORRENT = "qBittorrent: no se añadió el torrent porque no se pudo descargar el .torrent firmado desde eMuwarez."
+
+
+def mensaje_qbit_fallo(motivo: str | None, *, reenvio: bool = False) -> str:
+    """Lo que ve el usuario cuando Uploadrr-EMU dice (evento `cliente`, ok:false) por qué el torrent no entró en
+    qBittorrent. En un reenvío (`reenvio`) no se ha subido nada: el .torrent se pide a eMuwarez."""
     if motivo == "login":
         return QBIT_LOGIN_INCORRECTO
+    if motivo == "no_visible":
+        return QBIT_NO_VISIBLE
     if motivo == "sin_torrent":
-        return QBIT_SIN_TORRENT_FIRMADO
+        return QBIT_REENVIO_SIN_TORRENT if reenvio else QBIT_SIN_TORRENT_FIRMADO
     texto = MOTIVOS_CLIENTE.get(motivo or "") or f"motivo «{motivo}»"
     return f"qBittorrent: falló al añadir o etiquetar el torrent ({texto}). Revisa qBittorrent. La subida a eMuwarez sí se completó."
 
