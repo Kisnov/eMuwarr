@@ -69,6 +69,11 @@ or report their errors unless they break an eMuwarez upload.
   per-key budget the app shares, in `LIMITADOR_DIR` (set by the app) or `CONFIG_DIR/limitador`, and a 429 pauses every
   process for its `Retry-After`. Without either variable it does nothing. The module is a byte-identical copy of the app's
   `integrations/limitador_compartido.py` (stdlib only, Python 3.9): change both together.
+- Tracker API client: every eMuwarez request (dupe search, upload POST, `.torrent` downloads, `--solo-cliente` lookup)
+  goes through `src/utils/cliente_unit3d.py` (`Unit3d._cliente`), which builds URL and headers, sends the key only to the
+  tracker's own origin and takes a limiter slot before each request. It is a byte-identical copy of the app's
+  `integrations/cliente_unit3d.py`: change both together. Its `User-Agent` is `emuwarr/<EMUWARR_VERSION>`; the app sets
+  that variable when it launches this (without it, `emuwarr/uploadrr-emu`).
 - The `.torrent` is hashed with mkbrr when it is on `PATH` (the app image installs a pinned one), torf otherwise.
   The mkbrr result must list exactly the files torf would pick, or it is rebuilt with torf. When mkbrr warns of
   an incomplete season pack, `print` writes `Incomplete season pack: season N, missing episodes A, B`.
@@ -100,10 +105,11 @@ or report their errors unless they break an eMuwarez upload.
 
 ## Secrets and auth
 
-- The tracker API key travels as the `api_token` query param. Never print `params`, full request URLs or
+- The tracker API key travels as `Authorization: Bearer`, and as the `api_token` query param when the tracker answers
+  401/403 to that (one retry, `src/utils/cliente_unit3d.py`). Never print headers, `params`, full request URLs or
   `http_err.request.url`. Plain `print` and raw `logging` handlers skip the redactor: keep them for
   machine-read lines that hold no secrets.
-- Re-downloading the signed `.torrent` after upload (`src/trackers/UNIT3D.py`) must send the same `params`
-  and `User-Agent` as the upload POST, or eMuwarez answers 403 and `[EMU]<name>.torrent` is never written.
+- Re-downloading the signed `.torrent` after upload (`src/trackers/UNIT3D.py`) must send the same key and
+  `User-Agent` as the upload POST, or eMuwarez answers 403 and `[EMU]<name>.torrent` is never written: both go through the client.
 - `data/config.yaml` and `data/config.yaml.bak` are not tracked: this repo's defaults live in
   `data/backup/example_config.yaml`. `data/tags.json` is tracked although `.gitignore` lists it: placeholders only.

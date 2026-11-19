@@ -237,7 +237,7 @@ def test_el_429_de_una_pagina_pausa_tambien_a_las_consultas(monkeypatch, limitad
                   {"data": [{"id": 1}], "meta": {"last_page": 1, "total": 1}}]
     pedidas = []
 
-    def falso(method, url):
+    def falso(method, url, **kw):
         pedidas.append(url)
         r = respuestas.pop(0)
         if isinstance(r, Exception):
@@ -300,10 +300,10 @@ def test_el_catalogo_largo_se_reparte_en_minutos_y_deja_sitio_al_perfil(monkeypa
     lim = limitador_emuwarez
     limite = lim.capacidad - lim.reserva_interactiva
     paginas = limite + 5
-    monkeypatch.setattr(emu, "request_json", lambda method, url: {"data": [{"id": 1}] * 100})
+    monkeypatch.setattr(emu, "request_json", lambda method, url, **kw: {"data": [{"id": 1}] * 100})
     emu.emu_fetch_all_torrents(CLAVE, max_pages=paginas)
     assert sum(lim.reloj.dormidas) == pytest.approx(60.0)  # la página limite+1 espera al minuto siguiente
-    monkeypatch.setattr(emu, "request_json", lambda method, url: {"username": "yo"})
+    monkeypatch.setattr(emu, "request_json", lambda method, url, **kw: {"username": "yo"})
     antes = len(lim.reloj.dormidas)
     assert emu.emu_get_user(CLAVE)["username"] == "yo"
     assert len(lim.reloj.dormidas) == antes
@@ -311,7 +311,7 @@ def test_el_catalogo_largo_se_reparte_en_minutos_y_deja_sitio_al_perfil(monkeypa
 
 def test_probar_conexion_y_detalle_son_consultas_y_el_catalogo_espera(monkeypatch, limitador_emuwarez):
     lim = limitador_emuwarez
-    monkeypatch.setattr(emu, "request_json", lambda method, url: {})
+    monkeypatch.setattr(emu, "request_json", lambda method, url, **kw: {})
     lim.penalizar(CLAVE, 60)
     with pytest.raises(IntegrationError, match="límite"):
         emu.emu_test_connection(CLAVE)

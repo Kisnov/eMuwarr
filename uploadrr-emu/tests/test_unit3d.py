@@ -20,6 +20,7 @@ from src.utils import limitador
 from tracker_falso import FakeTracker
 
 TOKEN = "clave-de-prueba"
+BEARER = f"Bearer {TOKEN}"
 SEARCH = "/api/torrents/filter"
 UPLOAD = "/api/torrents/upload"
 NAME = "Peli 2020 1080p WEB-DL DUAL-GRP"
@@ -66,8 +67,7 @@ def emu(tracker, monkeypatch):
     monkeypatch.setattr(unit3d, "UPLOAD_RETRY_DELAYS", (0, 0))
     monkeypatch.setattr(unit3d, "DOWNLOAD_RETRY_DELAYS", (0, 0, 0))
     instance = EMU(config={"TRACKERS": {"EMU": {"api_key": TOKEN}}, "DEFAULT": {}})
-    instance.search_url = tracker.url + SEARCH
-    instance.upload_url = tracker.url + UPLOAD
+    instance.domain = tracker.url
     return instance
 
 
@@ -92,7 +92,29 @@ def test_search_follows_next_links(tracker, emu, meta):
     assert first["resolutions[]"] == ["3", "4"]
     assert first["perPage"] == ["100"]
     assert first["name"] == [""]  # la edición ya no filtra por nombre
-    assert second["cursor"] == ["2"] and second["api_token"] == [TOKEN]
+    assert second["cursor"] == ["2"] and "api_token" not in second
+    assert tracker.autorizaciones == [BEARER, BEARER]
+
+
+def test_search_next_link_goes_with_our_key_only(tracker, emu, meta):
+    """La clave del enlace de la página siguiente se quita y va la nuestra (src/utils/cliente_unit3d.py)."""
+    def search(query):
+        if "page" not in query:
+            return 200, {"data": [], "links": {"next": f"{tracker.url}{SEARCH}?page=2&api_token=otra"}}
+        return 200, {"data": [], "links": {"next": None}}
+
+    tracker.routes[("GET", SEARCH)] = search
+    run(emu.search_existing(meta))
+    assert "api_token" not in tracker.calls("GET", SEARCH)[1] and tracker.autorizaciones[1] == BEARER
+
+
+def test_a_key_rejected_as_bearer_goes_once_more_in_the_url(tracker, emu, meta):
+    """Un UNIT3D que aún no lee Bearer: la misma petición, una vez, con ?api_token=."""
+    tracker.routes[("GET", SEARCH)] = lambda q: (
+        (200, {"data": [item("A", 10)], "links": {"next": None}}) if q.get("api_token") == [TOKEN] else (401, b""))
+    assert run(emu.search_existing(meta)) == {"A": 10}
+    assert tracker.autorizaciones == [BEARER, None]
+    assert [q.get("api_token") for q in tracker.calls("GET", SEARCH)] == [None, [TOKEN]]
 
 
 def test_search_other_resolutions_alone(tracker, emu, meta):
@@ -178,7 +200,7 @@ def test_search_connection_refused_raises(emu, meta):
     with socket.socket() as libre:
         libre.bind(("127.0.0.1", 0))
         puerto = libre.getsockname()[1]
-    emu.search_url = f"http://localhost:{puerto}{SEARCH}"  # nadie escucha ahí
+    emu.domain = f"http://localhost:{puerto}"  # nadie escucha ahí
     with pytest.raises(DupeSearchError) as error:
         run(emu.search_existing(meta))
     assert TOKEN not in str(error.value)
@@ -285,7 +307,7 @@ def serve_download(tracker, signed_torrent, failures=0):
 
     def download(query):
         calls.append(query)
-        if query.get("api_token") != [TOKEN]:
+        if tracker.autorizaciones[-1] != BEARER:
             return 403, b"forbidden"
         if len(calls) <= failures:
             return 404, b"not yet"
@@ -331,6 +353,15 @@ def test_upload_sends_season_and_episode_of_an_episode(tracker, emu, upload_meta
     (fields, _), = tracker.bodies
     assert (fields["category_id"], fields["type_id"], fields["resolution_id"]) == ("2", "4", "3")
     assert (fields["season_number"], fields["episode_number"]) == ("2", "7")
+
+
+def test_every_request_goes_with_the_emuwarr_user_agent(tracker, emu, upload_meta, signed_torrent):
+    """La subida, su descarga y la búsqueda de antes (src/utils/cliente_unit3d.py), con la versión que pasa la app."""
+    tracker.routes[("POST", UPLOAD)] = lambda q: (200, {"success": True, "data": download_url(tracker)})
+    serve_download(tracker, signed_torrent)
+    assert run(emu.upload(upload_meta)) is True
+    assert len(tracker.agentes) == 3 and set(tracker.agentes) == {unit3d.USER_AGENT}
+    assert unit3d.USER_AGENT.startswith("emuwarr/")
 
 
 def test_upload_retries_server_errors(tracker, emu, upload_meta, signed_torrent):
@@ -546,13 +577,13 @@ def test_upload_ok_with_invalid_link_counts_as_uploaded(tracker, emu, upload_met
 )
 def test_upload_never_sends_the_key_to_another_origin(tracker, emu, upload_meta, capsys, monkeypatch, link):
     requested = []
-    real_get = httpx.AsyncClient.get
+    real_request = httpx.AsyncClient.request
 
-    async def spy(self, url, *args, **kwargs):
+    async def spy(self, method, url, *args, **kwargs):
         requested.append(str(url))
-        return await real_get(self, url, *args, **kwargs)
+        return await real_request(self, method, url, *args, **kwargs)
 
-    monkeypatch.setattr(httpx.AsyncClient, "get", spy)
+    monkeypatch.setattr(httpx.AsyncClient, "request", spy)
     url = link(tracker.server.server_address[1])
     tracker.routes[("POST", UPLOAD)] = lambda q: (200, {"success": True, "data": url})
 
@@ -574,10 +605,19 @@ def test_upload_ok_without_link_counts_as_uploaded(tracker, emu, upload_meta, da
     assert "Torrent upload succeeded, but failed to download the torrent file" in capsys.readouterr().out
 
 
-def test_upload_forbidden_is_not_retried(tracker, emu, upload_meta):
+def test_upload_forbidden_is_only_retried_with_the_key_in_the_url(tracker, emu, upload_meta):
     tracker.routes[("POST", UPLOAD)] = lambda q: (403, b"forbidden")
     assert run(emu.upload(upload_meta)) is False
-    assert len(tracker.calls("POST", UPLOAD)) == 1
+    assert [q.get("api_token") for q in tracker.calls("POST", UPLOAD)] == [None, [TOKEN]]
+
+
+def test_an_upload_repeated_with_the_key_in_the_url_sends_the_files_again(tracker, emu, upload_meta, signed_torrent):
+    tracker.routes[("POST", UPLOAD)] = lambda q: (
+        (200, {"success": True, "data": download_url(tracker)}) if q.get("api_token") == [TOKEN] else (401, b""))
+    serve_download(tracker, signed_torrent)
+    assert run(emu.upload(upload_meta)) is True
+    (_, primero), (campos, segundo) = tracker.bodies
+    assert primero["torrent"] == segundo["torrent"] == signed_torrent and campos["name"] == NAME
 
 
 def test_upload_ok_but_torrent_never_downloads(tracker, emu, upload_meta, capsys):
@@ -650,7 +690,7 @@ def test_solo_cliente_baja_el_torrent_firmado_y_lo_anade(tracker, upload_meta, s
     assert solo_cliente(cliente) is None
     assert cliente.anadidos == [("EMU", True)]
     assert torf.Torrent.read(saved_torrent(upload_meta)).comment == f"Torrent descargado de la comunidad eMuwarez.\n{tracker.url}/torrents/42"
-    assert tracker.calls("GET", API_TORRENT)[0]["api_token"] == [TOKEN]
+    assert "api_token" not in tracker.calls("GET", API_TORRENT)[0] and tracker.autorizaciones[0] == BEARER
     assert tracker.calls("POST", UPLOAD) == [] and tracker.calls("GET", SEARCH) == []  # ni subida ni duplicados
     out = capsys.readouterr().out
     assert "Torrent URL:" not in out and "Torrent upload succeeded" not in out

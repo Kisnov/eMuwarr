@@ -1019,7 +1019,7 @@ def _url_publica(url: Optional[str]) -> Optional[str]:
     """La página de la petición en eMuwarez, sin nada que pueda llevar una clave.
 
     `normalize_request` guarda la página pública (`…/requests/<id>`), que no lleva consulta; aun así no se devuelve
-    tal cual: la clave de eMuwarez viaja en la consulta (`api_token=…`) y una fila escrita por otra versión podría
+    tal cual: la clave de eMuwarez puede viajar en la consulta (`api_token=…`) y una fila escrita por otra versión podría
     traerla. Se quitan la consulta, el fragmento y el usuario:contraseña; lo que no sea http(s), fuera."""
     if not url:
         return None

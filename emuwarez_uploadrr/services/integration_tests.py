@@ -243,22 +243,21 @@ def test_emuwarez_connection(
         set_state(conn, EMU_TEST_STATE_KEY, dt.datetime.now(dt.timezone.utc).isoformat())
         conn.commit()  # sin esto el bloqueo de escritura dura toda la petición y las otras escrituras fallan con «database is locked»
 
-    # Va por el mismo limitador que el resto de peticiones a eMuwarez, como consulta interactiva.
-    from ..integrations import emu_limitador
+    # Va por el cliente de eMuwarez, como consulta interactiva: espera su turno en el mismo limitador que el resto y
+    # un 429 pausa a todos.
+    from ..integrations import emu
     from ..integrations.base import IntegrationError
-    from ..integrations.limitador_compartido import segundos_retry_after
-    try:
-        emu_limitador.esperar_turno(_key, interactiva=True)
-    except IntegrationError as exc:
-        return _fail("emuwarez", "rate_limited", texto_de_error(exc, _key))
 
-    url = f"{_base}/api/torrents/filter?api_token={urllib.parse.quote(_key)}&perPage=1"
+    def enviar(metodo, url, cabeceras):
+        return http_cliente.pedir(metodo, url, cabeceras={"Accept": "application/json", **cabeceras},
+                                  timeout=_TIMEOUT, solo_seguras=True)
+
     try:
-        resp = http_cliente.pedir("GET", url, cabeceras=_CABECERAS_PRUEBA, timeout=_TIMEOUT, solo_seguras=True)
+        resp = emu.cliente(_key, _base, enviar).pedir("GET", "/api/torrents/filter", {"perPage": 1})
         return _ok("emuwarez", details={"base_url": url_sin_claves(_base), "http_status": resp.status_code})
+    except IntegrationError as exc:  # el limitador: habría que esperar demasiado
+        return _fail("emuwarez", "rate_limited", texto_de_error(exc, _key))
     except http_cliente.ErrorHTTP as exc:
-        if exc.status == 429:
-            emu_limitador.penalizar(_key, segundos_retry_after(exc.headers.get("retry-after")))
         if exc.status in (401, 403):
             return _fail("emuwarez", "invalid_key", "API key de eMuwarez inválida o no autorizada")
         return _fail("emuwarez", "connection_error", f"Error HTTP {exc.status} al conectar con eMuwarez")

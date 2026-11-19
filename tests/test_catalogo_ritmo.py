@@ -14,7 +14,7 @@ def _pagina(ids):
 def test_un_429_repite_la_pagina(monkeypatch, limitador_emuwarez):
     respuestas = [IntegrationError("HTTP 429", status=429), _pagina([3, 2, 1])]
 
-    def falso(method, url):
+    def falso(method, url, **kw):
         r = respuestas.pop(0)
         if isinstance(r, Exception):
             raise r
@@ -28,7 +28,7 @@ def test_un_429_repite_la_pagina(monkeypatch, limitador_emuwarez):
 def test_otros_errores_no_se_reintentan(monkeypatch):
     llamadas = []
 
-    def falso(method, url):
+    def falso(method, url, **kw):
         llamadas.append(url)
         raise IntegrationError("HTTP 503", status=503)
 

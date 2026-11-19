@@ -10,6 +10,7 @@ import time
 from datetime import datetime, timezone
 from typing import Callable
 
+from ... import __version__
 from ...database import get_setting_canonical
 from ...integrations.emu_limitador import directorio_compartido
 from ...integrations.qbittorrent import qbit_configurado
@@ -477,6 +478,7 @@ def _lanzar_uploadrr(job_id: int, argv: list[str], cwd: str) -> subprocess.Popen
     env = {k: v for k, v in os.environ.items()}
     # Uploadrr-EMU cuenta sus peticiones a eMuwarez en el mismo fichero que la app (src/utils/limitador.py).
     env["LIMITADOR_DIR"] = str(directorio_compartido())
+    env["EMUWARR_VERSION"] = __version__  # su User-Agent con eMuwarez, el mismo que el de la app
 
     # Sesión propia: Cancelar y el timeout señalan el grupo entero (Uploadrr,
     # mkbrr, ffmpeg…) y no solo el PID de Python.

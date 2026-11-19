@@ -63,7 +63,7 @@ def test_esquema_57_trae_las_tablas(conn):
 
 def test_el_filtro_por_usuario_va_en_la_url(monkeypatch):
     urls = []
-    monkeypatch.setattr(emu, "_pedir_pagina", lambda url, api_key: urls.append(url) or {"data": []})
+    monkeypatch.setattr(emu, "request_json", lambda method, url, **kw: urls.append(url) or {"data": []})
     emu.emu_fetch_all_torrents("clave", uploader="Kisnov")
     emu.emu_fetch_all_torrents("clave")
     assert "uploader=Kisnov" in urls[0] and "uploader" not in urls[1]
@@ -238,7 +238,7 @@ def test_sin_cifra_de_seeders_no_cuenta_como_sin_seeders(conn, tracker):
 
 def test_una_pagina_sin_lista_no_es_el_final(monkeypatch):
     paginas = iter([{"data": [_torrent(i, 1) for i in range(100)]}, {"message": "Server Error"}])
-    monkeypatch.setattr(emu, "_pedir_pagina", lambda url, api_key: next(paginas))
+    monkeypatch.setattr(emu, "request_json", lambda method, url, **kw: next(paginas))
     with pytest.raises(IntegrationError, match="página 2"):
         emu.emu_fetch_all_torrents("clave", uploader="Kisnov")
 

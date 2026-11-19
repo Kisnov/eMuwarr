@@ -1,7 +1,8 @@
 """eMuwarez API connector.
 
-eMuwarez runs on the UNIT3D platform (https://emu-warez.com).
-UNIT3D API authentication uses ?api_token=<key> as a query parameter.
+eMuwarez runs on the UNIT3D platform (https://emu-warez.com). Every request goes out through `cliente`
+(cliente_unit3d, the same client Uploadrr-EMU uses), which also puts the key in the request: `Authorization: Bearer`,
+or `?api_token=` once if the tracker rejects that.
 """
 from __future__ import annotations
 
@@ -11,10 +12,11 @@ import re
 from pathlib import Path
 from typing import Any, Iterable, Optional
 
-from . import emu_limitador
-from .base import IntegrationError, build_url, request_json
+from . import cliente_unit3d, emu_limitador
+from .base import IntegrationError, normalize_base_url, request_json
 from .emu_limitador import EMU_ESPERA_429
 from .limitador_compartido import segundos_retry_after
+from .. import __version__
 from ..constants import DEFAULT_UPLOADRR_PATH, EMU_BASE_URL
 from ..models import RequestItem
 
@@ -53,16 +55,34 @@ def _etiqueta(tabla: dict[int, str], nombre: str, valor: Any) -> Optional[str]:
 
 
 # ---------------------------------------------------------------------------
-# UNIT3D-pattern functions (primary, api_token query param)
+# UNIT3D-pattern functions
 # ---------------------------------------------------------------------------
 
+USER_AGENT = cliente_unit3d.user_agent(__version__)
+
+
+def _enviar(metodo: str, url: str, cabeceras: dict[str, str]) -> Any:
+    return request_json(metodo, url, headers=cabeceras)
+
+
+def cliente(api_key: str, base_url: str | None = None, enviar=None) -> cliente_unit3d.Cliente:
+    """El cliente de eMuwarez: cada petición espera su turno en el limitador compartido (emu_limitador) y un 429 pausa
+    a todos. `enviar` (por defecto request_json, que devuelve el JSON y lanza IntegrationError) lo cambia la prueba de
+    conexión, que quiere los errores de http_cliente."""
+    return cliente_unit3d.Cliente(
+        cliente_unit3d.Tracker(normalize_base_url(base_url or EMU_BASE_URL), api_key, USER_AGENT),
+        enviar or _enviar,
+        turno=lambda prioridad: emu_limitador.esperar_turno(api_key, interactiva=prioridad == "interactiva"),
+        apuntar_429=lambda retry_after: emu_limitador.penalizar(
+            api_key, segundos_retry_after(retry_after, EMU_ESPERA_429)),
+    )
+
+
 def emu_test_connection(api_key: str, base_url: str | None = None, *, interactiva: bool = True) -> dict[str, Any]:
-    """Test connectivity to eMuwarez using UNIT3D ?api_token= auth.
+    """Test connectivity to eMuwarez (GET /api/torrents/filter?perPage=1).
 
     `interactiva=False` cuando es el primer paso de un recorrido largo: espera su turno en vez de fallar."""
-    base = (base_url or EMU_BASE_URL).rstrip("/")
-    url = build_url(base, "/api/torrents/filter", {"api_token": api_key, "perPage": "1"})
-    return _pedir(url, api_key, interactiva=interactiva)
+    return _pedir(api_key, base_url, "/api/torrents/filter", {"perPage": "1"}, interactiva=interactiva)
 
 
 def emu_get_requests(
@@ -76,14 +96,8 @@ def emu_get_requests(
 
     Devuelve la respuesta entera: data[] y meta.last_page / meta.total.
     """
-    base = (base_url or EMU_BASE_URL).rstrip("/")
-    url = build_url(
-        base,
-        "/api/requests/filter",
-        {"api_token": api_key, "page": page, "perPage": per_page, "filled": 0,
-         "category_id[]": list(EMU_CATEGORIAS)},
-    )
-    return _pedir_pagina(url, api_key)
+    return _pedir_pagina(api_key, base_url, "/api/requests/filter", {
+        "page": page, "perPage": per_page, "filled": 0, "category_id[]": list(EMU_CATEGORIAS)})
 
 
 def emu_get_request_detail(
@@ -92,30 +106,24 @@ def emu_get_request_detail(
     base_url: str | None = None,
 ) -> dict[str, Any]:
     """Fetch detail for a single EMU request by ID."""
-    base = (base_url or EMU_BASE_URL).rstrip("/")
-    url = build_url(base, f"/api/requests/{request_id}", {"api_token": api_key})
-    return _pedir(url, api_key, interactiva=True)
+    return _pedir(api_key, base_url, f"/api/requests/{request_id}", interactiva=True)
 
 
 def emu_get_torrent(api_key: str, torrent_id: int, base_url: str | None = None) -> dict[str, Any]:
     """Un torrent (/api/torrents/{id}) con sus contadores del tracker: seeders, leechers, times_completed...
-    UNIT3D los da en `attributes`; devuelve ese diccionario, o la respuesta entera si viene plana."""
-    base = (base_url or EMU_BASE_URL).rstrip("/")
-    url = build_url(base, f"/api/torrents/{int(torrent_id)}", {"api_token": api_key})
-    data = _pedir(url, api_key, interactiva=True)
-    if isinstance(data, dict) and isinstance(data.get("attributes"), dict):
-        return data["attributes"]
-    if not isinstance(data, dict):
-        raise IntegrationError("eMuwarez ha devuelto el torrent en un formato que no se reconoce")
-    return data
+    UNIT3D los da en `attributes` (con o sin el envoltorio `data`); devuelve ese diccionario, o la respuesta entera
+    si viene plana."""
+    data = _pedir(api_key, base_url, f"/api/torrents/{int(torrent_id)}", interactiva=True)
+    try:
+        return cliente_unit3d.atributos_torrent(data)
+    except ValueError:
+        raise IntegrationError("eMuwarez ha devuelto el torrent en un formato que no se reconoce") from None
 
 
 def emu_get_user(api_key: str, base_url: str | None = None) -> dict[str, Any]:
     """Tu cuenta (/api/user): usuario, grupo, subido, bajado, ratio, buffer, seeding, leeching, bonus y H&R."""
-    base = (base_url or EMU_BASE_URL).rstrip("/")
-    url = build_url(base, "/api/user", {"api_token": api_key})
     try:
-        data = _pedir(url, api_key, interactiva=True)
+        data = _pedir(api_key, base_url, "/api/user", interactiva=True)
     except IntegrationError as exc:
         if exc.status in _MENSAJE_POR_ESTADO:
             raise IntegrationError(_MENSAJE_POR_ESTADO[exc.status], status=exc.status) from None
@@ -182,22 +190,16 @@ _MENSAJE_POR_ESTADO = {
 }
 
 
-def _pedir(url: str, api_key: str, *, interactiva: bool) -> Any:
-    """Toda petición a eMuwarez pasa por aquí: espera su turno en el limitador y, si llega un 429, pausa a todos."""
-    emu_limitador.esperar_turno(api_key, interactiva=interactiva)
-    try:
-        return request_json("GET", url)
-    except IntegrationError as e:
-        if e.status == 429:
-            emu_limitador.penalizar(api_key, segundos_retry_after(e.retry_after, EMU_ESPERA_429))
-        raise
+def _pedir(api_key: str, base_url: str | None, ruta: str, params: dict[str, Any] | None = None, *,
+           interactiva: bool) -> Any:
+    return cliente(api_key, base_url).pedir("GET", ruta, params, prioridad="interactiva" if interactiva else "recorrido")
 
 
-def _pedir_pagina(url: str, api_key: str) -> Any:
-    """Una página de un recorrido largo: un 429 se repite, tras la pausa que ya ha puesto `_pedir`."""
+def _pedir_pagina(api_key: str, base_url: str | None, ruta: str, params: dict[str, Any]) -> Any:
+    """Una página de un recorrido largo: un 429 se repite, tras la pausa que ya ha puesto el cliente."""
     for intento in range(EMU_REINTENTOS_429 + 1):
         try:
-            return _pedir(url, api_key, interactiva=False)
+            return _pedir(api_key, base_url, ruta, params, interactiva=False)
         except IntegrationError as e:
             if e.status != 429 or intento == EMU_REINTENTOS_429:
                 raise
@@ -229,7 +231,6 @@ def emu_fetch_all_torrents(
 
     `progress(page, total_pages, items_so_far, total_items)` is called after each
     page (total_pages/total_items from the API `meta`, or None if absent)."""
-    base = (base_url or EMU_BASE_URL).rstrip("/")
     all_items: list[dict[str, Any]] = []
     total_pages: int | None = None
     total_items: int | None = None
@@ -239,8 +240,8 @@ def emu_fetch_all_torrents(
     filtro = {"uploader": uploader} if uploader else {}
 
     def pedir(n: int) -> Any:
-        return _pedir_pagina(build_url(base, "/api/torrents/filter", {
-            "api_token": api_key, "perPage": str(per_page), "page": str(n), **filtro, **orden}), api_key)
+        return _pedir_pagina(api_key, base_url, "/api/torrents/filter", {
+            "perPage": str(per_page), "page": str(n), **filtro, **orden})
 
     while page <= max_pages and not reached_known:
         try:
