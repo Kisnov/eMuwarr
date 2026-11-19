@@ -214,6 +214,10 @@ def _nomenclature(path: str | None, available: bool) -> str:
     return NomenclatureStatus.NA.value if not available else NomenclatureStatus.UNCHECKED.value
 
 
+# Lo único que se lee de raw_json (Panel y el aviso de contenido nuevo); el resto ya va en columnas.
+CAMPOS_RAW_JSON = ("added", "monitored", "status")
+
+
 def movie_to_library_item(
     movie: dict[str, Any],
     *,
@@ -275,7 +279,7 @@ def movie_to_library_item(
         size_bytes=movie_file.get("size") if isinstance(movie_file, dict) else None,
         local_status=local_status,
         nomenclature_status=_nomenclature(path, has_file),
-        raw_json=json.dumps(movie, ensure_ascii=False),
+        raw_json=json.dumps({c: movie.get(c) for c in CAMPOS_RAW_JSON}, ensure_ascii=False),
         poster_url=extract_poster_url(movie.get("images")),
         backdrop_url=extract_backdrop_url(movie.get("images")),
     )

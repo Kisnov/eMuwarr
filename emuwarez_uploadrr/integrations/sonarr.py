@@ -234,6 +234,11 @@ def _nomenclature(path: str | None, available: bool) -> str:
     return NomenclatureStatus.NA.value if not available else NomenclatureStatus.UNCHECKED.value
 
 
+# Lo único que se lee de raw_json (Panel y el año de la temporada). Las temporadas no guardan nada.
+CAMPOS_RAW_JSON_SERIE = ("added",)
+CAMPOS_RAW_JSON_CAPITULO = ("airDate", "airDateUtc", "monitored", "title")
+
+
 # ---------------------------------------------------------------------------
 # *Arr data → LibraryItem
 # ---------------------------------------------------------------------------
@@ -289,7 +294,7 @@ def series_to_library_item(
         source=None,
         local_status=local_status,
         nomenclature_status=NomenclatureStatus.NA.value,
-        raw_json=json.dumps(series, ensure_ascii=False),
+        raw_json=json.dumps({c: series.get(c) for c in CAMPOS_RAW_JSON_SERIE}, ensure_ascii=False),
         poster_url=extract_poster_url(series.get("images")),
         backdrop_url=extract_backdrop_url(series.get("images")),
     )
@@ -367,7 +372,6 @@ def season_to_library_item(
         source=None,
         local_status=local_status,
         nomenclature_status=NomenclatureStatus.NA.value,
-        raw_json=json.dumps({"series_id": series_id, "season": season_entry}, ensure_ascii=False),
         poster_url=extract_poster_url(series.get("images")),
         backdrop_url=extract_backdrop_url(series.get("images")),
     )
@@ -450,10 +454,7 @@ def episode_to_library_item(
         size_bytes=size,
         local_status=local_status,
         nomenclature_status=_nomenclature(path, has_file),
-        raw_json=json.dumps(
-            {"series": series, "episode": episode, "episodeFile": episode_file},
-            ensure_ascii=False,
-        ),
+        raw_json=json.dumps({"episode": {c: episode.get(c) for c in CAMPOS_RAW_JSON_CAPITULO}}, ensure_ascii=False),
         poster_url=extract_poster_url(series.get("images")),
         backdrop_url=extract_backdrop_url(series.get("images")),
     )

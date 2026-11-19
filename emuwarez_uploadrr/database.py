@@ -8,6 +8,7 @@ import json
 import logging
 import os
 import re
+import shutil
 import sqlite3
 from pathlib import Path
 from typing import Any, Iterable, Iterator, Optional
@@ -18,7 +19,7 @@ logger = logging.getLogger(__name__)
 
 DB_FILE = CONFIG_DIR / "emuwarez_uploadrr.db"
 
-SCHEMA_VERSION = 57
+SCHEMA_VERSION = 58
 
 # Phase 10E: canonical settings namespace fix.
 #
@@ -1711,6 +1712,69 @@ def _migrate_scheduled_tasks_run_at(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE scheduled_tasks ADD COLUMN run_at TEXT")
 
 
+def _migrate_library_items_raw_json_recortado(conn: sqlite3.Connection) -> int:
+    """Esquema 58: raw_json guarda solo lo que se lee de él (CAMPOS_RAW_JSON* de radarr.py y sonarr.py); cada capítulo
+    llevaba la serie entera de Sonarr. Recorta las filas que ya hay y devuelve cuántas. Sin sitio para el WAL (como mucho
+    lo que ocupa la base) o si el disco se llena a medias, no toca nada: lo hace la próxima sincronización de cada
+    instancia."""
+    if not conn.execute("SELECT 1 FROM library_items WHERE raw_json IS NOT NULL LIMIT 1").fetchone():
+        return 0  # base nueva
+    fichero = conn.execute("PRAGMA database_list").fetchone()[2]
+    if fichero and shutil.disk_usage(Path(fichero).parent).free < Path(fichero).stat().st_size:
+        logger.warning("No hay sitio para recortar raw_json al migrar: lo hará la próxima sincronización")
+        return 0
+    conn.commit()  # el recorte, en su propia transacción: un SQLITE_FULL puede deshacer la transacción entera
+    # El SQLite de Debian llena de ceros cada página que libera: el WAL crecería como la base entera. Las libres solo
+    # guardan fichas de Radarr/Sonarr, sin claves, y el VACUUM de después las quita.
+    antes = conn.execute("PRAGMA secure_delete").fetchone()[0]
+    conn.execute("PRAGMA secure_delete = FAST")
+    try:
+        recortadas = conn.execute("""
+            UPDATE library_items SET raw_json = CASE
+                WHEN NOT json_valid(raw_json) THEN NULL
+                WHEN item_type = 'movie' THEN json_object('added', raw_json -> '$.added',
+                    'monitored', raw_json -> '$.monitored', 'status', raw_json -> '$.status')
+                WHEN item_type = 'series' THEN json_object('added', raw_json -> '$.added')
+                WHEN item_type = 'episode' THEN json_object('episode', json_object(
+                    'airDate', raw_json -> '$.episode.airDate', 'airDateUtc', raw_json -> '$.episode.airDateUtc',
+                    'monitored', raw_json -> '$.episode.monitored', 'title', raw_json -> '$.episode.title'))
+            END
+            WHERE raw_json IS NOT NULL""").rowcount
+        conn.commit()
+        return recortadas
+    except sqlite3.OperationalError:
+        conn.rollback()
+        logger.warning("No se pudo recortar raw_json al migrar: lo hará la próxima sincronización", exc_info=True)
+        return 0
+    finally:
+        conn.execute(f"PRAGMA secure_delete = {antes}")
+
+
+def _compactar_tras_migrar(conn: sqlite3.Connection) -> None:
+    """VACUUM tras una migración que deja la base medio vacía. Escribe en el WAL otra copia de lo que queda vivo: sin
+    el doble de eso libre en el disco no se hace (las páginas libres se reutilizan igual). Si falla, se arranca igual."""
+    fichero = conn.execute("PRAGMA database_list").fetchone()[2]
+    if not fichero:
+        return  # en memoria
+    pagina, paginas, libres = (conn.execute(f"PRAGMA {p}").fetchone()[0]
+                               for p in ("page_size", "page_count", "freelist_count"))
+    vivo = (paginas - libres) * pagina
+    if shutil.disk_usage(Path(fichero).parent).free < 2 * vivo:
+        logger.warning("No hay sitio para compactar la base (%d MB libres hacen falta): compáctala desde Diagnóstico",
+                       2 * vivo // 2**20)
+        return
+    try:
+        conn.execute("PRAGMA temp_store = MEMORY")  # la copia temporal del VACUUM, en RAM y no en /tmp
+        conn.execute("VACUUM")
+    except sqlite3.Error:
+        logger.warning("No se pudo compactar la base tras migrar", exc_info=True)
+    try:  # también tras un VACUUM fallido, que puede haber dejado el WAL lleno
+        conn.execute("PRAGMA temp_store = DEFAULT")
+        conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+    except sqlite3.Error:
+        logger.warning("No se pudo vaciar el WAL tras compactar", exc_info=True)
+
+
 _COPIAS_ANTES_DE_MIGRAR = 3
 
 
@@ -2021,8 +2085,12 @@ def init_db(conn: Optional[sqlite3.Connection] = None) -> None:
         _migrate_upload_jobs_reenvio_qbit(conn)
         _migrate_perfil_historial_completo(conn)
         _migrate_mis_torrents(conn)
+        recortadas = _migrate_library_items_raw_json_recortado(conn) if desde < 58 else 0
         set_state(conn, "schema_version", str(SCHEMA_VERSION))
         conn.commit()
+        if recortadas:
+            # Fuera de la cascada y con la versión ya guardada: si no hay sitio o se corta, la migración no se repite.
+            _compactar_tras_migrar(conn)
     finally:
         if own:
             conn.close()
