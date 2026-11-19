@@ -1,4 +1,5 @@
-"""Tests for config.yaml staging/restore around real execution — Phase 10F.
+"""El config de cada subida (--config) en una ejecución de verdad — Phase 10F: el config.yaml del usuario no se toca
+y el de la subida, con las claves, no queda en disco pase lo que pase.
 
 Uses the fake Uploadrr-EMU runner only (tests/fixtures/fake_uploadrr_emu.py).
 Never touches a real Uploadrr-EMU install or its real config.yaml.
@@ -72,7 +73,14 @@ def _wait_for_terminal(job_id, conn, timeout=10):
     raise AssertionError(f"Job {job_id} never reached a terminal status (last: {job['status'] if job else '?'})")
 
 
-def test_config_staged_and_restored_on_success(db_conn, tmp_path, fake_uploadrr_emu_dir, fake_uploadrr_python_path):
+def _sin_restos(config_path, original_content):
+    assert config_path.read_text() == original_content
+    assert not config_path.with_name("config.yaml.bak").exists()
+    assert not any((db_path().parent / "config_uploadrr").glob("*"))
+
+
+def test_config_untouched_and_job_config_gone_on_success(db_conn, tmp_path, fake_uploadrr_emu_dir,
+                                                          fake_uploadrr_python_path):
     config_path = fake_uploadrr_emu_dir / "data" / "config.yaml"
     original_content = config_path.read_text()
 
@@ -86,13 +94,11 @@ def test_config_staged_and_restored_on_success(db_conn, tmp_path, fake_uploadrr_
     job = _wait_for_terminal(jid, db_conn)
     assert job["status"] == "completed"
 
-    # config.yaml must be back to its original (pre-staging) content.
-    assert config_path.read_text() == original_content
-    # A backup file should exist as evidence that staging/restore happened.
-    assert config_path.with_suffix(".yaml.bak").exists()
+    _sin_restos(config_path, original_content)
 
 
-def test_config_restored_on_failure(db_conn, tmp_path, fake_uploadrr_emu_dir, fake_uploadrr_python_path, monkeypatch):
+def test_config_untouched_and_job_config_gone_on_failure(db_conn, tmp_path, fake_uploadrr_emu_dir,
+                                                          fake_uploadrr_python_path, monkeypatch):
     monkeypatch.setenv("FAKE_UPLOADRR_FAIL", "1")
     config_path = fake_uploadrr_emu_dir / "data" / "config.yaml"
     original_content = config_path.read_text()
@@ -105,11 +111,10 @@ def test_config_restored_on_failure(db_conn, tmp_path, fake_uploadrr_emu_dir, fa
     start_upload_job(jid, dry_run=False, start=True, confirmation=CONFIRMATION_TOKEN, conn=db_conn)
     job = _wait_for_terminal(jid, db_conn)
     assert job["status"] == "failed"
+    _sin_restos(config_path, original_content)
 
-    assert config_path.read_text() == original_content
 
-
-def test_config_restored_on_timeout(db_conn, tmp_path, fake_uploadrr_emu_dir, fake_uploadrr_python_path, monkeypatch):
+def test_config_untouched_and_job_config_gone_on_timeout(db_conn, tmp_path, fake_uploadrr_emu_dir, fake_uploadrr_python_path, monkeypatch):
     monkeypatch.setenv("FAKE_UPLOADRR_SLEEP", "5")
     config_path = fake_uploadrr_emu_dir / "data" / "config.yaml"
     original_content = config_path.read_text()
@@ -123,8 +128,7 @@ def test_config_restored_on_timeout(db_conn, tmp_path, fake_uploadrr_emu_dir, fa
     job = _wait_for_terminal(jid, db_conn, timeout=15)
     assert job["status"] == "failed"
     assert job["stage"] == "timeout"
-
-    assert config_path.read_text() == original_content
+    _sin_restos(config_path, original_content)
 
 
 def test_secrets_never_appear_in_logs_or_preview(db_conn, tmp_path, fake_uploadrr_emu_dir, fake_uploadrr_python_path):
@@ -150,14 +154,16 @@ def test_secrets_never_appear_in_logs_or_preview(db_conn, tmp_path, fake_uploadr
     assert EMU_SECRET not in job["safe_command_json"]
 
 
-def test_no_config_yaml_skips_staging_without_error(db_conn, tmp_path, fake_uploadrr_python_path):
-    """If Uploadrr-EMU has no data/config.yaml yet, execution still runs
-    (fake runner does not need it) and nothing is restored — no crash."""
+def test_no_config_yaml_launches_without_a_job_config(db_conn, tmp_path, fake_uploadrr_python_path):
+    """If Uploadrr-EMU has no data/config.yaml yet, no job config is written and it is
+    launched anyway: like the real one without its config, the fake exits with sin_config."""
     uploadrr_dir = tmp_path / "Uploadrr-no-config"
     uploadrr_dir.mkdir()
     import shutil
     from pathlib import Path
-    shutil.copy(Path(__file__).parent / "fixtures" / "fake_uploadrr_emu.py", uploadrr_dir / "upload.py")
+    fixtures = Path(__file__).parent / "fixtures"
+    shutil.copy(fixtures / "fake_uploadrr_emu.py", uploadrr_dir / "upload.py")
+    shutil.copy(fixtures / "contrato_eventos.json", uploadrr_dir / "contrato_eventos.json")
 
     prepared = tmp_path / "prepared.mkv"
     prepared.write_bytes(b"\x00")
@@ -166,8 +172,9 @@ def test_no_config_yaml_skips_staging_without_error(db_conn, tmp_path, fake_uplo
 
     start_upload_job(jid, dry_run=False, start=True, confirmation=CONFIRMATION_TOKEN, conn=db_conn)
     job = _wait_for_terminal(jid, db_conn)
-    assert job["status"] == "completed"
+    assert job["status"] == "failed"
 
     logs = get_upload_job_logs(jid, conn=db_conn)
     all_messages = " ".join(log["message"] for log in logs["logs"])
     assert "config.yaml no encontrado" in all_messages
+    assert not (uploadrr_dir / "data").exists()  # nadie lo crea

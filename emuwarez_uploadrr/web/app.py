@@ -72,21 +72,22 @@ def _reconcile_interrupted_jobs() -> None:
             "No se pudieron reconciliar las subidas interrumpidas al arrancar", exc_info=True)
 
 
-def _restore_interrupted_config() -> None:
-    """El config.yaml de Uploadrr-EMU que dejó stageado (claves reales dentro)
-    una subida que murió con la aplicación, y los config propios de las subidas que quedaron.
-    Best-effort: nunca bloquea el arranque."""
+def _preparar_configs_de_uploadrr() -> None:
+    """Los config propios de las subidas que murieron con la aplicación (claves dentro) y, una vez, el config.yaml.bak
+    de las versiones anteriores. Best-effort: nunca bloquea el arranque."""
+    log = logging.getLogger("emuwarez.web")
     try:
-        from emuwarez_uploadrr.services.upload_execution import barrer_configs_de_subidas, restaurar_config_interrumpida
+        from emuwarez_uploadrr.services.upload_execution import barrer_configs_de_subidas, migrar_config_bak
         if barrer_configs_de_subidas():
-            logging.getLogger("emuwarez.web").warning(
-                "Borrados los config de Uploadrr-EMU que dejaron subidas interrumpidas")
-        if restaurar_config_interrumpida():
-            logging.getLogger("emuwarez.web").warning(
-                "config.yaml de Uploadrr-EMU restaurado desde el backup: lo dejó stageado una subida interrumpida")
+            log.warning("Borrados los config de Uploadrr-EMU que dejaron subidas interrumpidas")
     except Exception:
-        logging.getLogger("emuwarez.web").warning(
-            "No se pudo restaurar el config.yaml de Uploadrr-EMU al arrancar", exc_info=True)
+        log.warning("No se pudieron borrar los config de Uploadrr-EMU de subidas interrumpidas", exc_info=True)
+    try:
+        if migrar_config_bak():
+            log.warning("config.yaml.bak de Uploadrr-EMU migrado: a partir de ahora se edita config.yaml "
+                        "(el .bak queda como config.yaml.migrado)")
+    except Exception:
+        log.warning("No se pudo migrar el config.yaml.bak de Uploadrr-EMU", exc_info=True)
 
 
 def _detener_procesos() -> None:
@@ -131,7 +132,7 @@ async def _lifespan(app: FastAPI):
             "No se pudo preparar la carpeta de subidas", exc_info=True)
     _backfill_spanish_flags()
     _reconcile_interrupted_jobs()
-    _restore_interrupted_config()
+    _preparar_configs_de_uploadrr()
     scheduler_task = None
     # EMUWAREZ_DISABLE_SCHEDULER=1 — escape hatch for scripted Docker
     # smoke/E2E runs that don't want a background scheduler tick firing

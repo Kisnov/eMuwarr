@@ -61,7 +61,7 @@ RUN python -c "import tomllib; print(*tomllib.load(open('pyproject.toml', 'rb'))
 # under /opt (NOT /app, or setuptools' flat-layout discovery would clash with
 # our own package). uploadrr.path defaults to /opt/Uploadrr
 # (services/uploadrr_contract.py). What Uploadrr-EMU writes and must survive a
-# rebuild/recreate (config.yaml, its .bak, cookies/ and tmp/) is symlinked into
+# rebuild/recreate (config.yaml, cookies/ and tmp/) is symlinked into
 # /config/Uploadrr below, so the user mounts nothing beyond the /config volume
 # they already have. The rest of data/ (services.json, tags.json, templates...)
 # stays real in the image: a new image updates it.
@@ -74,7 +74,6 @@ RUN pip install --no-cache-dir -r /tmp/uploadrr-requirements.txt && rm /tmp/uplo
 COPY uploadrr-emu/ /opt/Uploadrr/
 RUN rm -rf /opt/Uploadrr/data/cookies /opt/Uploadrr/tmp \
     && ln -sf /config/Uploadrr/data/config.yaml /opt/Uploadrr/data/config.yaml \
-    && ln -sf /config/Uploadrr/data/config.yaml.bak /opt/Uploadrr/data/config.yaml.bak \
     && ln -s /config/Uploadrr/data/cookies /opt/Uploadrr/data/cookies \
     && ln -s /config/Uploadrr/tmp /opt/Uploadrr/tmp \
     && chmod -R a+rX /opt/Uploadrr \

@@ -108,7 +108,7 @@ def _imagen(tmp_path: Path) -> tuple[Path, Path]:
     (uploadrr / "data" / "backup").mkdir(parents=True)
     (uploadrr / "data" / "backup" / "example_config.yaml").write_text("DEFAULT:\n  tmdb: ''\n", encoding="utf-8")
     (uploadrr / "data" / "services.json").write_text('{"de": "la imagen nueva"}', encoding="utf-8")
-    for nombre in ("config.yaml", "config.yaml.bak", "cookies"):
+    for nombre in ("config.yaml", "cookies"):
         os.symlink(estado / "data" / nombre, uploadrr / "data" / nombre)
     os.symlink(estado / "tmp", uploadrr / "tmp")
     return uploadrr, estado
@@ -157,7 +157,8 @@ def test_una_instalacion_anterior_conserva_su_estado_y_recibe_los_datos_nuevos(t
     assert _arrancar(tmp_path, uploadrr, estado, "true").returncode == 0
 
     assert (uploadrr / "data" / "config.yaml").read_text(encoding="utf-8") == "DEFAULT:\n  tmdb: mi-clave\n"
-    assert (uploadrr / "data" / "config.yaml.bak").exists()
+    # El .bak de las versiones anteriores sigue donde estaba: lo migra la app al arrancar (migrar_config_bak).
+    assert (estado / "data" / "config.yaml.bak").exists() and not (uploadrr / "data" / "config.yaml.bak").exists()
     assert (uploadrr / "data" / "cookies" / "EMU.pkl").read_bytes() == b"sesion"
     assert "imagen nueva" in (uploadrr / "data" / "services.json").read_text(encoding="utf-8")
     # La copia vieja no se borra, solo deja de usarse.
