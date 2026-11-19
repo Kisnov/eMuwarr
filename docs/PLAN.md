@@ -26,16 +26,15 @@ descripción y el cliente.
 - **No se borran los trackers que no son EMU de `uploadrr-emu/src/trackers/`**: son la base de los adaptadores (allí ya
   están SP seedpool, RF reelflix, DARK darkpeers, OE onlyencodes, LT lat-team, TTR torrenteros, YU yu-scene,
   IHD infinityhd, RTF retroflix, TL TorrentLeech, HDT hd-torrents y `UNIT3D_TEMPLATE`).
+- **La base ya está en `dev`** (#25, #27, #33, #34): una sola tabla de ids, un solo cliente UNIT3D (`cliente_unit3d.py`),
+  el limitador de llamadas compartido entre la app y Uploadrr-EMU, y un config de Uploadrr-EMU por subida.
 - **Por orden:**
-  1. Lo que sí queda del «paso 2» de la unión con Uploadrr-EMU, pensado ya para varios trackers: una sola tabla de ids,
-     un solo cliente UNIT3D, el limitador de llamadas compartido entre la app y el subproceso (uno por tracker) y la
-     configuración por subida en vez del `config.yaml` compartido.
-  2. **Fase A:** el tracker pasa a ser un dato. Base de datos (cada subida, petición, catálogo y estadística lleva su
+  1. **Fase A:** el tracker pasa a ser un dato. Base de datos (cada subida, petición, catálogo y estadística lleva su
      tracker), ajustes por tracker (URL, clave, usuario, grupos, anónimo), cola y Panel. eMuwarez queda como el primer
      adaptador, sin cambiar lo que ve hoy quien solo usa eMuwarez.
-  3. **Fase B: NOBS (nobs.rawsmoke.net) y Milnueve (tracker.milnueve.cc).** Los dos son UNIT3D y ya se sube a ellos con
+  2. **Fase B: NOBS (nobs.rawsmoke.net) y Milnueve (tracker.milnueve.cc).** Los dos son UNIT3D y ya se sube a ellos con
      otras herramientas: se puede empezar (Gabriel les avisa). El primero valida la abstracción.
-  4. Después, los internacionales que ya tienen código en `uploadrr-emu/`, solo para contenido con el audio en inglés y
+  3. Después, los internacionales que ya tienen código en `uploadrr-emu/`, solo para contenido con el audio en inglés y
      donde haya permiso.
 - **Esperando permiso:** Torrentland (torrentland.li; no acepta automatizaciones: hace falta el OK del staff por
   escrito antes de subir por API) y HDZero (hdzero.org, permiso improbable). Los cuatro son UNIT3D (`/api/torrents/filter`
