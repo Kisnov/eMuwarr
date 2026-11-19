@@ -677,6 +677,8 @@ export interface UploadJob {
   reenvio_qbit_estado?: 'en_curso' | 'ok' | 'fallido' | null
   reenvio_qbit_at?: string | null
   puede_reenviar_qbit?: boolean
+  // Completada pero eMuwarez aún no la enseña: se deduce de «Tus subidas» (cada 6 h), puede ir con retraso.
+  pendiente_moderacion?: boolean
   nomenclature_snapshot?: UploadNomenclatureSnapshot | null
   remux_snapshot?: UploadRemuxSnapshot | null
   checks_snapshot?: UploadChecksSnapshot | null

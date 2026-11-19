@@ -1,6 +1,6 @@
 import type { UploadJob } from '../../types/api'
 import type { SeedingEstado } from '../../hooks/useSeeding'
-import { estadoVisible } from '../../utils/estadoDeSubida'
+import { estadoVisible, PENDIENTE_MODERACION } from '../../utils/estadoDeSubida'
 import { opcionesDeReintento } from '../../utils/pasosSubida'
 import { formatDateTimeSeconds } from '../../utils/format'
 import { formatElapsed } from '../../utils/uploadStatus'
@@ -98,6 +98,7 @@ export function ResultadoSubida({ job, seeding, retryError, pasos, onStart, onRe
             <p className="dsub-estado-titulo">
               {estado.titulo}
               {estado.seeding && <span className={`${estado.seeding.clase} dsub-estado-seeding`}>{estado.seeding.texto}</span>}
+              {estado.pendienteModeracion && <span className={`${PENDIENTE_MODERACION.clase} dsub-estado-seeding`} title={PENDIENTE_MODERACION.ayuda}>{PENDIENTE_MODERACION.texto}</span>}
             </p>
             {estado.resumen && <p className="dsub-estado-resumen">{estado.resumen}</p>}
             {estado.motivo && <p className="dsub-estado-motivo">{estado.motivo}</p>}

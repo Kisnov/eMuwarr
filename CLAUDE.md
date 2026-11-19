@@ -109,6 +109,9 @@ came in from `Kisnov/Uploadrr-EMU` with `git subtree add`, history kept; that re
   `--resume`, Uploadrr-EMU wipes its `tmp/<name>` first, so a re-prepared file never meets a stale `BASE.torrent`.
   «Reenviar a qBittorrent» (`upload_execution/reenvio_qbit.py`) launches the same argv plus `--resume --solo-cliente <id>`:
   Uploadrr-EMU only re-adds that eMuwarez torrent to qBittorrent, exits 0 only if it was added and never prints `Torrent URL:`.
+  eMuwarez hides every new upload until a moderator approves it (up to a day): `/api/torrents/<id>` is a 404 and the
+  `uploader=` search leaves it out, so `mis_torrents.pendiente_de_moderacion` flags a completed, non-anonymous upload
+  missing from a later «Tus subidas» read, without asking the tracker anything else.
   The 30-calls-a-minute eMuwarez budget is shared by the server, the CLI and every Uploadrr-EMU: `_lanzar_uploadrr` sets
   `LIMITADOR_DIR` (`CONFIG_DIR/limitador`), and `integrations/limitador_compartido.py` and `uploadrr-emu/src/utils/limitador.py`
   must stay byte-identical (`test_limitador_compartido.py`); without `fcntl` or a usable directory each process counts alone.

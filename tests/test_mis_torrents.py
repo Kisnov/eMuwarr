@@ -1,6 +1,7 @@
 """Tus subidas en eMuwarez: la lectura por usuario, la foto de cada día, lo de la semana y la tarea."""
 from __future__ import annotations
 
+import json
 import sqlite3
 import time
 from datetime import datetime, timedelta, timezone
@@ -249,3 +250,62 @@ def test_una_subida_del_mismo_dia_del_corte_sin_foto_cuenta_entera(conn, tracker
         "%Y-%m-%dT%H:%M:%S.000000Z"))]
     sincronizar(conn, AHORA)
     assert resumen(conn)["torrents"][0]["completados_semana"] == 4
+
+
+# --- Pendientes de moderación: lo que no sale en la lectura ----------------------------------------------------------
+
+LEIDA = datetime(2026, 11, 19, 11, 0, tzinfo=timezone.utc)
+
+
+def _subida(torrent_id=18532, *, terminada="2026-11-19T10:22:17+00:00", estado="completed", comando="upload.py X -tk EMU"):
+    return {"status": estado, "result_torrent_id": str(torrent_id), "finished_at": terminada,
+            "safe_command_json": json.dumps({"args_preview": comando})}
+
+
+@pytest.mark.parametrize("subida, pendiente", [
+    (_subida(), True),                                                  # terminó antes de leer y no sale
+    (_subida(18434), False),                                            # sale: ya está aprobada
+    (_subida(terminada="2026-11-19T11:30:00+00:00"), False),            # terminó después de la lectura: no se sabe
+    (_subida(comando='upload.py "X -a Y" -tk EMU -a'), False),          # anónima: eMuwarez no la da por usuario
+    (_subida(estado="failed"), False),
+    ({**_subida(), "result_torrent_id": None}, False),
+    ({**_subida(), "finished_at": None}, False),
+], ids=["pendiente", "aprobada", "despues-de-leer", "anonima", "fallida", "sin-id", "sin-fecha"])
+def test_pendiente_de_moderacion(subida, pendiente):
+    assert mis_torrents.pendiente_de_moderacion(subida, (LEIDA, frozenset({18434}))) is pendiente
+
+
+def test_sin_lectura_nada_esta_pendiente():
+    assert mis_torrents.pendiente_de_moderacion(_subida(), None) is False
+
+
+def test_un_titulo_con_menos_a_no_la_hace_anonima():
+    comando = 'upload.py "/x/Peli -a 2020.mkv" -tk EMU -mt "Peli -a 2020"'
+    assert mis_torrents.pendiente_de_moderacion(_subida(comando=comando), (LEIDA, frozenset())) is True
+
+
+def test_la_lectura_para_moderacion_es_la_de_tu_usuario(conn, tracker):
+    assert mis_torrents.lectura_para_moderacion(conn) is None
+    tracker["torrents"] = [_torrent(18434, 3)]
+    sincronizar(conn, AHORA)
+    leido_at, ids = mis_torrents.lectura_para_moderacion(conn)
+    assert ids == {18434} and leido_at.tzinfo is not None
+    set_setting(conn, "emu.username", "Otro")
+    conn.commit()
+    assert mis_torrents.lectura_para_moderacion(conn) is None
+
+
+def test_la_lista_de_subidas_marca_la_pendiente(client, auth_headers, conn, tracker):
+    tracker["torrents"] = [_torrent(18434, 3)]
+    filas = []
+    for torrent_id in (18434, 18532):
+        cur = conn.execute(
+            "INSERT INTO upload_jobs (title, path, status, result_tracker, result_torrent_id, finished_at, safe_command_json) "
+            "VALUES ('Peli', '/x', 'completed', ?, ?, ?, '{}')",
+            (f"https://emu-warez.com/torrents/{torrent_id}", str(torrent_id), "2026-01-01T10:00:00+00:00"))
+        filas.append(cur.lastrowid)
+    conn.commit()
+    sincronizar(conn)
+    lista = {j["id"]: j["pendiente_moderacion"] for j in client.get("/api/uploads", headers=auth_headers).json()}
+    assert lista == {filas[0]: False, filas[1]: True}
+    assert client.get(f"/api/uploads/{filas[1]}", headers=auth_headers).json()["pendiente_moderacion"] is True

@@ -60,6 +60,19 @@ const pagina = (job: UploadJob) => <UploadJobDetailPage job={job} seeding={seedi
 afterEach(desmontar)
 
 describe('detalle de una subida completada', () => {
+  it('con pendiente_moderacion enseña el chip con su ayuda', async () => {
+    await montar(pagina({ ...completada, pendiente_moderacion: true }))
+    const chip = document.querySelector('[role="status"] .badge[title]')!
+    expect(chip.textContent).toBe('Pendiente de moderación')
+    expect(chip.getAttribute('title')).toContain('cada 6 horas')
+    expect(boton('Ver registro')).toBeDefined()
+  })
+
+  it('sin pendiente_moderacion no sale el chip', async () => {
+    await montar(pagina(completada))
+    expect(texto()).not.toContain('Pendiente de moderación')
+  })
+
   it('abre por el resultado: estado en eMuwarez, seeding, datos y acciones', async () => {
     await montar(pagina(completada))
     const estado = document.querySelector('[role="status"]')!
