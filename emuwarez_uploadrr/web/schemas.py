@@ -1612,6 +1612,8 @@ class TaskRunLogEntry(BaseModel):
 class TaskRunLogsResponse(BaseModel):
     task_key: str
     logs: list[TaskRunLogEntry] = []
+    # La tarea no guarda historial (correría cada pocos minutos): `logs` es solo su última ejecución.
+    sin_historial: bool = False
 
 
 class UltimaVersionPublicada(BaseModel):

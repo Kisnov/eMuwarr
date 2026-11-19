@@ -77,6 +77,7 @@ function EstadoTarea({ estado, desactivada = false }: { estado: string | null; d
 
 function LogsModal({ taskKey, taskName, onClose }: { taskKey: string; taskName: string; onClose: () => void }) {
   const [logs, setLogs] = useState<TaskRunLogEntry[]>([])
+  const [sinHistorial, setSinHistorial] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -86,6 +87,7 @@ function LogsModal({ taskKey, taskName, onClose }: { taskKey: string; taskName: 
     try {
       const r = await getScheduledTaskLogs(taskKey, 30)
       setLogs(r.logs)
+      setSinHistorial(!!r.sin_historial)
     } catch (e: unknown) {
       setError(e instanceof Error && e.message ? e.message : 'No se pudo leer el historial')
     } finally { setLoading(false) }
@@ -96,6 +98,9 @@ function LogsModal({ taskKey, taskName, onClose }: { taskKey: string; taskName: 
   return (
     <Modal titulo={<>Logs: {taskName}</>} onClose={onClose} className="tareas-modal-logs">
       <div className="modal-body tareas-logs-cuerpo">
+        {sinHistorial && (
+          <p className="tareas-logs-aviso">Esta tarea corre tan a menudo que no guarda historial: aquí sale su última ejecución.</p>
+        )}
         {loading && logs.length === 0 ? <p className="tareas-logs-aviso">Cargando…</p> : error ? (
           <p className="tareas-logs-aviso tareas-error-linea" role="alert"><IconoAviso />{error}</p>
         ) : logs.length === 0 ? (
