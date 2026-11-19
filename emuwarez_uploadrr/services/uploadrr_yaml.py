@@ -2,8 +2,8 @@
 
 Estas funciones NO tocan el disco: reciben y devuelven `lines: list[str]`, la
 lista de líneas ya leída. Quien lee y escribe el fichero es quien las llama
-(`services/uploadrr_config_staging.py`, que además hace copia de seguridad
-antes de sobrescribir).
+(`services/uploadrr_config.py` y `upload_execution/config.py`, que escribe el config
+de cada subida).
 
 Por qué por líneas y no con un analizador de YAML: el `config.yaml` de la
 herramienta lleva comentarios y un orden que hay que respetar, y volver a
@@ -254,28 +254,6 @@ def set_child_inline_mapping(lines: list[str], top_block: str, child: str, mappi
 
     lines[child_start:child_end] = [entry]
     return f"{top_block}.{child} actualizado"
-
-
-def get_emu_api_key(lines: list[str]) -> Optional[str]:
-    start, end = find_child_block(lines, "TRACKERS", "EMU", indent=2)
-    if start < 0:
-        return None
-    for line in lines[start + 1 : end]:
-        m = re.match(r"^\s{4}api_key\s*:\s*(.*?)\s*(?:#.*)?$", line)
-        if m:
-            return clean_optional_secret(m.group(1))
-    return None
-
-
-def get_emu_anon(lines: list[str]) -> Optional[bool]:
-    start, end = find_child_block(lines, "TRACKERS", "EMU", indent=2)
-    if start < 0:
-        return None
-    for line in lines[start + 1 : end]:
-        m = re.match(r"^\s{4}anon\s*:\s*(.*?)\s*(?:#.*)?$", line)
-        if m:
-            return m.group(1).strip().strip("\"'").lower() in {"true", "yes", "1", "si", "sí"}
-    return None
 
 
 def set_emu_config(lines: list[str], api_key: Optional[str] = None, anon: Optional[bool] = None) -> str:

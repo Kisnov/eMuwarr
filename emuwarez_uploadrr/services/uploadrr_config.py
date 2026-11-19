@@ -1,25 +1,11 @@
-"""Uploadrr-EMU data/config.yaml staging — Phase 10E.
+"""Lo que la app cambia en el config.yaml de Uploadrr-EMU para cada subida (upload_execution/config.py lo escribe en el
+fichero de la subida; el config.yaml del usuario no se toca).
 
-SAFETY CONTRACT:
-- Every function here takes an explicit config_path: Path supplied by the
-  caller. Nothing in this module resolves or defaults to a real Uploadrr/
-  installation — tests always point config_path at tmp_path.
-- write_staged_config() always creates a .bak backup before overwriting an
-  existing file.
-- Any preview/diff output redacts DEFAULT.tmdb and TRACKERS.EMU.api_key
-  values — never returns raw secrets.
-
-Reuses the pure, filesystem-agnostic YAML line helpers of
-services/uploadrr_yaml.py: find_top_block, set_block_key, get_block_key,
-set_child_inline_mapping, set_emu_config, yaml_scalar. Those functions only
-operate on `lines: list[str]` in memory — no filesystem or subprocess
-access. Vivían en legacy.py; se movieron a su propio módulo el 2026-08-01
-precisamente porque ser puras hacía el traslado seguro.
+Son ediciones por líneas, en memoria, con las funciones puras de services/uploadrr_yaml.py: conservan los comentarios
+y lo que la app no gestiona del config del usuario.
 """
 from __future__ import annotations
 
-import difflib
-import hashlib
 import os
 import re
 import stat
@@ -28,10 +14,7 @@ from typing import Optional
 
 from .uploadrr_yaml import (
     find_child_block,
-    get_block_key,
     get_child_inline_mapping,
-    get_emu_anon,
-    get_emu_api_key,
     set_block_key,
     set_child_inline_mapping,
     set_emu_config,
@@ -55,11 +38,6 @@ QBIT_CLIENT_KEY = "qbit"
 # guardaba, y la subida fallaba igual porque nunca llegaba allí.
 SCREENS_API_KEY_HOSTS = tuple(h["id"] for h in IMAGE_HOSTS if h["needs_key"])
 
-_SECRET_LINE_PATTERNS = [
-    re.compile(r"^(\s*api_key\s*:\s*).+$"),
-    re.compile(r"^(\s*tmdb\s*:\s*).+$"),
-]
-
 
 def default_uploadrr_config_path(uploadrr_dir: str) -> Path:
     """Return the conventional Uploadrr-EMU config.yaml path under uploadrr_dir/data.
@@ -76,87 +54,8 @@ def read_config_lines(config_path: Path) -> list[str]:
     return config_path.read_text(encoding="utf-8", errors="ignore").splitlines()
 
 
-def _backup_path(config_path: Path) -> Path:
-    return config_path.with_suffix(config_path.suffix + ".bak")
-
-
-def read_baseline_lines(config_path: Path) -> list[str]:
-    """Las líneas del config de verdad: el .bak si existe. El config.yaml de
-    ahora puede ser el que dejó stageado una subida que murió a medias."""
-    backup_path = _backup_path(config_path)
-    return read_config_lines(backup_path if backup_path.exists() else config_path)
-
-
-def _write_atomic(path: Path, data: bytes) -> None:
-    # Se escribe aparte y se renombra: un lector (Uploadrr arrancando) o un fallo
-    # a medias (disco lleno) nunca ven un fichero cortado.
-    # En la imagen config.yaml y config.yaml.bak son enlaces de root hacia /config
-    # dentro de un directorio con sticky: un usuario normal no puede sustituirlos
-    # (EPERM). Se escribe en el fichero real, junto a él, y el enlace no se toca.
-    real = Path(os.path.realpath(path))
-    real.parent.mkdir(parents=True, exist_ok=True)
-    tmp_path = real.with_suffix(real.suffix + ".tmp")
-    # El config lleva claves: el temporal nace privado y, antes de sustituir, toma el
-    # modo del fichero que reemplaza (os.replace no lo conserva y la umask lo ensancharía).
-    modo = stat.S_IMODE(real.stat().st_mode) if real.exists() else 0o600
-    tmp_path.unlink(missing_ok=True)
-    try:
-        with os.fdopen(os.open(tmp_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600), "wb") as destino:
-            destino.write(data)
-        os.chmod(tmp_path, modo)
-        os.replace(tmp_path, real)
-    except OSError:
-        tmp_path.unlink(missing_ok=True)
-        raise
-
-
-def backup_config(config_path: Path) -> Optional[Path]:
-    """Create a .bak copy next to config_path if one doesn't already exist.
-
-    Returns the backup path, or None if there was nothing to back up.
-    """
-    if not config_path.exists():
-        return None
-    backup_path = _backup_path(config_path)
-    if not backup_path.exists():
-        _write_atomic(backup_path, config_path.read_bytes())
-    return backup_path
-
-
-def restore_config_from_backup(config_path: Path) -> bool:
-    """Restore config_path from its .bak file. Returns True if restored."""
-    backup_path = _backup_path(config_path)
-    if not backup_path.exists():
-        return False
-    _write_atomic(config_path, backup_path.read_bytes())
-    return True
-
-
-def restore_stale_config(config_path: Path) -> bool:
-    """Restaura el .bak solo si config.yaml es otra cosa: el stageado de una
-    subida que murió sin restaurarlo. True si había que restaurar."""
-    backup_path = _backup_path(config_path)
-    if not backup_path.exists():
-        return False
-    if config_path.exists() and config_path.read_bytes() == backup_path.read_bytes():
-        return False
-    return restore_config_from_backup(config_path)
-
-
 def staged_config_text(lines: list[str]) -> str:
     return "\n".join(lines).rstrip() + "\n"
-
-
-def write_staged_config(config_path: Path, lines: list[str]) -> Path:
-    """Write staged lines to config_path, backing up any existing file first."""
-    config_path.parent.mkdir(parents=True, exist_ok=True)
-    backup_config(config_path)
-    _write_atomic(config_path, staged_config_text(lines).encode("utf-8"))
-    return config_path
-
-
-def get_tmdb_key(lines: list[str]) -> Optional[str]:
-    return get_block_key(lines, "DEFAULT", "tmdb")
 
 
 def stage_tmdb_key(lines: list[str], api_key: str) -> tuple[list[str], str]:
@@ -338,57 +237,10 @@ def stage_emu_config(
     return staged, message
 
 
-def _redact_value(value: str) -> str:
-    """Redact a secret value to a short, non-reversible, deterministic
-    fingerprint — different values redact differently, so a diff can still
-    show that a change happened without revealing either value."""
-    digest = hashlib.sha256(value.encode("utf-8", errors="ignore")).hexdigest()[:8]
-    return f"***REDACTED:{digest}***"
-
-
-def _redact_lines(lines: list[str]) -> list[str]:
-    redacted = []
-    for line in lines:
-        out = line
-        for pattern in _SECRET_LINE_PATTERNS:
-            m = pattern.match(line)
-            if m:
-                out = m.group(1) + _redact_value(line[m.end(1):])
-                break
-        redacted.append(out)
-    return redacted
-
-
-def build_redacted_preview(lines: list[str]) -> list[str]:
-    """Return a copy of lines with DEFAULT.tmdb / TRACKERS.EMU.api_key redacted."""
-    return _redact_lines(lines)
-
-
-def diff_staged_changes(old_lines: list[str], new_lines: list[str]) -> list[str]:
-    """Return a unified diff between old and new lines, with secrets redacted."""
-    old_redacted = _redact_lines(old_lines)
-    new_redacted = _redact_lines(new_lines)
-    return list(
-        difflib.unified_diff(
-            old_redacted,
-            new_redacted,
-            fromfile="config.yaml (actual)",
-            tofile="config.yaml (propuesto)",
-            lineterm="",
-        )
-    )
-
-
 __all__ = [
     "default_uploadrr_config_path",
     "read_config_lines",
-    "read_baseline_lines",
-    "backup_config",
-    "restore_config_from_backup",
-    "restore_stale_config",
     "staged_config_text",
-    "write_staged_config",
-    "get_tmdb_key",
     "stage_tmdb_key",
     "stage_emu_config",
     "stage_add_logo",
@@ -402,8 +254,4 @@ __all__ = [
     "stage_qbittorrent_config",
     "QBIT_CLIENT_KEY",
     "SCREENS_API_KEY_HOSTS",
-    "get_emu_api_key",
-    "get_emu_anon",
-    "build_redacted_preview",
-    "diff_staged_changes",
 ]

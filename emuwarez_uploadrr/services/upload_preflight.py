@@ -22,7 +22,7 @@ from .uploadrr_contract import (
     render_command_preview,
     validate_uploadrr_emu_contract,
 )
-from .uploadrr_config_staging import default_uploadrr_config_path
+from .uploadrr_config import default_uploadrr_config_path
 from .upload_execution import CONFIRMATION_TOKEN
 
 JOB_STATUS_DRAFT = "draft"
@@ -69,7 +69,7 @@ def validate_upload_preconditions(library_item: dict, proposal: dict | None = No
                 if not config_path.exists():
                     warnings.append(
                         f"config.yaml de Uploadrr-EMU no encontrado en {config_path}; "
-                        "no se podrán stagear credenciales antes de ejecutar."
+                        "Uploadrr-EMU no podrá arrancar."
                     )
 
         emu_key = get_setting_canonical(conn, "emu.api_key")

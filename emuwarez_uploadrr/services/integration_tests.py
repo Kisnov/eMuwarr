@@ -386,7 +386,7 @@ def test_uploadrr_connection(
     subprocess. If path/python_path are None, reads the stored settings
     (uploadrr.path / uploadrr.python_path) from conn.
     """
-    from .uploadrr_config_staging import default_uploadrr_config_path
+    from .uploadrr_config import default_uploadrr_config_path
 
     _path = path
     _python = python_path

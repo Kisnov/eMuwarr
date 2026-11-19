@@ -281,6 +281,7 @@ def test_el_comando_del_trabajo_lleva_eventos_solo_con_contrato(db_conn, tmp_pat
     jid = _crear_job(db_conn, tmp_path)
     job = get_upload_job(jid, conn=db_conn)
 
+    (fake_uploadrr_emu_dir / "contrato_eventos.json").unlink()
     sin = build_uploadrr_execution_command(job, conn=db_conn)
     assert "--eventos" not in sin["args"] and sin["eventos"] is None
 
@@ -302,6 +303,8 @@ def test_el_comando_del_trabajo_lleva_eventos_solo_con_contrato(db_conn, tmp_pat
 def _lanzar(db_conn, tmp_path, carpeta, python_path, *, contrato=True):
     if contrato:
         shutil.copy(CONTRATO, carpeta / "contrato_eventos.json")
+    else:
+        (carpeta / "contrato_eventos.json").unlink(missing_ok=True)
     _poner_ajustes(db_conn, carpeta, python_path)
     jid = _crear_job(db_conn, tmp_path)
     assert start_upload_job(jid, dry_run=False, start=True, confirmation=CONFIRMATION_TOKEN,
@@ -414,15 +417,16 @@ def test_sin_eventos_decide_el_texto_como_siempre(
     assert _fase(job, "qbittorrent_add") == "done"
 
 
-def test_sin_contrato_no_se_pasa_el_flag_y_se_lee_el_texto(
+def test_sin_contrato_no_se_lanza(
         db_conn, tmp_path, fake_uploadrr_emu_dir, fake_uploadrr_python_path, guion_uploadrr):
-    # Aunque el fake emitiría eventos si se los pidieran, sin el contrato la app no se los pide.
+    # Sin el contrato tampoco hay --config: un Uploadrr-EMU así de viejo ya no se lanza (upload_execution/config.py).
     guion_uploadrr([{"out": "Step done: screenshots"}, *TEXTO_BUENO])
     jid = _lanzar(db_conn, tmp_path, fake_uploadrr_emu_dir, fake_uploadrr_python_path, contrato=False)
-    job = _terminal(db_conn, jid)
+    assert _esperar(lambda: get_upload_job(jid, conn=db_conn)["status"] == "failed")  # sin proceso que esperar
+    job = get_upload_job(jid, conn=db_conn)
 
-    assert job["status"] == "completed" and "--eventos" not in job["safe_command_json"]
-    assert not ruta_eventos(jid).exists()
+    assert "es anterior a esta versión de eMuwarr" in job["error_message"]
+    assert "--eventos" not in job["safe_command_json"] and not ruta_eventos(jid).exists()
 
 
 def test_muere_tras_subido_sin_resultado_conserva_el_torrent(

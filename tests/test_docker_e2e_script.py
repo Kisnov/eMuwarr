@@ -112,10 +112,11 @@ def test_e2e_script_requires_confirmation_token_for_real_start():
     assert "CONFIRMATION_TOKEN" in content
 
 
-def test_e2e_script_checks_config_restored_after_execution():
+def test_e2e_script_checks_config_untouched_after_execution():
     content = E2E_SCRIPT.read_text()
     assert "PLACEHOLDER_TMDB_KEY" in content
-    assert "restaurado" in content.lower()
+    assert "sin tocar" in content.lower()
+    assert "contrato_eventos.json" in content  # sin la marca de --config la app no lo lanzaría
 
 
 def test_e2e_script_checks_job_reaches_completed():

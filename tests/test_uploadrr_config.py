@@ -1,27 +1,20 @@
-"""Tests for Uploadrr-EMU data/config.yaml staging (Phase 10E).
+"""Los editores de líneas del config.yaml de Uploadrr-EMU y el config que se prepara para cada subida.
 
-Every test operates exclusively under tmp_path — this module (and these
-tests) never touch a real Uploadrr/ installation.
+Cada test trabaja bajo tmp_path: nada toca una instalación real de Uploadrr/.
 """
 from __future__ import annotations
 
 import pytest
 
-from emuwarez_uploadrr.services.uploadrr_yaml import get_child_inline_mapping
-from emuwarez_uploadrr.services.uploadrr_config_staging import (
+from emuwarez_uploadrr.services.uploadrr_yaml import get_block_key, get_child_inline_mapping
+from emuwarez_uploadrr.services.uploadrr_config import (
     QBIT_CLIENT_KEY,
     SCREENS_API_KEY_HOSTS,
-    backup_config,
-    build_redacted_preview,
-    diff_staged_changes,
-    get_tmdb_key,
     read_config_lines,
-    restore_config_from_backup,
     stage_emu_config,
     stage_image_hosts,
     stage_qbittorrent_config,
     stage_tmdb_key,
-    write_staged_config,
 )
 
 
@@ -32,15 +25,15 @@ def test_read_config_lines_missing_file_returns_empty(tmp_path):
 def test_stage_tmdb_key_sets_default_tmdb():
     lines = ["DEFAULT:", "  other: 1"]
     staged, message = stage_tmdb_key(lines, "TMDB_REAL_KEY")
-    assert get_tmdb_key(staged) == "TMDB_REAL_KEY"
+    assert "TMDB_REAL_KEY" in "\n".join(staged)
     assert "creado" in message or "actualizado" in message
 
 
 def test_stage_tmdb_key_does_not_mutate_original_lines():
     lines = ["DEFAULT:", "  tmdb: 'old'"]
     staged, _ = stage_tmdb_key(lines, "new_key")
-    assert get_tmdb_key(lines) == "old"
-    assert get_tmdb_key(staged) == "new_key"
+    assert lines == ["DEFAULT:", "  tmdb: 'old'"]
+    assert "new_key" in "\n".join(staged) and "old" not in "\n".join(staged)
 
 
 def test_stage_emu_config_sets_api_key_and_anon():
@@ -188,7 +181,7 @@ def test_stage_qbittorrent_config_treats_an_unreadable_storage_dir_as_missing(mo
 def test_stage_blu_api_off_turns_off_the_blutopia_lookup():
     """Con useAPI activado el fork pregunta a Blutopia por el nombre de cada
     fichero ("Failed to search: HTTP 400" con la clave de ejemplo)."""
-    from emuwarez_uploadrr.services.uploadrr_config_staging import stage_blu_api_off
+    from emuwarez_uploadrr.services.uploadrr_config import stage_blu_api_off
     lines = [
         "TRACKERS:",
         "  BLU:",
@@ -205,7 +198,7 @@ def test_stage_blu_api_off_turns_off_the_blutopia_lookup():
 
 
 def test_stage_blu_api_off_leaves_a_config_without_blu_alone():
-    from emuwarez_uploadrr.services.uploadrr_config_staging import stage_blu_api_off
+    from emuwarez_uploadrr.services.uploadrr_config import stage_blu_api_off
     lines = ["TRACKERS:", "  EMU:", "    useAPI: true"]
     staged, message = stage_blu_api_off(lines)
     assert staged == lines
@@ -216,87 +209,11 @@ def test_get_child_inline_mapping_returns_empty_when_absent():
     assert get_child_inline_mapping([], "TORRENT_CLIENTS", "qbit") == {}
 
 
-def test_backup_config_creates_bak_file(tmp_path):
-    config_path = tmp_path / "config.yaml"
-    config_path.write_text("DEFAULT:\n  tmdb: 'k'\n")
-    backup_path = backup_config(config_path)
-    assert backup_path is not None
-    assert backup_path.exists()
-    assert backup_path.read_text() == config_path.read_text()
-
-
-def test_backup_config_missing_file_returns_none(tmp_path):
-    assert backup_config(tmp_path / "does-not-exist.yaml") is None
-
-
-def test_backup_config_does_not_overwrite_existing_backup(tmp_path):
-    config_path = tmp_path / "config.yaml"
-    config_path.write_text("v1")
-    backup_config(config_path)
-    config_path.write_text("v2")
-    backup_config(config_path)  # should NOT overwrite the .bak with v2
-    backup_path = config_path.with_suffix(config_path.suffix + ".bak")
-    assert backup_path.read_text() == "v1"
-
-
-def test_write_staged_config_creates_backup_before_overwrite(tmp_path):
-    config_path = tmp_path / "config.yaml"
-    config_path.write_text("DEFAULT:\n  tmdb: 'old'\n")
-    write_staged_config(config_path, ["DEFAULT:", "  tmdb: 'new'"])
-
-    backup_path = config_path.with_suffix(config_path.suffix + ".bak")
-    assert backup_path.exists()
-    assert "old" in backup_path.read_text()
-    assert "new" in config_path.read_text()
-
-
-def test_write_staged_config_creates_parent_dirs(tmp_path):
-    config_path = tmp_path / "nested" / "data" / "config.yaml"
-    write_staged_config(config_path, ["DEFAULT:", "  tmdb: 'x'"])
-    assert config_path.exists()
-
-
-def test_restore_config_from_backup(tmp_path):
-    config_path = tmp_path / "config.yaml"
-    config_path.write_text("original")
-    backup_config(config_path)
-    config_path.write_text("modified")
-
-    restored = restore_config_from_backup(config_path)
-    assert restored is True
-    assert config_path.read_text() == "original"
-
-
-def test_restore_config_from_backup_no_backup_returns_false(tmp_path):
-    config_path = tmp_path / "config.yaml"
-    config_path.write_text("only version")
-    assert restore_config_from_backup(config_path) is False
-
-
-def test_build_redacted_preview_hides_tmdb_and_api_key():
-    lines = ["DEFAULT:", "  tmdb: 'REALTMDBKEY'", "TRACKERS:", "  EMU:", "    api_key: 'REALEMUKEY'"]
-    preview = build_redacted_preview(lines)
-    text = "\n".join(preview)
-    assert "REALTMDBKEY" not in text
-    assert "REALEMUKEY" not in text
-    assert "***REDACTED:" in text
-
-
-def test_diff_staged_changes_redacts_secrets():
-    old_lines = ["DEFAULT:", "  tmdb: 'OLDKEY'"]
-    new_lines, _ = stage_tmdb_key(old_lines, "NEWKEY")
-    diff = diff_staged_changes(old_lines, new_lines)
-    diff_text = "\n".join(diff)
-    assert "OLDKEY" not in diff_text
-    assert "NEWKEY" not in diff_text
-    assert any(line.startswith(("+", "-")) for line in diff if not line.startswith(("+++", "---")))
-
-
 def test_never_touches_real_uploadrr_path(tmp_path):
     """Structural guard: config_path is always caller-supplied (tmp_path in
     tests) — nothing in this module hardcodes or defaults to a real
     Uploadrr/ install path."""
-    import emuwarez_uploadrr.services.uploadrr_config_staging as mod
+    import emuwarez_uploadrr.services.uploadrr_config as mod
     import inspect
 
     source = inspect.getsource(mod)
@@ -308,7 +225,7 @@ def test_stage_qbittorrent_splits_the_url_the_way_the_fork_expects():
     """La app guarda una sola url con el puerto dentro; el cliente qBittorrent
     del fork quiere host y puerto en dos claves (src/clients.py:
     host=qbit_url, port=qbit_port)."""
-    from emuwarez_uploadrr.services.uploadrr_config_staging import stage_qbittorrent_config
+    from emuwarez_uploadrr.services.uploadrr_config import stage_qbittorrent_config
     from emuwarez_uploadrr.services.uploadrr_yaml import get_child_inline_mapping
     lines = ["TORRENT_CLIENTS:", "  qbit: {'torrent_client': 'qbit'}"]
     staged, _ = stage_qbittorrent_config(
@@ -320,7 +237,7 @@ def test_stage_qbittorrent_splits_the_url_the_way_the_fork_expects():
 
 def test_stage_qbittorrent_writes_the_tag_the_fork_reads():
     """qbit_tag es la clave que el fork aplica al torrent (clients.py:634)."""
-    from emuwarez_uploadrr.services.uploadrr_config_staging import stage_qbittorrent_config
+    from emuwarez_uploadrr.services.uploadrr_config import stage_qbittorrent_config
     from emuwarez_uploadrr.services.uploadrr_yaml import get_child_inline_mapping
     lines = ["TORRENT_CLIENTS:", "  qbit: {'torrent_client': 'qbit'}"]
     staged, _ = stage_qbittorrent_config(
@@ -331,7 +248,7 @@ def test_stage_qbittorrent_writes_the_tag_the_fork_reads():
 def test_clearing_the_tag_removes_it_from_the_fork_config():
     """Vaciar el campo en Ajustes tiene que quitar la etiqueta de verdad, no
     dejar la anterior puesta para siempre."""
-    from emuwarez_uploadrr.services.uploadrr_config_staging import stage_qbittorrent_config
+    from emuwarez_uploadrr.services.uploadrr_config import stage_qbittorrent_config
     from emuwarez_uploadrr.services.uploadrr_yaml import get_child_inline_mapping
     lines = ["TORRENT_CLIENTS:", "  qbit: {'torrent_client': 'qbit', 'qbit_tag': 'Vieja'}"]
     for tag in ("", None, "   "):
@@ -343,7 +260,7 @@ def test_clearing_the_tag_removes_it_from_the_fork_config():
 def test_stage_add_logo_writes_the_key_the_fork_reads():
     """DEFAULT.add_logo es lo que mira src/utils/descgen.py del fork para
     incrustar el logo en la descripción."""
-    from emuwarez_uploadrr.services.uploadrr_config_staging import stage_add_logo
+    from emuwarez_uploadrr.services.uploadrr_config import stage_add_logo
     from emuwarez_uploadrr.services.uploadrr_yaml import get_block_key
     lines = ["DEFAULT:", "  tmdb: xxx", "  add_logo: true"]
     for enabled, expected in ((False, "false"), (True, "true")):
@@ -352,7 +269,7 @@ def test_stage_add_logo_writes_the_key_the_fork_reads():
 
 
 def test_stage_add_logo_creates_the_key_when_the_config_lacks_it():
-    from emuwarez_uploadrr.services.uploadrr_config_staging import stage_add_logo
+    from emuwarez_uploadrr.services.uploadrr_config import stage_add_logo
     from emuwarez_uploadrr.services.uploadrr_yaml import get_block_key
     staged, _ = stage_add_logo(["DEFAULT:", "  tmdb: xxx"], False)
     assert get_block_key(staged, "DEFAULT", "add_logo") == "false"
@@ -361,7 +278,7 @@ def test_stage_add_logo_creates_the_key_when_the_config_lacks_it():
 def test_stage_per_episode_screens_leaves_only_the_first_episode_by_default():
     """SCREENS.per_episode a 0 es lo que hace que el fork solo capture el primer
     capítulo de un pack; con todos se respeta el valor del config."""
-    from emuwarez_uploadrr.services.uploadrr_config_staging import stage_per_episode_screens
+    from emuwarez_uploadrr.services.uploadrr_config import stage_per_episode_screens
     from emuwarez_uploadrr.services.uploadrr_yaml import get_block_key
     lines = ["SCREENS:", "  per_episode: 3 # for tv will take x screens for every episode"]
     staged, _ = stage_per_episode_screens(lines, False)
@@ -370,33 +287,17 @@ def test_stage_per_episode_screens_leaves_only_the_first_episode_by_default():
     assert staged == lines
 
 
-def test_stage_uploadrr_config_screenshots_only_the_first_episode_unless_asked(tmp_path, monkeypatch):
-    from emuwarez_uploadrr.database import connect, init_db
-    from emuwarez_uploadrr.services.upload_execution import config as ue
-    from emuwarez_uploadrr.services.settings import set_setting
-    from emuwarez_uploadrr.services.uploadrr_yaml import get_block_key
-    config = tmp_path / "Uploadrr" / "data" / "config.yaml"
-    config.parent.mkdir(parents=True)
-    config.write_text("DEFAULT:\n  tmdb: ''\nSCREENS:\n  per_episode: 3\n", encoding="utf-8")
-    monkeypatch.setattr(ue, "append_upload_log", lambda *a, **k: None)
+def test_la_subida_captura_solo_el_primer_capitulo_salvo_que_se_pida(tmp_path, monkeypatch):
+    base = "DEFAULT:\n  tmdb: ''\nSCREENS:\n  per_episode: 3\n"
+    assert _per_episode(_preparar(tmp_path, monkeypatch, base)) == "0"
 
-    assert ue._stage_uploadrr_config(1, str(tmp_path / "Uploadrr")) == config
-    assert get_block_key(read_config_lines(config), "SCREENS", "per_episode") == "0"
-
-    restore_config_from_backup(config)
-    conn = connect()
-    init_db(conn)
-    set_setting(conn, "emu.per_episode_screens", "true")
-    conn.commit()
-    conn.close()
-    ue._stage_uploadrr_config(1, str(tmp_path / "Uploadrr"))
-    assert get_block_key(read_config_lines(config), "SCREENS", "per_episode") == "3"
+    _poner_ajuste("emu.per_episode_screens", "true")
+    assert _per_episode(_preparar(tmp_path, monkeypatch, base, job_id=2)) == "3"
 
 
-def test_stage_uploadrr_config_no_lanza_sin_proveedores_de_imagenes(tmp_path, monkeypatch):
+def test_la_subida_no_se_prepara_sin_proveedores_de_imagenes(tmp_path, monkeypatch):
     """Si el usuario quita todos los proveedores entre la comprobación previa y el lanzamiento, Uploadrr no arranca
-    con los de su propio config.yaml: el trabajo falla con el motivo."""
-    import pytest
+    con los de su propio config.yaml: el trabajo falla con el motivo y no se escribe nada."""
     from emuwarez_uploadrr.database import connect, init_db
     from emuwarez_uploadrr.services.upload_execution import config as ue
     from emuwarez_uploadrr.services.image_hosts import set_config
@@ -409,8 +310,10 @@ def test_stage_uploadrr_config_no_lanza_sin_proveedores_de_imagenes(tmp_path, mo
     set_config(conn, [], {})
     conn.commit()
     conn.close()
+    ruta = tmp_path / "subida.yaml"
     with pytest.raises(ue.ConfigNoPreparada, match="proveedor de imágenes"):
-        ue._stage_uploadrr_config(1, str(tmp_path / "Uploadrr"))
+        ue.preparar_config_de_la_subida(1, str(tmp_path / "Uploadrr"), ruta)
+    assert not ruta.exists()
     assert "img_hosts: [imgbox]" in config.read_text(encoding="utf-8")
 
 
@@ -422,7 +325,7 @@ def test_every_host_that_needs_a_key_gets_it_staged():
 
     Derivarla de IMAGE_HOSTS lo arregla; este test es lo que impide que vuelva
     a separarse cuando se añada el octavo proveedor."""
-    from emuwarez_uploadrr.services.uploadrr_config_staging import SCREENS_API_KEY_HOSTS
+    from emuwarez_uploadrr.services.uploadrr_config import SCREENS_API_KEY_HOSTS
     from emuwarez_uploadrr.services.image_hosts import IMAGE_HOSTS
     esperados = {h["id"] for h in IMAGE_HOSTS if h["needs_key"]}
     assert set(SCREENS_API_KEY_HOSTS) == esperados
@@ -542,14 +445,7 @@ def test_el_config_de_ejemplo_del_fork_se_sigue_leyendo():
     }
 
 
-# --- EJEC-4: el config de verdad es el .bak, no lo que dejó una subida muerta -
-
-def _config_falso(tmp_path):
-    config = tmp_path / "Uploadrr" / "data" / "config.yaml"
-    config.parent.mkdir(parents=True)
-    config.write_text("DEFAULT:\n  tmdb: ''\nSCREENS:\n  per_episode: 3\n", encoding="utf-8")
-    return config
-
+# --- El config de cada subida: preparar_config_de_la_subida ------------------
 
 def _poner_ajuste(clave, valor):
     from emuwarez_uploadrr.database import connect, init_db
@@ -562,199 +458,25 @@ def _poner_ajuste(clave, valor):
 
 
 def _per_episode(config):
-    from emuwarez_uploadrr.services.uploadrr_yaml import get_block_key
     return get_block_key(read_config_lines(config), "SCREENS", "per_episode")
 
 
-def test_tras_un_corte_la_siguiente_subida_parte_del_backup(tmp_path, monkeypatch):
-    """Una subida muerta dejaba el config stageado (per_episode: 0), y la
-    siguiente, que quería todos los capítulos, «dejaba el valor del config»: el suyo."""
+def _preparar(tmp_path, monkeypatch, texto, job_id=1):
+    """Prepara el config de una subida con config.yaml = `texto`; devuelve su ruta (el config.yaml no cambia)."""
     from emuwarez_uploadrr.services.upload_execution import config as ue
-    config = _config_falso(tmp_path)
+    config = tmp_path / "Uploadrr" / "data" / "config.yaml"
+    config.parent.mkdir(parents=True, exist_ok=True)
+    config.write_text(texto, encoding="utf-8")
     monkeypatch.setattr(ue, "append_upload_log", lambda *a, **k: None)
-    cwd = str(tmp_path / "Uploadrr")
-
-    ue._stage_uploadrr_config(1, cwd)
-    assert _per_episode(config) == "0"  # y la subida muere sin restaurar
-
-    _poner_ajuste("emu.per_episode_screens", "true")
-    ue._stage_uploadrr_config(2, cwd)
-
-    assert _per_episode(config) == "3"
-
-
-def test_restore_stale_config_solo_restaura_si_difiere(tmp_path):
-    from emuwarez_uploadrr.services.uploadrr_config_staging import restore_stale_config
-    config = _config_falso(tmp_path)
-    assert restore_stale_config(config) is False  # sin .bak
-
-    backup_config(config)
-    assert restore_stale_config(config) is False  # igual que el .bak
-
-    config.write_text("stageado", encoding="utf-8")
-    assert restore_stale_config(config) is True
-    assert config.read_bytes() == config.with_suffix(".yaml.bak").read_bytes()
-
-
-def test_escribir_y_restaurar_no_dejan_ficheros_temporales(tmp_path):
-    config = _config_falso(tmp_path)
-    write_staged_config(config, ["DEFAULT:", "  tmdb: 'x'"])
-    restore_config_from_backup(config)
-
-    assert sorted(p.name for p in config.parent.iterdir()) == ["config.yaml", "config.yaml.bak"]
-
-
-def test_al_arrancar_se_restaura_el_config_que_dejo_una_subida_muerta(tmp_path):
-    from emuwarez_uploadrr.services.upload_execution import config as ue
-    config = _config_falso(tmp_path)
-    backup_config(config)
-    original = config.read_bytes()
-    config.write_text("DEFAULT:\n  tmdb: 'CLAVE_REAL'\n", encoding="utf-8")
-    _poner_ajuste("uploadrr.path", str(tmp_path / "Uploadrr"))
-
-    assert ue.restaurar_config_interrumpida() is True
-    assert config.read_bytes() == original
-    assert ue.restaurar_config_interrumpida() is False
-
-
-def test_la_siguiente_subida_restaura_el_config_aunque_no_pueda_stagear(tmp_path, monkeypatch):
-    from emuwarez_uploadrr.services.upload_execution import config as ue
-    config = _config_falso(tmp_path)
-    backup_config(config)
-    original = config.read_bytes()
-    config.write_text("DEFAULT:\n  tmdb: 'CLAVE_REAL'\n", encoding="utf-8")
-    monkeypatch.setattr(ue, "append_upload_log", lambda *a, **k: None)
-    monkeypatch.setattr(ue, "_stage_uploadrr_config", lambda job_id, cwd: None)
-    ue._config_stage_refcount.clear()
-
-    assert ue._acquire_staged_config(1, str(tmp_path / "Uploadrr")) is None
-    assert config.read_bytes() == original
-
-
-# --- EJEC-5: una subida que se une a otra ya en curso relee Ajustes ------------
-
-def test_una_subida_que_se_une_a_otra_recoge_los_ajustes_nuevos(tmp_path, monkeypatch):
-    from emuwarez_uploadrr.services.upload_execution import config as ue
-    config = _config_falso(tmp_path)
-    original = config.read_bytes()
-    monkeypatch.setattr(ue, "append_upload_log", lambda *a, **k: None)
-    ue._config_stage_refcount.clear()
-    cwd = str(tmp_path / "Uploadrr")
-
-    primera = ue._acquire_staged_config(1, cwd)
-    assert _per_episode(config) == "0"
-    _poner_ajuste("emu.per_episode_screens", "true")  # Ajustes cambia con una subida en curso
-    segunda = ue._acquire_staged_config(2, cwd)
-
-    assert _per_episode(config) == "3"
-    ue._release_staged_config(1, primera)
-    assert _per_episode(config) == "3"  # sigue stageado para la segunda
-    ue._release_staged_config(2, segunda)
-    assert config.read_bytes() == original
-
-
-def test_una_subida_que_se_une_no_reescribe_si_los_ajustes_no_cambiaron(tmp_path, monkeypatch):
-    from emuwarez_uploadrr.services.upload_execution import config as ue
-    _config_falso(tmp_path)
-    monkeypatch.setattr(ue, "append_upload_log", lambda *a, **k: None)
-    ue._config_stage_refcount.clear()
-    escrituras = []
-    real = ue.write_staged_config
-    monkeypatch.setattr(ue, "write_staged_config", lambda *a, **k: escrituras.append(1) or real(*a, **k))
-    cwd = str(tmp_path / "Uploadrr")
-
-    primera = ue._acquire_staged_config(1, cwd)
-    segunda = ue._acquire_staged_config(2, cwd)
-
-    assert len(escrituras) == 1
-    ue._release_staged_config(1, primera)
-    ue._release_staged_config(2, segunda)
-
-
-# --- La imagen trae config.yaml y config.yaml.bak como enlaces a /config -----------
-
-def _config_con_enlaces(tmp_path):
-    """Como la imagen: data/ con enlaces hacia otro directorio. El .bak empieza roto."""
-    estado = tmp_path / "estado"
-    estado.mkdir()
-    (estado / "config.yaml").write_text("DEFAULT:\n  tmdb: ''\nSCREENS:\n  per_episode: 3\n", encoding="utf-8")
-    data = tmp_path / "Uploadrr" / "data"
-    data.mkdir(parents=True)
-    (data / "config.yaml").symlink_to(estado / "config.yaml")
-    (data / "config.yaml.bak").symlink_to(estado / "config.yaml.bak")
-    return data / "config.yaml", estado
-
-
-def test_preparar_y_restaurar_el_config_escribe_en_el_destino_del_enlace(tmp_path):
-    """Sustituir el enlace con os.replace falla con EPERM para un usuario normal
-    (directorio con sticky, enlace de root): se escribe en el fichero real."""
-    config, estado = _config_con_enlaces(tmp_path)
-    original = (estado / "config.yaml").read_bytes()
-
-    write_staged_config(config, ["DEFAULT:", "  tmdb: 'CLAVE'"])
-
-    assert config.is_symlink() and config.with_suffix(".yaml.bak").is_symlink()
-    assert b"CLAVE" in (estado / "config.yaml").read_bytes()
-    assert (estado / "config.yaml.bak").read_bytes() == original
-
-    assert restore_config_from_backup(config) is True
-
-    assert config.is_symlink()
-    assert (estado / "config.yaml").read_bytes() == original
-    assert sorted(p.name for p in estado.iterdir()) == ["config.yaml", "config.yaml.bak"]
-    assert sorted(p.name for p in config.parent.iterdir()) == ["config.yaml", "config.yaml.bak"]
-
-
-def test_restaurar_lo_que_dejo_una_subida_muerta_tambien_respeta_el_enlace(tmp_path):
-    config, estado = _config_con_enlaces(tmp_path)
-    backup_config(config)
-    original = (estado / "config.yaml").read_bytes()
-    (estado / "config.yaml").write_text("DEFAULT:\n  tmdb: 'CLAVE_REAL'\n", encoding="utf-8")
-
-    from emuwarez_uploadrr.services.uploadrr_config_staging import restore_stale_config
-    assert restore_stale_config(config) is True
-
-    assert config.is_symlink()
-    assert (estado / "config.yaml").read_bytes() == original
-
-
-def test_si_no_se_puede_sustituir_el_config_no_queda_el_temporal(tmp_path, monkeypatch):
-    import os
-    config, estado = _config_con_enlaces(tmp_path)
-
-    def sin_permiso(origen, destino):
-        raise PermissionError(1, "Operation not permitted")
-
-    monkeypatch.setattr(os, "replace", sin_permiso)
-    with pytest.raises(PermissionError):
-        write_staged_config(config, ["DEFAULT:", "  tmdb: 'x'"])
-
-    assert not any(p.name.endswith(".tmp") for p in estado.iterdir())
-
-
-def test_escribir_el_config_conserva_su_modo_y_lo_crea_privado(tmp_path):
-    """os.replace no conserva el modo: un config.yaml con 0600 acababa con el
-    que dejara la umask, legible por otros usuarios del volumen."""
-    import os
-    config, estado = _config_con_enlaces(tmp_path)
-    anterior = os.umask(0o022)
-    try:
-        (estado / "config.yaml").chmod(0o600)
-        write_staged_config(config, ["DEFAULT:", "  tmdb: 'x'"])
-        restore_config_from_backup(config)
-
-        assert (estado / "config.yaml").stat().st_mode & 0o777 == 0o600
-        assert (estado / "config.yaml.bak").stat().st_mode & 0o777 == 0o600  # nuevo: privado
-
-        (estado / "config.yaml").chmod(0o640)
-        write_staged_config(config, ["DEFAULT:", "  tmdb: 'y'"])
-        assert (estado / "config.yaml").stat().st_mode & 0o777 == 0o640
-    finally:
-        os.umask(anterior)
+    ruta = tmp_path / "subida.yaml"
+    ue.preparar_config_de_la_subida(job_id, str(tmp_path / "Uploadrr"), ruta)
+    assert config.read_text(encoding="utf-8") == texto
+    assert [p.name for p in config.parent.iterdir()] == ["config.yaml"]
+    return ruta
 
 
 def test_stage_keep_quiet_off_replaces_a_true_and_creates_a_missing_key():
-    from emuwarez_uploadrr.services.uploadrr_config_staging import stage_keep_quiet_off
+    from emuwarez_uploadrr.services.uploadrr_config import stage_keep_quiet_off
     from emuwarez_uploadrr.services.uploadrr_yaml import get_block_key
     staged, _ = stage_keep_quiet_off(["AUTO:", "  keep_quiet: true # silencio"])
     assert get_block_key(staged, "AUTO", "keep_quiet") == "false"
@@ -762,19 +484,13 @@ def test_stage_keep_quiet_off_replaces_a_true_and_creates_a_missing_key():
     assert get_block_key(staged, "AUTO", "keep_quiet") == "false"
 
 
-def test_stage_uploadrr_config_forces_keep_quiet_off(tmp_path, monkeypatch):
-    from emuwarez_uploadrr.services.upload_execution import config as ue
-    from emuwarez_uploadrr.services.uploadrr_yaml import get_block_key
-    config = tmp_path / "Uploadrr" / "data" / "config.yaml"
-    config.parent.mkdir(parents=True)
-    config.write_text("AUTO:\n  keep_quiet: true\n", encoding="utf-8")
-    monkeypatch.setattr(ue, "append_upload_log", lambda *a, **k: None)
-    ue._stage_uploadrr_config(1, str(tmp_path / "Uploadrr"))
-    assert get_block_key(read_config_lines(config), "AUTO", "keep_quiet") == "false"
+def test_la_subida_fuerza_keep_quiet_off(tmp_path, monkeypatch):
+    ruta = _preparar(tmp_path, monkeypatch, "AUTO:\n  keep_quiet: true\n")
+    assert get_block_key(read_config_lines(ruta), "AUTO", "keep_quiet") == "false"
 
 
 def test_la_firma_de_serie_anterior_pasa_a_la_actual_y_una_propia_no_se_toca():
-    from emuwarez_uploadrr.services.uploadrr_config_staging import FIRMA_ACTUAL, FIRMA_ANTERIOR, stage_firma_actual
+    from emuwarez_uploadrr.services.uploadrr_config import FIRMA_ACTUAL, FIRMA_ANTERIOR, stage_firma_actual
     propia = '  anon_signature: "[img]https://ejemplo.test/mia.png[/img]"'
     staged, _ = stage_firma_actual([
         "SIGNATURES:", f'  signature: "[img=400]{FIRMA_ANTERIOR}[/img]"',
@@ -785,41 +501,30 @@ def test_la_firma_de_serie_anterior_pasa_a_la_actual_y_una_propia_no_se_toca():
 
 
 def test_al_preparar_la_subida_la_firma_de_serie_queda_al_dia(tmp_path, monkeypatch):
-    from emuwarez_uploadrr.services.upload_execution import config as ue
-    from emuwarez_uploadrr.services.uploadrr_config_staging import FIRMA_ACTUAL, FIRMA_ANTERIOR
-    config = tmp_path / "Uploadrr" / "data" / "config.yaml"
-    config.parent.mkdir(parents=True)
-    config.write_text(f'SIGNATURES:\n  signature: "[img=400]{FIRMA_ANTERIOR}[/img]"\n', encoding="utf-8")
-    monkeypatch.setattr(ue, "append_upload_log", lambda *a, **k: None)
-    ue._stage_uploadrr_config(1, str(tmp_path / "Uploadrr"))
-    texto = config.read_text(encoding="utf-8")
+    from emuwarez_uploadrr.services.uploadrr_config import FIRMA_ACTUAL, FIRMA_ANTERIOR
+    ruta = _preparar(tmp_path, monkeypatch, f'SIGNATURES:\n  signature: "[img=400]{FIRMA_ANTERIOR}[/img]"\n')
+    texto = ruta.read_text(encoding="utf-8")
     assert FIRMA_ACTUAL in texto and FIRMA_ANTERIOR not in texto
 
 
 def test_stage_anon_off_neutralises_the_config_so_only_the_flag_decides():
-    from emuwarez_uploadrr.services.uploadrr_config_staging import stage_anon_off
-    from emuwarez_uploadrr.services.uploadrr_yaml import get_block_key, get_emu_anon
+    from emuwarez_uploadrr.services.uploadrr_config import stage_anon_off
     lines = ["DEFAULT:", "  always_anon: true", "TRACKERS:", "  EMU:", "    api_key: k", "    anon: true"]
     staged, _ = stage_anon_off(lines)
     assert get_block_key(staged, "DEFAULT", "always_anon") == "false"
-    assert get_emu_anon(staged) is False
+    assert "    anon: false" in staged and "    anon: true" not in staged
     assert "    api_key: k" in staged
     staged, _ = stage_anon_off(["DEFAULT:", "  tmdb: x"])
     assert get_block_key(staged, "DEFAULT", "always_anon") == "false"
-    assert get_emu_anon(staged) is False
+    assert "    anon: false" in staged
 
 
-def test_stage_uploadrr_config_forces_anonymity_off(tmp_path, monkeypatch):
-    from emuwarez_uploadrr.services.upload_execution import config as ue
-    from emuwarez_uploadrr.services.uploadrr_yaml import get_block_key, get_emu_anon
-    config = tmp_path / "Uploadrr" / "data" / "config.yaml"
-    config.parent.mkdir(parents=True)
-    config.write_text("DEFAULT:\n  always_anon: true\nTRACKERS:\n  EMU:\n    anon: true\n", encoding="utf-8")
-    monkeypatch.setattr(ue, "append_upload_log", lambda *a, **k: None)
-    ue._stage_uploadrr_config(1, str(tmp_path / "Uploadrr"))
-    lines = read_config_lines(config)
+def test_la_subida_fuerza_el_anonimato_apagado(tmp_path, monkeypatch):
+    ruta = _preparar(tmp_path, monkeypatch,
+                     "DEFAULT:\n  always_anon: true\nTRACKERS:\n  EMU:\n    anon: true\n")
+    lines = read_config_lines(ruta)
     assert get_block_key(lines, "DEFAULT", "always_anon") == "false"
-    assert get_emu_anon(lines) is False
+    assert "    anon: false" in lines and "    anon: true" not in lines
 
 
 def test_qbit_configurado_es_la_misma_condicion_para_probar_y_stagear():
@@ -830,26 +535,14 @@ def test_qbit_configurado_es_la_misma_condicion_para_probar_y_stagear():
     assert not qbit_configurado(None, "")
 
 
-def test_stage_uploadrr_config_stages_qbit_with_only_the_url(tmp_path, monkeypatch):
-    from emuwarez_uploadrr.database import connect, init_db
-    from emuwarez_uploadrr.services.upload_execution import config as ue
-    from emuwarez_uploadrr.services.settings import set_setting
-    from emuwarez_uploadrr.services.uploadrr_yaml import get_block_key
-    config = tmp_path / "Uploadrr" / "data" / "config.yaml"
-    config.parent.mkdir(parents=True)
-    config.write_text("DEFAULT:\n  default_torrent_client: watch\n", encoding="utf-8")
-    monkeypatch.setattr(ue, "append_upload_log", lambda *a, **k: None)
-    conn = connect()
-    init_db(conn)
-    set_setting(conn, "qbit.url", "http://qbit.local:8080")
-    conn.commit()
-    conn.close()
-    ue._stage_uploadrr_config(1, str(tmp_path / "Uploadrr"))
-    assert get_block_key(read_config_lines(config), "DEFAULT", "default_torrent_client") == QBIT_CLIENT_KEY
+def test_la_subida_pone_qbit_con_solo_la_url(tmp_path, monkeypatch):
+    _poner_ajuste("qbit.url", "http://qbit.local:8080")
+    ruta = _preparar(tmp_path, monkeypatch, "DEFAULT:\n  default_torrent_client: watch\n")
+    assert get_block_key(read_config_lines(ruta), "DEFAULT", "default_torrent_client") == QBIT_CLIENT_KEY
 
 
 def test_stage_oxipng_on_activa_oxipng_con_nivel_2():
-    from emuwarez_uploadrr.services.uploadrr_config_staging import stage_oxipng_on
+    from emuwarez_uploadrr.services.uploadrr_config import stage_oxipng_on
     from emuwarez_uploadrr.services.uploadrr_yaml import get_block_key
     staged, _ = stage_oxipng_on(["SCREENS:", "  use_oxipng: false", "  oxipng_level: 4"])
     assert get_block_key(staged, "SCREENS", "use_oxipng") == "true"
@@ -859,14 +552,10 @@ def test_stage_oxipng_on_activa_oxipng_con_nivel_2():
     assert get_block_key(staged, "SCREENS", "oxipng_level") == "2"
 
 
-def test_stage_uploadrr_config_fuerza_oxipng(tmp_path, monkeypatch):
-    from emuwarez_uploadrr.services.upload_execution import config as ue
-    from emuwarez_uploadrr.services.uploadrr_yaml import get_block_key
-    config = tmp_path / "Uploadrr" / "data" / "config.yaml"
-    config.parent.mkdir(parents=True)
-    config.write_text("SCREENS:\n  use_oxipng: false\n", encoding="utf-8")
-    monkeypatch.setattr(ue, "append_upload_log", lambda *a, **k: None)
-    ue._stage_uploadrr_config(1, str(tmp_path / "Uploadrr"))
-    lineas = read_config_lines(config)
+def test_la_subida_fuerza_oxipng(tmp_path, monkeypatch):
+    ruta = _preparar(tmp_path, monkeypatch, "SCREENS:\n  use_oxipng: false\n")
+    lineas = read_config_lines(ruta)
     assert get_block_key(lineas, "SCREENS", "use_oxipng") == "true"
     assert get_block_key(lineas, "SCREENS", "oxipng_level") == "2"
+
+

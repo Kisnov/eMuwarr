@@ -48,11 +48,12 @@ reviews:
           original solo con st_nlink == 1, y el título interno del MKV igual (nunca con las pistas en «Ninguno»).
         - Nunca se borra nada fuera de la carpeta de subidas, ni un enlace que otra subida está sembrando.
         - Rutas comparadas por componentes (commonpath / en_carpeta_de_subidas), nunca con startswith.
-    - path: "emuwarez_uploadrr/services/{uploadrr_contract,uploadrr_progress,upload_result_parser,uploadrr_config_staging,uploadrr_yaml,upload_execution}.py"
+    - path: "emuwarez_uploadrr/services/{uploadrr_contract,uploadrr_progress,upload_result_parser,uploadrr_config,uploadrr_yaml,upload_execution}.py"
       instructions: |
         Contrato con Uploadrr-EMU (uploadrr-emu/): argv, claves de config.yaml y líneas de salida se cambian en los dos
         lados en el mismo PR. Uploadrr-EMU sale con 0 solo si subió algo, y el enlace del torrent sale de la línea `Torrent URL:`.
-        config.yaml se restaura desde data/config.yaml.bak tras cada trabajo. Los subprocesos van en su propio grupo
+        Cada trabajo lleva su config (--config, config_uploadrr/<job>.yaml); el config.yaml del usuario no se escribe.
+        Los subprocesos van en su propio grupo
         y se cancelan con killpg.
     - path: "emuwarez_uploadrr/database.py"
       instructions: |

@@ -1,7 +1,9 @@
-"""El config de Uploadrr-EMU de cada subida (`--config`): el mismo contenido que el staging en el config.yaml compartido.
+"""El config de Uploadrr-EMU de cada subida (`--config`), la migración del config.yaml.bak y lo que pasa con un
+Uploadrr-EMU que no lo admite.
 
-Los `.yaml` de `fixtures/config_uploadrr_por_subida/` salieron del staging tal como estaba antes de que existiera el
-fichero por subida (dev 05e505f4). Con REGENERAR_CONFIG_DORADA=1 se reescriben desde el staging; revisa el diff.
+Los `.yaml` de `fixtures/config_uploadrr_por_subida/` salieron del staging que había antes del fichero por subida
+(dev 05e505f4) y prueban que el contenido no cambió. Con REGENERAR_CONFIG_DORADA=1 el test del dorado los reescribe
+desde `preparar_config_de_la_subida`; revisa el diff antes de subirlos.
 """
 from __future__ import annotations
 
@@ -17,8 +19,8 @@ from emuwarez_uploadrr.services.settings import set_setting
 from emuwarez_uploadrr.services.upload_execution import build_uploadrr_execution_command, get_upload_job
 from emuwarez_uploadrr.services.upload_execution import config as ue
 from emuwarez_uploadrr.services.uploadrr_eventos import admite_config, ruta_eventos
-from emuwarez_uploadrr.web.app import _restore_interrupted_config
-from tests.test_eventos_uploadrr import CONTRATO, _crear_job, _lanzar, _poner_ajustes, _terminal
+from emuwarez_uploadrr.web.app import _preparar_configs_de_uploadrr
+from tests.test_eventos_uploadrr import CONTRATO, _crear_job, _esperar, _lanzar, _poner_ajustes, _terminal
 
 DORADOS = Path(__file__).parent / "fixtures" / "config_uploadrr_por_subida"
 
@@ -84,11 +86,7 @@ def _completo(uploadrr: Path) -> None:
     )
 
 
-def _desde_el_bak(uploadrr: Path) -> None:
-    # Una subida que murió dejó config.yaml stageado: la base es el .bak, y sin ajustes solo cambian los fijos.
-    (uploadrr / "data" / "config.yaml").write_text("DEFAULT:\n  tmdb: CLAVE_REAL_QUE_QUEDO\n", encoding="utf-8")
-    (uploadrr / "data" / "config.yaml.bak").write_text(
-        "DEFAULT:\n  tmdb: ''\n  add_logo: false\nSCREENS:\n  img_hosts: [imgbox]\n", encoding="utf-8")
+
 
 
 def _qui_y_almacen(uploadrr: Path) -> None:
@@ -102,7 +100,7 @@ def _qui_y_almacen(uploadrr: Path) -> None:
              hosts=(["imgbox"], {}))
 
 
-ESCENARIOS = {"completo": _completo, "desde_el_bak": _desde_el_bak, "qui_y_almacen": _qui_y_almacen}
+ESCENARIOS = {"completo": _completo, "qui_y_almacen": _qui_y_almacen}
 
 
 def _uploadrr(tmp_path: Path, escenario: str) -> Path:
@@ -121,15 +119,7 @@ def _bytes_de(uploadrr: Path) -> dict[str, bytes]:
     return {f.name: f.read_bytes() for f in sorted((uploadrr / "data").iterdir())}
 
 
-@pytest.mark.parametrize("escenario", ESCENARIOS)
-def test_el_staging_da_el_config_dorado(tmp_path, sin_registro, escenario):
-    uploadrr = _uploadrr(tmp_path, escenario)
-    staged = ue._stage_uploadrr_config(1, str(uploadrr))
-    obtenido = staged.read_bytes()
-    if os.environ.get("REGENERAR_CONFIG_DORADA"):
-        DORADOS.mkdir(exist_ok=True)
-        (DORADOS / f"{escenario}.yaml").write_bytes(obtenido)
-    assert obtenido == (DORADOS / f"{escenario}.yaml").read_bytes()
+
 
 
 @pytest.mark.parametrize("escenario", ESCENARIOS)
@@ -141,9 +131,11 @@ def test_el_config_de_la_subida_es_el_dorado_y_el_del_usuario_no_se_toca(tmp_pat
     ue.preparar_config_de_la_subida(7, str(uploadrr), ruta)
 
     assert ruta == tmp_path / "config_uploadrr" / "7.yaml"
+    if os.environ.get("REGENERAR_CONFIG_DORADA"):
+        DORADOS.mkdir(exist_ok=True)
+        (DORADOS / f"{escenario}.yaml").write_bytes(ruta.read_bytes())
     assert ruta.read_bytes() == (DORADOS / f"{escenario}.yaml").read_bytes()
     assert _bytes_de(uploadrr) == antes  # ni config.yaml ni .bak, que tampoco se crea
-    assert ue._config_stage_refcount == {}
 
 
 def test_cada_subida_tiene_el_suyo(tmp_path, sin_registro):
@@ -157,7 +149,6 @@ def test_cada_subida_tiene_el_suyo(tmp_path, sin_registro):
 
     assert not rutas[0].exists()
     assert rutas[1].read_bytes() == rutas[2].read_bytes() == (DORADOS / "completo.yaml").read_bytes()
-    assert ue._config_stage_refcount == {}
 
 
 @pytest.mark.skipif(os.name == "nt", reason="permisos POSIX")
@@ -202,7 +193,7 @@ def test_al_arrancar_se_barren_los_que_quedaron(tmp_path):
     eventos.mkdir()
     (eventos / "3.jsonl").write_text("", encoding="utf-8")
 
-    _restore_interrupted_config()
+    _preparar_configs_de_uploadrr()
 
     assert list(carpeta.iterdir()) == [] and (eventos / "3.jsonl").exists()
 
@@ -273,9 +264,11 @@ def test_la_subida_lanza_con_su_config_y_lo_borra(db_conn, tmp_path, monkeypatch
     if os.name != "nt":
         assert (leido["modo"], leido["modo_carpeta"]) == (0o600, 0o700)
     assert not ue.ruta_config(jid).exists() and not ruta_eventos(jid).exists()
-    assert _bytes_de(fake_uploadrr_emu_dir) == usuario and ue._config_stage_refcount == {}
-    # Lo mismo que el staging habría dejado en config.yaml con estos ajustes.
-    assert leido["contenido"] == ue._stage_uploadrr_config(jid, str(fake_uploadrr_emu_dir)).read_text(encoding="utf-8")
+    assert _bytes_de(fake_uploadrr_emu_dir) == usuario
+    # Lo que leyó es lo que prepara preparar_config_de_la_subida con estos ajustes.
+    esperado = tmp_path / "esperado.yaml"
+    ue.preparar_config_de_la_subida(jid, str(fake_uploadrr_emu_dir), esperado)
+    assert leido["contenido"] == esperado.read_text(encoding="utf-8")
 
 
 @pytest.mark.parametrize("guion", [[{"exit": 1}], [{"kill": 9}]], ids=["falla", "muere"])
@@ -292,16 +285,163 @@ def test_se_borra_tambien_si_uploadrr_falla_o_lo_matan(db_conn, tmp_path, monkey
     assert not ue.ruta_config(jid).exists()
 
 
-def test_con_un_uploadrr_que_no_lo_admite_se_stagea_como_siempre(db_conn, tmp_path, monkeypatch, fake_uploadrr_emu_dir,
-                                                                fake_uploadrr_python_path):
+def test_con_un_uploadrr_que_no_lo_admite_la_subida_falla_sin_lanzarlo(db_conn, tmp_path, monkeypatch,
+                                                                       fake_uploadrr_emu_dir,
+                                                                       fake_uploadrr_python_path):
     copia = _copia_de_lo_leido(tmp_path, monkeypatch)
-    original = (fake_uploadrr_emu_dir / "data" / "config.yaml").read_bytes()
+    usuario = _bytes_de(fake_uploadrr_emu_dir)
     _contrato_sin_config(fake_uploadrr_emu_dir)
     jid = _lanzar(db_conn, tmp_path, fake_uploadrr_emu_dir, fake_uploadrr_python_path, contrato=False)
-    job = _terminal(db_conn, jid)
+    # No hay proceso, así que no hay línea «Proceso …» que esperar (lo que espera _terminal).
+    assert _esperar(lambda: get_upload_job(jid, conn=db_conn)["status"] == "failed"), "la subida no falló"
+    job = get_upload_job(jid, conn=db_conn)
 
-    assert job["status"] == "completed"
-    assert "--config" not in json.loads(job["safe_command_json"])["args_preview"] and not copia.exists()
-    assert (fake_uploadrr_emu_dir / "data" / "config.yaml.bak").read_bytes() == original  # stageado...
-    assert (fake_uploadrr_emu_dir / "data" / "config.yaml").read_bytes() == original  # ...y restaurado
-    assert not (tmp_path / "config_uploadrr").exists() and ue._config_stage_refcount == {}
+    assert job["error_message"] == str(ue.sin_config_por_subida(str(fake_uploadrr_emu_dir)))
+    assert "es anterior a esta versión de eMuwarr" in job["error_message"]
+    assert not copia.exists()  # Uploadrr-EMU no llegó a ejecutarse
+    assert _bytes_de(fake_uploadrr_emu_dir) == usuario  # config.yaml intacto y sin .bak
+    assert "config.yaml.bak" not in usuario and not (tmp_path / "config_uploadrr").exists()
+
+
+# ---------------------------------------------------------------------------
+# migrar_config_bak: el config.yaml.bak de las versiones anteriores pasa a ser config.yaml
+# ---------------------------------------------------------------------------
+
+solo_con_enlaces = pytest.mark.skipif(os.name == "nt", reason="enlaces simbólicos POSIX")
+
+
+def _uploadrr_en_ajustes(carpeta: Path) -> None:
+    conn = connect()
+    init_db(conn)
+    set_setting(conn, "uploadrr.path", str(carpeta))
+    conn.commit()
+    conn.close()
+
+
+def test_migrar_sin_bak_no_cambia_nada(tmp_path):
+    uploadrr = _uploadrr(tmp_path, "completo")
+    _uploadrr_en_ajustes(uploadrr)
+    antes = _bytes_de(uploadrr)
+
+    assert ue.migrar_config_bak() is False
+    assert _bytes_de(uploadrr) == antes
+
+
+def test_migrar_con_un_bak_distinto_lo_pone_en_config_y_lo_aparta(tmp_path):
+    uploadrr = _uploadrr(tmp_path, "completo")
+    _uploadrr_en_ajustes(uploadrr)
+    data = uploadrr / "data"
+    (data / "config.yaml").write_text("DEFAULT:\n  tmdb: CLAVE_STAGEADA\n", encoding="utf-8")
+    (data / "config.yaml.bak").write_bytes(b"DEFAULT:\n  tmdb: ''\n  add_logo: false\n")
+
+    assert ue.migrar_config_bak() is True
+
+    assert (data / "config.yaml").read_bytes() == b"DEFAULT:\n  tmdb: ''\n  add_logo: false\n"
+    assert (data / "config.yaml.migrado").read_bytes() == (data / "config.yaml").read_bytes()
+    assert not (data / "config.yaml.bak").exists()
+    assert ue.migrar_config_bak() is False  # una sola vez
+
+
+@pytest.mark.parametrize("donde", ["al escribir", "al sustituir"])
+def test_migrar_si_falla_a_medias_no_deja_el_config_cortado(tmp_path, monkeypatch, donde):
+    """Se escribe aparte y se renombra: un fallo (disco lleno) a media escritura o al sustituir deja config.yaml y
+    el .bak como estaban."""
+    from emuwarez_uploadrr.services.upload_execution import config as cfg
+
+    uploadrr = _uploadrr(tmp_path, "completo")
+    _uploadrr_en_ajustes(uploadrr)
+    data = uploadrr / "data"
+    antes, bak = b"DEFAULT:\n  tmdb: CLAVE_STAGEADA\n", b"DEFAULT:\n  tmdb: ''\n  add_logo: false\n"
+    (data / "config.yaml").write_bytes(antes)
+    (data / "config.yaml.bak").write_bytes(bak)
+    fdopen = cfg.os.fdopen
+
+    class EscribeLaMitad:
+        def __init__(self, fd, modo):
+            self.fichero = fdopen(fd, modo)
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_exc):
+            self.fichero.close()
+
+        def write(self, datos):
+            self.fichero.write(datos[: len(datos) // 2])
+            raise OSError(28, "No space left on device")
+
+    def disco_lleno(*_a):
+        raise OSError(28, "No space left on device")
+
+    if donde == "al escribir":
+        monkeypatch.setattr(cfg.os, "fdopen", EscribeLaMitad)
+    else:
+        monkeypatch.setattr(cfg.os, "replace", disco_lleno)
+    with pytest.raises(OSError):
+        ue.migrar_config_bak()
+
+    assert (data / "config.yaml").read_bytes() == antes and (data / "config.yaml.bak").read_bytes() == bak
+    assert sorted(f.name for f in data.iterdir()) == ["config.yaml", "config.yaml.bak"]  # sin el temporal
+
+
+def test_migrar_con_un_bak_igual_solo_lo_renombra(tmp_path):
+    uploadrr = _uploadrr(tmp_path, "completo")
+    _uploadrr_en_ajustes(uploadrr)
+    data = uploadrr / "data"
+    (data / "config.yaml.bak").write_bytes((data / "config.yaml").read_bytes())
+    antes = (data / "config.yaml").read_bytes()
+
+    assert ue.migrar_config_bak() is True
+
+    assert (data / "config.yaml").read_bytes() == antes
+    assert (data / "config.yaml.migrado").read_bytes() == antes
+    assert not (data / "config.yaml.bak").exists()
+
+
+def test_migrar_sin_config_yaml_crea_el_config_desde_el_bak(tmp_path):
+    uploadrr = tmp_path / "Uploadrr"
+    (uploadrr / "data").mkdir(parents=True)
+    _uploadrr_en_ajustes(uploadrr)
+    (uploadrr / "data" / "config.yaml.bak").write_bytes(b"DEFAULT:\n  tmdb: ''\n")
+
+    assert ue.migrar_config_bak() is True
+    assert (uploadrr / "data" / "config.yaml").read_bytes() == b"DEFAULT:\n  tmdb: ''\n"
+
+
+@solo_con_enlaces
+def test_migrar_en_la_imagen_busca_el_bak_junto_al_destino_del_enlace(tmp_path):
+    """Como la imagen: data/config.yaml es un enlace a /config/Uploadrr, y el .bak vive junto a su destino."""
+    estado = tmp_path / "estado"
+    estado.mkdir()
+    data = tmp_path / "Uploadrr" / "data"
+    data.mkdir(parents=True)
+    (estado / "config.yaml").write_bytes(b"DEFAULT:\n  tmdb: CLAVE_STAGEADA\n")
+    (estado / "config.yaml.bak").write_bytes(b"DEFAULT:\n  tmdb: ''\n")
+    (data / "config.yaml").symlink_to(estado / "config.yaml")
+    _uploadrr_en_ajustes(tmp_path / "Uploadrr")
+
+    assert ue.migrar_config_bak() is True
+
+    assert (data / "config.yaml").is_symlink()
+    assert (estado / "config.yaml").read_bytes() == b"DEFAULT:\n  tmdb: ''\n"
+    assert (estado / "config.yaml.migrado").read_bytes() == b"DEFAULT:\n  tmdb: ''\n"
+    assert sorted(f.name for f in estado.iterdir()) == ["config.yaml", "config.yaml.migrado"]
+    assert [f.name for f in data.iterdir()] == ["config.yaml"]
+
+
+def test_al_arrancar_se_migra_el_bak_y_se_barren_los_config(tmp_path):
+    uploadrr = _uploadrr(tmp_path, "completo")
+    _uploadrr_en_ajustes(uploadrr)
+    data = uploadrr / "data"
+    (data / "config.yaml.bak").write_bytes(b"DEFAULT:\n  tmdb: ''\n")
+    carpeta = tmp_path / "config_uploadrr"
+    carpeta.mkdir()
+    (carpeta / "3.yaml").write_text("TRACKERS:\n  EMU:\n    api_key: de-una-subida-muerta\n", encoding="utf-8")
+
+    _preparar_configs_de_uploadrr()
+
+    assert (data / "config.yaml").read_bytes() == b"DEFAULT:\n  tmdb: ''\n"
+    assert (data / "config.yaml.migrado").exists() and not (data / "config.yaml.bak").exists()
+    assert list(carpeta.iterdir()) == []
+
+

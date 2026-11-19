@@ -50,6 +50,8 @@ def uploadrr(db_conn, tmp_path):
     carpeta = tmp_path / "Uploadrr"
     carpeta.mkdir()
     (carpeta / "upload.py").write_text("# stub")
+    # Anuncia --config (y --eventos): sin él la app no lo lanza.
+    shutil.copy(Path(__file__).parent / "fixtures" / "contrato_eventos.json", carpeta / "contrato_eventos.json")
     for clave, valor in (("uploadrr_path", str(carpeta)), ("emu_api_key", CLAVE_EMU), ("tmdb_api_key", "tmdb_x")):
         db_conn.execute("INSERT OR REPLACE INTO settings (key, value, is_secret) VALUES (?, ?, 0)", (clave, valor))
     db_conn.commit()
@@ -133,7 +135,12 @@ def test_el_comando_del_trabajo_solo_añade_solo_cliente(db_conn, tmp_path, uplo
     job = get_upload_job(_job(db_conn, tmp_path))
     normal = build_uploadrr_execution_command(job, conn=db_conn)
     reenvio = build_uploadrr_execution_command(job, conn=db_conn, solo_cliente="4242")
-    assert reenvio["args"] == normal["args"] + ["--resume", "--solo-cliente", "4242"]
+
+    def sin_ficheros(args):  # --eventos y --config llevan los ficheros de cada ejecución
+        return [a for i, a in enumerate(args) if i == 0 or args[i - 1] not in ("--eventos", "--config")]
+
+    assert sin_ficheros(reenvio["args"]) == sin_ficheros(normal["args"])[:-2] + [
+        "--resume", "--solo-cliente", "4242", "--eventos", "--config"]
     assert reenvio["executable"] == normal["executable"] and reenvio["cwd"] == normal["cwd"]
 
 
@@ -203,7 +210,7 @@ def test_reenvio_bien(db_conn, tmp_path, uploadrr, avisos, monkeypatch):
         assert reenviar_a_qbittorrent(jid, wait=True)["ok"] is True
 
     argv = popen.call_args.args[0]
-    assert argv[-3:] == ["--resume", "--solo-cliente", "4242"]
+    assert argv[argv.index("--solo-cliente") - 1:argv.index("--solo-cliente") + 2] == ["--resume", "--solo-cliente", "4242"]
     despues = _fila(db_conn, jid)
     assert despues["reenvio_qbit_estado"] == "ok" and despues["reenvio_qbit_at"]
     for campo in ("status", "stage", "finished_at", "duration_seconds", "result_url", "result_torrent_id",

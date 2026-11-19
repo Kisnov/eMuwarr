@@ -299,13 +299,12 @@ def test_cancel_running_job_marks_cancelled(db_conn, tmp_path, fake_uploadrr_emu
     assert job["status"] == "cancelled"
 
     # Give the background thread (killed subprocess + its reader threads +
-    # config restore) time to fully wind down before the test's isolated_db
+    # config cleanup) time to fully wind down before the test's isolated_db
     # tmp_path is torn down — otherwise it can leak a stray write into the
     # *next* test's fresh database once CONFIG_DIR is repointed.
     time.sleep(1.0)
 
-    # Cancelar con Uploadrr en marcha no deja estado colgado: el config.yaml
-    # vuelve a ser el de antes y nadie lo da por stageado.
-    from emuwarez_uploadrr.services import upload_execution as ue
+    # Cancelar con Uploadrr en marcha no deja nada colgado: el config.yaml no se
+    # ha tocado y el de la subida (con las claves) ya no está.
     assert config.read_bytes() == config_original
-    assert ue._config_stage_refcount == {}
+    assert not any((db_path().parent / "config_uploadrr").glob("*"))
