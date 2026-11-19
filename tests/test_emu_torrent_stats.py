@@ -134,3 +134,14 @@ def test_el_endpoint_da_404_sin_ficha_y_200_con_ella(client, auth_headers, conn,
     r = client.get(f"/api/uploads/{job}/tracker-stats", headers=auth_headers)
     assert r.status_code == 200
     assert r.json()["completadas"] == 15 and "clave-secreta" not in r.text
+
+
+def test_un_404_es_que_eMuwarez_aun_no_la_ensena(conn, monkeypatch):
+    """Pendiente de moderación: eMuwarez no la da hasta que la aprueban. No es un fallo del tracker."""
+    def no_esta(api_key, torrent_id, base_url=None):
+        raise IntegrationError("eMuwarez: HTTP 404", status=404)
+
+    monkeypatch.setattr(ets, "emu_get_torrent", no_esta)
+    datos = estadisticas_de_la_subida(conn, _subida(conn))
+    assert datos["aplica"] and not datos["disponible"] and datos["pendiente_moderacion"] is True
+    assert "pendiente de moderación" in datos["mensaje"] and "404" not in datos["mensaje"]

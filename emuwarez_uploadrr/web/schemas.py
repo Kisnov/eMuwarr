@@ -1192,6 +1192,8 @@ class UploadJobDetail(BaseModel):
     reenvio_qbit_estado: Optional[str] = None
     reenvio_qbit_at: Optional[str] = None
     puede_reenviar_qbit: bool = False
+    # En eMuwarez, pendiente de que un moderador la apruebe (services/mis_torrents.py, pendiente_de_moderacion).
+    pendiente_moderacion: bool = False
     # Read-only snapshots taken at apply time — the nomenclature field
     # breakdown and the applied remux track plan, neither of which survive
     # anywhere else once nomenclature.py/mkv_remux.py return. Backs the job

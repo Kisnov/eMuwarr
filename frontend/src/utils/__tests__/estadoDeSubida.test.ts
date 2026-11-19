@@ -20,6 +20,12 @@ describe('estadoVisible', () => {
     expect(e.seeding?.clase).toContain('status-available')
   })
 
+  it('pendiente_moderacion se marca solo en una completada que lo trae', () => {
+    expect(estadoVisible(subida({ result_url: 'x', pendiente_moderacion: true }), null).pendienteModeracion).toBe(true)
+    expect(estadoVisible(subida({ result_url: 'x' }), null).pendienteModeracion).toBeUndefined()
+    expect(estadoVisible(subida({ status: 'failed', pendiente_moderacion: true }), null).pendienteModeracion).toBeUndefined()
+  })
+
   it('sin datos de qBittorrent no inventa el seeding', () => {
     expect(estadoVisible(subida({ result_url: 'https://emu/t/1' }), null).seeding).toBeUndefined()
   })

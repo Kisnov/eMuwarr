@@ -378,9 +378,11 @@ class Uploadrr:
             eventos.cliente_fallo("sin_emu")
             return "--solo-cliente necesita -tk EMU"
         emu = tracker_registry["EMU"]["class"](config=self.config)
-        torrent = await emu.descargar_subido(meta, meta["solo_cliente"])
+        torrent, motivo = await emu.descargar_subido(meta, meta["solo_cliente"])
         if torrent is None:
-            eventos.cliente_fallo("sin_torrent")
+            eventos.cliente_fallo(motivo)
+            if motivo == "no_visible":
+                return "EMU no da el torrent (¿pendiente de moderación o retirado?)"
             return "No se pudo bajar el .torrent de EMU"
         # La subida son hardlinks a la biblioteca: con otros ficheros, qBittorrent descargaría encima de los originales.
         distinto = fichero_distinto(torrent, Path(meta["path"]))

@@ -429,3 +429,11 @@ def test_reenvio_con_contrato_pero_sin_eventos_lee_el_texto(db_conn, tmp_path, u
     with patch(POPEN, return_value=_proc(0, ["Added to: qbit" + chr(10)])):
         reenviar_a_qbittorrent(jid, wait=True)
     assert _fila(db_conn, jid)["reenvio_qbit_estado"] == "ok" and QBIT_AÑADIDO in _mensajes(jid)
+
+
+def test_los_mensajes_del_reenvio_no_hablan_de_subir():
+    from emuwarez_uploadrr.services.upload_execution.comun import mensaje_qbit_fallo
+    assert "justo después de subir" in mensaje_qbit_fallo("sin_torrent")
+    reenvio = mensaje_qbit_fallo("sin_torrent", reenvio=True)
+    assert "subir" not in reenvio and "más arriba" not in reenvio
+    assert "pendiente de moderación" in mensaje_qbit_fallo("no_visible", reenvio=True)

@@ -5,11 +5,15 @@ recorrido largo del limitador) cada 6 horas, con la tarea «Leer tus subidas en 
 marcha, como el catálogo: Uploadrr-EMU gasta llamadas de la misma clave y no pasa por el limitador. eMuwarez guarda
 cada consulta unos minutos, así que pedirla más a menudo no daría cifras más frescas.
 
-UNIT3D no da las subidas anónimas al buscar por usuario, así que no salen.
+UNIT3D no da las subidas anónimas al buscar por usuario, así que no salen. Tampoco las que siguen pendientes de
+moderación (en eMuwarez, hasta que un moderador las aprueba, a veces un día): `pendiente_de_moderacion` lo deduce de
+eso, sin pedir nada más al tracker.
 """
 from __future__ import annotations
 
+import json
 import logging
+import shlex
 import sqlite3
 import threading
 from datetime import datetime, timedelta
@@ -109,6 +113,46 @@ def _sincronizar(conn: sqlite3.Connection, ahora: Optional[datetime]) -> tuple[s
         raise
     sin_seeders = sum(1 for f in filas if f[4] == 0)
     return "completed", f"{len(filas)} subidas, {sin_seeders} sin seeders"
+
+
+def lectura_para_moderacion(conn: sqlite3.Connection) -> Optional[tuple[datetime, frozenset[int]]]:
+    """(cuándo, ids) de la última lectura de tus subidas, para `pendiente_de_moderacion`; None si no hay una del usuario
+    de Ajustes. Una consulta: se pide una vez para toda la lista de subidas."""
+    estado = get_json_state(conn, ESTADO) or {}
+    usuario = (get_setting_canonical(conn, "emu.username") or "").strip()
+    if not estado.get("leido_at") or estado.get("usuario") != usuario:
+        return None
+    ids = frozenset(fila[0] for fila in conn.execute("SELECT torrent_id FROM emu_mis_torrents"))
+    return datetime.fromisoformat(estado["leido_at"]).astimezone(), ids
+
+
+def _anonima(job: dict[str, Any]) -> bool:
+    """Si se subió con `-a`: eMuwarez no la da al buscar por usuario, salga o no de moderación."""
+    try:
+        texto = json.loads(job.get("safe_command_json") or "{}").get("args_preview") or ""
+    except (ValueError, AttributeError):
+        return False
+    try:
+        return "-a" in shlex.split(texto)
+    except ValueError:
+        return "-a" in texto.split()
+
+
+def pendiente_de_moderacion(job: dict[str, Any], lectura: Optional[tuple[datetime, frozenset[int]]]) -> bool:
+    """Una subida completada, con su torrent en eMuwarez y no anónima, que no sale en una lectura de tus subidas hecha
+    después de terminar: eMuwarez no da las que un moderador aún no ha aprobado. Una rechazada o borrada se ve igual, y
+    una recién aprobada sigue así hasta la lectura siguiente (cada 6 horas)."""
+    if lectura is None or job.get("status") != "completed" or _anonima(job):
+        return False
+    torrent_id = _entero(job.get("result_torrent_id"))
+    try:
+        terminada = datetime.fromisoformat(str(job.get("finished_at") or "").replace("Z", "+00:00"))
+    except ValueError:
+        return False
+    if torrent_id is None or terminada.tzinfo is None:
+        return False
+    leido_at, ids = lectura
+    return terminada < leido_at and torrent_id not in ids
 
 
 def _dia_local(fecha_iso: Optional[str]) -> str:

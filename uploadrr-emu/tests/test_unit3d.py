@@ -967,3 +967,17 @@ def test_con_el_limite_lleno_la_subida_espera_y_luego_pide(tracker, emu, meta, t
     assert time.monotonic() - inicio >= 0.3 and len(tracker.requests) == 1
     out = capsys.readouterr().out
     assert "espera de 60 s" in out and "se pide igualmente" in out and TOKEN not in out
+
+
+@pytest.mark.parametrize("respuesta, motivo", [
+    ((404, {"message": "No query results"}), "no_visible"),
+    ((500, b"error"), "sin_torrent"),
+    ((200, {"data": {"attributes": {}}}), "sin_torrent"),
+], ids=["404-pendiente", "http-500", "sin-enlace"])
+def test_solo_cliente_dice_por_que_no_bajo_el_torrent(tracker, upload_meta, emu, capsys, respuesta, motivo):
+    """Un 404 es que la API aún no lo da (en eMuwarez, pendiente de moderación): el evento lo dice aparte."""
+    tracker.routes[("GET", API_TORRENT)] = lambda q: respuesta
+    emu.domain = tracker.url
+    assert run(emu.descargar_subido(upload_meta, 42)) == (None, motivo)
+    if motivo == "no_visible":
+        assert "pendiente de moderación" in capsys.readouterr().out

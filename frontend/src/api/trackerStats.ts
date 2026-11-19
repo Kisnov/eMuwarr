@@ -6,6 +6,8 @@ export interface TrackerStats {
   configurado: boolean
   disponible: boolean
   mensaje: string | null
+  // eMuwarez aún no enseña el torrent (pendiente de moderación o retirado): `mensaje` lo explica.
+  pendiente_moderacion?: boolean
   actualizado: string | null
   seeders?: number | null
   leechers?: number | null

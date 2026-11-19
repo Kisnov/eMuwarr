@@ -25,6 +25,7 @@ from ...services.upload_execution import (
 )
 from ...services.subida_pasos import NOMBRES, pasos_de_subida, reanudar_desde, subpasos_que_reutilizaria
 from ...services import lotes
+from ...services.mis_torrents import lectura_para_moderacion, pendiente_de_moderacion
 from ...services.lotes import PATRON_LOTE_ID, contar_por_lote
 from ...services.trailer_check import marcar_trailer_a_mano
 from ...services.upload_queue import get_queue_positions
@@ -134,6 +135,7 @@ def _job_to_detail(
     queue_total: int | None = None,
     release_groups: list[str] | None = None,
     lote_total: int | None = None,
+    pendiente_moderacion: bool = False,
 ) -> UploadJobDetail:
     prepared = j.get("prepared_path")
     source = j.get("source_path") or j.get("path")
@@ -197,6 +199,7 @@ def _job_to_detail(
         reenvio_qbit_estado=j.get("reenvio_qbit_estado"),
         reenvio_qbit_at=j.get("reenvio_qbit_at"),
         puede_reenviar_qbit=puede_reenviar_qbit(j),
+        pendiente_moderacion=pendiente_moderacion,
         nomenclature_snapshot=_extract_json_dict(j, "nomenclature_snapshot_json"),
         remux_snapshot=_extract_json_dict(j, "remux_snapshot_json"),
         checks_snapshot=_extract_json_dict(j, "checks_snapshot_json"),
@@ -332,12 +335,14 @@ def get_uploads(
         fichas = library_display_fields({j.get("library_item_id") for j in jobs}, conn)
         # El «Lote · N» de cada fila, en una sola consulta para toda la página.
         lotes = contar_por_lote(conn, (j.get("lote_id") for j in jobs))
+        lectura = lectura_para_moderacion(conn)
     return [
         _con_ficha(
             j, fichas.get(j.get("library_item_id")),
             queue_position=queue_positions.get(j.get("id"), (None, None))[0],
             queue_total=queue_positions.get(j.get("id"), (None, None))[1],
             lote_total=lotes.get(j.get("lote_id")),
+            pendiente_moderacion=pendiente_de_moderacion(j, lectura),
         )
         for j in jobs
     ]
@@ -451,8 +456,9 @@ def get_upload(job_id: int, current_user: dict = Depends(require_auth)):
         row = library_display_fields_one(job["library_item_id"], conn) if job.get("library_item_id") else None
         display_title = content_display_title(conn, row) if row else None
         lote_total = contar_por_lote(conn, [job["lote_id"]]).get(job["lote_id"]) if job.get("lote_id") else None
+        pendiente = pendiente_de_moderacion(job, lectura_para_moderacion(conn))
     return _con_ficha(job, row, display_title=display_title, queue_position=queue_position, queue_total=queue_total,
-                      lote_total=lote_total)
+                      lote_total=lote_total, pendiente_moderacion=pendiente)
 
 
 @router.get("/uploads/{job_id}/logs", response_model=UploadJobLogsResponse)

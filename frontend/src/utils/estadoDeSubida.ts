@@ -3,6 +3,13 @@ import type { UploadJob } from '../types/api'
 import { claseSeeding, seedingDe } from './seeding'
 import { currentPhaseInfo, phaseLabel, progressCounter, queuedWaitText, statusLabel } from './uploadStatus'
 
+// El chip de una subida que eMuwarez aún no enseña, con su ayuda (la marca sale de «Tus subidas», leída cada 6 h).
+export const PENDIENTE_MODERACION = {
+  texto: 'Pendiente de moderación',
+  clase: 'badge status-partial',
+  ayuda: 'eMuwarez aún no enseña este torrent: está pendiente de moderación (hasta 24 h). Se deduce de «Tus subidas», que se lee cada 6 horas: una subida recién aprobada puede seguir marcada un rato, y una rechazada o borrada se ve igual.',
+}
+
 // El estado de una subida tal como lo abre el detalle: una frase, su tono (el único color de la cabecera) y,
 // si falló o quedó a medias, el motivo.
 export type Tono = 'ok' | 'aviso' | 'error' | 'curso' | 'neutro'
@@ -19,6 +26,8 @@ export interface EstadoVisible {
   transcurrido?: string
   // El estado en qBittorrent de una subida completada, con la clase de insignia de Seeding.
   seeding?: { texto: string; clase: string }
+  // Completada, pero eMuwarez aún no la enseña (ver PENDIENTE_MODERACION).
+  pendienteModeracion?: boolean
 }
 
 // Llegó a eMuwarez pero el añadido a qBittorrent falló (la fase queda «fallida» aunque la subida esté completada).
@@ -37,12 +46,13 @@ export function estadoVisible(job: UploadJob, seeding: SeedingResponse | null): 
       const enQbit = i ? { texto: `${i.etiqueta} en qBittorrent`, clase: claseSeeding(i.estado) } : undefined
       const sinQbit = noLlegoAQbit(job)
       const titulo = job.result_url ? 'Subido a eMuwarez' : 'Subida completada'
+      const pendienteModeracion = job.pendiente_moderacion || undefined
       if (sinQbit) {
-        return { tono: 'aviso', simbolo: '!', titulo, seeding: enQbit,
+        return { tono: 'aviso', simbolo: '!', titulo, seeding: enQbit, pendienteModeracion,
           motivo: 'El torrent está en eMuwarez, pero no se pudo añadir a qBittorrent: '
             + (job.puede_reenviar_qbit ? 'usa «Reenviar a qBittorrent» o añádelo a mano.' : 'añádelo a mano para sembrarlo.') }
       }
-      return { tono: 'ok', simbolo: '✓', titulo, seeding: enQbit }
+      return { tono: 'ok', simbolo: '✓', titulo, seeding: enQbit, pendienteModeracion }
     }
     case 'failed': {
       const paso = pasoDe(job, 'fallido')
