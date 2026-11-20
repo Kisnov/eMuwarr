@@ -36,7 +36,7 @@ def get_database_maintenance_status() -> dict:
         page_count = conn.execute("PRAGMA page_count").fetchone()[0]
         freelist = conn.execute("PRAGMA freelist_count").fetchone()[0]
         conn.close()
-        size_bytes = db.stat().st_size
+        size_bytes = _size_on_disk(db)
         return {
             "ok": True,
             "db_path": str(db),
@@ -242,7 +242,9 @@ def podar_avisos_leidos(conn: sqlite3.Connection, dias: int, ahora: Optional[dat
 def optimizar_base(conn: sqlite3.Connection) -> bool:
     """PRAGMA optimize y vaciar el WAL. False si una lectura en curso no ha dejado vaciarlo del todo."""
     conn.commit()
-    conn.execute("PRAGMA optimize")
+    # 0x10000: todas las tablas, no solo las que ha leído esta conexión (la del planificador no lee la biblioteca);
+    # 0x10: con analysis_limit, para no tener el bloqueo mucho rato. Son de SQLite 3.46 (la imagen); antes se ignoran.
+    conn.execute("PRAGMA optimize(0x10012)")
     return conn.execute("PRAGMA wal_checkpoint(TRUNCATE)").fetchone()[0] == 0
 
 

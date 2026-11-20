@@ -53,6 +53,24 @@ def test_un_fallo_de_codigo_no_se_disfraza_de_caida_de_la_base(client, auth_head
     assert sin_relanzar.get("/api/auth/me", headers=auth_headers).status_code == 500
 
 
+def test_una_base_bloqueada_a_media_peticion_es_503(client, auth_headers, monkeypatch):
+    """Pasados los 5 s de busy_timeout dentro de un endpoint: antes era el 500 genérico, sin Retry-After."""
+    monkeypatch.setattr("emuwarez_uploadrr.services.library.get_dashboard_summary", _bloqueada)
+    resp = client.get("/api/dashboard/summary", headers=auth_headers)
+    assert resp.status_code == 503
+    assert resp.headers["retry-after"]
+
+
+def test_otro_error_de_sqlite_a_media_peticion_sigue_siendo_500(auth_headers, monkeypatch):
+    def _sin_tabla(*_a, **_k):
+        raise sqlite3.OperationalError("no such table: nada")
+
+    from emuwarez_uploadrr.web.app import create_app
+    monkeypatch.setattr("emuwarez_uploadrr.services.library.get_dashboard_summary", _sin_tabla)
+    sin_relanzar = TestClient(create_app(), raise_server_exceptions=False)
+    assert sin_relanzar.get("/api/dashboard/summary", headers=auth_headers).status_code == 500
+
+
 def test_un_token_que_no_existe_sigue_siendo_401(client, auth_headers):
     resp = client.get("/api/auth/me", headers={"Authorization": "Bearer no-existe"})
     assert resp.status_code == 401

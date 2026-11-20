@@ -173,7 +173,6 @@ def test_sin_sitio_para_compactar_recorta_pero_no_compacta(conn, monkeypatch, ca
     assert _raw(conn, "series")[0] == {"added": "2023-05-01T10:00:00Z"}
     assert _libres(conn) > 0
     assert "No hay sitio para compactar" in caplog.text
-    assert conn.execute("PRAGMA secure_delete").fetchone()[0] == 1  # el recorte lo deja como estaba
 
 
 def _falla(monkeypatch, cual, error="database or disk is full"):

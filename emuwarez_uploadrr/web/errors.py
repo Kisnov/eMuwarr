@@ -1,10 +1,15 @@
 """Error handlers and exception types for the web API."""
 from __future__ import annotations
 
+import sqlite3
+
 from fastapi import Request
 from fastapi.encoders import jsonable_encoder
+from fastapi.exception_handlers import http_exception_handler
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
+
+from .dependencies import base_no_disponible
 
 
 # Pydantic repite en cada error el valor recibido (`input`) y, a veces, la excepción que lo
@@ -21,6 +26,14 @@ async def validation_error_handler(request: Request, exc: RequestValidationError
         for error in jsonable_encoder(exc.errors())
     ]
     return JSONResponse(status_code=422, content={"detail": errores})
+
+
+async def base_ocupada_handler(request: Request, exc: sqlite3.OperationalError) -> Response:
+    """Un «database is locked» a media petición (pasados los 5 s de busy_timeout) es pasajero: 503 con Retry-After,
+    como cuando no se puede abrir la base. Cualquier otro OperationalError sigue siendo un 500."""
+    if "locked" not in str(exc):
+        raise exc
+    return await http_exception_handler(request, base_no_disponible(f"{request.method} {request.url.path}"))
 
 
 async def generic_error_handler(request: Request, exc: Exception) -> JSONResponse:

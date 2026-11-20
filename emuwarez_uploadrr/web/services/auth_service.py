@@ -172,10 +172,14 @@ def _apuntar_uso(conn: sqlite3.Connection, token_hash: str) -> None:
     if ahora - _apuntadas.get(token_hash, -_APUNTAR_CADA_SEGUNDOS) < _APUNTAR_CADA_SEGUNDOS:
         return
     _apuntadas[token_hash] = ahora
+    espera = conn.execute("PRAGMA busy_timeout").fetchone()[0]
+    conn.execute("PRAGMA busy_timeout = 0")
     try:
         conn.execute("UPDATE auth_sessions SET last_used_at = CURRENT_TIMESTAMP WHERE token_hash = ?", (token_hash,))
     except sqlite3.OperationalError:
         logger.debug("No se pudo apuntar el uso de la sesión (base ocupada)", exc_info=True)
+    finally:
+        conn.execute(f"PRAGMA busy_timeout = {int(espera)}")
 
 
 def list_sessions(conn: sqlite3.Connection, user_id: int, token: str) -> list[dict]:
