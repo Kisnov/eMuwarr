@@ -11,6 +11,7 @@ import pytest
 from emuwarez_uploadrr.database import connect, db, db_path, get_state, init_db, olvidar_esquema, set_state
 from emuwarez_uploadrr.services import backup_service as bs
 from emuwarez_uploadrr.services.notification_center import list_notifications
+from emuwarez_uploadrr.services.settings import get_setting_canonical, set_setting
 from emuwarez_uploadrr.services.scheduler import TASK_BACKUP, run_scheduled_task
 
 solo_posix = pytest.mark.skipif(os.name == "nt", reason="los permisos son de POSIX")
@@ -68,19 +69,32 @@ def test_restaurar_guarda_antes_lo_que_habia_y_esa_copia_lo_deshace(cfg):
     assert _restaurar(bs.get_backup_dir() / previa)["ok"] and _marca() == "después"
 
 
-def test_deja_las_ultimas_cinco_de_antes_de_restaurar_y_nunca_la_que_se_restaura(cfg):
+def test_deja_las_ultimas_cinco_de_antes_de_restaurar_y_nunca_la_restaurada_ni_la_nueva(cfg):
     carpeta = bs.get_backup_dir()
-    # La más antigua es la que se restaura: la retención no puede llevársela a mitad.
     restaurada = carpeta / f"{bs.PREFIJO_ANTES_DE_RESTAURAR}20260101_000000_with_secrets.tar.gz"
     os.replace(bs.create_config_backup()["archive_path"], restaurada)
-    for dia in range(2, 7):
-        (carpeta / f"{bs.PREFIJO_ANTES_DE_RESTAURAR}2026010{dia}_000000_with_secrets.tar.gz").write_bytes(b"x")
+    # Con el reloj atrasado, la nueva y la restaurada son las más antiguas: tampoco se van.
+    for dia in range(1, 7):
+        (carpeta / f"{bs.PREFIJO_ANTES_DE_RESTAURAR}2027010{dia}_000000_with_secrets.tar.gz").write_bytes(b"x")
 
-    assert _restaurar(restaurada)["ok"]
+    previa = _restaurar(restaurada)["copia_previa"]
 
     quedan = sorted(c.name for c in carpeta.glob(f"{bs.PREFIJO_ANTES_DE_RESTAURAR}*"))
-    assert len(quedan) == 6 and quedan[0] == restaurada.name
-    assert f"{bs.PREFIJO_ANTES_DE_RESTAURAR}20260102_000000_with_secrets.tar.gz" not in quedan
+    assert len(quedan) == 7 and quedan[:2] == [restaurada.name, previa]
+    assert f"{bs.PREFIJO_ANTES_DE_RESTAURAR}20270101_000000_with_secrets.tar.gz" not in quedan
+
+
+def test_deshacer_devuelve_tambien_las_claves_que_estaban_vacias(cfg):
+    with db() as conn:
+        set_setting(conn, "tmdb.api_key", "clave-de-la-copia")
+    con_clave = bs.create_config_backup(include_secrets=True, confirmation=bs.RESTORE_CONFIRMATION)["archive_path"]
+    with db() as conn:
+        set_setting(conn, "tmdb.api_key", "")
+
+    previa = _restaurar(con_clave)["copia_previa"]
+    assert _restaurar(bs.get_backup_dir() / previa)["ok"]
+    with db() as conn:
+        assert not get_setting_canonical(conn, "tmdb.api_key")
 
 
 def test_sin_poder_guardar_lo_que_habia_no_se_restaura_nada(cfg, monkeypatch):
@@ -114,11 +128,12 @@ def test_una_copia_truncada_da_un_error_claro_y_no_toca_nada(cfg):
     buena = bs.get_backup_dir() / bs.create_config_backup()["archive_name"]
     datos = buena.read_bytes()
     truncada = buena.with_name("emuwarez_config_20260101_000000.tar.gz")
-    truncada.write_bytes(datos[: len(datos) // 2])
     _marcar("después")
 
-    for r in (bs.restore_config_backup(str(truncada), dry_run=True), _restaurar(truncada)):
-        assert not r["ok"] and "incompleto o dañado" in r["error"]
+    for corte in (len(datos) // 2, 2):  # a medias, o solo la cabecera de gzip
+        truncada.write_bytes(datos[:corte])
+        for r in (bs.restore_config_backup(str(truncada), dry_run=True), _restaurar(truncada)):
+            assert not r["ok"] and "incompleto o dañado" in r["error"]
     assert _marca() == "después"
     assert not list(bs.get_backup_dir().glob(f"{bs.PREFIJO_ANTES_DE_RESTAURAR}*"))
 

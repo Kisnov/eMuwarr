@@ -378,10 +378,10 @@ def _tipo_de_copia(nombre: str) -> str:
     return "subida" if nombre.startswith(PREFIJO_SUBIDA) else "manual"
 
 
-def _retirar_antiguas(carpeta: Path, prefijo: str, conservar: int, salvo: str | None = None) -> list[str]:
+def _retirar_antiguas(carpeta: Path, prefijo: str, conservar: int, salvo: tuple[str, ...] = ()) -> list[str]:
     """Borra las copias con ese prefijo más antiguas y deja las `conservar` últimas (mínimo 1), sin contar `salvo`."""
     # El nombre lleva la fecha: ordena como el tiempo aunque el fichero se haya copiado o tocado.
-    copias = sorted(c for c in carpeta.glob(f"{prefijo}*.tar.gz") if c.name != salvo)
+    copias = sorted(c for c in carpeta.glob(f"{prefijo}*.tar.gz") if c.name not in salvo)
     retiradas = []
     for vieja in copias[:max(0, len(copias) - max(1, conservar))]:
         vieja.unlink(missing_ok=True)
@@ -471,14 +471,12 @@ def restore_config_backup(
     dry_run=True (default) previews only.
     apply=True requires confirmation=RESTAURAR_CONFIG and dry_run=False.
     Keys the backup doesn't carry (empty in its database, files not in it)
-    stay as they are in the current install. Before applying, the current
+    stay as they are in the current install, except in a PREFIJO_ANTES_DE_RESTAURAR copy. Before applying, the current
     CONFIG_DIR goes to a PREFIJO_ANTES_DE_RESTAURAR copy with keys; without it nothing is restored.
     """
     path = Path(backup_path)
     if not path.exists():
         return {"ok": False, "dry_run": dry_run, "error": f"Archivo no encontrado: {backup_path}"}
-    if not tarfile.is_tarfile(str(path)):
-        return {"ok": False, "dry_run": dry_run, "error": "El archivo no es un tarball válido"}
 
     do_apply = apply and not dry_run
     if do_apply and confirmation != RESTORE_CONFIRMATION:
@@ -522,7 +520,7 @@ def restore_config_backup(
                     "error": f"No se ha restaurado nada: no se pudo guardar antes la configuración actual "
                              f"({texto_de_error(exc)})"}
         _retirar_antiguas(Path(previa["archive_path"]).parent, PREFIJO_ANTES_DE_RESTAURAR,
-                          _COPIAS_ANTES_DE_RESTAURAR, salvo=path.name)
+                          _COPIAS_ANTES_DE_RESTAURAR, salvo=(path.name, previa["archive_name"]))
 
     config_dir.mkdir(parents=True, exist_ok=True)
     conservadas: list[str] = []
@@ -537,7 +535,9 @@ def restore_config_backup(
                 restaurada = Path(tmp) / _DB_NAME
                 with tar.extractfile(member) as origen, open(restaurada, "wb") as destino:
                     shutil.copyfileobj(origen, destino)
-                conservadas = _colocar_base(restaurada, config_dir / _DB_NAME)
+                # La de antes de restaurar es lo que había tal cual: también devuelve las claves vacías.
+                fusionar = not path.name.startswith(PREFIJO_ANTES_DE_RESTAURAR)
+                conservadas = _colocar_base(restaurada, config_dir / _DB_NAME, fusionar=fusionar)
         tar.extractall(path=config_dir, members=resto, filter="data")
 
     message = f"Restauración completada: {len(members)} archivos"
@@ -616,9 +616,9 @@ def _conservar_claves(restaurada: Path, viva: Path) -> list[str]:
     return conservadas
 
 
-def _colocar_base(restaurada: Path, viva: Path) -> list[str]:
+def _colocar_base(restaurada: Path, viva: Path, fusionar: bool = True) -> list[str]:
     """Pone la base de la copia en el sitio de la actual, conservando las
-    claves que la copia no trae. Devuelve cuáles ha conservado.
+    claves que la copia no trae (con fusionar). Devuelve cuáles ha conservado.
 
     Se coloca con la API de backup de SQLite y no sobrescribiendo el .db: con
     la app en marcha, junto a la base vive su -wal, y SQLite lo aplicaría
@@ -632,7 +632,7 @@ def _colocar_base(restaurada: Path, viva: Path) -> list[str]:
         shutil.copyfile(restaurada, viva)
         olvidar_esquema()
         return []
-    conservadas = _conservar_claves(restaurada, viva) if viva.exists() else []
+    conservadas = _conservar_claves(restaurada, viva) if fusionar and viva.exists() else []
     src = sqlite3.connect(str(restaurada))
     dst = sqlite3.connect(str(viva), timeout=30)
     try:
