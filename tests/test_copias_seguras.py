@@ -97,6 +97,25 @@ def test_deshacer_devuelve_tambien_las_claves_que_estaban_vacias(cfg):
         assert not get_setting_canonical(conn, "tmdb.api_key")
 
 
+def test_deshacer_quita_los_ficheros_con_claves_que_trajo_la_restauracion(cfg):
+    traidos = [cfg / "config.json", cfg / "Uploadrr" / "data" / "cookies" / "emu.pkl"]
+    for f in traidos:
+        f.parent.mkdir(parents=True, exist_ok=True)
+        f.write_text("clave")
+    con_claves = bs.create_config_backup(include_secrets=True, confirmation=bs.RESTORE_CONFIRMATION)["archive_path"]
+    for f in traidos:
+        f.unlink()
+
+    previa = _restaurar(con_claves)["copia_previa"]
+    assert all(f.exists() for f in traidos)
+    registro = cfg / "logs" / "app.log"  # lo que no lleva claves se queda aunque la copia no lo tenga
+    registro.parent.mkdir()
+    registro.write_text("x")
+
+    assert _restaurar(bs.get_backup_dir() / previa)["ok"]
+    assert not any(f.exists() for f in traidos) and registro.exists()
+
+
 def test_sin_poder_guardar_lo_que_habia_no_se_restaura_nada(cfg, monkeypatch):
     vieja = bs.create_config_backup()["archive_path"]
     _marcar("después")

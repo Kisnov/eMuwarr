@@ -522,6 +522,8 @@ def restore_config_backup(
         _retirar_antiguas(Path(previa["archive_path"]).parent, PREFIJO_ANTES_DE_RESTAURAR,
                           _COPIAS_ANTES_DE_RESTAURAR, salvo=(path.name, previa["archive_name"]))
 
+    # La de antes de restaurar va tal cual: también las claves vacías y los ficheros con claves que no estaban.
+    exacta = path.name.startswith(PREFIJO_ANTES_DE_RESTAURAR)
     config_dir.mkdir(parents=True, exist_ok=True)
     conservadas: list[str] = []
     with tarfile.open(str(path), "r:gz") as tar:
@@ -535,10 +537,10 @@ def restore_config_backup(
                 restaurada = Path(tmp) / _DB_NAME
                 with tar.extractfile(member) as origen, open(restaurada, "wb") as destino:
                     shutil.copyfileobj(origen, destino)
-                # La de antes de restaurar es lo que había tal cual: también devuelve las claves vacías.
-                fusionar = not path.name.startswith(PREFIJO_ANTES_DE_RESTAURAR)
-                conservadas = _colocar_base(restaurada, config_dir / _DB_NAME, fusionar=fusionar)
+                conservadas = _colocar_base(restaurada, config_dir / _DB_NAME, fusionar=not exacta)
         tar.extractall(path=config_dir, members=resto, filter="data")
+    if exacta:
+        _quitar_claves_que_no_estaban(config_dir, set(members))
 
     message = f"Restauración completada: {len(members)} archivos"
     if conservadas:
@@ -559,6 +561,15 @@ def restore_config_backup(
         "copia_previa": previa["archive_name"] if previa else None,
         "message": message,
     }
+
+
+def _quitar_claves_que_no_estaban(config_dir: Path, en_la_copia: set[str]) -> None:
+    """Borra los ficheros de _CON_CLAVES que la copia no lleva: en una copia con claves, es que no estaban."""
+    for partes in _CON_CLAVES:
+        ruta = config_dir.joinpath(*partes)
+        for f in ruta.rglob("*") if ruta.is_dir() else [ruta]:
+            if f.is_file() and f.relative_to(config_dir).as_posix() not in en_la_copia:
+                f.unlink()
 
 
 def _canonica(key: str) -> str:
