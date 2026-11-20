@@ -434,7 +434,20 @@ def _run_backup(conn: sqlite3.Connection) -> tuple[str, str]:
             resumen += f"; {n} {'automática antigua retirada' if n == 1 else 'automáticas antiguas retiradas'}"
         return "completed", resumen
 
-    return _con_registro(conn, TASK_BACKUP, trabajo)
+    try:
+        estado, resumen = _con_registro(conn, TASK_BACKUP, trabajo)
+    except Exception as exc:
+        _avisar_copia_fallida(conn, texto_de_error(exc))
+        raise
+    if estado == "failed":
+        _avisar_copia_fallida(conn, resumen)
+    return estado, resumen
+
+
+def _avisar_copia_fallida(conn: sqlite3.Connection, motivo: str) -> None:
+    from .notification_center import emit
+    # Fuera de EVENT_TYPES a propósito: la campana la guarda aunque el usuario haya cerrado su lista de eventos.
+    emit(conn, "backup_failed", "La copia de seguridad programada ha fallado", motivo, level="error")
 
 
 def _run_maintenance(conn: sqlite3.Connection) -> tuple[str, str]:

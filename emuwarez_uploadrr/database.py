@@ -1799,7 +1799,7 @@ def _copia_antes_de_migrar(conn: sqlite3.Connection, version: int) -> None:
         if not fichero:
             return  # en memoria
         carpeta = Path(fichero).parent / "backups"
-        carpeta.mkdir(parents=True, exist_ok=True)
+        carpeta.mkdir(mode=0o700, parents=True, exist_ok=True)
         ahora = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
         destino = carpeta / f"pre-migracion-{ahora}-v{version}.db"
         if destino.exists():
