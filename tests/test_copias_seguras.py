@@ -116,6 +116,19 @@ def test_deshacer_quita_los_ficheros_con_claves_que_trajo_la_restauracion(cfg):
     assert not any(f.exists() for f in traidos) and registro.exists()
 
 
+@solo_posix
+def test_deshacer_no_borra_nada_detras_de_un_enlace(cfg):
+    registro = cfg / "logs" / "app.log"
+    registro.parent.mkdir()
+    registro.write_text("x")
+    (cfg / "Uploadrr" / "data").mkdir(parents=True)
+    (cfg / "Uploadrr" / "data" / "cookies").symlink_to(registro.parent, target_is_directory=True)
+
+    previa = _restaurar(bs.create_config_backup()["archive_path"])["copia_previa"]
+    assert _restaurar(bs.get_backup_dir() / previa)["ok"]
+    assert registro.exists()
+
+
 def test_sin_poder_guardar_lo_que_habia_no_se_restaura_nada(cfg, monkeypatch):
     vieja = bs.create_config_backup()["archive_path"]
     _marcar("después")

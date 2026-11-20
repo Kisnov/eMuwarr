@@ -567,6 +567,9 @@ def _quitar_claves_que_no_estaban(config_dir: Path, en_la_copia: set[str]) -> No
     """Borra los ficheros de _CON_CLAVES que la copia no lleva: en una copia con claves, es que no estaban."""
     for partes in _CON_CLAVES:
         ruta = config_dir.joinpath(*partes)
+        # La copia no entra por un enlace: lo que hay detrás no falta, no lo vio.
+        if any(config_dir.joinpath(*partes[:i]).is_symlink() for i in range(1, len(partes) + 1)):
+            continue
         for f in ruta.rglob("*") if ruta.is_dir() else [ruta]:
             if f.is_file() and f.relative_to(config_dir).as_posix() not in en_la_copia:
                 f.unlink()
