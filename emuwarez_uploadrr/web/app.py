@@ -5,6 +5,7 @@ import asyncio
 import logging
 import mimetypes
 import os
+import sqlite3
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -18,7 +19,7 @@ from starlette.staticfiles import NotModifiedResponse
 
 from .api.router import api_router
 from .cabeceras import CabecerasDeSeguridad
-from .errors import generic_error_handler, validation_error_handler
+from .errors import base_ocupada_handler, generic_error_handler, validation_error_handler
 from .runtime import get_app_version
 
 # Phase 11D — automatic tasks scheduler tick interval (seconds). Checking
@@ -309,6 +310,7 @@ def create_app() -> FastAPI:
         return response
 
     app.add_exception_handler(RequestValidationError, validation_error_handler)
+    app.add_exception_handler(sqlite3.OperationalError, base_ocupada_handler)
     app.add_exception_handler(Exception, generic_error_handler)
 
     app.include_router(api_router)

@@ -77,6 +77,9 @@ came in from `Kisnov/Uploadrr-EMU` with `git subtree add`, history kept; that re
   `init_db` returns at once for that file, until a restore calls `olvidar_esquema()`. Where nobody called
   `preparar_base` (tests, scripts) `init_db` still checks the stored version. Open the DB with `db()` (commits,
   rolls back, closes) or the `get_db` dependency; a DB failure in a request is a 503, never a 401.
+- SQLite settings live in `connect()`: WAL, `synchronous = NORMAL`, a 64 MB `journal_size_limit` and `secure_delete = FAST`
+  (the image's Debian `libsqlite3` is built with `SECURE_DELETE`, which zero-fills every freed page into the WAL). Never
+  hold a write transaction across a network call: commit first (`tmdb_titles._resolve_title` does).
 - Upload pipeline: `upload_queue._run_queued_job` → `carpeta_subida` links the files into
   `UPLOADRR_UPLOADS_DIR` (default `/config/Uploadrr/uploads`) → `upload_execution.start_upload_job` →
   Uploadrr-EMU subprocess. Uploadrr hands that same folder to qBittorrent as the save path, so qBittorrent

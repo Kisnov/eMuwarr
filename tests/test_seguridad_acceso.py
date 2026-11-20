@@ -5,6 +5,7 @@ F9 de la revisión de 2026-10-31.
 from __future__ import annotations
 
 import sqlite3
+import time
 from types import SimpleNamespace
 
 import pytest
@@ -278,6 +279,28 @@ def test_con_la_base_ocupada_la_peticion_pasa_y_no_se_insiste(isolated_db):
 
     assert ocupada.escrituras == 1
     conn.close()
+
+
+def test_con_otra_conexion_escribiendo_no_espera_el_busy_timeout(isolated_db):
+    """El docstring decía «la petición no espera», pero el UPDATE esperaba los 5 s del busy_timeout."""
+    conn = connect()
+    init_db(conn)
+    user_id = create_user(conn, "ana", "Clave1!claveclave")
+    token = create_session(conn, user_id)
+    conn.execute("UPDATE auth_sessions SET last_used_at = datetime('now', '-1 hour')")
+    conn.commit()
+    auth_service._apuntadas.clear()
+    sincronizacion = connect()
+    sincronizacion.execute("BEGIN IMMEDIATE")
+    try:
+        inicio = time.monotonic()
+        assert get_user_by_token(conn, token)["username"] == "ana"
+        assert time.monotonic() - inicio < 2
+        assert conn.execute("PRAGMA busy_timeout").fetchone()[0] == 5000
+    finally:
+        sincronizacion.rollback()
+        sincronizacion.close()
+        conn.close()
 
 
 def test_el_usuario_que_devuelve_el_token_no_lleva_el_campo_interno(client, auth_headers, isolated_db):

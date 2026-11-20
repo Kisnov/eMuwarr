@@ -76,6 +76,8 @@ def _resolve_title(
     if _tmdb_en_pausa(conn):
         return fallback
 
+    # Nada a medio escribir mientras se espera a TMDb (hasta 25 s): cualquier otra escritura esperaría el bloqueo.
+    conn.commit()
     try:
         title = pedir()
     except Exception as exc:

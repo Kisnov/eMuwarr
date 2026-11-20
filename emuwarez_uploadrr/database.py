@@ -73,6 +73,14 @@ def connect(path: Optional[Path] = None, *, entre_hilos: bool = False) -> sqlite
     # immediate "database is locked"/"table already exists" error instead of
     # one simply waiting its turn.
     conn.execute("PRAGMA busy_timeout = 5000")
+    # En WAL, NORMAL no corrompe la base: un corte de luz pierde como mucho los últimos commits, y no hace un fsync
+    # por commit (la sincronización hace uno por fila).
+    conn.execute("PRAGMA synchronous = NORMAL")
+    # El -wal vuelve a 64 MB tras cada checkpoint, en vez de quedarse del tamaño de la mayor escritura.
+    conn.execute("PRAGMA journal_size_limit = 67108864")
+    # El SQLite de Debian llena de ceros, y escribe en el WAL, cada página que se libera. FAST solo borra lo que se
+    # escribe igualmente; las copias sin claves ya pasan por VACUUM.
+    conn.execute("PRAGMA secure_delete = FAST")
     conn.create_collation("TITLE_SORT", _title_sort_collation)
     return conn
 
@@ -1724,10 +1732,6 @@ def _migrate_library_items_raw_json_recortado(conn: sqlite3.Connection) -> int:
         logger.warning("No hay sitio para recortar raw_json al migrar: lo hará la próxima sincronización")
         return 0
     conn.commit()  # el recorte, en su propia transacción: un SQLITE_FULL puede deshacer la transacción entera
-    # El SQLite de Debian llena de ceros cada página que libera: el WAL crecería como la base entera. Las libres solo
-    # guardan fichas de Radarr/Sonarr, sin claves, y el VACUUM de después las quita.
-    antes = conn.execute("PRAGMA secure_delete").fetchone()[0]
-    conn.execute("PRAGMA secure_delete = FAST")
     try:
         recortadas = conn.execute("""
             UPDATE library_items SET raw_json = CASE
@@ -1746,8 +1750,6 @@ def _migrate_library_items_raw_json_recortado(conn: sqlite3.Connection) -> int:
         conn.rollback()
         logger.warning("No se pudo recortar raw_json al migrar: lo hará la próxima sincronización", exc_info=True)
         return 0
-    finally:
-        conn.execute(f"PRAGMA secure_delete = {antes}")
 
 
 def _compactar_tras_migrar(conn: sqlite3.Connection) -> None:
