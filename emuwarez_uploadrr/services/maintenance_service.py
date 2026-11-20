@@ -242,8 +242,9 @@ def podar_avisos_leidos(conn: sqlite3.Connection, dias: int, ahora: Optional[dat
 def optimizar_base(conn: sqlite3.Connection) -> bool:
     """PRAGMA optimize y vaciar el WAL. False si una lectura en curso no ha dejado vaciarlo del todo."""
     conn.commit()
-    # 0x10002: todas las tablas, no solo las que ha leído esta conexión (la del planificador no lee la biblioteca).
-    conn.execute("PRAGMA optimize(0x10002)")
+    # 0x10000: todas las tablas, no solo las que ha leído esta conexión (la del planificador no lee la biblioteca);
+    # 0x10: con analysis_limit, para no tener el bloqueo mucho rato. Son de SQLite 3.46 (la imagen); antes se ignoran.
+    conn.execute("PRAGMA optimize(0x10012)")
     return conn.execute("PRAGMA wal_checkpoint(TRUNCATE)").fetchone()[0] == 0
 
 

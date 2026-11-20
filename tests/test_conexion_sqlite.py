@@ -1,6 +1,10 @@
 """Cómo abre la app SQLite y cuándo suelta el bloqueo de escritura (análisis de la base de 2026-11-19, bloque 1)."""
 from __future__ import annotations
 
+import sqlite3
+
+import pytest
+
 from emuwarez_uploadrr.database import connect, init_db, set_state
 from emuwarez_uploadrr.services import maintenance_service as mant
 from emuwarez_uploadrr.services import tmdb_titles
@@ -16,6 +20,8 @@ def test_cada_conexion_sale_con_las_pragma_de_la_app(tmp_path):
                       "busy_timeout": 5000, "foreign_keys": 1}  # synchronous 1 = NORMAL, secure_delete 2 = FAST
 
 
+@pytest.mark.skipif(sqlite3.sqlite_version_info < (3, 46, 0),
+                    reason="optimize(0x10000) es de SQLite 3.46: la imagen trae 3.46.1, el ubuntu-24.04 de CI la 3.45.1")
 def test_el_mantenimiento_refresca_las_estadisticas_de_tablas_que_su_conexion_no_ha_leido(tmp_path):
     """La conexión del planificador no lee la biblioteca: con un PRAGMA optimize a secas, unas estadísticas de cuando
     la biblioteca tenía 100 filas seguían diciendo 100 con 3.000."""
@@ -37,9 +43,9 @@ def test_el_mantenimiento_refresca_las_estadisticas_de_tablas_que_su_conexion_no
     planificador = connect(base)
     mant.optimizar_base(planificador)
 
-    assert planificador.execute("SELECT stat FROM sqlite_stat1 WHERE idx = 'idx_library_status'").fetchone()[0] \
-        .startswith("3000 ")
+    filas = planificador.execute("SELECT stat FROM sqlite_stat1 WHERE idx = 'idx_library_status'").fetchone()[0]
     planificador.close()
+    assert int(filas.split()[0]) > 1000  # con analysis_limit es una estimación; antes se quedaba en 100
 
 
 def test_mientras_se_espera_a_tmdb_otra_conexion_puede_escribir(tmp_path):
