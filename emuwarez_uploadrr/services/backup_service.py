@@ -378,10 +378,10 @@ def _tipo_de_copia(nombre: str) -> str:
     return "subida" if nombre.startswith(PREFIJO_SUBIDA) else "manual"
 
 
-def _retirar_antiguas(carpeta: Path, prefijo: str, conservar: int, salvo: Path | None = None) -> list[str]:
+def _retirar_antiguas(carpeta: Path, prefijo: str, conservar: int, salvo: str | None = None) -> list[str]:
     """Borra las copias con ese prefijo más antiguas y deja las `conservar` últimas (mínimo 1), sin contar `salvo`."""
     # El nombre lleva la fecha: ordena como el tiempo aunque el fichero se haya copiado o tocado.
-    copias = sorted(c for c in carpeta.glob(f"{prefijo}*.tar.gz") if salvo is None or c.resolve() != salvo.resolve())
+    copias = sorted(c for c in carpeta.glob(f"{prefijo}*.tar.gz") if c.name != salvo)
     retiradas = []
     for vieja in copias[:max(0, len(copias) - max(1, conservar))]:
         vieja.unlink(missing_ok=True)
@@ -522,7 +522,7 @@ def restore_config_backup(
                     "error": f"No se ha restaurado nada: no se pudo guardar antes la configuración actual "
                              f"({texto_de_error(exc)})"}
         _retirar_antiguas(Path(previa["archive_path"]).parent, PREFIJO_ANTES_DE_RESTAURAR,
-                          _COPIAS_ANTES_DE_RESTAURAR, salvo=path)
+                          _COPIAS_ANTES_DE_RESTAURAR, salvo=path.name)
 
     config_dir.mkdir(parents=True, exist_ok=True)
     conservadas: list[str] = []
