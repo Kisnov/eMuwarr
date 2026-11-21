@@ -7,6 +7,8 @@ from emuwarez_uploadrr.database import connect, db_path, init_db
 def test_las_peticiones_de_ejemplo_se_borran_con_lo_que_colgaba_de_ellas(isolated_db):
     conn = connect(db_path())
     init_db(conn)
+    # La marca la tenía una base anterior al esquema 59.
+    conn.execute("ALTER TABLE request_items ADD COLUMN is_example INTEGER NOT NULL DEFAULT 0")
     ejemplo = conn.execute(
         "INSERT INTO request_items (emu_id, title, is_example) VALUES ('ejemplo-1', 'Falsa', 1)").lastrowid
     real = conn.execute("INSERT INTO request_items (emu_id, title) VALUES ('7', 'Real')").lastrowid
@@ -22,15 +24,13 @@ def test_las_peticiones_de_ejemplo_se_borran_con_lo_que_colgaba_de_ellas(isolate
         conn.execute("INSERT INTO request_readiness (request_item_id, status) VALUES (?, 'ready')", (peticion,))
         conn.execute("INSERT INTO request_candidates (request_item_id, library_item_id, candidate_rank, match_status)"
                      " VALUES (?, ?, 1, 'Compatible')", (peticion, de_ejemplo))
-        conn.execute("INSERT INTO operational_queue_items (queue_key, item_type, entity_type, request_item_id)"
-                     " VALUES (?, 'request_readiness', 'request', ?)", (f"request:{peticion}:readiness", peticion))
     conn.execute("DELETE FROM app_state WHERE key = 'schema_version'")
     conn.commit()
 
     init_db(conn)
 
     assert [r[0] for r in conn.execute("SELECT id FROM request_items")] == [real]
-    for tabla in ("request_matches", "request_readiness", "request_candidates", "operational_queue_items"):
+    for tabla in ("request_matches", "request_readiness", "request_candidates"):
         assert [r[0] for r in conn.execute(f"SELECT request_item_id FROM {tabla}")] == [real], tabla
     estado = lambda i: tuple(conn.execute(
         "SELECT request_status, request_id FROM library_items WHERE id = ?", (i,)).fetchone())

@@ -91,8 +91,6 @@ def test_lo_que_radarr_ya_no_tiene_se_borra_con_lo_que_colgaba(conn, arr):
     for item in (matrix, dune):
         conn.execute("INSERT INTO nomenclature_proposals (library_item_id) VALUES (?)", (item,))
         conn.execute("INSERT INTO filesystem_operations (operation_type, library_item_id) VALUES ('rename', ?)", (item,))
-        conn.execute("INSERT INTO operational_queue_items (queue_key, item_type, entity_type, library_item_id)"
-                     " VALUES (?, 'library_recommendation', 'library_item', ?)", (f"library:{item}", item))
     subida = conn.execute("INSERT INTO upload_jobs (library_item_id, title, path, status)"
                           " VALUES (?, 'Matrix', '/movies/Matrix.mkv', 'completed')", (matrix,)).lastrowid
     conn.commit()
@@ -103,7 +101,7 @@ def test_lo_que_radarr_ya_no_tiene_se_borra_con_lo_que_colgaba(conn, arr):
     assert _externos(conn, RADARR) == {"2"}
     for tabla in ("request_matches", "request_candidates"):
         assert conn.execute(f"SELECT COUNT(*) FROM {tabla}").fetchone()[0] == 0, tabla
-    for tabla in ("nomenclature_proposals", "filesystem_operations", "operational_queue_items"):
+    for tabla in ("nomenclature_proposals", "filesystem_operations"):
         assert [r[0] for r in conn.execute(f"SELECT library_item_id FROM {tabla}")] == [dune], tabla
     # La subida sigue en el historial, sin enlace a lo que ya no está.
     assert conn.execute("SELECT library_item_id FROM upload_jobs WHERE id = ?", (subida,)).fetchone()[0] is None

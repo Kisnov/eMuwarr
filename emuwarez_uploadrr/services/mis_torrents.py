@@ -85,7 +85,8 @@ def _sincronizar(conn: sqlite3.Connection, ahora: Optional[datetime]) -> tuple[s
     if len(torrents) >= MAX_PAGINAS * POR_PAGINA:
         return "failed", (f"Tienes {MAX_PAGINAS * POR_PAGINA} subidas o más y la lectura se corta ahí: no se guarda, "
                           "para no borrar las que faltan")
-    filas = [f for f in map(_fila, torrents) if f]
+    # Una por torrent: una subida nueva mientras se pagina repite un id, y la clave primaria tumbaba la lectura entera.
+    filas = list({f[0]: f for f in map(_fila, torrents) if f}.values())
 
     ahora = ahora or datetime.now()
     dia = ahora.strftime("%Y-%m-%d")

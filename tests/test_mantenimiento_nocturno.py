@@ -171,7 +171,7 @@ def test_solo_se_borran_los_avisos_leidos_y_viejos(conn):
 def _huella(conn) -> dict:
     return {
         t: [tuple(r) for r in conn.execute(f"SELECT * FROM {t} ORDER BY id")]
-        for t in ("upload_jobs", "upload_artifacts", "library_items", "request_items", "operational_queue_items", "instances")
+        for t in ("upload_jobs", "upload_artifacts", "library_items", "request_items", "instances")
     }
 
 

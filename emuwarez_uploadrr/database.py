@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 
 DB_FILE = CONFIG_DIR / "emuwarez_uploadrr.db"
 
-SCHEMA_VERSION = 58
+SCHEMA_VERSION = 59
 
 # Phase 10E: canonical settings namespace fix.
 #
@@ -608,25 +608,9 @@ def _migrate_request_items_phase8b(conn: sqlite3.Connection) -> None:
         _anadir_columna(conn, "request_items", col, col_def)
 
 
-def _migrate_request_items_emu_catalog_check(conn: sqlite3.Connection) -> None:
-    """Add columns to cache a direct eMuwarez catalog (torrents/filter) duplicate check.
-
-    This is independent from request_matches (library vs request matching):
-    it records whether eMuwarez's own torrent catalog already has content for
-    this request's tmdb_id. Sin uso desde que se quitó esa comprobación en vivo
-    (una llamada por petición); las columnas se quedan donde están.
-    """
-    new_cols = [
-        ("emu_catalog_checked_at", "TEXT"),
-        ("emu_catalog_result", "TEXT"),
-    ]
-    for col, col_def in new_cols:
-        _anadir_columna(conn, "request_items", col, col_def)
-
-
 def _migrate_drop_priority_columns(conn: sqlite3.Connection) -> None:
     """Remove the numeric "priority" ranking system (score + high/medium/low
-    bucket) from request_readiness/operational_queue_items/request_items —
+    bucket) from request_readiness/request_items —
     the user explicitly asked for no "priority" concept anywhere in
     requests/queue. The 'blocked' classification is KEPT, but it already
     lives on the independent `status` column (e.g. status='file_missing' or
@@ -636,14 +620,12 @@ def _migrate_drop_priority_columns(conn: sqlite3.Connection) -> None:
     Plain ALTER TABLE DROP COLUMN (SQLite >= 3.35, confirmed available here)
     is enough — unlike the instances.type migrations, these columns carry no
     CHECK/UNIQUE constraint, so no table-rebuild is needed. SQLite refuses to
-    drop a column that still has an index on it, so idx_rr_bucket/idx_oq_bucket
+    drop a column that still has an index on it, so idx_rr_bucket
     must be dropped first. Idempotent: only what is still there is dropped.
     """
-    for index_name in ("idx_rr_bucket", "idx_oq_bucket"):
-        conn.execute(f"DROP INDEX IF EXISTS {index_name}")
+    conn.execute("DROP INDEX IF EXISTS idx_rr_bucket")
     for table, columns in (
         ("request_readiness", ("priority_score", "priority_bucket")),
-        ("operational_queue_items", ("priority_score", "priority_bucket")),
         ("request_items", ("readiness_priority_score", "readiness_priority_bucket")),
     ):
         presentes = {fila[1] for fila in conn.execute(f"PRAGMA table_info({table})")}
@@ -723,86 +705,6 @@ def _migrate_request_readiness_tables(conn: sqlite3.Connection) -> None:
     """)
 
 
-def _migrate_operational_queue_tables(conn: sqlite3.Connection) -> None:
-    """Create Phase 8C operational queue tables."""
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS operational_queue_items (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            queue_key TEXT NOT NULL UNIQUE,
-            item_type TEXT NOT NULL,
-            entity_type TEXT NOT NULL,
-            entity_id INTEGER,
-            request_item_id INTEGER,
-            library_item_id INTEGER,
-            upload_job_id INTEGER,
-            title TEXT,
-            subtitle TEXT,
-            status TEXT NOT NULL DEFAULT 'open',
-            action TEXT NOT NULL DEFAULT 'none',
-            blockers_json TEXT,
-            reasons_json TEXT,
-            context_json TEXT,
-            target_url TEXT,
-            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-            last_seen_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-            resolved_at TEXT
-        )
-    """)
-    conn.execute("CREATE INDEX IF NOT EXISTS idx_oq_queue_key ON operational_queue_items(queue_key)")
-    conn.execute("CREATE INDEX IF NOT EXISTS idx_oq_status ON operational_queue_items(status)")
-    conn.execute("CREATE INDEX IF NOT EXISTS idx_oq_action ON operational_queue_items(action)")
-    conn.execute("CREATE INDEX IF NOT EXISTS idx_oq_request ON operational_queue_items(request_item_id)")
-    conn.execute("CREATE INDEX IF NOT EXISTS idx_oq_library ON operational_queue_items(library_item_id)")
-    conn.execute("CREATE INDEX IF NOT EXISTS idx_oq_upload ON operational_queue_items(upload_job_id)")
-    conn.execute("CREATE INDEX IF NOT EXISTS idx_oq_updated ON operational_queue_items(updated_at)")
-
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS operational_queue_runs (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            run_type TEXT NOT NULL,
-            status TEXT NOT NULL,
-            items_built INTEGER NOT NULL DEFAULT 0,
-            items_open INTEGER NOT NULL DEFAULT 0,
-            items_ready INTEGER NOT NULL DEFAULT 0,
-            items_blocked INTEGER NOT NULL DEFAULT 0,
-            started_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-            finished_at TEXT,
-            summary_json TEXT,
-            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-        )
-    """)
-
-
-def _migrate_operational_actions_tables(conn: sqlite3.Connection) -> None:
-    """Create Phase 9A operational action events table and add action tracking columns."""
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS operational_action_events (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            queue_item_id INTEGER NOT NULL,
-            action TEXT NOT NULL,
-            event_type TEXT NOT NULL,
-            status TEXT NOT NULL,
-            message TEXT,
-            details_json TEXT,
-            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-        )
-    """)
-    conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_oae_queue_item ON operational_action_events(queue_item_id)"
-    )
-    conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_oae_created ON operational_action_events(created_at)"
-    )
-    for col, col_type in [
-        ("last_action_at", "TEXT"),
-        ("last_action_status", "TEXT"),
-        ("last_action_message", "TEXT"),
-    ]:
-        _anadir_columna(conn, "operational_queue_items", col, col_type)
-
-
 def _migrate_library_items_phase8a(conn: sqlite3.Connection) -> None:
     """Add Phase 8A diagnostic/filesystem columns to library_items."""
     new_cols = [
@@ -816,15 +718,12 @@ def _migrate_library_items_phase8a(conn: sqlite3.Connection) -> None:
         ("arr_queue_progress", "REAL"),
         ("arr_queue_timeleft", "TEXT"),
         ("arr_queue_error", "TEXT"),
-        ("arr_queue_raw_json", "TEXT"),
         ("arr_history_status", "TEXT"),
         ("arr_history_event_type", "TEXT"),
         ("arr_history_error", "TEXT"),
         ("arr_history_source_title", "TEXT"),
-        ("arr_history_raw_json", "TEXT"),
         ("diagnostic_status", "TEXT"),
         ("diagnostic_summary", "TEXT"),
-        ("diagnostic_reasons_json", "TEXT"),
         ("recommended_action", "TEXT"),
         ("recommendation_reasons_json", "TEXT"),
         ("recommendation_updated_at", "TEXT"),
@@ -1111,20 +1010,6 @@ def _migrate_emu_catalog(conn: sqlite3.Connection) -> None:
         _anadir_columna(conn, "library_items", col, col_def)
 
 
-def _migrate_request_items_is_example(conn: sqlite3.Connection) -> None:
-    """Marks the demo requests generated from the user's own library while
-    eMuwarez hasn't handed over the real requests endpoint.
-
-    The flag exists FOR THE REMOVAL more than for the feature: sync_requests
-    only upserts and never deletes rows the tracker doesn't send, so the day
-    the real endpoint ships, any leftover examples would sit in the table
-    alongside real requests with no way to tell them apart. The version that
-    brings that endpoint deletes them from its own migration
-    (DELETE FROM request_items WHERE is_example = 1) instead of trusting that
-    somebody remembered to press Borrar first."""
-    _anadir_columna(conn, "request_items", "is_example", "INTEGER NOT NULL DEFAULT 0")
-
-
 def _migrate_request_items_posters(conn: sqlite3.Connection) -> None:
     """Esquema 42: el póster y el fondo de TMDb de las peticiones que no casan con nada de la biblioteca,
     de donde salía el póster. '' = TMDb no tiene."""
@@ -1273,13 +1158,6 @@ def _migrate_imgbox_a_pixhost(conn: sqlite3.Connection) -> None:
     conn.execute("UPDATE settings SET value = ? WHERE key = 'imghost.enabled'", (json.dumps(ids),))
 
 
-def _migrate_quitar_registro_arr(conn: sqlite3.Connection) -> None:
-    """Esquema 48: el registro entero de la cola y el historial de Radarr/Sonarr ya no se guarda (nadie lo leía, y
-    trae el enlace del indexador con su clave, como el ?apikey= de Prowlarr). Se borra el que había."""
-    conn.execute("UPDATE library_items SET arr_queue_raw_json = NULL, arr_history_raw_json = NULL "
-                 "WHERE arr_queue_raw_json IS NOT NULL OR arr_history_raw_json IS NOT NULL")
-
-
 def _migrate_perfil_historial(conn: sqlite3.Connection) -> None:
     """Esquema 50: una instantánea al día de tu cuenta de eMuwarez (la sacan las lecturas horarias del perfil),
     para dibujar la evolución en Estadísticas. `dia` es el día local del servidor (TZ del contenedor).
@@ -1322,8 +1200,30 @@ def _migrate_auth_sessions_last_used(conn: sqlite3.Connection) -> None:
 
 def _migrate_quitar_peticiones_de_ejemplo(conn: sqlite3.Connection) -> None:
     """Las peticiones de ejemplo se generaron mientras no había endpoint real;
-    ahora que se leen de eMuwarez, se borran con lo que colgaba de ellas."""
-    borrar_peticiones(conn, "is_example = 1")
+    ahora que se leen de eMuwarez, se borran con lo que colgaba de ellas. Solo una base anterior tiene la marca."""
+    if "is_example" in {fila[1] for fila in conn.execute("PRAGMA table_info(request_items)")}:
+        borrar_peticiones(conn, "is_example = 1")
+
+
+_TABLAS_SIN_USO = (
+    "operational_queue_items", "operational_queue_runs", "operational_action_events",
+    "library_diagnostic_runs", "library_item_diagnostics",
+)
+_COLUMNAS_SIN_USO = (
+    ("library_items", ("arr_queue_raw_json", "arr_history_raw_json", "diagnostic_reasons_json")),
+    ("request_items", ("emu_catalog_checked_at", "emu_catalog_result", "is_example")),
+)
+
+
+def _migrate_quitar_esquema_sin_uso(conn: sqlite3.Connection) -> None:
+    """Esquema 59: fuera las tablas y columnas que ya nadie escribía ni leía. Una base nueva no las llega a crear."""
+    for tabla in _TABLAS_SIN_USO:
+        conn.execute(f"DROP TABLE IF EXISTS {tabla}")
+    for tabla, columnas in _COLUMNAS_SIN_USO:
+        presentes = {fila[1] for fila in conn.execute(f"PRAGMA table_info({tabla})")}
+        for columna in columnas:
+            if columna in presentes:
+                conn.execute(f"ALTER TABLE {tabla} DROP COLUMN {columna}")
 
 
 def _migrate_qbit_port_into_url(conn: sqlite3.Connection) -> None:
@@ -1470,38 +1370,6 @@ def _migrate_settings_phase10e(conn: sqlite3.Connection) -> None:
                VALUES (?, ?, ?)""",
             (key, value, is_secret),
         )
-
-
-def _migrate_diagnostic_tables(conn: sqlite3.Connection) -> None:
-    """Create Phase 8A diagnostic run and item diagnostic tables."""
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS library_diagnostic_runs (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            run_type TEXT NOT NULL,
-            status TEXT NOT NULL,
-            items_checked INTEGER NOT NULL DEFAULT 0,
-            items_updated INTEGER NOT NULL DEFAULT 0,
-            warnings_count INTEGER NOT NULL DEFAULT 0,
-            errors_count INTEGER NOT NULL DEFAULT 0,
-            started_at TEXT NOT NULL,
-            finished_at TEXT,
-            summary_json TEXT,
-            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-        )
-    """)
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS library_item_diagnostics (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            library_item_id INTEGER NOT NULL,
-            run_id INTEGER,
-            severity TEXT NOT NULL,
-            code TEXT NOT NULL,
-            message TEXT NOT NULL,
-            details_json TEXT,
-            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-        )
-    """)
 
 
 def _migrate_scheduled_tasks_table(conn: sqlite3.Connection) -> None:
@@ -1859,11 +1727,8 @@ def init_db(conn: Optional[sqlite3.Connection] = None) -> None:
         _migrate_library_items_phase6b(conn)
         _migrate_upload_jobs_phase6d(conn)
         _migrate_library_items_phase8a(conn)
-        _migrate_diagnostic_tables(conn)
         _migrate_request_items_phase8b(conn)
         _migrate_request_readiness_tables(conn)
-        _migrate_operational_queue_tables(conn)
-        _migrate_operational_actions_tables(conn)
         _migrate_nomenclature_phase10a(conn)
         _migrate_settings_phase10a(conn)
         _migrate_settings_phase10e(conn)
@@ -1871,7 +1736,6 @@ def init_db(conn: Optional[sqlite3.Connection] = None) -> None:
         _migrate_library_items_phase11e(conn)
         _migrate_library_items_title_slug(conn)
         _migrate_instances_narrow_type_check(conn)
-        _migrate_request_items_emu_catalog_check(conn)
         _migrate_request_items_extra_ids(conn)
         _migrate_drop_priority_columns(conn)
         _migrate_instances_unique_name(conn)
@@ -1895,7 +1759,6 @@ def init_db(conn: Optional[sqlite3.Connection] = None) -> None:
         _migrate_library_items_backdrop_url(conn)
         _migrate_library_items_missing_since(conn)
         _migrate_library_items_spanish_audio(conn)
-        _migrate_request_items_is_example(conn)
         _migrate_qbit_port_into_url(conn)
         _migrate_library_items_tvmaze_id(conn)
         _migrate_library_items_release_group(conn)
@@ -1910,7 +1773,6 @@ def init_db(conn: Optional[sqlite3.Connection] = None) -> None:
         _migrate_auth_sessions_last_used(conn)
         _migrate_scheduled_tasks_run_at(conn)
         _migrate_upload_jobs_pasos(conn)
-        _migrate_quitar_registro_arr(conn)
         _migrate_request_items_aviso_pendiente(conn, activar_evento=desde < 49)
         _migrate_perfil_historial(conn)
         _migrate_upload_jobs_pasos_uploadrr(conn)
@@ -1923,6 +1785,7 @@ def init_db(conn: Optional[sqlite3.Connection] = None) -> None:
         _migrate_perfil_historial_completo(conn)
         _migrate_mis_torrents(conn)
         recortadas = _migrate_library_items_raw_json_recortado(conn) if desde < 58 else 0
+        _migrate_quitar_esquema_sin_uso(conn)
         set_state(conn, "schema_version", str(SCHEMA_VERSION))
         if sin_copia:
             set_state(conn, "migracion_sin_copia", str(version))  # backup_service.avisar_migracion_sin_copia
@@ -1947,7 +1810,7 @@ def borrar_peticiones(conn: sqlite3.Connection, donde: str, params: tuple = ()) 
     conn.execute(
         "UPDATE library_items SET request_status = 'Sin petición', request_id = NULL "
         f"WHERE request_id IN ({ids})", params)
-    for tabla in ("request_readiness", "request_candidates", "operational_queue_items"):
+    for tabla in ("request_readiness", "request_candidates"):
         conn.execute(f"DELETE FROM {tabla} WHERE request_item_id IN ({ids})", params)
     return conn.execute(f"DELETE FROM request_items WHERE {donde}", params).rowcount
 
@@ -1976,7 +1839,7 @@ def borrar_biblioteca(conn: sqlite3.Connection, donde: str, params: tuple = ()) 
         "'poster_url', li.poster_url, 'backdrop_url', li.backdrop_url, 'instance_type', li.instance_type, "
         "'instance_name', li.instance_name, 'year', li.year) FROM library_items li "
         f"WHERE li.id = upload_jobs.library_item_id) WHERE library_item_id IN ({ids})", params)
-    for tabla in ("request_candidates", "nomenclature_proposals", "filesystem_operations", "operational_queue_items"):
+    for tabla in ("request_candidates", "nomenclature_proposals", "filesystem_operations"):
         conn.execute(f"DELETE FROM {tabla} WHERE library_item_id IN ({ids})", params)
     return conn.execute(f"DELETE FROM library_items WHERE id IN ({ids})", params).rowcount, peticiones
 
