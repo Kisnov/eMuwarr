@@ -147,14 +147,14 @@ def test_la_migracion_compacta_la_base(conn):
 
 
 def _disco_libre(monkeypatch, *libres):
-    """El sitio libre que ve cada comprobación, por orden: la del recorte y la del VACUUM."""
+    """El sitio libre que ve cada comprobación, por orden: la de la copia previa, la del recorte y la del VACUUM."""
     quedan = iter(libres)
     monkeypatch.setattr(database.shutil, "disk_usage", lambda _ruta: types.SimpleNamespace(free=next(quedan)))
 
 
 def test_sin_sitio_para_el_wal_no_recorta_y_arranca_igual(conn, monkeypatch, caplog):
     _biblioteca_como_antes(conn)
-    _disco_libre(monkeypatch, 0)
+    _disco_libre(monkeypatch, 2**40, 0)
 
     _migrar_desde_57(conn)
 
@@ -166,7 +166,7 @@ def test_sin_sitio_para_el_wal_no_recorta_y_arranca_igual(conn, monkeypatch, cap
 def test_sin_sitio_para_compactar_recorta_pero_no_compacta(conn, monkeypatch, caplog):
     for _ in range(20):
         _biblioteca_como_antes(conn)
-    _disco_libre(monkeypatch, 2**40, 0)
+    _disco_libre(monkeypatch, 2**40, 2**40, 0)
 
     _migrar_desde_57(conn)
 

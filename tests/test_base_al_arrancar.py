@@ -137,7 +137,7 @@ def test_cada_carpeta_de_config_se_prepara_por_separado(tmp_path):
         conn.close()
 
 
-def test_restaurar_una_copia_de_otro_esquema_vuelve_a_comprobar_la_base(tmp_path):
+def test_restaurar_una_copia_de_otro_esquema_la_migra_en_el_acto(tmp_path):
     from emuwarez_uploadrr.services.backup_service import (
         RESTORE_CONFIRMATION,
         create_config_backup,
@@ -152,12 +152,9 @@ def test_restaurar_una_copia_de_otro_esquema_vuelve_a_comprobar_la_base(tmp_path
 
     res = restore_config_backup(copia, dry_run=False, apply=True, confirmation=RESTORE_CONFIRMATION)
     assert res["ok"], res
-    assert _version(ruta) == str(SCHEMA_VERSION - 1)
-
-    conn = connect()
-    init_db(conn)
-    conn.close()
+    # Sin esperar a la próxima petición: tras restaurar, cada hilo que llegaba empezaba la cascada por su cuenta.
     assert _version(ruta) == str(SCHEMA_VERSION)
+    assert str(ruta) in database._esquema_listo
 
 
 # ---------------------------------------------------------------------------

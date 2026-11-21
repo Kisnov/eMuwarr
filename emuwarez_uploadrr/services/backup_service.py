@@ -13,7 +13,9 @@ import tempfile
 import zlib
 from pathlib import Path
 
-from ..database import CANONICAL_SETTING_ALIASES, SCHEMA_VERSION, _version_guardada, olvidar_esquema
+from ..database import (
+    CANONICAL_SETTING_ALIASES, SCHEMA_VERSION, _version_guardada, get_state, olvidar_esquema, preparar_base,
+)
 from ..integrations.base import texto_de_error
 from .settings import all_settings, es_secreto, get_setting_canonical, set_setting
 
@@ -428,6 +430,21 @@ def barrer_copias_a_medias() -> int:
     return len(restos)
 
 
+def avisar_migracion_sin_copia(conn: sqlite3.Connection) -> bool:
+    """Al arrancar: si init_db actualizó la base sin poder copiarla antes, lo dice en la campana, una vez."""
+    version = get_state(conn, "migracion_sin_copia")
+    if not version:
+        return False
+    from .notification_center import emit
+    conn.execute("DELETE FROM app_state WHERE key = 'migracion_sin_copia'")
+    # Fuera de EVENT_TYPES a propósito, como backup_failed: la campana lo guarda aunque el usuario cerrara su lista.
+    emit(conn, "migration_without_backup", "La base de datos se actualizó sin copia previa",
+         f"No se pudo guardar la copia de antes de actualizar (esquema {version} → {SCHEMA_VERSION}); comprueba el "
+         "espacio libre en el disco. Para volver a la versión anterior solo vale una copia de seguridad de antes.",
+         level="warning")
+    return True
+
+
 class CopiaSubida:
     """Una copia que llega del navegador a trozos. Va a un temporal y solo se queda, con nombre propio
     en backups/, si es un .tar.gz con la base de datos dentro. Restaurarla es cosa de restore_config_backup."""
@@ -541,6 +558,9 @@ def restore_config_backup(
         tar.extractall(path=config_dir, members=resto, filter="data")
     if exacta:
         _quitar_claves_que_no_estaban(config_dir, set(members))
+    if (config_dir / _DB_NAME).exists() and _es_sqlite(config_dir / _DB_NAME):
+        # Una copia de un esquema anterior se migra aquí, una vez, y no desde cada petición que llegue después.
+        preparar_base(config_dir / _DB_NAME)
 
     message = f"Restauración completada: {len(members)} archivos"
     if conservadas:

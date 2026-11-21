@@ -72,9 +72,14 @@ came in from `Kisnov/Uploadrr-EMU` with `git subtree add`, history kept; that re
   `frontend` (`grep -l frontend tests/test_*.py`). A test that reads frontend files must name `frontend` in its own file.
 
 - Migrations: bump `SCHEMA_VERSION` in `database.py` and add a `_migrate_*` call at the end of the cascade in
-  `init_db`. `preparar_base()` runs it once at startup (lifespan and `web serve`): it copies the DB to
-  `backups/pre-migracion-*.db` first and refuses a DB left by a newer version (`BaseMasNuevaError`); after that
-  `init_db` returns at once for that file, until a restore calls `olvidar_esquema()`. Where nobody called
+  `init_db`; new columns go through `_anadir_columna`, which only stays quiet when the column is already there. The
+  cascade is not one transaction and the version is stored at the end, so a pass that fails halfway runs again from the
+  top: every migration must be safe to run twice, and one that rewrites data runs only when `desde` crosses its schema.
+  `preparar_base()` runs it once at startup (lifespan and `web serve`): it copies the DB to
+  `backups/pre-migracion-*.db` first (not started without room for it; the bell then says the update had no copy) and
+  refuses a DB left by a newer version (`BaseMasNuevaError`); after that
+  `init_db` returns at once for that file. A restore migrates the restored DB itself, and a lock keeps the cascade to
+  one thread at a time. Where nobody called
   `preparar_base` (tests, scripts) `init_db` still checks the stored version. Open the DB with `db()` (commits,
   rolls back, closes) or the `get_db` dependency; a DB failure in a request is a 503, never a 401.
 - SQLite settings live in `connect()`: WAL, `synchronous = NORMAL`, a 64 MB `journal_size_limit` and `secure_delete = FAST`
