@@ -302,7 +302,8 @@ def test_la_lista_trae_la_hora_la_zona_y_las_opciones(client, auth_headers, monk
     assert tareas[TASK_LIBRARY_SYNC]["run_at"] is None
     assert {t["timezone"] for t in tareas.values()} == {"Europe/Madrid"}
     assert [o["clave"] for o in tareas[TASK_MAINTENANCE]["opciones"]] == [
-        "mantenimiento.dias_tareas", "mantenimiento.dias_registros", "mantenimiento.lineas_registro", "mantenimiento.dias_avisos"]
+        "mantenimiento.dias_tareas", "mantenimiento.dias_registros", "mantenimiento.lineas_registro", "mantenimiento.dias_avisos",
+        "mantenimiento.dias_tmp"]
     assert tareas[TASK_MAINTENANCE]["opciones"][0] == {
         "clave": "mantenimiento.dias_tareas", "etiqueta": "Historial de tareas: conservar (días)",
         "valor": 90, "minimo": 7, "maximo": 3650, "nota": ""}

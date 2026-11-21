@@ -212,7 +212,10 @@ automáticas llevan también las claves y se llaman `…_with_secrets.tar.gz`.
 
 La tarea «Mantenimiento» (04:00) borra del historial de tareas lo de más de 90 días, deja en las últimas 200 líneas
 el registro de las subidas terminadas sin fallo de hace más de 30 días (el de las fallidas se conserva entero),
-borra los avisos leídos de más de 30 días y optimiza la base. No toca las subidas ni nada que enlacen.
+borra los avisos leídos de más de 30 días y optimiza la base. También borra las capturas y demás temporales que
+Uploadrr-EMU deja de cada subida (`/config/Uploadrr/tmp`) cuando llevan 7 días sin tocarse: reintentar o reenviar a
+qBittorrent una subida más antigua los vuelve a generar. Los días se cambian en la propia tarea. No toca las subidas
+ni nada que enlacen.
 
 El backup no lleva las claves. En la base de datos van vacías las API keys (TMDb, eMuwarez, Radarr/Sonarr, hosts
 de imágenes), la contraseña de qBittorrent, el webhook de Discord, el token de Telegram y la clave del widget de Homepage, y de

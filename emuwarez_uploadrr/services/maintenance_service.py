@@ -1,14 +1,21 @@
 """SQLite maintenance."""
 from __future__ import annotations
 
+import logging
 import os
+import shutil
 import sqlite3
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Iterable, Optional
 
 from .settings import get_setting_canonical, set_setting
+from .source_engine.constants import ENGINE_VERSION
+from .upload_states import ACTIVE_JOB_STATUSES
+from .uploadrr_contract import get_runtime_settings
 from ..integrations.base import error_inesperado, texto_de_error
+
+logger = logging.getLogger(__name__)
 
 VACUUM_CONFIRMATION = "MANTENIMIENTO_DB"
 
@@ -139,7 +146,10 @@ def run_database_vacuum(
 
 
 # --- Mantenimiento nocturno: limpiar lo antiguo y optimizar la base -----------------------------------------
-# Solo toca task_runs, upload_job_logs y notifications. Nunca upload_jobs ni nada que una subida enlace.
+# Nunca toca upload_jobs ni nada que una subida enlace: historial, registros, avisos y lo que ya no se puede leer.
+
+_DIAS_PROPUESTAS = 90
+_DIAS_SESIONES = 90  # una sesión no vive más (auth_service.SESION_MAXIMA_DIAS): pasado eso solo queda el rastro
 
 # clave de ajuste -> (etiqueta, por defecto, mínimo, máximo, nota). Con rango 0-1 es un interruptor.
 OPCIONES: dict[str, tuple[str, int, int, int, str]] = {
@@ -147,6 +157,10 @@ OPCIONES: dict[str, tuple[str, int, int, int, str]] = {
     "mantenimiento.dias_registros": ("Registro de subidas terminadas: recortar pasados (días)", 30, 1, 3650, ""),
     "mantenimiento.lineas_registro": ("Registro recortado: líneas que se dejan", 200, 20, 100000, ""),
     "mantenimiento.dias_avisos": ("Avisos leídos: conservar (días)", 30, 1, 3650, ""),
+    "mantenimiento.dias_tmp": (
+        "Capturas y temporales de cada subida: borrar pasados (días)", 7, 1, 3650,
+        "Reintentar o reenviar a qBittorrent una subida más antigua los vuelve a generar.",
+    ),
     "copias.conservar": ("Copias automáticas que se guardan", 7, 1, 365, ""),
     "copias.incluir_claves": (
         "Incluir las claves en las copias automáticas", 0, 0, 1,
@@ -239,6 +253,64 @@ def podar_avisos_leidos(conn: sqlite3.Connection, dias: int, ahora: Optional[dat
     return n
 
 
+def podar_tmp_de_uploadrr(conn: sqlite3.Connection, dias: int, ahora: Optional[datetime] = None) -> int:
+    """Borra de la carpeta tmp de Uploadrr-EMU lo que dejó cada subida (capturas, BASE.torrent, descripción) cuando
+    nada de ello se toca desde hace `dias` y no es de una subida en marcha. Nadie más lo borraba. Un reintento o un
+    reenvío a qBittorrent posterior lo vuelve a generar. Solo carpetas reales dentro de tmp: un enlace no se sigue."""
+    carpeta = get_runtime_settings(conn)["uploadrr_path"]  # sin el ajuste, el Uploadrr-EMU de la imagen
+    corte = (ahora or datetime.now(timezone.utc)).timestamp() - dias * 86400
+    en_marcha = {Path(ruta).name for fila in conn.execute(
+        f"""SELECT path, prepared_path FROM upload_jobs
+            WHERE status IN ({",".join("?" * len(ACTIVE_JOB_STATUSES))}) OR reenvio_qbit_estado = 'en_curso'""",
+        tuple(ACTIVE_JOB_STATUSES)) for ruta in fila if ruta}
+    try:
+        entradas = list(os.scandir(Path(carpeta) / "tmp"))
+    except OSError:
+        return 0
+    borradas = 0
+    for entrada in entradas:
+        if entrada.name in en_marcha or not entrada.is_dir(follow_symlinks=False):
+            continue
+        try:
+            ultimo = max([entrada.stat(follow_symlinks=False).st_mtime,
+                          *(hijo.stat(follow_symlinks=False).st_mtime for hijo in os.scandir(entrada.path))])
+            if ultimo < corte:
+                shutil.rmtree(entrada.path)
+                borradas += 1
+        except OSError as exc:
+            logger.warning("No se pudo borrar una carpeta temporal de Uploadrr-EMU: %s", type(exc).__name__)
+    return borradas
+
+
+def podar_propuestas_caducadas(conn: sqlite3.Connection, ahora: Optional[datetime] = None) -> int:
+    """Borra las propuestas de nombre que otra más nueva dejó caducadas hace más de _DIAS_PROPUESTAS, salvo las que
+    una subida guarda como la suya: cada vez que se rehace una propuesta, la anterior se quedaba para siempre."""
+    corte = _dia_de_corte(ahora or datetime.now(timezone.utc), _DIAS_PROPUESTAS)
+    n = conn.execute(
+        """DELETE FROM nomenclature_proposals
+           WHERE status = 'expired' AND substr(updated_at, 1, 10) < ?
+             AND id NOT IN (SELECT nomenclature_proposal_id FROM upload_jobs
+                            WHERE nomenclature_proposal_id IS NOT NULL)""",
+        (corte,),
+    ).rowcount
+    conn.commit()
+    return n
+
+
+def podar_restos(conn: sqlite3.Connection, ahora: Optional[datetime] = None) -> int:
+    """Lo que ya no se puede volver a leer: la caché del motor de fuentes de otra versión del motor, las sesiones
+    que caducaron hace más de _DIAS_SESIONES (guardan IP y navegador) y la marca «lote avisado» de lotes sin subidas."""
+    corte = _dia_de_corte(ahora or datetime.now(timezone.utc), _DIAS_SESIONES)
+    n = conn.execute("DELETE FROM source_engine_cache WHERE engine_version != ?", (ENGINE_VERSION,)).rowcount
+    n += conn.execute(
+        "DELETE FROM auth_sessions WHERE substr(COALESCE(last_used_at, created_at), 1, 10) < ?", (corte,)).rowcount
+    n += conn.execute(
+        """DELETE FROM app_state WHERE key LIKE 'lote_avisado:%'
+           AND substr(key, 14) NOT IN (SELECT lote_id FROM upload_jobs WHERE lote_id IS NOT NULL)""").rowcount
+    conn.commit()
+    return n
+
+
 def optimizar_base(conn: sqlite3.Connection) -> bool:
     """PRAGMA optimize y vaciar el WAL. False si una lectura en curso no ha dejado vaciarlo del todo."""
     conn.commit()
@@ -251,13 +323,16 @@ def optimizar_base(conn: sqlite3.Connection) -> bool:
 def ejecutar_mantenimiento(conn: sqlite3.Connection, ahora: Optional[datetime] = None) -> tuple[str, str]:
     """La tarea nocturna. Cada paso es independiente: si uno falla, los demás se hacen igual y el resumen lo dice."""
     ahora = ahora or datetime.now(timezone.utc)
-    dias_tareas, dias_registros, lineas, dias_avisos = (valor_opcion(conn, c) for c in (
+    dias_tareas, dias_registros, lineas, dias_avisos, dias_tmp = (valor_opcion(conn, c) for c in (
         "mantenimiento.dias_tareas", "mantenimiento.dias_registros",
-        "mantenimiento.lineas_registro", "mantenimiento.dias_avisos"))
+        "mantenimiento.lineas_registro", "mantenimiento.dias_avisos", "mantenimiento.dias_tmp"))
     pasos = (
         ("ejecuciones de tareas", lambda: podar_tareas(conn, dias_tareas, ahora)),
         ("líneas de registro de subidas", lambda: recortar_registros_de_subidas(conn, dias_registros, lineas, ahora)),
         ("avisos leídos", lambda: podar_avisos_leidos(conn, dias_avisos, ahora)),
+        ("carpetas temporales de subidas", lambda: podar_tmp_de_uploadrr(conn, dias_tmp, ahora)),
+        ("propuestas de nombre caducadas", lambda: podar_propuestas_caducadas(conn, ahora)),
+        ("restos sin uso", lambda: podar_restos(conn, ahora)),
     )
     borrados: list[str] = []
     fallos: list[str] = []
