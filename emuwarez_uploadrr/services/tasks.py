@@ -26,6 +26,16 @@ def finish_task(conn: sqlite3.Connection, task_id: int, status: str, summary: Op
     conn.commit()
 
 
+def cerrar_tareas_interrumpidas(conn: sqlite3.Connection) -> int:
+    """Al arrancar no corre ninguna tarea: las que siguen «running» murieron con la aplicación y se quedaban así para
+    siempre (el mantenimiento conserva la última de cada nombre)."""
+    n = conn.execute(
+        "UPDATE task_runs SET status = 'failed', finished_at = CURRENT_TIMESTAMP, "
+        "summary = 'Interrumpida al reiniciarse la aplicación' WHERE status = 'running'").rowcount
+    conn.commit()
+    return n
+
+
 def discard_task(conn: sqlite3.Connection, task_id: int) -> None:
     """Quita una ejecución que no llegó a hacer nada (una tarea que espera turno y se reintenta al minuto siguiente)."""
     conn.execute("DELETE FROM task_runs WHERE id = ?", (task_id,))

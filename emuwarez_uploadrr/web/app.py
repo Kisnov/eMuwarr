@@ -91,6 +91,24 @@ def _preparar_configs_de_uploadrr() -> None:
         log.warning("No se pudo migrar el config.yaml.bak de Uploadrr-EMU", exc_info=True)
 
 
+def _cerrar_lo_interrumpido() -> None:
+    """Las tareas que seguían «running» y los ficheros de eventos de subidas que murieron con la aplicación."""
+    log = logging.getLogger("emuwarez.web")
+    try:
+        from emuwarez_uploadrr.database import db
+        from emuwarez_uploadrr.services.tasks import cerrar_tareas_interrumpidas
+        with db() as conn:
+            if cerrar_tareas_interrumpidas(conn):
+                log.warning("Marcadas como fallidas las tareas que se quedaron a medias")
+    except Exception:
+        log.warning("No se pudieron cerrar las tareas interrumpidas", exc_info=True)
+    try:
+        from emuwarez_uploadrr.services.uploadrr_eventos import barrer_eventos
+        barrer_eventos()
+    except Exception:
+        log.warning("No se pudieron borrar los ficheros de eventos de subidas interrumpidas", exc_info=True)
+
+
 def _barrer_copias_a_medias() -> None:
     log = logging.getLogger("emuwarez.web")
     try:
@@ -154,6 +172,7 @@ async def _lifespan(app: FastAPI):
     _backfill_spanish_flags()
     _reconcile_interrupted_jobs()
     _preparar_configs_de_uploadrr()
+    _cerrar_lo_interrumpido()
     _barrer_copias_a_medias()
     _avisar_migracion_sin_copia()
     scheduler_task = None

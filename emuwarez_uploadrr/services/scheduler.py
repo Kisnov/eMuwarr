@@ -95,7 +95,7 @@ DEFAULT_TASKS: list[tuple[str, str, str, int, int, int, Optional[str]]] = [
     (
         TASK_MAINTENANCE,
         "Mantenimiento",
-        "Limpia lo antiguo (historial de tareas, registro de subidas ya terminadas, avisos leídos) y optimiza la base de datos. No toca las subidas ni lo que enlazan.",
+        "Limpia lo antiguo (historial de tareas, registro de subidas ya terminadas, avisos leídos, capturas y temporales de subidas) y optimiza la base de datos. No toca las subidas ni lo que enlazan.",
         1440, 60, 1, "04:00",
     ),
 ]
@@ -105,7 +105,7 @@ OPCIONES_DE_TAREA: dict[str, tuple[str, ...]] = {
     TASK_BACKUP: ("copias.conservar", "copias.incluir_claves"),
     TASK_MAINTENANCE: (
         "mantenimiento.dias_tareas", "mantenimiento.dias_registros",
-        "mantenimiento.lineas_registro", "mantenimiento.dias_avisos",
+        "mantenimiento.lineas_registro", "mantenimiento.dias_avisos", "mantenimiento.dias_tmp",
     ),
 }
 

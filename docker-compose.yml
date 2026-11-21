@@ -36,6 +36,12 @@ services:
     image: ghcr.io/kisnov/emuwarr:${EMUWAREZ_UPLOADRR_TAG:-latest}
     container_name: emuwarr
     restart: unless-stopped
+    # El log de Docker lleva una línea por petición y no rota solo: sin esto crece sin límite.
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     # Un init como proceso 1: recoge los procesos que quedan sueltos al cancelar una subida (ffmpeg, mkbrr...).
     init: true
 

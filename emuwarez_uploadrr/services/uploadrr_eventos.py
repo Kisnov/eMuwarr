@@ -72,6 +72,22 @@ def borrar_fichero(ruta: str | os.PathLike | None) -> None:
             logger.warning("No se pudo borrar el fichero de eventos de Uploadrr-EMU")
 
 
+def barrer_eventos() -> int:
+    """Al arrancar no hay ninguna subida viva: los ficheros de eventos que quedan son de una que murió con la aplicación."""
+    borrados = 0
+    try:
+        ficheros = [f for f in (db_path().parent / "eventos_uploadrr").iterdir() if f.is_file() or f.is_symlink()]
+    except OSError:
+        return 0
+    for fichero in ficheros:
+        try:
+            fichero.unlink()
+            borrados += 1
+        except OSError:
+            logger.warning("No se pudo borrar un fichero de eventos de una subida interrumpida")
+    return borrados
+
+
 def _una_vez(avisados: set[str], clave: str, texto: str) -> None:
     """Avisa en el log una sola vez por clave: un Uploadrr-EMU más nuevo repetiría el aviso en cada línea."""
     if clave not in avisados:
