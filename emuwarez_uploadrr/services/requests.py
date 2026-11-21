@@ -697,6 +697,9 @@ def _guardar_casamientos(conn: sqlite3.Connection, casamientos: list[tuple], pet
                 "UPDATE library_items SET request_status = 'Sin petición', request_id = NULL WHERE request_id = ?",
                 (peticion,),
             )
+        # Varias peticiones pueden ir a la misma fila de la biblioteca y esta solo guarda una: la de mejor cruce
+        # (a igualdad, la más antigua) se escribe la última. Antes ganaba la que saliera después en la consulta.
+        casamientos = sorted(casamientos, key=lambda c: (-_ORDEN_DEL_CASAMIENTO.get(c[2]["status"], 9), -int(c[0]["id"])))
         for req, best, cls, destino in casamientos:
             conn.execute(_INSERTAR_CASAMIENTO, (
                 best["item"]["id"],
@@ -734,6 +737,16 @@ def match_all_requests(conn: sqlite3.Connection) -> int:
     _guardar_casamientos(conn, casamientos)
     _notify_new_compatible_matches(conn, before_compatible)
     return len(casamientos)
+
+
+def volver_a_cruzar_tras_la_biblioteca(conn: sqlite3.Connection) -> None:
+    """Tras una sincronización de biblioteca: el cruce y la preparación de las peticiones con lo que acaba de entrar.
+    Con una sincronización de peticiones en marcha no hace nada: esa los rehace al terminar."""
+    if _SYNC_EN_CURSO.locked() or not conn.execute("SELECT 1 FROM request_items LIMIT 1").fetchone():
+        return
+    from .request_readiness import refresh_request_readiness
+    match_all_requests(conn)
+    refresh_request_readiness(conn)
 
 
 _MAX_AVISOS_SUELTOS = 5

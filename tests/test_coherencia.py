@@ -1,0 +1,130 @@
+"""Lo guardado no se queda atrás de lo que hay: el cruce con las peticiones tras cada sincronización de biblioteca,
+qué petición se lleva una fila que casa con varias y un catálogo de eMuwarez sin torrents repetidos.
+
+Bloque 5 del análisis de la base de 2026-11-19 (INT-1, INT-2, INT-3). INT-4 está en test_mis_torrents.py e INT-5 en
+test_library_sync.py.
+"""
+from __future__ import annotations
+
+import pytest
+
+from emuwarez_uploadrr.database import connect, db_path, init_db
+from emuwarez_uploadrr.models import RequestItem
+from emuwarez_uploadrr.services import emu_catalog
+from emuwarez_uploadrr.services import requests as reqs
+from emuwarez_uploadrr.services.library.sync import recompute_after_sync
+
+
+@pytest.fixture
+def conn(isolated_db):
+    c = connect(db_path())
+    init_db(c)
+    yield c
+    c.close()
+
+
+def _pelicula(conn, tmdb: str, resolucion: str = "1080p") -> int:
+    return conn.execute(
+        "INSERT INTO library_items(item_type, title, year, local_status, tmdb_id, resolution, source, video_codec) "
+        "VALUES ('movie', 'Peli', 2020, 'Disponible', ?, ?, 'WEB-DL', 'x264')", (tmdb, resolucion)).lastrowid
+
+
+def _peticion(conn, emu_id: str, tmdb: str, resolucion: str = "1080p") -> int:
+    reqs.upsert_request(conn, RequestItem(
+        id=None, emu_id=emu_id, title="Peli", category="Películas", tmdb_id=tmdb,
+        requested_resolution=resolucion, requested_source="WEB-DL"))
+    conn.commit()
+    return conn.execute("SELECT id FROM request_items WHERE emu_id = ?", (emu_id,)).fetchone()[0]
+
+
+def _fila(conn, item_id: int):
+    return conn.execute("SELECT request_status, request_id FROM library_items WHERE id = ?", (item_id,)).fetchone()
+
+
+# ---------------------------------------------------------------------------
+# INT-1: la sincronización de biblioteca vuelve a cruzar las peticiones
+# ---------------------------------------------------------------------------
+
+def test_tras_sincronizar_la_biblioteca_lo_recien_bajado_ya_sale_cruzado(conn):
+    peticion = _peticion(conn, "r1", "900")
+    peli = _pelicula(conn, "900")  # lo que Radarr acaba de bajar
+    conn.commit()
+    assert conn.execute("SELECT COUNT(*) FROM request_matches").fetchone()[0] == 0
+
+    recompute_after_sync(conn)
+
+    cruce = conn.execute("SELECT library_item_id, request_item_id FROM request_matches").fetchone()
+    assert tuple(cruce) == (peli, peticion)
+    assert _fila(conn, peli)["request_status"] != "Sin petición" and _fila(conn, peli)["request_id"] == peticion
+    assert conn.execute("SELECT readiness_status FROM request_items").fetchone()[0] is not None
+
+
+def test_con_una_sincronizacion_de_peticiones_en_marcha_el_cruce_se_le_deja_a_ella(conn):
+    _peticion(conn, "r1", "900")
+    _pelicula(conn, "900")
+    conn.commit()
+
+    with reqs._SYNC_EN_CURSO:
+        reqs.volver_a_cruzar_tras_la_biblioteca(conn)
+
+    assert conn.execute("SELECT COUNT(*) FROM request_matches").fetchone()[0] == 0
+
+
+def test_si_el_cruce_falla_la_sincronizacion_de_biblioteca_no_se_cae(conn, monkeypatch, caplog):
+    _peticion(conn, "r1", "900")
+
+    def revienta(_conn):
+        raise RuntimeError("base ocupada")
+
+    monkeypatch.setattr(reqs, "match_all_requests", revienta)
+
+    recompute_after_sync(conn)
+
+    assert "No se pudieron volver a cruzar las peticiones" in caplog.text
+
+
+# ---------------------------------------------------------------------------
+# INT-2: de dos peticiones a la misma fila, se queda la de mejor cruce
+# ---------------------------------------------------------------------------
+
+def test_de_dos_peticiones_a_la_misma_fila_se_queda_la_de_mejor_cruce_venga_en_el_orden_que_venga(conn):
+    primera, segunda = _pelicula(conn, "901"), _pelicula(conn, "902")
+    buena_antes = _peticion(conn, "a", "901", "1080p")
+    _peticion(conn, "b", "901", "2160p")
+    _peticion(conn, "c", "902", "2160p")
+    buena_despues = _peticion(conn, "d", "902", "1080p")
+
+    reqs.match_all_requests(conn)
+
+    estados = dict(conn.execute("SELECT request_item_id, status FROM request_matches").fetchall())
+    assert estados[buena_antes] == estados[buena_despues] == "Compatible"
+    assert "Compatible" not in (estados[buena_antes + 1], estados[buena_despues - 1])
+    assert tuple(_fila(conn, primera)) == ("Compatible", buena_antes)
+    assert tuple(_fila(conn, segunda)) == ("Compatible", buena_despues)
+
+
+# ---------------------------------------------------------------------------
+# INT-3: el catálogo no guarda dos veces el mismo torrent
+# ---------------------------------------------------------------------------
+
+def _torrent(torrent_id: str, nombre: str = "Peli") -> dict:
+    return {"torrent_id": torrent_id, "category": "Películas", "tmdb_id": "900", "tvdb_id": None,
+            "season_number": None, "resolution": "1080p", "source": "WEB-DL", "codec": "x264", "has_spanish": 1,
+            "size": 1, "name": nombre}
+
+
+def _catalogo(conn) -> list[tuple]:
+    return [tuple(f) for f in conn.execute("SELECT torrent_id, name FROM emu_catalog ORDER BY torrent_id")]
+
+
+def test_una_descarga_completa_con_un_torrent_repetido_lo_guarda_una_vez(conn):
+    emu_catalog._store_catalog(conn, [_torrent("1"), _torrent("2"), _torrent("2"), _torrent("3")])
+    assert _catalogo(conn) == [("1", "Peli"), ("2", "Peli"), ("3", "Peli")]
+
+
+def test_una_lectura_incremental_no_repite_lo_que_ya_estaba(conn):
+    emu_catalog._store_catalog(conn, [_torrent("1"), _torrent("2")])
+
+    emu_catalog._append_catalog(conn, [_torrent("2", "Peli renombrada"), _torrent("3"), _torrent("3")])
+
+    assert _catalogo(conn) == [("1", "Peli"), ("2", "Peli renombrada"), ("3", "Peli")]

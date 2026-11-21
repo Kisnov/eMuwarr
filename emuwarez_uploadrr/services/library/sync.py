@@ -164,6 +164,8 @@ def upsert_library_item(
             missing_since = CASE
                 WHEN excluded.local_status = 'Faltante' AND library_items.local_status IS NOT 'Faltante'
                 THEN excluded.missing_since
+                -- Ya no falta: sin esto, Recomendaciones ordenaba lo disponible por cuándo faltó una vez.
+                WHEN excluded.local_status = 'Disponible' THEN NULL
                 ELSE library_items.missing_since END,
             last_seen_at = COALESCE(excluded.last_seen_at, library_items.last_seen_at),
             updated_at = CURRENT_TIMESTAMP
@@ -884,6 +886,14 @@ def recompute_after_sync(conn: sqlite3.Connection) -> None:
         recompute_spanish_flags(conn)
     except Exception:
         logger.warning("No se pudo recalcular el castellano (audio/subtítulos) tras la sincronización de biblioteca", exc_info=True)
+    # El cruce con las peticiones solo lo rehacía su propia sincronización, una vez al día: lo que Radarr/Sonarr
+    # acababa de bajar no salía como «listo para subir» hasta entonces. Es local, no llama a eMuwarez.
+    try:
+        from ..requests import volver_a_cruzar_tras_la_biblioteca
+        volver_a_cruzar_tras_la_biblioteca(conn)
+    except Exception:
+        conn.rollback()
+        logger.warning("No se pudieron volver a cruzar las peticiones tras la sincronización de biblioteca", exc_info=True)
     olvidar_valores_de_filtro()
 
 
