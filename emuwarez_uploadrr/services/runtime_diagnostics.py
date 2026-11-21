@@ -180,7 +180,7 @@ def check_required_secrets() -> dict:
 
 
 def check_arr_health_configuration() -> dict:
-    """Devuelve resumen de instancias Radarr/Sonarr: count, enabled, last_sync, last_diagnostics."""
+    """Devuelve resumen de instancias Radarr/Sonarr: count, enabled, last_sync."""
     try:
         config_dir = os.environ.get("CONFIG_DIR", str(Path.home() / ".config" / "emuwarez-renamer"))
         db_path = Path(config_dir) / "emuwarez_uploadrr.db"
@@ -207,11 +207,6 @@ def check_arr_health_configuration() -> dict:
                 "SELECT started_at FROM task_runs WHERE name='sync-library' AND status='completed' ORDER BY id DESC LIMIT 1"
             ).fetchone()
             last_sync = last_sync_row[0] if last_sync_row else None
-
-            last_diag_row = conn.execute(
-                "SELECT started_at FROM library_diagnostic_runs ORDER BY id DESC LIMIT 1"
-            ).fetchone() if _table_exists(conn, "library_diagnostic_runs") else None
-            last_diag = last_diag_row[0] if last_diag_row else None
         finally:
             conn.close()
 
@@ -227,18 +222,10 @@ def check_arr_health_configuration() -> dict:
                 "sonarr_total": sonarr_total,
                 "sonarr_enabled": sonarr_enabled,
                 "last_sync": last_sync,
-                "last_diagnostics_run": last_diag,
             },
         )
     except Exception as exc:
         return _check("arr_health_config", "warning", f"No se pudo verificar configuración ARR: {texto_de_error(exc)}", {})
-
-
-def _table_exists(conn: sqlite3.Connection, table: str) -> bool:
-    row = conn.execute(
-        "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=?", (table,)
-    ).fetchone()
-    return bool(row and row[0])
 
 
 def get_runtime_diagnostics() -> dict:

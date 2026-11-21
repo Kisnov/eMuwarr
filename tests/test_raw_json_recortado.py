@@ -158,7 +158,7 @@ def test_sin_sitio_para_el_wal_no_recorta_y_arranca_igual(conn, monkeypatch, cap
 
     _migrar_desde_57(conn)
 
-    assert conn.execute("SELECT value FROM app_state WHERE key = 'schema_version'").fetchone()[0] == "58"
+    assert _version(conn) == str(database.SCHEMA_VERSION)
     assert _raw(conn, "series") == [SERIE]
     assert "No hay sitio para recortar" in caplog.text
 
@@ -192,13 +192,14 @@ def _version(conn) -> str:
 
 def test_si_el_disco_se_llena_al_recortar_arranca_igual_y_no_deshace_lo_de_antes(conn, monkeypatch, caplog):
     _biblioteca_como_antes(conn)
-    conn.execute("UPDATE library_items SET arr_queue_raw_json = '{}'")  # lo vacía otra migración de la cascada (48)
+    # El dominio viejo lo cambia otra migración de la cascada (39).
+    conn.execute("INSERT INTO request_items (emu_id, title, url) VALUES ('1', 'P', 'https://emuwarez.com/requests/1')")
     _falla(monkeypatch, lambda sql: sql.startswith("UPDATE library_items SET raw_json"))
 
     _migrar_desde_57(conn)
 
-    assert _version(conn) == "58"
-    assert conn.execute("SELECT COUNT(*) FROM library_items WHERE arr_queue_raw_json IS NOT NULL").fetchone()[0] == 0
+    assert _version(conn) == str(database.SCHEMA_VERSION)
+    assert conn.execute("SELECT url FROM request_items").fetchone()[0] == "https://emu-warez.com/requests/1"
     assert _raw(conn, "series") == [SERIE]
     assert "No se pudo recortar raw_json" in caplog.text
 
@@ -211,7 +212,7 @@ def test_si_falla_la_compactacion_arranca_igual(conn, monkeypatch, caplog, sente
 
     _migrar_desde_57(conn)
 
-    assert _version(conn) == "58"
+    assert _version(conn) == str(database.SCHEMA_VERSION)
     assert _raw(conn, "series") == [{"added": "2023-05-01T10:00:00Z"}]
     assert aviso in caplog.text
 
