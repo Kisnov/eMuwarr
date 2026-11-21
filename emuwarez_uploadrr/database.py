@@ -1633,6 +1633,10 @@ def _copia_antes_de_migrar(conn: sqlite3.Connection, version: int) -> bool:
         except Exception:
             destino.unlink(missing_ok=True)  # una copia vacía no puede contar entre las últimas
             raise
+    except (sqlite3.Error, OSError):
+        logger.warning("No se pudo copiar la base antes de migrar", exc_info=True)
+        return False
+    try:
         copias = sorted(carpeta.glob("pre-migracion-*.db"))
         # La primera de esta versión es la única anterior a un intento fallido de migrar: los
         # reintentos de un arranque en bucle copian ya una base a medias y no deben llevársela.
@@ -1640,10 +1644,9 @@ def _copia_antes_de_migrar(conn: sqlite3.Connection, version: int) -> bool:
         for vieja in copias[:-_COPIAS_ANTES_DE_MIGRAR]:
             if vieja != intocable:
                 vieja.unlink(missing_ok=True)
-        return True
-    except (sqlite3.Error, OSError):
-        logger.warning("No se pudo copiar la base antes de migrar", exc_info=True)
-        return False
+    except OSError:  # la copia nueva ya está hecha
+        logger.warning("No se pudieron retirar las copias antiguas de antes de migrar", exc_info=True)
+    return True
 
 
 def init_db(conn: Optional[sqlite3.Connection] = None) -> None:

@@ -10,6 +10,7 @@ import shutil
 import sqlite3
 import tarfile
 import tempfile
+import threading
 import zlib
 from pathlib import Path
 
@@ -28,6 +29,8 @@ PREFIJO_AUTOMATICA = "emuwarez_config_auto_"
 PREFIJO_ANTES_DE_RESTAURAR = "emuwarez_config_antes_de_restaurar_"
 PREFIJO_SUBIDA = "emuwarez_config_subida_"
 _COPIAS_ANTES_DE_RESTAURAR = 5
+# Una restauración a la vez: dos se pisarían los ficheros, y la base de una podía quedar dada por migrada sin estarlo.
+_restaurando = threading.Lock()
 _NOMBRE_COPIA = re.compile(r"^emuwarez_config_[A-Za-z0-9_]+\.tar\.gz$")
 LIMITE_SUBIDA_BYTES = 1024 ** 3
 # Un .tar.gz truncado (disco lleno, contenedor parado a medias) no da TarError sino estos.
@@ -526,6 +529,12 @@ def restore_config_backup(
             "message": "Previsualización — no se han restaurado archivos",
         }
 
+    with _restaurando:
+        return _aplicar_restauracion(path, config_dir, members)
+
+
+def _aplicar_restauracion(path: Path, config_dir: Path, members: list[str]) -> dict:
+    """La parte de restore_config_backup que escribe: la copia de lo que hay, la base, los ficheros y la migración."""
     previa = None
     if config_dir.exists():
         # Lo que se va a sobrescribir, con claves: es lo único con lo que se deshace una restauración equivocada.

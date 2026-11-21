@@ -180,3 +180,49 @@ def test_con_copia_previa_no_hay_aviso():
     assert len(_copias_previas()) == 1
     with db() as conn:
         assert backup_service.avisar_migracion_sin_copia(conn) is False
+
+
+def test_no_poder_retirar_copias_antiguas_no_cuenta_como_migrar_sin_copia(monkeypatch):
+    _base_de_la_version_anterior()
+    carpeta = db_path().parent / "backups"
+    carpeta.mkdir(exist_ok=True)
+    for dia in range(1, 5):
+        (carpeta / f"pre-migracion-2020010{dia}_000000-v1.db").write_bytes(b"")
+
+    def no_se_puede(self, missing_ok=False):
+        raise PermissionError("no se puede borrar")
+
+    with monkeypatch.context() as m:
+        m.setattr(database.Path, "unlink", no_se_puede)
+        preparar_base()
+
+    assert len(_copias_previas()) == 5
+    with db() as conn:
+        assert get_state(conn, "migracion_sin_copia") is None
+
+
+# ---------------------------------------------------------------------------
+# Una restauración a la vez
+# ---------------------------------------------------------------------------
+
+def test_una_restauracion_espera_a_que_acabe_la_que_esta_en_marcha():
+    with db() as conn:
+        set_state(conn, "marca", "copia")
+    copia = backup_service.create_config_backup()["archive_path"]
+    with db() as conn:
+        set_state(conn, "marca", "ahora")
+    resultado = []
+    hilo = threading.Thread(target=lambda: resultado.append(backup_service.restore_config_backup(
+        copia, dry_run=False, apply=True, confirmation=backup_service.RESTORE_CONFIRMATION)))
+
+    with backup_service._restaurando:  # otra restauración en marcha
+        hilo.start()
+        hilo.join(0.5)
+        assert hilo.is_alive()
+        with db() as conn:
+            assert get_state(conn, "marca") == "ahora"
+    hilo.join(30)
+
+    assert resultado and resultado[0]["ok"] is True
+    with db() as conn:
+        assert get_state(conn, "marca") == "copia"
