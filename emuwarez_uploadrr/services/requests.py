@@ -681,14 +681,21 @@ def _casar(
     return req, best, classification, _scoped_library_id(conn, best["item"], req)
 
 
-def _gana_la_fila(conn: sqlite3.Connection, destino: int, estado: str, peticion: int) -> bool:
-    """Varias peticiones pueden ir a la misma fila de la biblioteca y esta solo guarda una: la de mejor cruce y, a
-    igualdad, la más antigua. Antes ganaba la última en escribirse."""
-    actual = conn.execute("SELECT request_status, request_id FROM library_items WHERE id = ?", (destino,)).fetchone()
-    if not actual or actual[1] is None:
-        return True
-    orden = _ORDEN_DEL_CASAMIENTO.get
-    return (orden(estado, 9), peticion) < (orden(actual[0], 9), actual[1])
+def _cruces_guardados_hacia(conn: sqlite3.Connection, filas: set[int]) -> list[tuple]:
+    """(estado, petición, fila) de los cruces guardados que van a esas filas: un cruce va a la fila que casó, a su
+    temporada o a su capítulo (`_scoped_library_id`)."""
+    marcas = ",".join("?" * len(filas))
+    candidatos = conn.execute(f"""
+        SELECT rm.status, rm.request_item_id, li.id, li.item_type, ri.req_season, ri.req_episode, ri.req_scope
+        FROM request_matches rm
+        JOIN library_items li ON li.id = rm.library_item_id
+        JOIN request_items ri ON ri.id = rm.request_item_id
+        WHERE li.id IN ({marcas})
+           OR li.id IN (SELECT parent_id FROM library_items WHERE id IN ({marcas}))
+           OR li.id IN (SELECT t.parent_id FROM library_items c JOIN library_items t ON t.id = c.parent_id
+                        WHERE c.id IN ({marcas}))""", (*filas, *filas, *filas)).fetchall()
+    cruces = ((c["status"], c["request_item_id"], _scoped_library_id(conn, dict(c), dict(c))) for c in candidatos)
+    return [c for c in cruces if c[2] in filas]
 
 
 def _guardar_casamientos(conn: sqlite3.Connection, casamientos: list[tuple], peticion: Optional[int] = None) -> None:
@@ -705,6 +712,7 @@ def _guardar_casamientos(conn: sqlite3.Connection, casamientos: list[tuple], pet
             )
             conn.execute("DELETE FROM request_matches")
         else:
+            filas = {f[0] for f in conn.execute("SELECT id FROM library_items WHERE request_id = ?", (peticion,))}
             conn.execute("DELETE FROM request_matches WHERE request_item_id = ?", (peticion,))
             conn.execute(
                 "UPDATE library_items SET request_status = 'Sin petición', request_id = NULL WHERE request_id = ?",
@@ -721,11 +729,18 @@ def _guardar_casamientos(conn: sqlite3.Connection, casamientos: list[tuple], pet
                 1 if best["id_match"] else 0,
                 "\n".join(cls["reasons"]),
             ))
-            if _gana_la_fila(conn, destino, cls["status"], int(req["id"])):
-                conn.execute(
-                    "UPDATE library_items SET request_status = ?, request_id = ?, updated_at = CURRENT_TIMESTAMP "
-                    "WHERE id = ?", (cls["status"], int(req["id"]), destino),
-                )
+        cruces = [(cls["status"], int(req["id"]), destino) for req, _, cls, destino in casamientos]
+        if peticion is not None:
+            # Las filas de una sola petición, la de antes y la de ahora, se reparten con las demás que van a ellas.
+            filas |= {c[2] for c in cruces}
+            cruces = _cruces_guardados_hacia(conn, filas) if filas else []
+        # Varias peticiones pueden ir a la misma fila de la biblioteca y esta solo guarda una: la de mejor cruce
+        # (a igualdad, la más antigua) se escribe la última. Antes ganaba la que saliera después en la consulta.
+        for estado, de_peticion, fila in sorted(cruces, key=lambda c: (-_ORDEN_DEL_CASAMIENTO.get(c[0], 9), -c[1])):
+            conn.execute(
+                "UPDATE library_items SET request_status = ?, request_id = ?, updated_at = CURRENT_TIMESTAMP "
+                "WHERE id = ?", (estado, de_peticion, fila),
+            )
         conn.commit()
     except Exception:
         conn.rollback()

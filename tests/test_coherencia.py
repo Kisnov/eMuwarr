@@ -134,6 +134,47 @@ def test_recalcular_una_sola_peticion_no_le_quita_la_fila_a_otra_de_mejor_cruce(
     assert conn.execute("SELECT COUNT(*) FROM request_matches").fetchone()[0] == 2
 
 
+def test_si_la_que_tenia_la_fila_empeora_o_deja_de_casar_la_fila_pasa_a_la_siguiente(conn):
+    peli = _pelicula(conn, "904")
+    antigua = _peticion(conn, "a", "904", "1080p")
+    nueva = _peticion(conn, "b", "904", "1080p")
+    reqs.match_all_requests(conn)
+    assert tuple(_fila(conn, peli)) == ("Compatible", antigua)
+
+    conn.execute("UPDATE request_items SET requested_resolution = '2160p' WHERE id = ?", (antigua,))
+    reqs.match_single_request(conn, antigua)
+    assert tuple(_fila(conn, peli)) == ("Compatible", nueva)
+
+    conn.execute("UPDATE request_items SET requested_resolution = '1080p' WHERE id = ?", (antigua,))
+    reqs.match_single_request(conn, antigua)
+    assert tuple(_fila(conn, peli)) == ("Compatible", antigua)
+
+    conn.execute("UPDATE request_items SET tmdb_id = '999', title = 'Otra cosa' WHERE id = ?", (antigua,))
+    assert reqs.match_single_request(conn, antigua) is None
+    assert tuple(_fila(conn, peli)) == ("Compatible", nueva)
+
+
+def test_una_peticion_de_temporada_se_reparte_la_fila_de_su_temporada(conn):
+    serie = conn.execute(
+        "INSERT INTO library_items(item_type, title, year, local_status, tmdb_id) "
+        "VALUES ('series', 'Serie', 2020, 'Disponible', '905')").lastrowid
+    temporada = conn.execute(
+        "INSERT INTO library_items(item_type, title, year, local_status, tmdb_id, parent_id, season_number) "
+        "VALUES ('season', 'Serie', 2020, 'Disponible', '905', ?, 2)", (serie,)).lastrowid
+    for emu_id in ("a", "b"):
+        reqs.upsert_request(conn, RequestItem(
+            id=None, emu_id=emu_id, title="Serie", category="Series", tmdb_id="905", req_scope="season", req_season=2))
+    conn.commit()
+    antigua, nueva = (r[0] for r in conn.execute("SELECT id FROM request_items ORDER BY id"))
+    reqs.match_all_requests(conn)
+    assert _fila(conn, temporada)["request_id"] == antigua and _fila(conn, serie)["request_id"] is None
+
+    conn.execute("UPDATE request_items SET tmdb_id = '999', title = 'Otra cosa' WHERE id = ?", (antigua,))
+    reqs.match_single_request(conn, antigua)
+
+    assert _fila(conn, temporada)["request_id"] == nueva
+
+
 # ---------------------------------------------------------------------------
 # INT-3: el catálogo no guarda dos veces el mismo torrent
 # ---------------------------------------------------------------------------
