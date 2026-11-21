@@ -25,7 +25,8 @@ LABEL org.opencontainers.image.source="https://github.com/Kisnov/eMuwarr"
 # needed for it.
 # mesa-vulkan-drivers: Vulkan por CPU para el libplacebo de ffmpeg, con el que Uploadrr-EMU saca las capturas de
 # un Dolby Vision perfil 5.
-RUN apt-get update && apt-get install -y --no-install-recommends \
+# upgrade: los arreglos de seguridad de Debian que la imagen base de Python aún no trae.
+RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-recommends \
     mediainfo ffmpeg mktorrent mkvtoolnix mesa-vulkan-drivers \
     && rm -rf /var/lib/apt/lists/*
 
