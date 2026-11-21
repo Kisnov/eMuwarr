@@ -174,7 +174,7 @@ def _con_clave(conn, clave="configured-key-123"):
 def sin_cruce(monkeypatch):
     """Estas pruebas son de lo que se importa, no de cruzarlo con la biblioteca."""
     from emuwarez_uploadrr.services import requests as reqs
-    monkeypatch.setattr(reqs, "match_all_requests", lambda conn: 0)
+    monkeypatch.setattr(reqs, "_cruzar_todas", lambda conn: (0, set()))
 
 
 def test_sync_requests_reads_key_from_db_settings(db_conn, monkeypatch, sin_cruce):
@@ -287,9 +287,9 @@ def _add_compatible_request(conn, *, title, library_item_id, scope=None,
 
 
 def _notify_and_read(conn):
-    from emuwarez_uploadrr.services.requests import _notify_new_compatible_matches
+    from emuwarez_uploadrr.services.requests import _compatible_request_ids, _notify_new_compatible_matches
     from emuwarez_uploadrr.services.notification_center import list_notifications
-    _notify_new_compatible_matches(conn, set())
+    _notify_new_compatible_matches(conn, _compatible_request_ids(conn))
     return list_notifications(conn)
 
 

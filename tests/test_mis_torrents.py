@@ -70,6 +70,14 @@ def test_el_filtro_por_usuario_va_en_la_url(monkeypatch):
     assert "uploader=Kisnov" in urls[0] and "uploader" not in urls[1]
 
 
+def test_un_torrent_repetido_entre_paginas_no_tumba_la_lectura(conn, tracker):
+    """Una subida nueva mientras se pagina desplaza la lista y repite un id: la clave primaria abortaba todo."""
+    tracker["torrents"] = [_torrent(1, 40), _torrent(2, 3), _torrent(1, 41)]
+    assert sincronizar(conn, AHORA)[0] == "completed"
+    assert [tuple(f) for f in conn.execute("SELECT torrent_id, completados FROM emu_mis_torrents ORDER BY 1")] == [
+        (1, 41), (2, 3)]
+
+
 def test_lee_por_tu_usuario_y_guarda_la_lista(conn, tracker):
     tracker["torrents"] = [_torrent(1, 40), _torrent(2, 3, seeders=0, freeleech="50%", double_upload=True)]
     assert sincronizar(conn, AHORA) == ("completed", "2 subidas, 1 sin seeders")

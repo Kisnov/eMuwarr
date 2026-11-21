@@ -773,6 +773,23 @@ def test_upsert_sets_missing_since_only_on_transition_into_faltante(mem_conn):
     assert row["missing_since"] == first_missing_since
 
 
+def test_missing_since_se_borra_cuando_vuelve_a_estar_disponible(mem_conn):
+    """Sin esto, Recomendaciones ordenaba lo disponible por cuándo faltó una vez, y no por cuándo se añadió."""
+    from emuwarez_uploadrr.services.library import sync_instance
+    from emuwarez_uploadrr.services.instances import list_instances
+    instance = list_instances(mem_conn)[0]
+
+    for tiene_fichero, esperado in ((False, True), (True, False)):
+        with (
+            patch("emuwarez_uploadrr.integrations.radarr.get_movies",
+                  return_value=[_fake_movie(31, "Vuelve", has_file=tiene_fichero)]),
+            patch("emuwarez_uploadrr.integrations.radarr.get_queue", return_value=[]),
+        ):
+            sync_instance(mem_conn, instance)
+        fila = mem_conn.execute("SELECT missing_since FROM library_items WHERE title = 'Vuelve'").fetchone()
+        assert (fila["missing_since"] is not None) is esperado
+
+
 def test_faltante_group_orders_by_missing_since_not_arr_added(mem_conn):
     """Recomendaciones' "Faltante" group must rank by when an item actually
     became missing (missing_since), not by Radarr/Sonarr's own "added" date

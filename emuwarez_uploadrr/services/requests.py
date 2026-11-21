@@ -163,6 +163,8 @@ def _resolve_emu_api_key(conn: sqlite3.Connection) -> Optional[str]:
 
 
 _SYNC_EN_CURSO = threading.Lock()
+# El cruce y la preparación, de uno en uno: el que entra segundo lee la biblioteca que dejó el primero.
+_CRUZANDO = threading.Lock()
 
 
 def _motivo_ocupado(conn: sqlite3.Connection) -> Optional[str]:
@@ -335,16 +337,12 @@ def _importar_peticiones(conn: sqlite3.Connection) -> dict[str, int | str]:
         set_state(conn, SYNC_STATE_KEY, _utcnow().isoformat())
         conn.commit()
         _set_progress(phase="Cruzando con tu biblioteca…")
-        matched = match_all_requests(conn)
-        # La preparación no se calcula sola: sin esto el detalle de cada petición nueva daba 404. Si falla no tumba
-        # la sincronización: lo importado vale, y «Recalcular» la repite sin volver a llamar a eMuwarez.
-        _set_progress(phase="Calculando qué está listo para subir…")
-        try:
-            sin_preparar = refresh_request_readiness(conn)["errors"]
-        except Exception:
-            conn.rollback()
-            logger.exception("No se pudo calcular la preparación de las peticiones")
-            sin_preparar = None
+        with _CRUZANDO:
+            matched, compatibles_nuevas = _cruzar_todas(conn)
+            # La preparación no se calcula sola: sin esto el detalle de cada petición nueva daba 404.
+            _set_progress(phase="Calculando qué está listo para subir…")
+            sin_preparar = _preparar_peticiones(conn)
+        _notify_new_compatible_matches(conn, compatibles_nuevas)
         if sin_preparar is not None:
             _avisar_peticiones_nuevas_listas(conn)
         # Igual que la preparación: unos pósters que no llegan no tumban la sincronización.
@@ -378,6 +376,17 @@ def _importar_peticiones(conn: sqlite3.Connection) -> dict[str, int | str]:
 
 
 _MAX_TITULOS_EN_EL_AVISO = 5
+
+
+def _preparar_peticiones(conn: sqlite3.Connection) -> Optional[int]:
+    """La preparación tras un cruce: cuántas peticiones fallaron, o None si no se pudo calcular. Un fallo no tumba la
+    sincronización que la pide: lo cruzado vale, y «Recalcular» la repite sin volver a llamar a eMuwarez."""
+    try:
+        return refresh_request_readiness(conn)["errors"]
+    except Exception:
+        conn.rollback()
+        logger.exception("No se pudo calcular la preparación de las peticiones")
+        return None
 
 
 def _avisar_peticiones_nuevas_listas(conn: sqlite3.Connection) -> None:
@@ -678,6 +687,23 @@ def _casar(
     return req, best, classification, _scoped_library_id(conn, best["item"], req)
 
 
+def _cruces_guardados_hacia(conn: sqlite3.Connection, filas: set[int]) -> list[tuple]:
+    """(estado, petición, fila) de los cruces guardados que van a esas filas: un cruce va a la fila que casó, a su
+    temporada o a su capítulo (`_scoped_library_id`)."""
+    marcas = ",".join("?" * len(filas))
+    candidatos = conn.execute(f"""
+        SELECT rm.status, rm.request_item_id, li.id, li.item_type, ri.req_season, ri.req_episode, ri.req_scope
+        FROM request_matches rm
+        JOIN library_items li ON li.id = rm.library_item_id
+        JOIN request_items ri ON ri.id = rm.request_item_id
+        WHERE li.id IN ({marcas})
+           OR li.id IN (SELECT parent_id FROM library_items WHERE id IN ({marcas}))
+           OR li.id IN (SELECT t.parent_id FROM library_items c JOIN library_items t ON t.id = c.parent_id
+                        WHERE c.id IN ({marcas}))""", (*filas, *filas, *filas)).fetchall()
+    cruces = ((c["status"], c["request_item_id"], _scoped_library_id(conn, dict(c), dict(c))) for c in candidatos)
+    return [c for c in cruces if c[2] in filas]
+
+
 def _guardar_casamientos(conn: sqlite3.Connection, casamientos: list[tuple], peticion: Optional[int] = None) -> None:
     """Cambia de una vez lo guardado (de todas las peticiones, o solo de `peticion`) por los casamientos nuevos.
 
@@ -692,6 +718,7 @@ def _guardar_casamientos(conn: sqlite3.Connection, casamientos: list[tuple], pet
             )
             conn.execute("DELETE FROM request_matches")
         else:
+            filas = {f[0] for f in conn.execute("SELECT id FROM library_items WHERE request_id = ?", (peticion,))}
             conn.execute("DELETE FROM request_matches WHERE request_item_id = ?", (peticion,))
             conn.execute(
                 "UPDATE library_items SET request_status = 'Sin petición', request_id = NULL WHERE request_id = ?",
@@ -708,9 +735,17 @@ def _guardar_casamientos(conn: sqlite3.Connection, casamientos: list[tuple], pet
                 1 if best["id_match"] else 0,
                 "\n".join(cls["reasons"]),
             ))
+        cruces = [(cls["status"], int(req["id"]), destino) for req, _, cls, destino in casamientos]
+        if peticion is not None:
+            # Las filas de una sola petición, la de antes y la de ahora, se reparten con las demás que van a ellas.
+            filas |= {c[2] for c in cruces}
+            cruces = _cruces_guardados_hacia(conn, filas) if filas else []
+        # Varias peticiones pueden ir a la misma fila de la biblioteca y esta solo guarda una: la de mejor cruce
+        # (a igualdad, la más antigua) se escribe la última. Antes ganaba la que saliera después en la consulta.
+        for estado, de_peticion, fila in sorted(cruces, key=lambda c: (-_ORDEN_DEL_CASAMIENTO.get(c[0], 9), -c[1])):
             conn.execute(
                 "UPDATE library_items SET request_status = ?, request_id = ?, updated_at = CURRENT_TIMESTAMP "
-                "WHERE id = ?", (cls["status"], int(req["id"]), destino),
+                "WHERE id = ?", (estado, de_peticion, fila),
             )
         conn.commit()
     except Exception:
@@ -718,22 +753,37 @@ def _guardar_casamientos(conn: sqlite3.Connection, casamientos: list[tuple], pet
         raise
 
 
-def match_all_requests(conn: sqlite3.Connection) -> int:
-    """Re-run compatibility matching for all request items. Returns updated count.
-
-    Es solo comparar con lo que ya hay en la base de datos: no llama a eMuwarez.
-    """
-    # Snapshot which requests already had compatible content, so afterwards we
-    # only notify about the ones that *newly* became satisfiable this run.
-    before_compatible = _compatible_request_ids(conn)
-
+def _cruzar_todas(conn: sqlite3.Connection) -> tuple[int, set[int]]:
+    """El cruce de todas las peticiones, sin avisar: cuántas casan y cuáles pasan a tener contenido compatible. Los
+    avisos van aparte para mandarlos con `_CRUZANDO` ya suelto: Discord y Telegram pueden tardar."""
+    antes = _compatible_request_ids(conn)
     requests = [dict(r) for r in conn.execute("SELECT * FROM request_items").fetchall()]
     library = _biblioteca(conn)
     usuario = mi_usuario_emu(conn) or ""
     casamientos = [c for c in (_casar(conn, req, library, usuario) for req in requests) if c]
     _guardar_casamientos(conn, casamientos)
-    _notify_new_compatible_matches(conn, before_compatible)
-    return len(casamientos)
+    return len(casamientos), _compatible_request_ids(conn) - antes
+
+
+def match_all_requests(conn: sqlite3.Connection) -> int:
+    """Re-run compatibility matching for all request items. Returns updated count.
+
+    Es solo comparar con lo que ya hay en la base de datos: no llama a eMuwarez.
+    """
+    cuantas, compatibles_nuevas = _cruzar_todas(conn)
+    _notify_new_compatible_matches(conn, compatibles_nuevas)
+    return cuantas
+
+
+def volver_a_cruzar_tras_la_biblioteca(conn: sqlite3.Connection) -> None:
+    """Tras una sincronización de biblioteca: el cruce y la preparación de las peticiones con lo que acaba de entrar."""
+    if not conn.execute("SELECT 1 FROM request_items LIMIT 1").fetchone():
+        return
+    conn.commit()  # sin nada a medio escribir mientras espera su turno
+    with _CRUZANDO:
+        _, compatibles_nuevas = _cruzar_todas(conn)
+        _preparar_peticiones(conn)
+    _notify_new_compatible_matches(conn, compatibles_nuevas)
 
 
 _MAX_AVISOS_SUELTOS = 5
@@ -747,11 +797,10 @@ def _compatible_request_ids(conn: sqlite3.Connection) -> set[int]:
     return {int(r[0]) for r in rows}
 
 
-def _notify_new_compatible_matches(conn: sqlite3.Connection, before_ids: set[int]) -> None:
+def _notify_new_compatible_matches(conn: sqlite3.Connection, new_ids: set[int]) -> None:
     """Emit one notification per request that became satisfiable this run.
     Best-effort: never lets a notification failure break matching."""
     try:
-        new_ids = _compatible_request_ids(conn) - before_ids
         if not new_ids:
             return
         from .notification_center import emit
@@ -815,9 +864,11 @@ def match_single_request(conn: sqlite3.Connection, request_id: int) -> Optional[
     req_row = conn.execute("SELECT * FROM request_items WHERE id = ?", (request_id,)).fetchone()
     if not req_row:
         return None
-    # Lo de la vez anterior se recalcula entero: si ya no casa, no queda nada viejo enseñándose.
-    casamiento = _casar(conn, dict(req_row), _biblioteca(conn))
-    _guardar_casamientos(conn, [casamiento] if casamiento else [], peticion=request_id)
+    conn.commit()  # sin nada a medio escribir mientras espera su turno
+    with _CRUZANDO:
+        # Lo de la vez anterior se recalcula entero: si ya no casa, no queda nada viejo enseñándose.
+        casamiento = _casar(conn, dict(req_row), _biblioteca(conn))
+        _guardar_casamientos(conn, [casamiento] if casamiento else [], peticion=request_id)
     if not casamiento:
         return None
     _, best, classification, _ = casamiento

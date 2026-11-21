@@ -204,16 +204,25 @@ _INSERT_CATALOG_SQL = (
 )
 
 
+def _sin_repetidos(rows: list[dict]) -> list[dict]:
+    """Una fila por torrent: si eMuwarez recibe una subida mientras se pagina, la lista se desplaza y el último torrent
+    de una página vuelve a salir en la siguiente (contaba dos veces en los aportes)."""
+    return list({r["torrent_id"]: r for r in rows}.values())
+
+
 def _store_catalog(conn: sqlite3.Connection, rows: list[dict]) -> None:
     """Full replace — used on the first (complete) download."""
     conn.execute("DELETE FROM emu_catalog")
-    conn.executemany(_INSERT_CATALOG_SQL, rows)
+    conn.executemany(_INSERT_CATALOG_SQL, _sin_repetidos(rows))
     conn.commit()
 
 
 def _append_catalog(conn: sqlite3.Connection, rows: list[dict]) -> None:
-    """Incremental — add newly-uploaded torrents without dropping the rest."""
+    """Incremental — add newly-uploaded torrents without dropping the rest. Los que ya estaban (una lectura anterior
+    que se cortó antes de apuntar hasta dónde llegó) se sustituyen."""
+    rows = _sin_repetidos(rows)
     if rows:
+        conn.executemany("DELETE FROM emu_catalog WHERE torrent_id = ?", [(r["torrent_id"],) for r in rows])
         conn.executemany(_INSERT_CATALOG_SQL, rows)
         conn.commit()
 
