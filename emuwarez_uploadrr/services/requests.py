@@ -163,6 +163,8 @@ def _resolve_emu_api_key(conn: sqlite3.Connection) -> Optional[str]:
 
 
 _SYNC_EN_CURSO = threading.Lock()
+# El cruce y la preparación, de uno en uno: el que entra segundo lee la biblioteca que dejó el primero.
+_CRUZANDO = threading.Lock()
 
 
 def _motivo_ocupado(conn: sqlite3.Connection) -> Optional[str]:
@@ -335,16 +337,17 @@ def _importar_peticiones(conn: sqlite3.Connection) -> dict[str, int | str]:
         set_state(conn, SYNC_STATE_KEY, _utcnow().isoformat())
         conn.commit()
         _set_progress(phase="Cruzando con tu biblioteca…")
-        matched = match_all_requests(conn)
-        # La preparación no se calcula sola: sin esto el detalle de cada petición nueva daba 404. Si falla no tumba
-        # la sincronización: lo importado vale, y «Recalcular» la repite sin volver a llamar a eMuwarez.
-        _set_progress(phase="Calculando qué está listo para subir…")
-        try:
-            sin_preparar = refresh_request_readiness(conn)["errors"]
-        except Exception:
-            conn.rollback()
-            logger.exception("No se pudo calcular la preparación de las peticiones")
-            sin_preparar = None
+        with _CRUZANDO:
+            matched = match_all_requests(conn)
+            # La preparación no se calcula sola: sin esto el detalle de cada petición nueva daba 404. Si falla no tumba
+            # la sincronización: lo importado vale, y «Recalcular» la repite sin volver a llamar a eMuwarez.
+            _set_progress(phase="Calculando qué está listo para subir…")
+            try:
+                sin_preparar = refresh_request_readiness(conn)["errors"]
+            except Exception:
+                conn.rollback()
+                logger.exception("No se pudo calcular la preparación de las peticiones")
+                sin_preparar = None
         if sin_preparar is not None:
             _avisar_peticiones_nuevas_listas(conn)
         # Igual que la preparación: unos pósters que no llegan no tumban la sincronización.
@@ -678,6 +681,16 @@ def _casar(
     return req, best, classification, _scoped_library_id(conn, best["item"], req)
 
 
+def _gana_la_fila(conn: sqlite3.Connection, destino: int, estado: str, peticion: int) -> bool:
+    """Varias peticiones pueden ir a la misma fila de la biblioteca y esta solo guarda una: la de mejor cruce y, a
+    igualdad, la más antigua. Antes ganaba la última en escribirse."""
+    actual = conn.execute("SELECT request_status, request_id FROM library_items WHERE id = ?", (destino,)).fetchone()
+    if not actual or actual[1] is None:
+        return True
+    orden = _ORDEN_DEL_CASAMIENTO.get
+    return (orden(estado, 9), peticion) < (orden(actual[0], 9), actual[1])
+
+
 def _guardar_casamientos(conn: sqlite3.Connection, casamientos: list[tuple], peticion: Optional[int] = None) -> None:
     """Cambia de una vez lo guardado (de todas las peticiones, o solo de `peticion`) por los casamientos nuevos.
 
@@ -697,9 +710,6 @@ def _guardar_casamientos(conn: sqlite3.Connection, casamientos: list[tuple], pet
                 "UPDATE library_items SET request_status = 'Sin petición', request_id = NULL WHERE request_id = ?",
                 (peticion,),
             )
-        # Varias peticiones pueden ir a la misma fila de la biblioteca y esta solo guarda una: la de mejor cruce
-        # (a igualdad, la más antigua) se escribe la última. Antes ganaba la que saliera después en la consulta.
-        casamientos = sorted(casamientos, key=lambda c: (-_ORDEN_DEL_CASAMIENTO.get(c[2]["status"], 9), -int(c[0]["id"])))
         for req, best, cls, destino in casamientos:
             conn.execute(_INSERTAR_CASAMIENTO, (
                 best["item"]["id"],
@@ -711,10 +721,11 @@ def _guardar_casamientos(conn: sqlite3.Connection, casamientos: list[tuple], pet
                 1 if best["id_match"] else 0,
                 "\n".join(cls["reasons"]),
             ))
-            conn.execute(
-                "UPDATE library_items SET request_status = ?, request_id = ?, updated_at = CURRENT_TIMESTAMP "
-                "WHERE id = ?", (cls["status"], int(req["id"]), destino),
-            )
+            if _gana_la_fila(conn, destino, cls["status"], int(req["id"])):
+                conn.execute(
+                    "UPDATE library_items SET request_status = ?, request_id = ?, updated_at = CURRENT_TIMESTAMP "
+                    "WHERE id = ?", (cls["status"], int(req["id"]), destino),
+                )
         conn.commit()
     except Exception:
         conn.rollback()
@@ -740,13 +751,13 @@ def match_all_requests(conn: sqlite3.Connection) -> int:
 
 
 def volver_a_cruzar_tras_la_biblioteca(conn: sqlite3.Connection) -> None:
-    """Tras una sincronización de biblioteca: el cruce y la preparación de las peticiones con lo que acaba de entrar.
-    Con una sincronización de peticiones en marcha no hace nada: esa los rehace al terminar."""
-    if _SYNC_EN_CURSO.locked() or not conn.execute("SELECT 1 FROM request_items LIMIT 1").fetchone():
+    """Tras una sincronización de biblioteca: el cruce y la preparación de las peticiones con lo que acaba de entrar."""
+    if not conn.execute("SELECT 1 FROM request_items LIMIT 1").fetchone():
         return
-    from .request_readiness import refresh_request_readiness
-    match_all_requests(conn)
-    refresh_request_readiness(conn)
+    conn.commit()  # sin nada a medio escribir mientras espera su turno
+    with _CRUZANDO:
+        match_all_requests(conn)
+        refresh_request_readiness(conn)
 
 
 _MAX_AVISOS_SUELTOS = 5

@@ -13,6 +13,7 @@ from emuwarez_uploadrr.models import RequestItem
 from emuwarez_uploadrr.services import emu_catalog
 from emuwarez_uploadrr.services import requests as reqs
 from emuwarez_uploadrr.services.library.sync import recompute_after_sync
+from emuwarez_uploadrr.services.settings import set_setting
 
 
 @pytest.fixture
@@ -59,7 +60,7 @@ def test_tras_sincronizar_la_biblioteca_lo_recien_bajado_ya_sale_cruzado(conn):
     assert conn.execute("SELECT readiness_status FROM request_items").fetchone()[0] is not None
 
 
-def test_con_una_sincronizacion_de_peticiones_en_marcha_el_cruce_se_le_deja_a_ella(conn):
+def test_con_una_sincronizacion_de_peticiones_en_marcha_lo_recien_bajado_se_cruza_igual(conn):
     _peticion(conn, "r1", "900")
     _pelicula(conn, "900")
     conn.commit()
@@ -67,7 +68,22 @@ def test_con_una_sincronizacion_de_peticiones_en_marcha_el_cruce_se_le_deja_a_el
     with reqs._SYNC_EN_CURSO:
         reqs.volver_a_cruzar_tras_la_biblioteca(conn)
 
-    assert conn.execute("SELECT COUNT(*) FROM request_matches").fetchone()[0] == 0
+    assert conn.execute("SELECT COUNT(*) FROM request_matches").fetchone()[0] == 1
+
+
+def test_el_cruce_va_de_uno_en_uno_y_los_posters_no_lo_retienen(conn, monkeypatch):
+    set_setting(conn, "emu.api_key", "clave")
+    conn.commit()
+    visto = []
+    monkeypatch.setattr(reqs.emu, "emu_fetch_all_pages", lambda *a, **kw: ([], 0))
+    monkeypatch.setattr(reqs, "match_all_requests", lambda c: visto.append(("cruce", reqs._CRUZANDO.locked())) or 0)
+    monkeypatch.setattr(reqs, "rellenar_posters", lambda c: visto.append(("pósters", reqs._CRUZANDO.locked())) or 0)
+
+    reqs._importar_peticiones(conn)
+    _peticion(conn, "r1", "900")
+    reqs.volver_a_cruzar_tras_la_biblioteca(conn)
+
+    assert visto == [("cruce", True), ("pósters", False), ("cruce", True)]
 
 
 def test_si_el_cruce_falla_la_sincronizacion_de_biblioteca_no_se_cae(conn, monkeypatch, caplog):
@@ -101,6 +117,21 @@ def test_de_dos_peticiones_a_la_misma_fila_se_queda_la_de_mejor_cruce_venga_en_e
     assert "Compatible" not in (estados[buena_antes + 1], estados[buena_despues - 1])
     assert tuple(_fila(conn, primera)) == ("Compatible", buena_antes)
     assert tuple(_fila(conn, segunda)) == ("Compatible", buena_despues)
+
+
+def test_recalcular_una_sola_peticion_no_le_quita_la_fila_a_otra_de_mejor_cruce(conn):
+    peli = _pelicula(conn, "903")
+    buena = _peticion(conn, "a", "903", "1080p")
+    peor = _peticion(conn, "b", "903", "2160p")
+    reqs.match_all_requests(conn)
+    assert tuple(_fila(conn, peli)) == ("Compatible", buena)
+
+    reqs.match_single_request(conn, peor)
+    assert tuple(_fila(conn, peli)) == ("Compatible", buena)
+
+    reqs.match_single_request(conn, buena)
+    assert tuple(_fila(conn, peli)) == ("Compatible", buena)
+    assert conn.execute("SELECT COUNT(*) FROM request_matches").fetchone()[0] == 2
 
 
 # ---------------------------------------------------------------------------
