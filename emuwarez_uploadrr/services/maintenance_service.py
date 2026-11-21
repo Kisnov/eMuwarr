@@ -299,7 +299,7 @@ def podar_propuestas_caducadas(conn: sqlite3.Connection, ahora: Optional[datetim
 
 def podar_restos(conn: sqlite3.Connection, ahora: Optional[datetime] = None) -> int:
     """Lo que ya no se puede volver a leer: la caché del motor de fuentes de otra versión del motor, las sesiones
-    que caducaron hace más de _DIAS_SESIONES (guardan IP y navegador) y la marca «lote avisado» de lotes sin subidas."""
+    sin usar desde hace más de _DIAS_SESIONES (guardan IP y navegador) y la marca «lote avisado» de lotes sin subidas."""
     corte = _dia_de_corte(ahora or datetime.now(timezone.utc), _DIAS_SESIONES)
     n = conn.execute("DELETE FROM source_engine_cache WHERE engine_version != ?", (ENGINE_VERSION,)).rowcount
     n += conn.execute(
