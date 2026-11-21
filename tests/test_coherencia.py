@@ -13,6 +13,7 @@ from emuwarez_uploadrr.models import RequestItem
 from emuwarez_uploadrr.services import emu_catalog
 from emuwarez_uploadrr.services import requests as reqs
 from emuwarez_uploadrr.services.library.sync import recompute_after_sync
+from emuwarez_uploadrr.services.notification_center import list_notifications
 from emuwarez_uploadrr.services.settings import set_setting
 
 
@@ -90,6 +91,22 @@ def test_el_cruce_va_de_uno_en_uno_y_los_posters_no_lo_retienen(conn, monkeypatc
 
     assert visto == [
         ("cruce", True), ("avisos", False), ("pósters", False), ("cruce", True), ("avisos", False), ("una sola", True)]
+
+
+def test_si_la_preparacion_falla_tras_la_biblioteca_lo_recien_cruzado_se_avisa_igual(conn, monkeypatch, caplog):
+    _peticion(conn, "r1", "900")
+    _pelicula(conn, "900")
+    conn.commit()
+
+    def revienta(_conn):
+        raise RuntimeError("base ocupada")
+
+    monkeypatch.setattr(reqs, "refresh_request_readiness", revienta)
+
+    recompute_after_sync(conn)
+
+    assert [n["event_type"] for n in list_notifications(conn)] == ["request_match_found"]
+    assert "No se pudo calcular la preparación de las peticiones" in caplog.text
 
 
 def test_si_el_cruce_falla_la_sincronizacion_de_biblioteca_no_se_cae(conn, monkeypatch, caplog):

@@ -339,15 +339,9 @@ def _importar_peticiones(conn: sqlite3.Connection) -> dict[str, int | str]:
         _set_progress(phase="Cruzando con tu biblioteca…")
         with _CRUZANDO:
             matched, compatibles_nuevas = _cruzar_todas(conn)
-            # La preparación no se calcula sola: sin esto el detalle de cada petición nueva daba 404. Si falla no tumba
-            # la sincronización: lo importado vale, y «Recalcular» la repite sin volver a llamar a eMuwarez.
+            # La preparación no se calcula sola: sin esto el detalle de cada petición nueva daba 404.
             _set_progress(phase="Calculando qué está listo para subir…")
-            try:
-                sin_preparar = refresh_request_readiness(conn)["errors"]
-            except Exception:
-                conn.rollback()
-                logger.exception("No se pudo calcular la preparación de las peticiones")
-                sin_preparar = None
+            sin_preparar = _preparar_peticiones(conn)
         _notify_new_compatible_matches(conn, compatibles_nuevas)
         if sin_preparar is not None:
             _avisar_peticiones_nuevas_listas(conn)
@@ -382,6 +376,17 @@ def _importar_peticiones(conn: sqlite3.Connection) -> dict[str, int | str]:
 
 
 _MAX_TITULOS_EN_EL_AVISO = 5
+
+
+def _preparar_peticiones(conn: sqlite3.Connection) -> Optional[int]:
+    """La preparación tras un cruce: cuántas peticiones fallaron, o None si no se pudo calcular. Un fallo no tumba la
+    sincronización que la pide: lo cruzado vale, y «Recalcular» la repite sin volver a llamar a eMuwarez."""
+    try:
+        return refresh_request_readiness(conn)["errors"]
+    except Exception:
+        conn.rollback()
+        logger.exception("No se pudo calcular la preparación de las peticiones")
+        return None
 
 
 def _avisar_peticiones_nuevas_listas(conn: sqlite3.Connection) -> None:
@@ -777,7 +782,7 @@ def volver_a_cruzar_tras_la_biblioteca(conn: sqlite3.Connection) -> None:
     conn.commit()  # sin nada a medio escribir mientras espera su turno
     with _CRUZANDO:
         _, compatibles_nuevas = _cruzar_todas(conn)
-        refresh_request_readiness(conn)
+        _preparar_peticiones(conn)
     _notify_new_compatible_matches(conn, compatibles_nuevas)
 
 
