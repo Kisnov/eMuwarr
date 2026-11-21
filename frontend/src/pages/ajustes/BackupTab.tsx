@@ -13,7 +13,9 @@ import { useSettingsMessage } from './mensajes'
 import { CabeceraTarjeta } from './CabeceraTarjeta'
 import { IconoArchivo, IconoGuardar, IconoRestaurar } from '../../components/Iconos'
 
-const TIPO_COPIA: Record<BackupInfo['tipo'], string> = { manual: 'Manual', automatica: 'Automática', subida: 'Subida' }
+const TIPO_COPIA: Record<BackupInfo['tipo'], string> = {
+  manual: 'Manual', automatica: 'Automática', antes_de_restaurar: 'Antes de restaurar', subida: 'Subida',
+}
 
 export function BackupTab({ status, onRefresh }: { status: MaintenanceStatus | null; onRefresh: () => void }) {
   const [backups, setBackups] = useState<BackupInfo[]>([])
@@ -85,6 +87,7 @@ export function BackupTab({ status, onRefresh }: { status: MaintenanceStatus | n
         confirmation: dry ? undefined : restoreConfirm,
       })
       showMessage(r.ok, r.ok ? `✓ ${r.message}` : `✗ ${r.error}`)
+      if (r.ok && !dry) { loadBackups(); onRefresh() }  // la copia de antes de restaurar
     } catch (e: unknown) {
       showMessage(false, `✗ ${e instanceof Error ? e.message : String(e)}`)
     } finally {

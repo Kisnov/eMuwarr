@@ -91,6 +91,16 @@ def _preparar_configs_de_uploadrr() -> None:
         log.warning("No se pudo migrar el config.yaml.bak de Uploadrr-EMU", exc_info=True)
 
 
+def _barrer_copias_a_medias() -> None:
+    log = logging.getLogger("emuwarez.web")
+    try:
+        from emuwarez_uploadrr.services.backup_service import barrer_copias_a_medias
+        if barrer_copias_a_medias():
+            log.warning("Borradas las copias de seguridad que quedaron a medias")
+    except Exception:
+        log.warning("No se pudieron borrar las copias de seguridad a medias", exc_info=True)
+
+
 def _detener_procesos() -> None:
     """Uploadrr y mkvmerge van en su propia sesión: al apagar el servidor ya no
     caen con él (antes caían con el Ctrl-C del terminal)."""
@@ -134,6 +144,7 @@ async def _lifespan(app: FastAPI):
     _backfill_spanish_flags()
     _reconcile_interrupted_jobs()
     _preparar_configs_de_uploadrr()
+    _barrer_copias_a_medias()
     scheduler_task = None
     # EMUWAREZ_DISABLE_SCHEDULER=1 — escape hatch for scripted Docker
     # smoke/E2E runs that don't want a background scheduler tick firing

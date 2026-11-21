@@ -27,7 +27,7 @@ export interface BackupInfo {
   path: string
   size_bytes: number
   created_at: string
-  tipo: 'manual' | 'automatica' | 'subida'
+  tipo: 'manual' | 'automatica' | 'antes_de_restaurar' | 'subida'
   /** null: copia subida, no se sabe si lleva claves. */
   con_claves: boolean | null
 }
