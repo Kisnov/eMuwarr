@@ -12,6 +12,7 @@ from typing import Iterable, Optional
 from .settings import get_setting_canonical, set_setting
 from .source_engine.constants import ENGINE_VERSION
 from .upload_states import ACTIVE_JOB_STATUSES
+from .uploadrr_contract import get_runtime_settings
 from ..integrations.base import error_inesperado, texto_de_error
 
 logger = logging.getLogger(__name__)
@@ -256,9 +257,7 @@ def podar_tmp_de_uploadrr(conn: sqlite3.Connection, dias: int, ahora: Optional[d
     """Borra de la carpeta tmp de Uploadrr-EMU lo que dejó cada subida (capturas, BASE.torrent, descripción) cuando
     nada de ello se toca desde hace `dias` y no es de una subida en marcha. Nadie más lo borraba. Un reintento o un
     reenvío a qBittorrent posterior lo vuelve a generar. Solo carpetas reales dentro de tmp: un enlace no se sigue."""
-    carpeta = get_setting_canonical(conn, "uploadrr.path")
-    if not carpeta:
-        return 0
+    carpeta = get_runtime_settings(conn)["uploadrr_path"]  # sin el ajuste, el Uploadrr-EMU de la imagen
     corte = (ahora or datetime.now(timezone.utc)).timestamp() - dias * 86400
     en_marcha = {Path(ruta).name for fila in conn.execute(
         f"""SELECT path, prepared_path FROM upload_jobs

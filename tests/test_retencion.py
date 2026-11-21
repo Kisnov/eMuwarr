@@ -12,6 +12,7 @@ import pytest
 
 from emuwarez_uploadrr.database import connect, db_path, init_db, set_state
 from emuwarez_uploadrr.services import maintenance_service as mant
+from emuwarez_uploadrr.services import uploadrr_contract
 from emuwarez_uploadrr.services import uploadrr_eventos
 from emuwarez_uploadrr.services.settings import set_setting
 from emuwarez_uploadrr.services.source_engine.constants import ENGINE_VERSION
@@ -86,6 +87,16 @@ def test_se_borran_los_temporales_que_nadie_toca_y_no_los_recientes(conn, tmp_up
 
     assert not vieja.exists()
     assert reciente.exists() and tocada.exists() and suelto.exists()
+
+
+def test_sin_el_ajuste_se_limpia_la_carpeta_del_uploadrr_de_la_imagen(conn, tmp_path, monkeypatch):
+    (tmp_path / "tmp").mkdir()
+    monkeypatch.setattr(uploadrr_contract, "DEFAULT_UPLOADRR_PATH", str(tmp_path))
+    vieja = _temporal(tmp_path / "tmp", "Peli.Vieja.2020", 8)
+
+    assert mant.podar_tmp_de_uploadrr(conn, 7, AHORA) == 1
+
+    assert not vieja.exists()
 
 
 def test_una_carpeta_temporal_vacia_se_trata_como_las_demas(conn, tmp_uploadrr):
