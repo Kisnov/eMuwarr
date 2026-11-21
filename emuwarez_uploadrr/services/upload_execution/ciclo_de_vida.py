@@ -444,7 +444,6 @@ def delete_upload_job(job_id: int, confirmation: str | None = None, conn=None) -
         conn.execute(f"DELETE FROM upload_artifacts WHERE upload_job_id IN ({marcas})", chain)
         conn.execute(f"DELETE FROM upload_job_logs WHERE upload_job_id IN ({marcas})", chain)
         conn.execute(f"UPDATE filesystem_operations SET upload_job_id = NULL WHERE upload_job_id IN ({marcas})", chain)
-        conn.execute(f"UPDATE operational_queue_items SET upload_job_id = NULL WHERE upload_job_id IN ({marcas})", chain)
         # Las que se quedan cuelgan ahora de su antepasada más cercana que también se queda (o de ninguna).
         padre_de = {f["id"]: f["retry_of_job_id"] for f in conn.execute(
             f"SELECT id, retry_of_job_id FROM upload_jobs WHERE id IN ({','.join('?' * len(cadena))})", cadena)}

@@ -78,6 +78,8 @@ def test_la_cola_y_el_historial_no_guardan_la_clave_del_indexador(conn, monkeypa
 
 def test_al_migrar_se_borra_el_registro_que_ya_se_guardo(conn):
     from emuwarez_uploadrr.database import SCHEMA_VERSION, init_db, set_state
+    for columna in ("arr_queue_raw_json", "arr_history_raw_json"):  # las tenía una base anterior al esquema 59
+        conn.execute(f"ALTER TABLE library_items ADD COLUMN {columna} TEXT")
     conn.execute("INSERT INTO library_items (item_type, title, instance_id, external_id, local_status, instance_type,"
                  " arr_queue_raw_json, arr_history_raw_json) VALUES ('movie', 'M', ?, '42', 'Faltante', 'radarr', ?, ?)",
                  (RADARR, f'{{"downloadUrl": "{_ENLACE}"}}', f'{{"data": {{"downloadUrl": "{_ENLACE}"}}}}'))
@@ -86,4 +88,5 @@ def test_al_migrar_se_borra_el_registro_que_ya_se_guardo(conn):
 
     init_db(conn)
 
-    assert tuple(conn.execute("SELECT arr_queue_raw_json, arr_history_raw_json FROM library_items").fetchone()) == (None, None)
+    fila = dict(conn.execute("SELECT * FROM library_items").fetchone())
+    assert fila["title"] == "M" and not {"arr_queue_raw_json", "arr_history_raw_json"} & set(fila)

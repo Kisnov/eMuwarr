@@ -124,8 +124,6 @@ def test_un_recorrido_completo_borra_lo_que_ya_no_esta_con_lo_que_colgaba(db_con
                            (cuelgan,)).fetchone()[0] == 1
     db_conn.execute("INSERT INTO request_candidates (request_item_id, library_item_id, candidate_rank, match_status)"
                     " VALUES (?, ?, 1, 'Compatible')", (cuelgan, peli))
-    db_conn.execute("INSERT INTO operational_queue_items (queue_key, item_type, entity_type, request_item_id)"
-                    " VALUES ('request:1:readiness', 'request_readiness', 'request', ?)", (cuelgan,))
     db_conn.commit()
     assert db_conn.execute("SELECT request_status FROM library_items WHERE id = ?", (peli,)).fetchone()[0] == "Compatible"
 
@@ -134,7 +132,7 @@ def test_un_recorrido_completo_borra_lo_que_ya_no_esta_con_lo_que_colgaba(db_con
 
     assert resultado["removed"] == 1
     assert _emu_ids(db_conn) == ["2", "3"]
-    for tabla in ("request_matches", "request_readiness", "request_candidates", "operational_queue_items"):
+    for tabla in ("request_matches", "request_readiness", "request_candidates"):
         assert db_conn.execute(f"SELECT COUNT(*) FROM {tabla} WHERE request_item_id = ?", (cuelgan,)).fetchone()[0] == 0, tabla
     # La biblioteca recalcula: Matrix deja de llevar una petición que ya no existe, Dune sigue cruzada.
     estados = {r["title"]: (r["request_status"], r["request_id"]) for r in db_conn.execute(
