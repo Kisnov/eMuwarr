@@ -76,7 +76,9 @@ def test_el_cruce_va_de_uno_en_uno_y_los_posters_no_lo_retienen(conn, monkeypatc
     conn.commit()
     visto = []
     monkeypatch.setattr(reqs.emu, "emu_fetch_all_pages", lambda *a, **kw: ([], 0))
-    monkeypatch.setattr(reqs, "match_all_requests", lambda c: visto.append(("cruce", reqs._CRUZANDO.locked())) or 0)
+    monkeypatch.setattr(reqs, "_cruzar_todas", lambda c: visto.append(("cruce", reqs._CRUZANDO.locked())) or (0, set()))
+    monkeypatch.setattr(
+        reqs, "_notify_new_compatible_matches", lambda c, nuevas: visto.append(("avisos", reqs._CRUZANDO.locked())))
     monkeypatch.setattr(reqs, "rellenar_posters", lambda c: visto.append(("pósters", reqs._CRUZANDO.locked())) or 0)
 
     monkeypatch.setattr(reqs, "_casar", lambda *a, **kw: visto.append(("una sola", reqs._CRUZANDO.locked())))
@@ -86,7 +88,8 @@ def test_el_cruce_va_de_uno_en_uno_y_los_posters_no_lo_retienen(conn, monkeypatc
     reqs.volver_a_cruzar_tras_la_biblioteca(conn)
     reqs.match_single_request(conn, peticion)
 
-    assert visto == [("cruce", True), ("pósters", False), ("cruce", True), ("una sola", True)]
+    assert visto == [
+        ("cruce", True), ("avisos", False), ("pósters", False), ("cruce", True), ("avisos", False), ("una sola", True)]
 
 
 def test_si_el_cruce_falla_la_sincronizacion_de_biblioteca_no_se_cae(conn, monkeypatch, caplog):
@@ -95,7 +98,7 @@ def test_si_el_cruce_falla_la_sincronizacion_de_biblioteca_no_se_cae(conn, monke
     def revienta(_conn):
         raise RuntimeError("base ocupada")
 
-    monkeypatch.setattr(reqs, "match_all_requests", revienta)
+    monkeypatch.setattr(reqs, "_cruzar_todas", revienta)
 
     recompute_after_sync(conn)
 

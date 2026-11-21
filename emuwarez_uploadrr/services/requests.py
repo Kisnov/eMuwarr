@@ -338,7 +338,7 @@ def _importar_peticiones(conn: sqlite3.Connection) -> dict[str, int | str]:
         conn.commit()
         _set_progress(phase="Cruzando con tu biblioteca…")
         with _CRUZANDO:
-            matched = match_all_requests(conn)
+            matched, compatibles_nuevas = _cruzar_todas(conn)
             # La preparación no se calcula sola: sin esto el detalle de cada petición nueva daba 404. Si falla no tumba
             # la sincronización: lo importado vale, y «Recalcular» la repite sin volver a llamar a eMuwarez.
             _set_progress(phase="Calculando qué está listo para subir…")
@@ -348,6 +348,7 @@ def _importar_peticiones(conn: sqlite3.Connection) -> dict[str, int | str]:
                 conn.rollback()
                 logger.exception("No se pudo calcular la preparación de las peticiones")
                 sin_preparar = None
+        _notify_new_compatible_matches(conn, compatibles_nuevas)
         if sin_preparar is not None:
             _avisar_peticiones_nuevas_listas(conn)
         # Igual que la preparación: unos pósters que no llegan no tumban la sincronización.
@@ -747,22 +748,26 @@ def _guardar_casamientos(conn: sqlite3.Connection, casamientos: list[tuple], pet
         raise
 
 
-def match_all_requests(conn: sqlite3.Connection) -> int:
-    """Re-run compatibility matching for all request items. Returns updated count.
-
-    Es solo comparar con lo que ya hay en la base de datos: no llama a eMuwarez.
-    """
-    # Snapshot which requests already had compatible content, so afterwards we
-    # only notify about the ones that *newly* became satisfiable this run.
-    before_compatible = _compatible_request_ids(conn)
-
+def _cruzar_todas(conn: sqlite3.Connection) -> tuple[int, set[int]]:
+    """El cruce de todas las peticiones, sin avisar: cuántas casan y cuáles pasan a tener contenido compatible. Los
+    avisos van aparte para mandarlos con `_CRUZANDO` ya suelto: Discord y Telegram pueden tardar."""
+    antes = _compatible_request_ids(conn)
     requests = [dict(r) for r in conn.execute("SELECT * FROM request_items").fetchall()]
     library = _biblioteca(conn)
     usuario = mi_usuario_emu(conn) or ""
     casamientos = [c for c in (_casar(conn, req, library, usuario) for req in requests) if c]
     _guardar_casamientos(conn, casamientos)
-    _notify_new_compatible_matches(conn, before_compatible)
-    return len(casamientos)
+    return len(casamientos), _compatible_request_ids(conn) - antes
+
+
+def match_all_requests(conn: sqlite3.Connection) -> int:
+    """Re-run compatibility matching for all request items. Returns updated count.
+
+    Es solo comparar con lo que ya hay en la base de datos: no llama a eMuwarez.
+    """
+    cuantas, compatibles_nuevas = _cruzar_todas(conn)
+    _notify_new_compatible_matches(conn, compatibles_nuevas)
+    return cuantas
 
 
 def volver_a_cruzar_tras_la_biblioteca(conn: sqlite3.Connection) -> None:
@@ -771,8 +776,9 @@ def volver_a_cruzar_tras_la_biblioteca(conn: sqlite3.Connection) -> None:
         return
     conn.commit()  # sin nada a medio escribir mientras espera su turno
     with _CRUZANDO:
-        match_all_requests(conn)
+        _, compatibles_nuevas = _cruzar_todas(conn)
         refresh_request_readiness(conn)
+    _notify_new_compatible_matches(conn, compatibles_nuevas)
 
 
 _MAX_AVISOS_SUELTOS = 5
@@ -786,11 +792,10 @@ def _compatible_request_ids(conn: sqlite3.Connection) -> set[int]:
     return {int(r[0]) for r in rows}
 
 
-def _notify_new_compatible_matches(conn: sqlite3.Connection, before_ids: set[int]) -> None:
+def _notify_new_compatible_matches(conn: sqlite3.Connection, new_ids: set[int]) -> None:
     """Emit one notification per request that became satisfiable this run.
     Best-effort: never lets a notification failure break matching."""
     try:
-        new_ids = _compatible_request_ids(conn) - before_ids
         if not new_ids:
             return
         from .notification_center import emit
