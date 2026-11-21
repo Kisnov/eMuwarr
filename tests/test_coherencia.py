@@ -79,11 +79,14 @@ def test_el_cruce_va_de_uno_en_uno_y_los_posters_no_lo_retienen(conn, monkeypatc
     monkeypatch.setattr(reqs, "match_all_requests", lambda c: visto.append(("cruce", reqs._CRUZANDO.locked())) or 0)
     monkeypatch.setattr(reqs, "rellenar_posters", lambda c: visto.append(("pósters", reqs._CRUZANDO.locked())) or 0)
 
-    reqs._importar_peticiones(conn)
-    _peticion(conn, "r1", "900")
-    reqs.volver_a_cruzar_tras_la_biblioteca(conn)
+    monkeypatch.setattr(reqs, "_casar", lambda *a, **kw: visto.append(("una sola", reqs._CRUZANDO.locked())))
 
-    assert visto == [("cruce", True), ("pósters", False), ("cruce", True)]
+    reqs._importar_peticiones(conn)
+    peticion = _peticion(conn, "r1", "900")
+    reqs.volver_a_cruzar_tras_la_biblioteca(conn)
+    reqs.match_single_request(conn, peticion)
+
+    assert visto == [("cruce", True), ("pósters", False), ("cruce", True), ("una sola", True)]
 
 
 def test_si_el_cruce_falla_la_sincronizacion_de_biblioteca_no_se_cae(conn, monkeypatch, caplog):

@@ -854,9 +854,11 @@ def match_single_request(conn: sqlite3.Connection, request_id: int) -> Optional[
     req_row = conn.execute("SELECT * FROM request_items WHERE id = ?", (request_id,)).fetchone()
     if not req_row:
         return None
-    # Lo de la vez anterior se recalcula entero: si ya no casa, no queda nada viejo enseñándose.
-    casamiento = _casar(conn, dict(req_row), _biblioteca(conn))
-    _guardar_casamientos(conn, [casamiento] if casamiento else [], peticion=request_id)
+    conn.commit()  # sin nada a medio escribir mientras espera su turno
+    with _CRUZANDO:
+        # Lo de la vez anterior se recalcula entero: si ya no casa, no queda nada viejo enseñándose.
+        casamiento = _casar(conn, dict(req_row), _biblioteca(conn))
+        _guardar_casamientos(conn, [casamiento] if casamiento else [], peticion=request_id)
     if not casamiento:
         return None
     _, best, classification, _ = casamiento
