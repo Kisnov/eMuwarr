@@ -88,6 +88,18 @@ def test_se_borran_los_temporales_que_nadie_toca_y_no_los_recientes(conn, tmp_up
     assert reciente.exists() and tocada.exists() and suelto.exists()
 
 
+def test_una_carpeta_temporal_vacia_se_trata_como_las_demas(conn, tmp_uploadrr):
+    vieja, reciente = tmp_uploadrr / "Vacia.Vieja", tmp_uploadrr / "Vacia.Reciente"
+    for carpeta, dias in ((vieja, 30), (reciente, 1)):
+        carpeta.mkdir()
+        _envejecer(carpeta, dias)
+
+    estado, resumen = mant.ejecutar_mantenimiento(conn, AHORA)
+
+    assert estado == "completed" and "1 carpetas temporales de subidas" in resumen
+    assert not vieja.exists() and reciente.exists()
+
+
 def test_los_temporales_de_una_subida_en_marcha_no_se_tocan(conn, tmp_uploadrr):
     en_marcha = _temporal(tmp_uploadrr, "Peli.En.Marcha", 30)
     reenviando = _temporal(tmp_uploadrr, "Peli.Reenviando", 30)

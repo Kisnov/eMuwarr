@@ -273,8 +273,8 @@ def podar_tmp_de_uploadrr(conn: sqlite3.Connection, dias: int, ahora: Optional[d
         if entrada.name in en_marcha or not entrada.is_dir(follow_symlinks=False):
             continue
         try:
-            ultimo = max(entrada.stat(follow_symlinks=False).st_mtime,
-                         *(hijo.stat(follow_symlinks=False).st_mtime for hijo in os.scandir(entrada.path)))
+            ultimo = max([entrada.stat(follow_symlinks=False).st_mtime,
+                          *(hijo.stat(follow_symlinks=False).st_mtime for hijo in os.scandir(entrada.path))])
             if ultimo < corte:
                 shutil.rmtree(entrada.path)
                 borradas += 1
