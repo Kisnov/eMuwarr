@@ -101,6 +101,16 @@ def _barrer_copias_a_medias() -> None:
         log.warning("No se pudieron borrar las copias de seguridad a medias", exc_info=True)
 
 
+def _avisar_migracion_sin_copia() -> None:
+    try:
+        from emuwarez_uploadrr.database import db
+        from emuwarez_uploadrr.services.backup_service import avisar_migracion_sin_copia
+        with db() as conn:
+            avisar_migracion_sin_copia(conn)
+    except Exception:
+        logging.getLogger("emuwarez.web").warning("No se pudo avisar de la migración sin copia", exc_info=True)
+
+
 def _detener_procesos() -> None:
     """Uploadrr y mkvmerge van en su propia sesión: al apagar el servidor ya no
     caen con él (antes caían con el Ctrl-C del terminal)."""
@@ -145,6 +155,7 @@ async def _lifespan(app: FastAPI):
     _reconcile_interrupted_jobs()
     _preparar_configs_de_uploadrr()
     _barrer_copias_a_medias()
+    _avisar_migracion_sin_copia()
     scheduler_task = None
     # EMUWAREZ_DISABLE_SCHEDULER=1 — escape hatch for scripted Docker
     # smoke/E2E runs that don't want a background scheduler tick firing

@@ -10,6 +10,7 @@ import os
 import re
 import shutil
 import sqlite3
+import threading
 from pathlib import Path
 from typing import Any, Iterable, Iterator, Optional
 
@@ -58,6 +59,8 @@ class _Conexion(sqlite3.Connection):
 
 # Ficheros cuyo esquema ya se comprobó (y migró) al arrancar este proceso.
 _esquema_listo: set[str] = set()
+# Una sola cascada a la vez en el proceso: tras restaurar una copia vieja, cada hilo de petición empezaba la suya.
+_cascada = threading.Lock()
 
 
 def connect(path: Optional[Path] = None, *, entre_hilos: bool = False) -> sqlite3.Connection:
@@ -151,6 +154,16 @@ def _title_sort_collation(a: str, b: str) -> int:
     return (ka > kb) - (ka < kb)
 
 
+def _anadir_columna(conn: sqlite3.Connection, tabla: str, columna: str, definicion: str) -> None:
+    """ALTER TABLE ADD COLUMN de una migración. Solo calla si la columna ya está, no un «database is locked»: con ese
+    callado la versión se guardaba igual y la columna faltaba para siempre."""
+    try:
+        conn.execute(f"ALTER TABLE {tabla} ADD COLUMN {columna} {definicion}")
+    except sqlite3.OperationalError:
+        if columna not in {fila[1] for fila in conn.execute(f"PRAGMA table_info({tabla})")}:
+            raise
+
+
 def _migrate_instances(conn: sqlite3.Connection) -> None:
     """Add columns to instances that were not present in schema v2."""
     new_cols = [
@@ -160,10 +173,7 @@ def _migrate_instances(conn: sqlite3.Connection) -> None:
         ("last_test_at", "TEXT"),
     ]
     for col, col_def in new_cols:
-        try:
-            conn.execute(f"ALTER TABLE instances ADD COLUMN {col} {col_def}")
-        except sqlite3.OperationalError:
-            pass  # column already exists
+        _anadir_columna(conn, "instances", col, col_def)
 
 
 def _rebuild_instances_table(
@@ -234,7 +244,9 @@ def _migrate_instances_widen_type_check(conn: sqlite3.Connection) -> None:
         row = conn.execute(
             "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'instances'"
         ).fetchone()
-        if not row or not row["sql"] or "'seerr'" in row["sql"]:
+        # Con UNIQUE(name) la tabla ya pasó por las tres reconstrucciones: sin esto se repetían en cada salto de
+        # esquema, y cada una dejaba el AUTOINCREMENT en el id más alto que quedaba (un id borrado se reutilizaba).
+        if not row or not row["sql"] or "'seerr'" in row["sql"] or "UNIQUE(name)" in row["sql"]:
             conn.execute("COMMIT")
             return
         _rebuild_instances_table(conn, "'radarr','sonarr','seerr'")
@@ -374,10 +386,7 @@ def _migrate_nomenclature(conn: sqlite3.Connection) -> None:
         ("applied_at", "TEXT"),
         ("operation_id", "INTEGER"),
     ]:
-        try:
-            conn.execute(f"ALTER TABLE nomenclature_proposals ADD COLUMN {col} {col_def}")
-        except sqlite3.OperationalError:
-            pass
+        _anadir_columna(conn, "nomenclature_proposals", col, col_def)
 
 
 def _migrate_filesystem_operations(conn: sqlite3.Connection) -> None:
@@ -414,10 +423,7 @@ def _migrate_library_items_phase6b(conn: sqlite3.Connection) -> None:
         ("audio_channels", "TEXT"),
         ("dynamic_range", "TEXT"),
     ]:
-        try:
-            conn.execute(f"ALTER TABLE library_items ADD COLUMN {col} {col_def}")
-        except sqlite3.OperationalError:
-            pass
+        _anadir_columna(conn, "library_items", col, col_def)
 
 
 def _migrate_upload_jobs(conn: sqlite3.Connection) -> None:
@@ -435,10 +441,7 @@ def _migrate_upload_jobs(conn: sqlite3.Connection) -> None:
         ("finished_at", "TEXT"),
     ]
     for col, col_def in new_cols:
-        try:
-            conn.execute(f"ALTER TABLE upload_jobs ADD COLUMN {col} {col_def}")
-        except sqlite3.OperationalError:
-            pass
+        _anadir_columna(conn, "upload_jobs", col, col_def)
 
 
 def _migrate_upload_jobs_phase6c(conn: sqlite3.Connection) -> None:
@@ -448,10 +451,7 @@ def _migrate_upload_jobs_phase6c(conn: sqlite3.Connection) -> None:
         ("process_id", "INTEGER"),
     ]
     for col, col_def in new_cols:
-        try:
-            conn.execute(f"ALTER TABLE upload_jobs ADD COLUMN {col} {col_def}")
-        except sqlite3.OperationalError:
-            pass
+        _anadir_columna(conn, "upload_jobs", col, col_def)
 
 
 def _migrate_upload_job_logs(conn: sqlite3.Connection) -> None:
@@ -473,10 +473,7 @@ def _migrate_upload_job_logs(conn: sqlite3.Connection) -> None:
         ("sequence", "INTEGER"),
         ("is_secret_redacted", "INTEGER NOT NULL DEFAULT 1"),
     ]:
-        try:
-            conn.execute(f"ALTER TABLE upload_job_logs ADD COLUMN {col} {col_def}")
-        except sqlite3.OperationalError:
-            pass
+        _anadir_columna(conn, "upload_job_logs", col, col_def)
 
 
 def _migrate_upload_jobs_phase6d(conn: sqlite3.Connection) -> None:
@@ -495,10 +492,7 @@ def _migrate_upload_jobs_phase6d(conn: sqlite3.Connection) -> None:
         ("safe_command_json", "TEXT"),
     ]
     for col, col_def in new_cols:
-        try:
-            conn.execute(f"ALTER TABLE upload_jobs ADD COLUMN {col} {col_def}")
-        except sqlite3.OperationalError:
-            pass
+        _anadir_columna(conn, "upload_jobs", col, col_def)
 
     conn.execute("""
         CREATE TABLE IF NOT EXISTS upload_artifacts (
@@ -521,10 +515,7 @@ def _migrate_upload_jobs_queue(conn: sqlite3.Connection) -> None:
     the instant the user clicks "Subir a eMuwarez" carries this so the UI can
     show a countdown and a Cancel button before the server actually starts
     renaming/remuxing/uploading."""
-    try:
-        conn.execute("ALTER TABLE upload_jobs ADD COLUMN queued_until TEXT")
-    except sqlite3.OperationalError:
-        pass
+    _anadir_columna(conn, "upload_jobs", "queued_until", "TEXT")
 
 
 def _migrate_upload_jobs_snapshots(conn: sqlite3.Connection) -> None:
@@ -536,10 +527,7 @@ def _migrate_upload_jobs_snapshots(conn: sqlite3.Connection) -> None:
         ("nomenclature_snapshot_json", "TEXT"),
         ("remux_snapshot_json", "TEXT"),
     ]:
-        try:
-            conn.execute(f"ALTER TABLE upload_jobs ADD COLUMN {col} {col_def}")
-        except sqlite3.OperationalError:
-            pass
+        _anadir_columna(conn, "upload_jobs", col, col_def)
 
 
 def _migrate_upload_jobs_manual_refs(conn: sqlite3.Connection) -> None:
@@ -552,14 +540,8 @@ def _migrate_upload_jobs_manual_refs(conn: sqlite3.Connection) -> None:
     An automatic (staging-pipeline) job never sets nomenclature_proposal_id —
     its absence is what queue_retry_for_job() uses to tell manual from
     automatic jobs apart."""
-    try:
-        conn.execute("ALTER TABLE upload_jobs ADD COLUMN nomenclature_proposal_id INTEGER")
-    except sqlite3.OperationalError:
-        pass
-    try:
-        conn.execute("ALTER TABLE upload_jobs ADD COLUMN remux_overrides_json TEXT")
-    except sqlite3.OperationalError:
-        pass
+    _anadir_columna(conn, "upload_jobs", "nomenclature_proposal_id", "INTEGER")
+    _anadir_columna(conn, "upload_jobs", "remux_overrides_json", "TEXT")
 
 
 def _migrate_upload_jobs_checks_snapshot(conn: sqlite3.Connection) -> None:
@@ -569,10 +551,7 @@ def _migrate_upload_jobs_checks_snapshot(conn: sqlite3.Connection) -> None:
     results the wizard already computed and showed the user before they
     confirmed; run_upload_checks() itself never persists anything, so without
     this the job detail page would have nothing to show for this section."""
-    try:
-        conn.execute("ALTER TABLE upload_jobs ADD COLUMN checks_snapshot_json TEXT")
-    except sqlite3.OperationalError:
-        pass
+    _anadir_columna(conn, "upload_jobs", "checks_snapshot_json", "TEXT")
 
 
 def _migrate_upload_jobs_season_overrides(conn: sqlite3.Connection) -> None:
@@ -581,10 +560,7 @@ def _migrate_upload_jobs_season_overrides(conn: sqlite3.Connection) -> None:
     across every episode. Previously this choice only ever reached the preview
     snapshot: the real apply step (season_pack.apply_season_pack) recomputed
     from scratch with no override at all, silently discarding it."""
-    try:
-        conn.execute("ALTER TABLE upload_jobs ADD COLUMN season_overrides_json TEXT")
-    except sqlite3.OperationalError:
-        pass
+    _anadir_columna(conn, "upload_jobs", "season_overrides_json", "TEXT")
 
 
 def _migrate_upload_jobs_request_snapshot(conn: sqlite3.Connection) -> None:
@@ -593,10 +569,7 @@ def _migrate_upload_jobs_request_snapshot(conn: sqlite3.Connection) -> None:
     deja de estar abierta en eMuwarez, y el historial de Subidas tiene que seguir
     diciendo qué petición cubrió cada subida."""
     for col in ("request_title", "request_url"):
-        try:
-            conn.execute(f"ALTER TABLE upload_jobs ADD COLUMN {col} TEXT")
-        except sqlite3.OperationalError:
-            pass
+        _anadir_columna(conn, "upload_jobs", col, "TEXT")
     # Las subidas de antes que ya llevaban la petición (CLI, rutas antiguas) la copian mientras aún existe.
     conn.execute(
         "UPDATE upload_jobs SET "
@@ -620,10 +593,7 @@ def _migrate_requests(conn: sqlite3.Connection) -> None:
         ("req_season", "INTEGER"),
         ("req_episode", "INTEGER"),
     ]:
-        try:
-            conn.execute(f"ALTER TABLE request_items ADD COLUMN {col} {col_def}")
-        except sqlite3.OperationalError:
-            pass
+        _anadir_columna(conn, "request_items", col, col_def)
 
 
 def _migrate_request_items_phase8b(conn: sqlite3.Connection) -> None:
@@ -635,10 +605,7 @@ def _migrate_request_items_phase8b(conn: sqlite3.Connection) -> None:
         ("readiness_updated_at", "TEXT"),
     ]
     for col, col_def in new_cols:
-        try:
-            conn.execute(f"ALTER TABLE request_items ADD COLUMN {col} {col_def}")
-        except sqlite3.OperationalError:
-            pass
+        _anadir_columna(conn, "request_items", col, col_def)
 
 
 def _migrate_request_items_emu_catalog_check(conn: sqlite3.Connection) -> None:
@@ -654,10 +621,7 @@ def _migrate_request_items_emu_catalog_check(conn: sqlite3.Connection) -> None:
         ("emu_catalog_result", "TEXT"),
     ]
     for col, col_def in new_cols:
-        try:
-            conn.execute(f"ALTER TABLE request_items ADD COLUMN {col} {col_def}")
-        except sqlite3.OperationalError:
-            pass
+        _anadir_columna(conn, "request_items", col, col_def)
 
 
 def _migrate_drop_priority_columns(conn: sqlite3.Connection) -> None:
@@ -673,34 +637,26 @@ def _migrate_drop_priority_columns(conn: sqlite3.Connection) -> None:
     is enough — unlike the instances.type migrations, these columns carry no
     CHECK/UNIQUE constraint, so no table-rebuild is needed. SQLite refuses to
     drop a column that still has an index on it, so idx_rr_bucket/idx_oq_bucket
-    must be dropped first. Idempotent: DROP INDEX/DROP COLUMN both raise
-    OperationalError if already gone, caught and ignored.
+    must be dropped first. Idempotent: only what is still there is dropped.
     """
     for index_name in ("idx_rr_bucket", "idx_oq_bucket"):
-        try:
-            conn.execute(f"DROP INDEX {index_name}")
-        except sqlite3.OperationalError:
-            pass
+        conn.execute(f"DROP INDEX IF EXISTS {index_name}")
     for table, columns in (
         ("request_readiness", ("priority_score", "priority_bucket")),
         ("operational_queue_items", ("priority_score", "priority_bucket")),
         ("request_items", ("readiness_priority_score", "readiness_priority_bucket")),
     ):
+        presentes = {fila[1] for fila in conn.execute(f"PRAGMA table_info({table})")}
         for col in columns:
-            try:
+            if col in presentes:
                 conn.execute(f"ALTER TABLE {table} DROP COLUMN {col}")
-            except sqlite3.OperationalError:
-                pass
 
 
 def _migrate_request_items_extra_ids(conn: sqlite3.Connection) -> None:
     """Add mal_id / tvdb_id to request_items (populated at sync from the eMuwarez
     request when present — mal_id mainly for anime requests)."""
     for col in ("mal_id", "tvdb_id"):
-        try:
-            conn.execute(f"ALTER TABLE request_items ADD COLUMN {col} TEXT")
-        except sqlite3.OperationalError:
-            pass
+        _anadir_columna(conn, "request_items", col, "TEXT")
 
 
 def _migrate_request_readiness_tables(conn: sqlite3.Connection) -> None:
@@ -844,12 +800,7 @@ def _migrate_operational_actions_tables(conn: sqlite3.Connection) -> None:
         ("last_action_status", "TEXT"),
         ("last_action_message", "TEXT"),
     ]:
-        try:
-            conn.execute(
-                f"ALTER TABLE operational_queue_items ADD COLUMN {col} {col_type}"
-            )
-        except Exception:
-            pass
+        _anadir_columna(conn, "operational_queue_items", col, col_type)
 
 
 def _migrate_library_items_phase8a(conn: sqlite3.Connection) -> None:
@@ -879,18 +830,12 @@ def _migrate_library_items_phase8a(conn: sqlite3.Connection) -> None:
         ("recommendation_updated_at", "TEXT"),
     ]
     for col, col_def in new_cols:
-        try:
-            conn.execute(f"ALTER TABLE library_items ADD COLUMN {col} {col_def}")
-        except sqlite3.OperationalError:
-            pass
+        _anadir_columna(conn, "library_items", col, col_def)
 
 
 def _migrate_library_items_phase11e(conn: sqlite3.Connection) -> None:
     """Add poster_url to library_items (Phase 11E — grid/poster view)."""
-    try:
-        conn.execute("ALTER TABLE library_items ADD COLUMN poster_url TEXT")
-    except sqlite3.OperationalError:
-        pass
+    _anadir_columna(conn, "library_items", "poster_url", "TEXT")
 
 
 def _migrate_library_items_title_slug(conn: sqlite3.Connection) -> None:
@@ -899,10 +844,7 @@ def _migrate_library_items_title_slug(conn: sqlite3.Connection) -> None:
     tmdb_id already covers). Sonarr's raw API response already includes
     titleSlug (saved whole into raw_json since day one), this just gives it
     a dedicated, queryable column like tmdb_id/imdb_id/tvdb_id already have."""
-    try:
-        conn.execute("ALTER TABLE library_items ADD COLUMN title_slug TEXT")
-    except sqlite3.OperationalError:
-        pass
+    _anadir_columna(conn, "library_items", "title_slug", "TEXT")
 
 
 def _migrate_library_items_media_info(conn: sqlite3.Connection) -> None:
@@ -923,27 +865,21 @@ def _migrate_library_items_media_info(conn: sqlite3.Connection) -> None:
         ("nomenclature_checked_at", "TEXT"),
     ]
     for col, col_type in new_cols:
-        try:
-            conn.execute(f"ALTER TABLE library_items ADD COLUMN {col} {col_type}")
-        except sqlite3.OperationalError:
-            pass
+        _anadir_columna(conn, "library_items", col, col_type)
 
     # Clear stale verdicts from the OLD tag-based heuristic. Nomenclature can
     # now only be judged by reading MediaInfo, so anything the new checker has
     # NOT actually run (nomenclature_checked_at IS NULL) must fall back to the
     # honest default: 'No comprobada' when a file is on disk, 'N/A' otherwise.
     # Idempotent — checked items (checked_at set) are never touched.
-    try:
-        conn.execute(
-            "UPDATE library_items SET nomenclature_status = CASE "
-            "  WHEN local_status IN ('Disponible','Subido','Subiendo') AND path IS NOT NULL "
-            "  THEN 'No comprobada' ELSE 'N/A' END "
-            "WHERE nomenclature_checked_at IS NULL "
-            "  AND nomenclature_status IS NOT 'No comprobada' "
-            "  AND nomenclature_status IS NOT 'N/A'"
-        )
-    except sqlite3.OperationalError:
-        pass
+    conn.execute(
+        "UPDATE library_items SET nomenclature_status = CASE "
+        "  WHEN local_status IN ('Disponible','Subido','Subiendo') AND path IS NOT NULL "
+        "  THEN 'No comprobada' ELSE 'N/A' END "
+        "WHERE nomenclature_checked_at IS NULL "
+        "  AND nomenclature_status IS NOT 'No comprobada' "
+        "  AND nomenclature_status IS NOT 'N/A'"
+    )
 
 
 def _migrate_library_items_hierarchy(conn: sqlite3.Connection) -> None:
@@ -962,10 +898,7 @@ def _migrate_library_items_hierarchy(conn: sqlite3.Connection) -> None:
         ("english_title", "TEXT"),
     ]
     for col, col_type in new_cols:
-        try:
-            conn.execute(f"ALTER TABLE library_items ADD COLUMN {col} {col_type}")
-        except sqlite3.OperationalError:
-            pass
+        _anadir_columna(conn, "library_items", col, col_type)
     conn.execute("CREATE INDEX IF NOT EXISTS idx_library_parent ON library_items(parent_id)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_library_tvdb ON library_items(tvdb_id)")
 
@@ -1058,29 +991,20 @@ def _migrate_library_items_track_remux(conn: sqlite3.Connection) -> None:
         ("track_remux_error", "TEXT"),
     ]
     for col, col_type in new_cols:
-        try:
-            conn.execute(f"ALTER TABLE library_items ADD COLUMN {col} {col_type}")
-        except sqlite3.OperationalError:
-            pass
+        _anadir_columna(conn, "library_items", col, col_type)
 
 
 def _migrate_library_items_mal_id(conn: sqlite3.Connection) -> None:
     """MAL (MyAnimeList) id, resolved from the Fribb/anime-lists table against
     tvdb_id/tmdb_id at upsert time (see services/anime_lists.py) — Radarr/
     Sonarr never provide this themselves. Purely additive."""
-    try:
-        conn.execute("ALTER TABLE library_items ADD COLUMN mal_id TEXT")
-    except sqlite3.OperationalError:
-        pass
+    _anadir_columna(conn, "library_items", "mal_id", "TEXT")
 
 
 def _migrate_nomenclature_torrent_name(conn: sqlite3.Connection) -> None:
     """El título del aporte (con espacios y acentos) aparte del nombre de archivo
     (con puntos): `proposed_filename` guardaba uno u otro según quién escribiera."""
-    try:
-        conn.execute("ALTER TABLE nomenclature_proposals ADD COLUMN proposed_torrent_name TEXT")
-    except sqlite3.OperationalError:
-        pass
+    _anadir_columna(conn, "nomenclature_proposals", "proposed_torrent_name", "TEXT")
 
 
 def _migrate_library_items_tvmaze_id(conn: sqlite3.Connection) -> None:
@@ -1090,20 +1014,14 @@ def _migrate_library_items_tvmaze_id(conn: sqlite3.Connection) -> None:
     No se añade tvRageId, que Sonarr también manda: solo lo trae la mitad y
     sus fichas devuelven 404 (comprobado con dos ids reales), así que el
     enlace no llevaría a ninguna parte. Purely additive."""
-    try:
-        conn.execute("ALTER TABLE library_items ADD COLUMN tvmaze_id TEXT")
-    except sqlite3.OperationalError:
-        pass
+    _anadir_columna(conn, "library_items", "tvmaze_id", "TEXT")
 
 
 def _migrate_library_items_release_group(conn: sqlite3.Connection) -> None:
     """Grupo de release del archivo, el `releaseGroup` que Radarr/Sonarr ya
     mandan en movieFile/episodeFile. Se rellena en la siguiente sincronización.
     Purely additive."""
-    try:
-        conn.execute("ALTER TABLE library_items ADD COLUMN release_group TEXT")
-    except sqlite3.OperationalError:
-        pass
+    _anadir_columna(conn, "library_items", "release_group", "TEXT")
 
 
 def _migrate_library_items_backdrop_url(conn: sqlite3.Connection) -> None:
@@ -1111,10 +1029,7 @@ def _migrate_library_items_backdrop_url(conn: sqlite3.Connection) -> None:
     poster_url (Phase 11E), same Radarr/Sonarr `images` array, just
     coverType=fanart instead of poster (see integrations/base.py::
     extract_backdrop_url). Used as the dedicated page's hero background."""
-    try:
-        conn.execute("ALTER TABLE library_items ADD COLUMN backdrop_url TEXT")
-    except sqlite3.OperationalError:
-        pass
+    _anadir_columna(conn, "library_items", "backdrop_url", "TEXT")
 
 
 def _migrate_library_items_missing_since(conn: sqlite3.Connection) -> None:
@@ -1127,10 +1042,7 @@ def _migrate_library_items_missing_since(conn: sqlite3.Connection) -> None:
     ago as an unreleased pre-order, only just released) — an item added
     recently for an unrelated reason could then wrongly outrank a genuinely
     newer missing detection."""
-    try:
-        conn.execute("ALTER TABLE library_items ADD COLUMN missing_since TEXT")
-    except sqlite3.OperationalError:
-        pass
+    _anadir_columna(conn, "library_items", "missing_since", "TEXT")
 
     # Backfill for content that was already Faltante before this column
     # existed: added_at (when we first synced/inserted this row) is an
@@ -1196,10 +1108,7 @@ def _migrate_emu_catalog(conn: sqlite3.Connection) -> None:
         ("emu_in_catalog", "INTEGER"),   # 1 present, 0 not, NULL not computed
         ("emu_aportes", "TEXT"),          # JSON list of {dim,detail}
     ]:
-        try:
-            conn.execute(f"ALTER TABLE library_items ADD COLUMN {col} {col_def}")
-        except sqlite3.OperationalError:
-            pass
+        _anadir_columna(conn, "library_items", col, col_def)
 
 
 def _migrate_request_items_is_example(conn: sqlite3.Connection) -> None:
@@ -1213,43 +1122,27 @@ def _migrate_request_items_is_example(conn: sqlite3.Connection) -> None:
     brings that endpoint deletes them from its own migration
     (DELETE FROM request_items WHERE is_example = 1) instead of trusting that
     somebody remembered to press Borrar first."""
-    try:
-        conn.execute("ALTER TABLE request_items ADD COLUMN is_example INTEGER NOT NULL DEFAULT 0")
-    except sqlite3.OperationalError:
-        pass
+    _anadir_columna(conn, "request_items", "is_example", "INTEGER NOT NULL DEFAULT 0")
 
 
 def _migrate_request_items_posters(conn: sqlite3.Connection) -> None:
     """Esquema 42: el póster y el fondo de TMDb de las peticiones que no casan con nada de la biblioteca,
     de donde salía el póster. '' = TMDb no tiene."""
     for col in ("tmdb_poster_url", "tmdb_backdrop_url"):
-        try:
-            conn.execute(f"ALTER TABLE request_items ADD COLUMN {col} TEXT")
-        except sqlite3.OperationalError:
-            # Solo se calla si la columna ya está (la añadió otro init_db a la vez), no un «database is locked».
-            if col not in {fila[1] for fila in conn.execute("PRAGMA table_info(request_items)")}:
-                raise
+        _anadir_columna(conn, "request_items", col, "TEXT")
 
 
 def _migrate_request_items_last_seen(conn: sqlite3.Connection) -> None:
     """Cuándo vio por última vez la sincronización cada petición: lo que no sale
     en un recorrido completo de eMuwarez es que ya no está abierta, y se borra."""
-    try:
-        conn.execute("ALTER TABLE request_items ADD COLUMN last_seen_at TEXT")
-    except sqlite3.OperationalError:
-        pass
+    _anadir_columna(conn, "request_items", "last_seen_at", "TEXT")
 
 
 def _migrate_request_items_aviso_pendiente(conn: sqlite3.Connection, activar_evento: bool = True) -> None:
     """Esquema 49: las peticiones que la sincronización vio por primera vez y aún no se han mirado para avisar de
     «nueva y lista para subir». Una columna y no una clave de app_state para que sobreviva a una sincronización
     que se corta a medias, y para que el aviso salga una sola vez por petición. Las que ya hay no avisan."""
-    try:
-        conn.execute("ALTER TABLE request_items ADD COLUMN aviso_pendiente INTEGER NOT NULL DEFAULT 0")
-    except sqlite3.OperationalError:
-        # Solo se calla si la columna ya está (la añadió otro init_db a la vez), no un «database is locked».
-        if "aviso_pendiente" not in {fila[1] for fila in conn.execute("PRAGMA table_info(request_items)")}:
-            raise
+    _anadir_columna(conn, "request_items", "aviso_pendiente", "INTEGER NOT NULL DEFAULT 0")
     if activar_evento:
         _activar_evento_en_la_campana(conn, "request_new_ready")  # quien ya guardó sus eventos no se queda sin el nuevo
 
@@ -1260,12 +1153,7 @@ def _migrate_library_items_last_seen(conn: sqlite3.Connection) -> None:
     las subidas por cada fila borrada: borrar una instancia de 35.000 capítulos con 2.000 subidas tardaba 3,5 s
     escribiendo, y 0,4 s con él."""
     for tabla, col in (("library_items", "last_seen_at"), ("upload_jobs", "library_snapshot_json")):
-        try:
-            conn.execute(f"ALTER TABLE {tabla} ADD COLUMN {col} TEXT")
-        except sqlite3.OperationalError:
-            # Solo se calla si la columna ya está (la añadió otro init_db a la vez), no un «database is locked».
-            if col not in {fila[1] for fila in conn.execute(f"PRAGMA table_info({tabla})")}:
-                raise
+        _anadir_columna(conn, tabla, col, "TEXT")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_upload_jobs_library ON upload_jobs(library_item_id)")
     # Borrar una instancia dejaba lo suyo en la biblioteca, y ninguna sincronización lo iba a quitar. Sin el
     # IS NOT NULL, con la tabla de instancias vacía también caerían las filas sin instancia.
@@ -1276,61 +1164,32 @@ def _migrate_upload_jobs_pasos(conn: sqlite3.Connection) -> None:
     """Esquema 47: dónde se paró una subida (`etapa_parada`, la fase en que estaba al fallar o cancelarse), si su
     reintento reutiliza los ficheros ya preparados (`reutiliza_preparacion`) y la huella de los originales con que
     se prepararon (`huellas_preparacion_json`), para no reutilizar lo preparado de un original que ha cambiado."""
-    columnas = {fila[1] for fila in conn.execute("PRAGMA table_info(upload_jobs)")}
     for nombre, definicion in (("etapa_parada", "TEXT"), ("reutiliza_preparacion", "INTEGER NOT NULL DEFAULT 0"),
                                ("huellas_preparacion_json", "TEXT")):
-        if nombre in columnas:
-            continue
-        try:
-            conn.execute(f"ALTER TABLE upload_jobs ADD COLUMN {nombre} {definicion}")
-        except sqlite3.OperationalError:
-            # Solo se calla si la columna ya está (la añadió otro init_db a la vez), no un «database is locked».
-            if nombre not in {fila[1] for fila in conn.execute("PRAGMA table_info(upload_jobs)")}:
-                raise
+        _anadir_columna(conn, "upload_jobs", nombre, definicion)
 
 
 def _migrate_upload_jobs_pasos_uploadrr(conn: sqlite3.Connection) -> None:
     """Esquema 51: qué pasos dijo Uploadrr-EMU que había terminado (`pasos_uploadrr_json`, las líneas
     `Step done:` de su salida) y si lanzarlo con `--resume` para que reutilice lo que dejó la subida anterior
     (`reanuda_uploadrr`)."""
-    columnas = {fila[1] for fila in conn.execute("PRAGMA table_info(upload_jobs)")}
     for nombre, definicion in (("pasos_uploadrr_json", "TEXT"), ("reanuda_uploadrr", "INTEGER NOT NULL DEFAULT 0")):
-        if nombre in columnas:
-            continue
-        try:
-            conn.execute(f"ALTER TABLE upload_jobs ADD COLUMN {nombre} {definicion}")
-        except sqlite3.OperationalError:
-            # Solo se calla si la columna ya está (la añadió otro init_db a la vez), no un «database is locked».
-            if nombre not in {fila[1] for fila in conn.execute("PRAGMA table_info(upload_jobs)")}:
-                raise
+        _anadir_columna(conn, "upload_jobs", nombre, definicion)
 
 
 def _migrate_upload_jobs_lote(conn: sqlite3.Connection) -> None:
     """Esquema 52: `lote_id`, la etiqueta que agrupa las subidas lanzadas de una vez (una tanda del asistente o un
     lote). Sin tabla propia: lo que se sabe del lote se deduce de sus filas. Anulable: las subidas sueltas y las
     viejas no tienen lote."""
-    if "lote_id" not in {fila[1] for fila in conn.execute("PRAGMA table_info(upload_jobs)")}:
-        try:
-            conn.execute("ALTER TABLE upload_jobs ADD COLUMN lote_id TEXT")
-        except sqlite3.OperationalError:
-            # Solo se calla si la columna ya está (la añadió otro init_db a la vez), no un «database is locked».
-            if "lote_id" not in {fila[1] for fila in conn.execute("PRAGMA table_info(upload_jobs)")}:
-                raise
+    _anadir_columna(conn, "upload_jobs", "lote_id", "TEXT")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_upload_jobs_lote ON upload_jobs(lote_id)")
 
 
 def _migrate_upload_jobs_opciones_tracker(conn: sqlite3.Connection) -> None:
     """Esquema 53: `anonimo` / `personal_release`, lo elegido a mano en el asistente para esa subida (NULL: lo que
     digan los grupos de Configuración, services/opciones_tracker.py)."""
-    columnas = {fila[1] for fila in conn.execute("PRAGMA table_info(upload_jobs)")}
     for nombre in ("anonimo", "personal_release"):
-        if nombre in columnas:
-            continue
-        try:
-            conn.execute(f"ALTER TABLE upload_jobs ADD COLUMN {nombre} INTEGER")
-        except sqlite3.OperationalError:
-            if nombre not in {fila[1] for fila in conn.execute("PRAGMA table_info(upload_jobs)")}:
-                raise
+        _anadir_columna(conn, "upload_jobs", nombre, "INTEGER")
 
 
 def _migrate_upload_jobs_trailer_estado(conn: sqlite3.Connection) -> None:
@@ -1338,13 +1197,7 @@ def _migrate_upload_jobs_trailer_estado(conn: sqlite3.Connection) -> None:
     trailer_check.py): 'incluido', 'falta' (eMuwarez lo exige y hay que ponerlo a mano) o 'a_mano' (el usuario dijo
     que ya lo puso). NULL: no se comprobó o no se pudo. Las de antes se deducen de lo que dejaron: el artefacto
     `trailer_url` o la línea de aviso del registro. Siempre con `IS NULL`: no pisa lo que el usuario marcó."""
-    if "trailer_estado" not in {fila[1] for fila in conn.execute("PRAGMA table_info(upload_jobs)")}:
-        try:
-            conn.execute("ALTER TABLE upload_jobs ADD COLUMN trailer_estado TEXT")
-        except sqlite3.OperationalError:
-            # Solo se calla si la columna ya está (la añadió otro init_db a la vez), no un «database is locked».
-            if "trailer_estado" not in {fila[1] for fila in conn.execute("PRAGMA table_info(upload_jobs)")}:
-                raise
+    _anadir_columna(conn, "upload_jobs", "trailer_estado", "TEXT")
     conn.execute(
         "UPDATE upload_jobs SET trailer_estado = 'incluido' WHERE trailer_estado IS NULL AND id IN ("
         "SELECT upload_job_id FROM upload_artifacts WHERE artifact_type = 'trailer_url')"
@@ -1358,15 +1211,8 @@ def _migrate_upload_jobs_trailer_estado(conn: sqlite3.Connection) -> None:
 def _migrate_upload_jobs_reenvio_qbit(conn: sqlite3.Connection) -> None:
     """Esquema 55: «Reenviar a qBittorrent» (services/upload_execution/reenvio_qbit.py). `reenvio_qbit_estado` es NULL,
     'en_curso', 'ok' o 'fallido', y `reenvio_qbit_at` cuándo cambió por última vez. El `status` de la subida no cambia."""
-    columnas = {fila[1] for fila in conn.execute("PRAGMA table_info(upload_jobs)")}
     for nombre in ("reenvio_qbit_estado", "reenvio_qbit_at"):
-        if nombre in columnas:
-            continue
-        try:
-            conn.execute(f"ALTER TABLE upload_jobs ADD COLUMN {nombre} TEXT")
-        except sqlite3.OperationalError:
-            if nombre not in {fila[1] for fila in conn.execute("PRAGMA table_info(upload_jobs)")}:
-                raise
+        _anadir_columna(conn, "upload_jobs", nombre, "TEXT")
 
 
 def _migrate_perfil_historial_completo(conn: sqlite3.Connection) -> None:
@@ -1374,15 +1220,8 @@ def _migrate_perfil_historial_completo(conn: sqlite3.Connection) -> None:
     misma lectura de /api/user. Las filas de antes se quedan con esas columnas a NULL."""
     tipos = {"buffer_bytes": "INTEGER", "seeding": "INTEGER", "leeching": "INTEGER", "hit_and_runs": "INTEGER",
              "grupo": "TEXT"}
-    columnas = {fila[1] for fila in conn.execute("PRAGMA table_info(perfil_historial)")}
     for nombre, tipo in tipos.items():
-        if nombre in columnas:
-            continue
-        try:
-            conn.execute(f"ALTER TABLE perfil_historial ADD COLUMN {nombre} {tipo}")
-        except sqlite3.OperationalError:
-            if nombre not in {fila[1] for fila in conn.execute("PRAGMA table_info(perfil_historial)")}:
-                raise
+        _anadir_columna(conn, "perfil_historial", nombre, tipo)
 
 
 def _migrate_mis_torrents(conn: sqlite3.Connection) -> None:
@@ -1461,12 +1300,7 @@ def _migrate_perfil_historial(conn: sqlite3.Connection) -> None:
 def _migrate_upload_jobs_torrent_subido(conn: sqlite3.Connection) -> None:
     """Esquema 44: `torrent_subido` (qBittorrent siembra del enlace de esa subida, antes se buscaba en todo el
     registro) y el índice del registro, que sirve a MAX(sequence) y a leer el final o lo posterior a una línea."""
-    try:
-        conn.execute("ALTER TABLE upload_jobs ADD COLUMN torrent_subido INTEGER NOT NULL DEFAULT 0")
-    except sqlite3.OperationalError:
-        # Solo se calla si la columna ya está (la añadió otro init_db a la vez), no un «database is locked».
-        if "torrent_subido" not in {fila[1] for fila in conn.execute("PRAGMA table_info(upload_jobs)")}:
-            raise
+    _anadir_columna(conn, "upload_jobs", "torrent_subido", "INTEGER NOT NULL DEFAULT 0")
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_upload_job_logs_job_sequence ON upload_job_logs(upload_job_id, sequence)"
     )
@@ -1482,12 +1316,7 @@ def _migrate_upload_jobs_torrent_subido(conn: sqlite3.Connection) -> None:
 def _migrate_auth_sessions_last_used(conn: sqlite3.Connection) -> None:
     """Esquema 45: cuándo se usó por última vez cada sesión, para que caduque por inactividad. Las que ya hay cuentan
     como usadas ahora: nadie se queda fuera al actualizar solo por no tener el dato."""
-    try:
-        conn.execute("ALTER TABLE auth_sessions ADD COLUMN last_used_at TEXT")
-    except sqlite3.OperationalError:
-        # Solo se calla si la columna ya está (la añadió otro init_db a la vez), no un «database is locked».
-        if "last_used_at" not in {fila[1] for fila in conn.execute("PRAGMA table_info(auth_sessions)")}:
-            raise
+    _anadir_columna(conn, "auth_sessions", "last_used_at", "TEXT")
     conn.execute("UPDATE auth_sessions SET last_used_at = CURRENT_TIMESTAMP WHERE last_used_at IS NULL AND revoked_at IS NULL")
 
 
@@ -1540,10 +1369,7 @@ def _migrate_library_items_spanish_audio(conn: sqlite3.Connection) -> None:
     those, and a season's verdict is "every episode I hold satisfies it", which
     is not the same as OR-ing the two separate rollups. Purely additive."""
     for col in ("has_spanish_audio", "has_spanish_subs", "has_spanish_ok"):
-        try:
-            conn.execute(f"ALTER TABLE library_items ADD COLUMN {col} INTEGER")
-        except sqlite3.OperationalError:
-            pass  # 1 yes, 0 no, NULL unknown/not computed
+        _anadir_columna(conn, "library_items", col, "INTEGER")  # 1 yes, 0 no, NULL unknown/not computed
 
 
 def _migrate_notifications_table(conn: sqlite3.Connection) -> None:
@@ -1571,10 +1397,7 @@ def _migrate_notifications_table(conn: sqlite3.Connection) -> None:
     # Existing installs predate poster_url/content_title — CREATE TABLE IF NOT
     # EXISTS above is a no-op for them, so add the columns here too.
     for col in ("poster_url", "content_title"):
-        try:
-            conn.execute(f"ALTER TABLE notifications ADD COLUMN {col} TEXT")
-        except sqlite3.OperationalError:
-            pass
+        _anadir_columna(conn, "notifications", col, "TEXT")
 
 
 def _migrate_nomenclature_phase10a(conn: sqlite3.Connection) -> None:
@@ -1591,10 +1414,7 @@ def _migrate_nomenclature_phase10a(conn: sqlite3.Connection) -> None:
         ("internal_title_error",          "TEXT"),
     ]
     for col, col_def in new_cols:
-        try:
-            conn.execute(f"ALTER TABLE nomenclature_proposals ADD COLUMN {col} {col_def}")
-        except sqlite3.OperationalError:
-            pass
+        _anadir_columna(conn, "nomenclature_proposals", col, col_def)
 
 
 def _migrate_nomenclature_year_series(conn: sqlite3.Connection) -> None:
@@ -1610,10 +1430,7 @@ def _migrate_nomenclature_year_series(conn: sqlite3.Connection) -> None:
         ("season_number",  "INTEGER"),
     ]
     for col, col_def in new_cols:
-        try:
-            conn.execute(f"ALTER TABLE nomenclature_proposals ADD COLUMN {col} {col_def}")
-        except sqlite3.OperationalError:
-            pass
+        _anadir_columna(conn, "nomenclature_proposals", col, col_def)
 
 
 def _migrate_settings_phase10a(conn: sqlite3.Connection) -> None:
@@ -1716,8 +1533,7 @@ def _migrate_scheduled_tasks_table(conn: sqlite3.Connection) -> None:
 
 def _migrate_scheduled_tasks_run_at(conn: sqlite3.Connection) -> None:
     """Esquema 46: `run_at` (HH:MM), la hora fija de una tarea programada. NULL = cada N minutos."""
-    if "run_at" not in {fila[1] for fila in conn.execute("PRAGMA table_info(scheduled_tasks)")}:
-        conn.execute("ALTER TABLE scheduled_tasks ADD COLUMN run_at TEXT")
+    _anadir_columna(conn, "scheduled_tasks", "run_at", "TEXT")
 
 
 def _migrate_library_items_raw_json_recortado(conn: sqlite3.Connection) -> int:
@@ -1791,19 +1607,24 @@ def _version_guardada(conn: sqlite3.Connection) -> Optional[int]:
         return None
 
 
-def _copia_antes_de_migrar(conn: sqlite3.Connection, version: int) -> None:
-    """Deja en backups/ una copia de la base antes de tocar el esquema, que es
-    lo único con lo que se vuelve atrás tras una migración. Si falla, migra igual."""
+def _copia_antes_de_migrar(conn: sqlite3.Connection, version: int) -> bool:
+    """Deja en backups/ una copia de la base antes de tocar el esquema, que es lo único con lo que se vuelve atrás
+    tras una migración. Sin sitio para ella no la empieza: llenaba el disco hasta fallar. Devuelve si la base queda
+    copiada; si no, se migra igual e init_db lo deja dicho para la campana."""
     try:
         fichero = conn.execute("PRAGMA database_list").fetchone()[2]
         if not fichero:
-            return  # en memoria
+            return True  # en memoria
         carpeta = Path(fichero).parent / "backups"
         carpeta.mkdir(mode=0o700, parents=True, exist_ok=True)
         ahora = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
         destino = carpeta / f"pre-migracion-{ahora}-v{version}.db"
         if destino.exists():
-            return
+            return True
+        ocupa = sum(f.stat().st_size for f in (Path(fichero), Path(fichero + "-wal")) if f.exists())
+        if shutil.disk_usage(carpeta).free < ocupa:
+            logger.warning("No hay sitio para copiar la base antes de migrar (hacen falta %d MB)", ocupa // 2**20)
+            return False
         conn.commit()  # VACUUM INTO no corre dentro de una transacción
         # Creada antes en 0600 (lleva todas las claves): VACUUM INTO la crearía con el umask y quedaría legible.
         os.close(os.open(destino, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600))
@@ -1812,6 +1633,10 @@ def _copia_antes_de_migrar(conn: sqlite3.Connection, version: int) -> None:
         except Exception:
             destino.unlink(missing_ok=True)  # una copia vacía no puede contar entre las últimas
             raise
+    except (sqlite3.Error, OSError):
+        logger.warning("No se pudo copiar la base antes de migrar", exc_info=True)
+        return False
+    try:
         copias = sorted(carpeta.glob("pre-migracion-*.db"))
         # La primera de esta versión es la única anterior a un intento fallido de migrar: los
         # reintentos de un arranque en bucle copian ya una base a medias y no deben llevársela.
@@ -1819,8 +1644,9 @@ def _copia_antes_de_migrar(conn: sqlite3.Connection, version: int) -> None:
         for vieja in copias[:-_COPIAS_ANTES_DE_MIGRAR]:
             if vieja != intocable:
                 vieja.unlink(missing_ok=True)
-    except (sqlite3.Error, OSError):
-        logger.warning("No se pudo copiar la base antes de migrar", exc_info=True)
+    except OSError:  # la copia nueva ya está hecha
+        logger.warning("No se pudieron retirar las copias antiguas de antes de migrar", exc_info=True)
+    return True
 
 
 def init_db(conn: Optional[sqlite3.Connection] = None) -> None:
@@ -1836,13 +1662,23 @@ def init_db(conn: Optional[sqlite3.Connection] = None) -> None:
     A base left by a newer version is refused (BaseMasNuevaError) instead of
     being stamped with the old number, and an older one is copied to
     backups/ before it is migrated.
+
+    The cascade is not one transaction: the `instances` rebuilds and the pre-migration copy commit what came before
+    them, and the version is stored only at the end. A pass that fails halfway leaves its first migrations applied and
+    the next start runs all of them again, so every `_migrate_*` must be safe to run twice; one that rewrites data
+    is called here only when `desde` crosses its schema.
     """
     own = conn is None
     conn = conn or connect()
+    candado = False
     try:
         if getattr(conn, "ruta", None) in _esquema_listo:
             return
-        version = _version_guardada(conn)
+        if _version_guardada(conn) == SCHEMA_VERSION:
+            return
+        _cascada.acquire()
+        candado = True
+        version = _version_guardada(conn)  # otro hilo pudo migrarla mientras este esperaba
         if version == SCHEMA_VERSION:
             return
         if version is not None and version > SCHEMA_VERSION:
@@ -1851,8 +1687,7 @@ def init_db(conn: Optional[sqlite3.Connection] = None) -> None:
                 f"aplicación (esquema {SCHEMA_VERSION}). Usa una imagen igual o más nueva; para "
                 f"volver atrás, restaura la copia backups/pre-migracion-*-v{SCHEMA_VERSION}.db."
             )
-        if version is not None:
-            _copia_antes_de_migrar(conn, version)
+        sin_copia = version is not None and not _copia_antes_de_migrar(conn, version)
         # Las migraciones que cambian ajustes solo corren al cruzar su esquema: repetidas en cada salto deshacían
         # lo que el usuario había cambiado después.
         desde = version or 0
@@ -2089,11 +1924,15 @@ def init_db(conn: Optional[sqlite3.Connection] = None) -> None:
         _migrate_mis_torrents(conn)
         recortadas = _migrate_library_items_raw_json_recortado(conn) if desde < 58 else 0
         set_state(conn, "schema_version", str(SCHEMA_VERSION))
+        if sin_copia:
+            set_state(conn, "migracion_sin_copia", str(version))  # backup_service.avisar_migracion_sin_copia
         conn.commit()
         if recortadas:
             # Fuera de la cascada y con la versión ya guardada: si no hay sitio o se corta, la migración no se repite.
             _compactar_tras_migrar(conn)
     finally:
+        if candado:
+            _cascada.release()
         if own:
             conn.close()
 
