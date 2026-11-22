@@ -18,6 +18,10 @@ from tests.test_subida_por_tracker import (  # noqa: F401 (fixtures)
     _biblioteca_en_tmp, _clave, _fila, _logs, _peli, _subida_a_emu_hecha, _trabajo, db_conn, pipeline,
 )
 
+# pytest busca las fixtures por nombre en este módulo; nombrarlas aquí las da por usadas (sin esto, cada test que las
+# recibe es un F811 de ruff).
+_FIXTURES_COMPARTIDAS = (db_conn, pipeline)
+
 
 @pytest.fixture
 def sin_hilos(monkeypatch):
