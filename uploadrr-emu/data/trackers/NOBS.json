@@ -1,0 +1,38 @@
+{
+  "version": 1,
+  "tracker": "NOBS",
+  "description": "Ids de UNIT3D de N.O.B.S (nobs.rawsmoke.net), de su formulario de subida el 22/11/2026 (docs/trackers-ids.md). Uploadrr-EMU envía el id del token que recibe; una entrada sin tokens solo se etiqueta, nunca se envía. Solo están los tipos de vídeo: los de libros, audiolibros y juegos (7-49) no los sube eMuwarr.",
+  "categories": [
+    {"id": 1, "label": "Movies", "tokens": ["movie"]},
+    {"id": 2, "label": "TV", "tokens": ["tv"]},
+    {"id": 3, "label": "Arcade", "tokens": []},
+    {"id": 4, "label": "Anime Movies", "tokens": []},
+    {"id": 5, "label": "Anime TV Shows", "tokens": []},
+    {"id": 7, "label": "E-Books", "tokens": []},
+    {"id": 8, "label": "Audiobooks", "tokens": []},
+    {"id": 9, "label": "Consolas", "tokens": []},
+    {"id": 10, "label": "PC", "tokens": []}
+  ],
+  "types": [
+    {"id": 1, "label": "Full Disc", "tokens": ["disc"]},
+    {"id": 2, "label": "Remux", "tokens": ["remux"]},
+    {"id": 3, "label": "Encode", "tokens": ["encode"]},
+    {"id": 4, "label": "WEB-DL", "tokens": ["webdl", "web-dl"]},
+    {"id": 5, "label": "WEBRip", "tokens": ["webrip"]},
+    {"id": 6, "label": "HDTV", "tokens": ["hdtv"]}
+  ],
+  "resolutions": [
+    {"id": 1, "label": "4320p", "tokens": ["4320p"]},
+    {"id": 2, "label": "2160p", "tokens": ["2160p"]},
+    {"id": 3, "label": "1080p", "tokens": ["1080p", "1440p"]},
+    {"id": 4, "label": "1080i", "tokens": ["1080i"]},
+    {"id": 5, "label": "720p", "tokens": ["720p"]},
+    {"id": 6, "label": "576p", "tokens": ["576p"]},
+    {"id": 7, "label": "576i", "tokens": ["576i"]},
+    {"id": 8, "label": "480p", "tokens": ["480p"]},
+    {"id": 9, "label": "480i", "tokens": ["480i"]},
+    {"id": 10, "label": "Other", "tokens": ["other"]}
+  ],
+  "defaults": {"categories": 0, "types": 0, "resolutions": 10},
+  "search": {"resolution_groups": [[3, 4]]}
+}
