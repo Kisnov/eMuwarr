@@ -237,6 +237,8 @@ def test_la_lista_blanca_cubre_todo_lo_que_el_codigo_lee_de_raw_json():
 
     leido_sql, leido_py = set(), set()
     for fichero in Path(emuwarez_uploadrr.__file__).parent.rglob("*.py"):
+        if fichero.name == "carpeta.py":
+            continue  # lee el raw_json que escribe ella misma (guessit, sugerencia), no el de Radarr/Sonarr
         texto = fichero.read_text(encoding="utf-8")
         leido_sql |= {c for c in re.findall(r"json_extract\((?:\w+\.)?raw_json,\s*'(\$[^']*)'\)", texto)
                       if not _OTRAS_TABLAS_SQL.match(c)}

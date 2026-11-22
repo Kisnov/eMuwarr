@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 
 DB_FILE = CONFIG_DIR / "emuwarez_uploadrr.db"
 
-SCHEMA_VERSION = 59
+SCHEMA_VERSION = 60
 
 # Phase 10E: canonical settings namespace fix.
 #
@@ -343,6 +343,28 @@ def _migrate_instances_unique_name(conn: sqlite3.Connection) -> None:
             )
 
         _rebuild_instances_table(conn, "'radarr','sonarr'", unique_clause="UNIQUE(name)")
+        conn.execute("COMMIT")
+    except BaseException:
+        conn.execute("ROLLBACK")
+        raise
+    finally:
+        conn.isolation_level = prior_isolation
+
+
+def _migrate_instances_carpeta(conn: sqlite3.Connection) -> None:
+    """Admite el tipo 'carpeta' (carpeta manual: `url` es su ruta, sin clave). Va después de las tres reconstrucciones
+    de arriba, que la dejan en ('radarr','sonarr') con UNIQUE(name); el mismo BEGIN IMMEDIATE que ellas."""
+    prior_isolation = conn.isolation_level
+    conn.isolation_level = None
+    try:
+        conn.execute("BEGIN IMMEDIATE")
+        row = conn.execute(
+            "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'instances'"
+        ).fetchone()
+        if not row or not row["sql"] or "'carpeta'" in row["sql"]:
+            conn.execute("COMMIT")
+            return
+        _rebuild_instances_table(conn, "'radarr','sonarr','carpeta'", unique_clause="UNIQUE(name)")
         conn.execute("COMMIT")
     except BaseException:
         conn.execute("ROLLBACK")
@@ -1786,6 +1808,7 @@ def init_db(conn: Optional[sqlite3.Connection] = None) -> None:
         _migrate_mis_torrents(conn)
         recortadas = _migrate_library_items_raw_json_recortado(conn) if desde < 58 else 0
         _migrate_quitar_esquema_sin_uso(conn)
+        _migrate_instances_carpeta(conn)
         set_state(conn, "schema_version", str(SCHEMA_VERSION))
         if sin_copia:
             set_state(conn, "migracion_sin_copia", str(version))  # backup_service.avisar_migracion_sin_copia

@@ -28,7 +28,7 @@ def _row_to_safe(row: dict) -> InstanceSafeResponse:
         type=row["type"],
         name=row["name"],
         url=row["url"],
-        api_key_masked=safe_api_key(row.get("api_key") or ""),
+        api_key_masked=safe_api_key(row["api_key"]) if row.get("api_key") else "",  # una carpeta no tiene
         enabled=bool(row["enabled"]),
         is_4k=bool(row.get("is_4k") or 0),
         is_anime=bool(row.get("is_anime") or 0),
@@ -138,6 +138,7 @@ def test_instance(
         version=result.get("version"),
         username=result.get("username"),
         error=result.get("error"),
+        message=result.get("message"),
     )
 
 
@@ -152,7 +153,7 @@ def sync_instance(
         inst = get_instance(conn, instance_id)
         if not inst:
             raise HTTPException(status_code=404, detail="Instancia no encontrada")
-        if inst.type not in ("radarr", "sonarr"):
+        if inst.type not in ("radarr", "sonarr", "carpeta"):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Sincronización de biblioteca no soportada para el tipo '{inst.type}'.",
@@ -173,9 +174,10 @@ def sync_instance(
         if resultado is None:
             raise HTTPException(status_code=404, detail="Instancia no encontrada")
         imported, missing = resultado
-    return SyncResponse(
-        imported=imported,
-        missing=missing,
-        instances=1,
-        message=f"Instancia '{inst.name}' sincronizada: {imported} elementos, {missing} no disponibles",
-    )
+    if inst.type == "carpeta":
+        from emuwarez_uploadrr.services.library.carpeta import contar_por_identificar
+        pendientes = contar_por_identificar(conn, inst.id)
+        mensaje = f"Carpeta '{inst.name}' escaneada: {imported} vídeos, {pendientes} por identificar en TMDb"
+    else:
+        mensaje = f"Instancia '{inst.name}' sincronizada: {imported} elementos, {missing} no disponibles"
+    return SyncResponse(imported=imported, missing=missing, instances=1, message=mensaje)
