@@ -97,8 +97,9 @@ jobs:
       # Solo lo que rompe en ejecución: el código heredado aún no pasa las reglas de la app (E9,F).
       - run: ruff check --select E9,F63,F7,F82 --output-format github .
       - run: python -m compileall -q .
-      # Sin red ni ffmpeg/mediainfo: su tests/conftest.py corta cualquier salida.
-      - run: pytest -q --cov=src --cov-report=term-missing --cov-report=xml
+      # Sin red ni ffmpeg/mediainfo: su tests/conftest.py corta cualquier salida. Cobertura mínima del 55 %, sin lo
+      # heredado que omite su pyproject.toml; súbela cuando lleguen tests nuevos.
+      - run: pytest -q --cov=src --cov-report=term-missing --cov-report=xml --cov-fail-under=55
       - if: ${{ !cancelled() }}
         uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
         timeout-minutes: 5
