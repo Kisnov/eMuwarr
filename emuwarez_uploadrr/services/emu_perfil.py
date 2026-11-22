@@ -14,12 +14,14 @@ import threading
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from ..database import get_json_state, get_setting_canonical, set_json_state
+from ..database import get_json_state, set_json_state
 from ..integrations.base import IntegrationError, texto_de_error
 from ..integrations.emu import emu_get_user
 from .avisos_cuenta import avisar_cambios
 from .perfil_historial import guardar_instantanea
 from .settings import set_setting
+from .trackers import EMU
+from .settings import ajuste_de_tracker
 
 logger = logging.getLogger(__name__)
 
@@ -37,7 +39,7 @@ _PIDIENDO = threading.Lock()
 def perfil_emu(conn: sqlite3.Connection, *, actualizar: bool = False) -> dict[str, Any]:
     """El perfil guardado; antes lo vuelve a pedir si el último intento tiene más de una hora
     (o de un minuto, con `actualizar`). Un fallo se guarda en `error` junto al último perfil bueno."""
-    clave = (get_setting_canonical(conn, "emu.api_key") or "").strip()
+    clave = (ajuste_de_tracker(conn, "api_key") or "").strip()
     guardado: dict[str, Any] = {}
     if clave:
         with _PIDIENDO:
@@ -51,7 +53,7 @@ def perfil_emu(conn: sqlite3.Connection, *, actualizar: bool = False) -> dict[st
         "configured": bool(clave),
         **{campo: perfil.get(campo) for campo in CAMPOS},
         # Sin perfil todavía, el usuario de Ajustes basta para los enlaces.
-        "username": perfil.get("username") or get_setting_canonical(conn, "emu.username") or None,
+        "username": perfil.get("username") or ajuste_de_tracker(conn, "username") or None,
         "updated_at": guardado.get("leido_at"),
         "error": guardado.get("error"),
     }
@@ -79,8 +81,8 @@ def _pedir(conn: sqlite3.Connection, clave: str, guardado: dict[str, Any]) -> di
     else:
         nuevo.update(perfil={campo: datos.get(campo) for campo in CAMPOS}, leido_at=nuevo["intento_at"], error=None)
         # «Mis peticiones» cuenta por este nombre: si no lo has escrito en Ajustes, se pone el de la cuenta.
-        if not get_setting_canonical(conn, "emu.username"):
-            set_setting(conn, "emu.username", str(datos["username"]))
+        if not ajuste_de_tracker(conn, "username"):
+            set_setting(conn, EMU.clave("username"), str(datos["username"]))
         guardar_instantanea(conn, datos)
         cambios = (guardado.get("perfil"), nuevo["perfil"])
     set_json_state(conn, PERFIL_STATE_KEY, nuevo)

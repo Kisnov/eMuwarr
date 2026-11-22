@@ -6,6 +6,7 @@ import re
 from datetime import datetime, timezone
 
 from ...database import connect, get_setting_canonical, init_db
+from ..trackers import EMU
 from ...integrations.base import tapar_claves
 from ..uploadrr_eventos import MOTIVOS_CLIENTE
 
@@ -143,7 +144,7 @@ def _get_setting(conn, key: str, default=None):
 def _collect_secrets(conn) -> list[str]:
     secrets = []
     # Los dos de qBittorrent también: un error de conexión de Uploadrr-EMU escribe la URL de qui, clave incluida.
-    for key in ("emu.api_key", "tmdb.api_key", "qbit.password", "qbit.qui_proxy_url"):
+    for key in (EMU.clave("api_key"), "tmdb.api_key", "qbit.password", "qbit.qui_proxy_url"):
         val = get_setting_canonical(conn, key)
         if val:
             secrets.append(val)

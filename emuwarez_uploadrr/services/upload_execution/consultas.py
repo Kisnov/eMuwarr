@@ -17,6 +17,7 @@ from ..uploadrr_contract import (
 )
 from .comun import _get_db_conn
 from .config import ruta_config
+from ..settings import ajuste_de_tracker
 
 
 VIDEO_EXTENSIONS = {
@@ -178,7 +179,7 @@ def validate_upload_job_start(job_id: int, conn=None) -> dict:
             if not script.exists():
                 errors.append(f"Script de Uploadrr no encontrado: {script}")
 
-        emu_key = get_setting_canonical(conn, "emu.api_key")
+        emu_key = ajuste_de_tracker(conn, "api_key")
         if not emu_key:
             errors.append("API key de eMuwarez no configurada.")
 

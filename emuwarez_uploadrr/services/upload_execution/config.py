@@ -31,6 +31,7 @@ from ..uploadrr_config import (
 from ..uploadrr_contract import get_runtime_settings
 from .comun import _get_db_conn, logger
 from .registro import append_upload_log
+from ..settings import ajuste_de_tracker
 
 
 class ConfigNoPreparada(RuntimeError):
@@ -55,7 +56,7 @@ def _lineas_preparadas(job_id: int, cwd: str) -> list[str] | None:
     conn = _get_db_conn()
     try:
         tmdb_key = get_setting_canonical(conn, "tmdb.api_key")
-        emu_key = get_setting_canonical(conn, "emu.api_key")
+        emu_key = ajuste_de_tracker(conn, "api_key")
         img_hosts = fallback_order(conn)
         img_api_keys = {
             host_id: key for host_id in SCREENS_API_KEY_HOSTS
