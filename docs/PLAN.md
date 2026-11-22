@@ -59,8 +59,9 @@ descripción y el cliente.
        (qBittorrent lo tiene; el tracker también, con la clave). Antes de cada una, buscar duplicados en ese tracker
        (Milnueve rechaza la misma calidad y fuente; NOBS, la misma obra con el mismo tipo y resolución) y comprobar que el
        fichero sigue ahí y completo en qBittorrent.
-     - **Lo que sí exigen y hay que respetar** (detalle en `docs/trackers-ids.md`): castellano obligatorio si existe el
-       doblaje (si no, Milnueve lo quiere en sus categorías Latino); descripción con MediaInfo y capturas (NOBS: mínimo 4,
+     - **Lo que sí exigen y hay que respetar** (detalle en `docs/trackers-ids.md`): el castellano va si existe el
+       doblaje (sin él, Milnueve lo quiere en sus categorías Latino), pero Milnueve también acepta contenido solo en
+       catalán (tiene «Anime en Catalan»): la regla de idioma de eMuwarr no se le aplica tal cual; descripción con MediaInfo y capturas (NOBS: mínimo 4,
        la configuración del encode si es un encode y el tráiler en películas); en NOBS el tipo sale del MediaInfo, no del
        nombre (un WEB-DL que pasó por Tdarr/HandBrake/ffmpeg es WEBRip), y puede no coincidir con el que se usó en
        eMuwarez.

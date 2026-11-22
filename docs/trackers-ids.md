@@ -106,8 +106,9 @@ Resumen de sus guías (las pasó Gabriel el 22/11; NOBS: [Normas](https://nobs.r
   castellano y la VO van con el mismo códec, `VOSE`/`VO` sin doblaje. Decisión del 22/11: se sube con la nomenclatura
   de eMuwarez, porque en la práctica nadie sigue una norma fija. Solo cuenta el nombre del torrent: no el del fichero
   ni el de la carpeta (FAQ de NOBS).
-- **Audio:** castellano obligatorio cuando existe el doblaje; mínimo recomendado castellano + VO. Sin doblaje
-  castellano se acepta el latino (en Milnueve, en sus categorías Latino, 10 y 14). VOSE se acepta.
+- **Audio:** las guías piden el castellano cuando existe el doblaje (mínimo recomendado castellano + VO). Sin doblaje
+  castellano se acepta el latino (en Milnueve, en sus categorías Latino, 10 y 14) y la VOSE. Milnueve acepta además
+  contenido solo en catalán (categoría «Anime en Catalan», 8; Gabriel, 22/11): allí no se exige el castellano.
 - **Calidad:** Milnueve recomienda 1080p, 720p solo si no hay 1080p y SD solo para DVD o casos justificados. NOBS no
   pone mínimo en películas, pero en series pide 720p (1080p si existe). Ninguno acepta CAM/TS/TC ni reescalados.
 - **Duplicados:** Milnueve rechaza la misma calidad y fuente si no mejora nada; en NOBS es duplicado la misma obra con
