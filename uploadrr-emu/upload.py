@@ -5,7 +5,7 @@ import asyncio
 import sys
 import time
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 import inspect
 
 import requests
@@ -26,7 +26,7 @@ from src.utils.console import console, log, redactor, set_log_level
 from src.utils.loads import load_trackers
 from src.utils.meta import edit_meta, limpiar_tmp_item, load_existing_meta, marcar_paso_hecho, queda_estado_viejo, save_meta
 from src.utils.queue import apply_delay, expand_auto_queue, normalize_trackers
-from src.utils.torrentman import handle_torrent_creation
+from src.utils.torrentman import TorrentMaker, _base_torrent_valido, handle_torrent_creation
 from src.utils.ui import print_banner, print_summary
 from src.utils.upload import anadir_al_cliente, get_confirmation, upload_to_trackers
 
@@ -261,6 +261,19 @@ class Uploadrr:
                     eventos.resultado(fallo is None, "cliente_ok" if fallo is None else "cliente_fallido", fallo)
                     continue
 
+                if item_meta.get("base_desde"):
+                    # El mismo contenido ya está en otro tracker: su torrent da el BASE.torrent (mismas piezas, sin hashear).
+                    fallo = await self._base_desde(item_meta)
+                    if fallo is not None:
+                        codigo_fallo, motivo = fallo
+                        log.warning(f"[yellow]Skipping {item_name}: {motivo}[/yellow]")
+                        progress.update(f"Processing {item_name}: Skipped (--base-desde)")
+                        skipped += 1
+                        skipped_details.append((path, motivo))
+                        eventos.fase("torrent", "fallida")
+                        eventos.resultado(False, codigo_fallo, motivo)
+                        continue
+
                 screens_handled = False
                 # Con generate_b4_confirm las capturas se hacen antes de saber los trackers viables: sin restricción de hosts.
                 tracker_whitelists: Dict[str, List[str]] = {}
@@ -398,6 +411,40 @@ class Uploadrr:
         if not await anadir_al_cliente(self.client, meta, nombre):
             console.print("[red]--solo-cliente: el torrent no se ha añadido al cliente")
             return "El torrent no se ha añadido al cliente"
+        return None
+
+    async def _base_desde(self, meta: Dict[str, Any]) -> Optional[Tuple[str, str]]:
+        """--base-desde TRACKER:ID: baja de ese tracker el .torrent del mismo contenido y escribe con él BASE.torrent
+        (mismo `name`, `files`, `pieces` y `piece length`: los dos torrents se siembran con el mismo fichero), y marca el
+        paso `torrent`, que así no se vuelve a hashear. Devuelve None si quedó hecho, o (código del resultado, motivo)."""
+        tracker_id, _, torrent_id = meta["base_desde"].partition(":")
+        registro = load_trackers([tracker_id], self.config)
+        datos = registro.get(tracker_id)
+        origen = datos["class"](config=self.config) if datos else None
+        if not hasattr(origen, "descargar_subido"):
+            return "base_sin_torrent", f"--base-desde: {tracker_id} no es un tracker UNIT3D"
+        torrent, motivo = await origen.descargar_subido(meta, int(torrent_id))
+        if torrent is None:
+            if motivo == "no_visible":
+                return "base_sin_torrent", f"{tracker_id} no da el torrent {torrent_id} (¿pendiente de moderación o retirado?)"
+            return "base_sin_torrent", f"No se pudo bajar el .torrent {torrent_id} de {tracker_id}"
+        try:
+            # Con otros ficheros, el torrent nuevo no se podría sembrar desde la subida (y qBittorrent descargaría encima).
+            distinto = fichero_distinto(torrent, Path(meta["path"]))
+            if distinto:
+                console.print(f"[red]--base-desde: el torrent {torrent_id} de {tracker_id} no coincide con la subida en {distinto}")
+                return "base_no_coincide", f"El torrent {torrent_id} de {tracker_id} no coincide con la subida en {distinto}"
+            base = Path(meta["base_dir"]) / "tmp" / meta["uuid"] / "BASE.torrent"
+            try:
+                await TorrentMaker(self.config).from_existing(torrent, Path(meta["base_dir"]), meta["uuid"])
+            except Exception as e:
+                return "base_sin_torrent", f"No se pudo escribir BASE.torrent con el torrent {torrent_id} de {tracker_id}: {type(e).__name__}"
+            if not _base_torrent_valido(base):
+                return "base_sin_torrent", f"No se pudo escribir BASE.torrent con el torrent {torrent_id} de {tracker_id}"
+        finally:
+            torrent.unlink(missing_ok=True)  # el del otro tracker no se añade a ningún cliente desde aquí
+        await marcar_paso_hecho(meta, "torrent", Path(meta["base_dir"]))
+        console.print(f"[green]BASE.torrent hecho con el torrent {torrent_id} de {tracker_id}: mismas piezas, sin hashear")
         return None
 
     async def shutdown(self) -> None:

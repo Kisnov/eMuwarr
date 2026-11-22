@@ -157,7 +157,8 @@ _BASE = {"manual_name": "Peli.2024.1080p.WEB-DL", "trackers": ["EMU"], "unattend
 @pytest.mark.parametrize(
     "cambios, esperado, ausentes",
     [
-        ({}, {**_BASE, "category": "MOVIE", "resolution": "1080p"}, ("anon", "resume", "aviso_baja_calidad", "solo_cliente")),
+        ({}, {**_BASE, "category": "MOVIE", "resolution": "1080p"},
+         ("anon", "resume", "aviso_baja_calidad", "solo_cliente", "base_desde")),
         (dict(category="tv", season=1, episode=5),
          {**_BASE, "category": "TV", "manual_season": "S01", "manual_episode": "E05"}, ("anon", "resume")),
         (dict(category="tv", season=2, resolution="480p", anonimo=True, reanudar=True),
@@ -170,8 +171,13 @@ _BASE = {"manual_name": "Peli.2024.1080p.WEB-DL", "trackers": ["EMU"], "unattend
          ("aviso_baja_calidad", "solo_cliente")),
         (dict(tracker="MNV", solo_cliente="77"),
          {**_BASE, "trackers": ["MNV"], "category": "MOVIE", "resume": True, "solo_cliente": 77}, ("anon",)),
+        # «Subir también a…» sin el BASE.torrent de entonces: Uploadrr-EMU lo hace con el torrent de eMuwarez.
+        (dict(tracker="NOBS", reanudar=True, base_desde="EMU:4242"),
+         {**_BASE, "trackers": ["NOBS"], "category": "MOVIE", "resume": True, "base_desde": "EMU:4242"},
+         ("aviso_baja_calidad", "solo_cliente")),
     ],
-    ids=["pelicula", "capitulo", "pack-480p-anonimo-resume", "solo-cliente", "nobs-480p-resume", "mnv-solo-cliente"],
+    ids=["pelicula", "capitulo", "pack-480p-anonimo-resume", "solo-cliente", "nobs-480p-resume", "mnv-solo-cliente",
+         "nobs-base-desde"],
 )
 def test_el_comando_de_la_app_llega_a_la_meta_con_el_tipo_y_valor_que_espera_uploadrr(
         args_uploadrr, parser_uploadrr, tmp_path, cambios, esperado, ausentes):

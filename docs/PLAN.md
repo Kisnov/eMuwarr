@@ -46,8 +46,13 @@ descripción y el cliente.
        tracker (`upload_jobs.tracker`), con el mismo nombre y el mismo fichero. El segundo espera a que acabe el primero,
        reutiliza su preparación y lanza Uploadrr-EMU con `--resume` (mismo BASE.torrent: mismas piezas). «Reenviar a
        qBittorrent» pide el torrent al tracker de la subida.
-     - Queda: subir a NOBS/Milnueve lo que ya está en eMuwarez (PR 4), las reglas de idioma y categoría por tracker
-       (PR 5), la subida por lotes a otros trackers y probarlo en el NAS.
+     - Ya está (PR 4): «Subir también a…» lo que ya está en eMuwarez (las ~50 subidas hechas con eMuwarr), desde el
+       detalle de una subida o, varias elegidas a mano, desde Subidas (un trabajo por subida y tracker, en un lote). Mismo
+       fichero y mismo nombre; si el `tmp/<nombre>` ya no tiene el BASE.torrent, Uploadrr-EMU lo hace con el torrent de
+       eMuwarez (`--base-desde EMU:<id>`): mismas piezas, sin hashear. Antes, qBittorrent tiene que tener ese torrent
+       entero con el fichero como contenido.
+     - Queda: las reglas de idioma y categoría por tracker (PR 5), la subida por lotes del asistente a otros trackers y
+       probarlo en el NAS (una subida vieja a N.O.B.S: los dos torrents sembrando el mismo fichero sin comprobar datos).
   3. Después, los internacionales que ya tienen código en `uploadrr-emu/`, solo para contenido con el audio en inglés y
      donde haya permiso.
 - **Por estudiar: nekoBT (nekobt.to; añadido el 22/11).** Tracker de anime (Jackett lo indexa como público). No consta

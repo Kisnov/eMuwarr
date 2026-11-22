@@ -203,6 +203,38 @@ def tracker_del_trabajo(job: dict) -> trackers.Tracker:
     return trackers.obtener(job.get("tracker") or trackers.POR_DEFECTO)
 
 
+def subida_con_el_mismo_fichero(job: dict, conn) -> dict | None:
+    """La subida completada del mismo elemento a otro tracker que siembra el mismo fichero de la carpeta de subidas
+    (`prepared_path`) y tiene apuntado su torrent: la que da las piezas a una subida que reutiliza su preparación."""
+    if not job.get("prepared_path") or not job.get("library_item_id"):
+        return None
+    return row_to_dict(conn.execute(
+        "SELECT * FROM upload_jobs WHERE library_item_id = ? AND prepared_path = ? AND tracker != ? AND id != ? "
+        "AND status = 'completed' AND result_torrent_id IS NOT NULL ORDER BY id LIMIT 1",
+        (job["library_item_id"], job["prepared_path"], job.get("tracker") or trackers.POR_DEFECTO, job.get("id") or 0),
+    ).fetchone())
+
+
+def base_torrent_de(uploadrr_path: str, prepared_path: str) -> Path:
+    """El BASE.torrent que Uploadrr-EMU deja en su `tmp/<nombre>` (nombre = el del fichero o carpeta que sube)."""
+    return Path(uploadrr_path) / "tmp" / Path(prepared_path).name / "BASE.torrent"
+
+
+def base_desde_para(job: dict, conn, uploadrr_path: str) -> str | None:
+    """`--base-desde` («EMU:<id>») para una subida que reutiliza la preparación de otra a otro tracker cuando ya no
+    queda su BASE.torrent (el mantenimiento borra `tmp/<nombre>` a los pocos días): sin él, Uploadrr-EMU lo volvería a
+    hashear, y otro tamaño de pieza haría un torrent que no se siembra junto al otro. None si no hace falta."""
+    if not job.get("reanuda_uploadrr") or not uploadrr_path or not job.get("prepared_path"):
+        return None
+    if base_torrent_de(uploadrr_path, job["prepared_path"]).is_file():
+        return None
+    otra = subida_con_el_mismo_fichero(job, conn)
+    if otra is None:
+        return None
+    torrent_id = str(otra["result_torrent_id"]).strip()
+    return f"{tracker_del_trabajo(otra).uploadrr}:{torrent_id}" if torrent_id.isdecimal() else None
+
+
 def build_uploadrr_execution_command(job: dict, conn=None, *, solo_cliente: str | None = None) -> dict:
     """Build the actual command list for subprocess. Resolves paths from settings at runtime.
 
@@ -269,6 +301,7 @@ def build_uploadrr_execution_command(job: dict, conn=None, *, solo_cliente: str 
                 anonimo=bool(cmd_data.get("anon")),
                 personal_release=bool(cmd_data.get("personal_release")),
                 solo_cliente=solo_cliente,
+                base_desde=None if solo_cliente else base_desde_para(job, conn, uploadrr_path),
                 eventos=eventos,
                 config=config,
                 tracker=tracker_del_trabajo(job).uploadrr,

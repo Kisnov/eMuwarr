@@ -51,6 +51,15 @@ or report their errors unless they break an eMuwarez upload.
   100 %; otherwise it stays stopped (starting it would download into the hardlinks). Other clients are refused, and so
   is a torrent already in qBittorrent (its 100 % would be an old one). Exit 0 only if `add_to_client`
   returned True (only qBittorrent reports it); any failure prints a reason, puts it in the summary and exits 1. `Torrent URL:` and `Torrent upload succeeded, but failed to` are never printed here.
+- `--base-desde TRACKER:ID` (`-bd`, per item, `meta["base_desde"]`, the string `"EMU:123"` with the tracker upper-cased, in
+  `overwrite_keys`): the app adds it (plus `--resume`) to an upload to another tracker of something already on `TRACKER`
+  when the shared `tmp/<uuid>/BASE.torrent` is gone. After prep (and the TMDb check), before screenshots, it downloads that
+  torrent with `TRACKER`'s adapter (`descargar_subido`, which needs its key in the config), checks it against `PATH`
+  (`fichero_distinto`) and writes `BASE.torrent` from it with `TorrentMaker.from_existing` (same `name`, `files`, `pieces`,
+  `piece length`; `source` becomes `Uploadrr`, so the info-hash differs), deletes the downloaded `[TRACKER]` file and marks
+  `torrent` done, so it is never hashed again. Then the normal upload to `-tk` (dupe check included). Failures end the item
+  with `resultado` `base_sin_torrent` (not a UNIT3D tracker, 404 or no link, BASE.torrent not written) or `base_no_coincide`
+  (other files or sizes; nothing is uploaded), exit 1.
 - Done steps: `meta["pasos_hechos"]` (list in `meta.json`) holds `screenshots` and `torrent`. Each is marked and
   saved first, then printed with plain `print(..., flush=True)` as `Step done: screenshots` / `Step done: torrent`
   (also when the step is reused in a `--resume`; nothing is printed for a step that did not run, e.g. a skipped item).

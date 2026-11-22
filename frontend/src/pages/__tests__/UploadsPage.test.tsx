@@ -12,7 +12,7 @@ vi.mock('../../api/uploads', () => ({
   getUploads: vi.fn(), countUploads: vi.fn(), getUploadJob: vi.fn(), startUploadJob: vi.fn(),
   retryUploadJobQueued: vi.fn(), cancelUploadJob: vi.fn(), getUploadJobLogs: vi.fn(), deleteUploadJob: vi.fn(),
   getLote: vi.fn(), cancelarLote: vi.fn(), reintentarLote: vi.fn(), borrarLote: vi.fn(),
-  contarSinTrailer: vi.fn(), marcarTrailerAMano: vi.fn(),
+  contarSinTrailer: vi.fn(), marcarTrailerAMano: vi.fn(), fetchTrackersParaSubir: vi.fn(async () => []),
 }))
 vi.mock('../../api/instances', () => ({ getInstances: vi.fn(async () => []) }))
 vi.mock('../../api/seeding', () => ({ getSeeding: vi.fn(async () => null) }))

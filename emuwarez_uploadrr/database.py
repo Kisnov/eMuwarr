@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 
 DB_FILE = CONFIG_DIR / "emuwarez_uploadrr.db"
 
-SCHEMA_VERSION = 60
+SCHEMA_VERSION = 61
 
 # Fase A del plan multitracker: el tracker de las filas de antes de que hubiera varios. Es `services.trackers.POR_DEFECTO`
 # (aquí en literal para que la base no importe servicios; test_tracker_en_la_base.py comprueba que coinciden).
@@ -1104,6 +1104,12 @@ def _migrate_upload_jobs_reenvio_qbit(conn: sqlite3.Connection) -> None:
         _anadir_columna(conn, "upload_jobs", nombre, "TEXT")
 
 
+def _migrate_upload_jobs_copia_de(conn: sqlite3.Connection) -> None:
+    """Esquema 61: «Subir también a…» (services/subir_tambien.py). `copia_de_job_id` es la subida completada a otro
+    tracker cuyo fichero y torrent reutiliza esta (mismo nombre, mismas piezas); NULL en las demás."""
+    _anadir_columna(conn, "upload_jobs", "copia_de_job_id", "INTEGER")
+
+
 def _migrate_perfil_historial_completo(conn: sqlite3.Connection) -> None:
     """Esquema 56: el historial de la cuenta guarda también buffer, seeding, leeching, H&R y grupo, que ya trae la
     misma lectura de /api/user. Las filas de antes se quedan con esas columnas a NULL."""
@@ -1889,6 +1895,7 @@ def init_db(conn: Optional[sqlite3.Connection] = None) -> None:
         recortadas = _migrate_library_items_raw_json_recortado(conn) if desde < 58 else 0
         _migrate_quitar_esquema_sin_uso(conn)
         _migrate_tracker_en_tablas(conn)
+        _migrate_upload_jobs_copia_de(conn)
         set_state(conn, "schema_version", str(SCHEMA_VERSION))
         if sin_copia:
             set_state(conn, "migracion_sin_copia", str(version))  # backup_service.avisar_migracion_sin_copia

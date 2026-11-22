@@ -119,7 +119,12 @@ came in from `Kisnov/Uploadrr-EMU` with `git subtree add`, history kept; that re
   job for the same item waits for an earlier live one of any tracker (`upload_queue._esperar_a_la_anterior`: they share the
   uploads-folder file and `tmp/<name>`), then reuses a completed other-tracker job's preparation and launches with `--resume`.
   The nightly maintenance deletes a `tmp/<name>` nobody touched for `mantenimiento.dias_tmp` days (7) unless its job is
-  running; `--resume` and `--solo-cliente` then start from nothing and regenerate it.
+  running; `--resume` and `--solo-cliente` then start from nothing and regenerate it, except that a job reusing another
+  tracker's preparation whose `BASE.torrent` is gone launches with `--base-desde <TK>:<id>` (`consultas.base_desde_para`):
+  Uploadrr-EMU builds it from that tracker's torrent (same pieces; `base_no_coincide` / `base_sin_torrent` otherwise).
+  «Subir también a…» (`services/subir_tambien.py`) creates those jobs for completed eMuwarez uploads (`copia_de_job_id`:
+  same file and name or fail, no fingerprints needed for old uploads) after checking qBittorrent has that torrent at 100 %
+  with the uploads-folder file as `content_path` (`seeding_qbit.completo_en_qbit`).
   «Reenviar a qBittorrent» (`upload_execution/reenvio_qbit.py`) launches the same argv plus `--resume --solo-cliente <id>`:
   Uploadrr-EMU only re-adds that torrent of the `-tk` tracker to qBittorrent, exits 0 only if it was added and never prints `Torrent URL:`.
   eMuwarez hides every new upload until a moderator approves it (up to a day): `/api/torrents/<id>` is a 404 and the
