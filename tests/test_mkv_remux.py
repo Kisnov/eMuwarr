@@ -140,6 +140,16 @@ def test_build_track_plan_names_are_professional():
     assert by_id[3]["new_name"] == "Inglés"
 
 
+def test_subtitle_codec_label():
+    from emuwarez_uploadrr.services.mkv_remux import _subtitle_codec_label
+    assert _subtitle_codec_label("HDMV PGS") == "PGS"
+    assert _subtitle_codec_label("SubRip/SRT") == "SRT"
+    assert _subtitle_codec_label("SubStationAlpha") == "ASS"
+    assert _subtitle_codec_label("VobSub") == "VobSub"
+    assert _subtitle_codec_label("WebVTT") == "WebVTT"
+    assert _subtitle_codec_label(None) == "?"
+
+
 def test_el_mismo_subtitulo_en_dos_formatos_lleva_el_formato_en_el_nombre():
     from emuwarez_uploadrr.services.mkv_remux import build_track_plan
 
