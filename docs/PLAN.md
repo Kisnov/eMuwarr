@@ -53,6 +53,8 @@ descripción y el cliente.
 
 ## Por probar en el NAS (`:dev`)
 
+- La carpeta manual: escanear una carpeta real con WEB-DL de películas y de series, identificar en TMDb (una a
+  una y las sugeridas de una vez) y subir una película y un pack de temporada.
 - El límite de «Subidas en paralelo» compartido entre la CLI y el servidor (`flock` sobre `CONFIG_DIR/plazas`).
 - El límite de peticiones a eMuwarez compartido entre el servidor, la CLI y cada Uploadrr-EMU (`flock` sobre
   `CONFIG_DIR/limitador`): con un catálogo largo en marcha y dos subidas a la vez no debería llegar ningún 429, y una
