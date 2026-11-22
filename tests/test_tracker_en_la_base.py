@@ -196,10 +196,13 @@ def test_lo_que_se_escribe_hoy_va_a_emuwarez():
     from emuwarez_uploadrr.services import perfil_historial, requests
 
     with db() as conn:
-        requests.upsert_request(conn, RequestItem(id=None, emu_id="1", title="Una"))
-        requests.upsert_request(conn, RequestItem(id=None, emu_id="1", title="Una, corregida"))
-        assert [tuple(f) for f in conn.execute("SELECT tracker, emu_id, title FROM request_items")] == [
-            ("emu", "1", "Una, corregida")]
+        # Una petición de otro tracker con el mismo id, creada antes: el upsert no la toca ni devuelve su id.
+        otra = conn.execute("INSERT INTO request_items (tracker, emu_id, title) VALUES ('nobs', '1', 'Ajena')").lastrowid
+        primera = requests.upsert_request(conn, RequestItem(id=None, emu_id="1", title="Una"))
+        segunda = requests.upsert_request(conn, RequestItem(id=None, emu_id="1", title="Una, corregida"))
+        assert primera == segunda != otra
+        assert [tuple(f) for f in conn.execute("SELECT tracker, emu_id, title FROM request_items ORDER BY id")] == [
+            ("nobs", "1", "Ajena"), ("emu", "1", "Una, corregida")]
         perfil_historial.guardar_instantanea(conn, {"ratio": 2, "username": "yo"}, datetime(2026, 11, 22, 10))
         perfil_historial.guardar_instantanea(conn, {"ratio": 3, "username": "yo"}, datetime(2026, 11, 22, 11))
         assert [tuple(f) for f in conn.execute("SELECT tracker, dia, ratio FROM perfil_historial")] == [

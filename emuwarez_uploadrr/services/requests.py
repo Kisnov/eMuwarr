@@ -24,6 +24,7 @@ from .request_readiness import _biblioteca, refresh_request_readiness
 from .eventos import EVENTO_SYNC_EMPEZADA, EVENTO_SYNC_TERMINADA, publicar
 from .tasks import start_task, finish_task
 from .tmdb_titles import tmdb_configured
+from .trackers import EMU
 from .compatibility import (
     match_request_to_library,
     classify_request_match,
@@ -95,10 +96,10 @@ def upsert_request(
     conn.execute(
         """
         INSERT INTO request_items(
-            emu_id, title, category, requested_source, requested_resolution,
+            tracker, emu_id, title, category, requested_source, requested_resolution,
             emu_status, points, comments, created_at, tmdb_id, imdb_id, tvdb_id, mal_id, url,
             author, author_visible, req_scope, req_season, req_episode, raw_json, last_seen_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
         ON CONFLICT(tracker, emu_id) DO UPDATE SET
             title = excluded.title,
             category = excluded.category,
@@ -130,14 +131,14 @@ def upsert_request(
             updated_at = CURRENT_TIMESTAMP
         """,
         (
-            item.emu_id, item.title, item.category, item.requested_source,
+            EMU.id, item.emu_id, item.title, item.category, item.requested_source,
             item.requested_resolution, item.emu_status, item.points, item.comments,
             item.created_at, item.tmdb_id, item.imdb_id, item.tvdb_id, item.mal_id, item.url, item.author,
             1 if item.author_visible else 0, item.req_scope, item.req_season, item.req_episode, item.raw_json,
             seen_at,
         ),
     )
-    row = conn.execute("SELECT id FROM request_items WHERE emu_id = ?", (item.emu_id,)).fetchone()
+    row = conn.execute("SELECT id FROM request_items WHERE tracker = ? AND emu_id = ?", (EMU.id, item.emu_id)).fetchone()
     if commit:
         conn.commit()
     return int(row["id"])
