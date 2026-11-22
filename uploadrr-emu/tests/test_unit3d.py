@@ -1014,6 +1014,44 @@ def test_ids_enviados_a_nobs_y_milnueve(otro, meta):
     assert {r: run(otro.get_res_id({**meta, "resolution": r})) for r in RESOLUCIONES_UNIT3D} == RESOLUCIONES_UNIT3D
 
 
+# --variante (la elige la app con services/reglas_tracker.py): token <CATEGORÍA>_<VARIANTE> de cada tabla
+VARIANTES_ENVIADAS = {
+    "EMU": {(c, v): {"MOVIE": "1", "TV": "2"}[c] for c in ("MOVIE", "TV") for v in ("anime", "latino", "anime_catalan")},
+    "NOBS": {("MOVIE", "anime"): "4", ("TV", "anime"): "5",
+             ("MOVIE", "latino"): "1", ("TV", "latino"): "2", ("MOVIE", "anime_catalan"): "1", ("TV", "anime_catalan"): "2"},
+    "MNV": {("MOVIE", "anime"): "3", ("TV", "anime"): "4", ("MOVIE", "latino"): "10", ("TV", "latino"): "14",
+            ("MOVIE", "anime_catalan"): "8", ("TV", "anime_catalan"): "8"},
+}
+
+
+@pytest.mark.parametrize("cls", [EMU, NOBS, MNV], ids=["EMU", "NOBS", "MNV"])
+def test_ids_de_categoria_de_cada_variante(cls, tracker, monkeypatch, meta):
+    """Una variante sin token en la tabla (eMuwarez no tiene anime; N.O.B.S, latino) va a la categoría normal."""
+    instancia = _instancia(cls, tracker, monkeypatch)
+    enviados = {(c, v): run(instancia.get_cat_id({**meta, "category": c, "variante": v}))
+                for c, v in VARIANTES_ENVIADAS[cls.__name__]}
+    assert enviados == VARIANTES_ENVIADAS[cls.__name__]
+    # Sin variante, la de siempre.
+    assert [run(instancia.get_cat_id({**meta, "category": c, "variante": None})) for c in ("MOVIE", "TV")] == ["1", "2"]
+
+
+@pytest.mark.parametrize("cls, variante, categoria, cat_id", [
+    (NOBS, "anime", "TV", "5"), (MNV, "latino", "MOVIE", "10"), (MNV, "anime_catalan", "TV", "8"),
+], ids=["NOBS-serie-anime", "MNV-pelicula-latino", "MNV-anime-catalan"])
+def test_la_variante_llega_al_formulario_de_subida(tracker, monkeypatch, upload_meta, signed_torrent,
+                                                   cls, variante, categoria, cat_id):
+    instancia = _instancia(cls, tracker, monkeypatch)
+    (Path(upload_meta["base_dir"]) / "tmp" / "u" / f"[{cls.__name__}]DESCRIPTION.txt").write_text("descripción")
+    tracker.routes[("POST", UPLOAD)] = lambda q: (200, {"success": True, "data": download_url(tracker)})
+    serve_download(tracker, signed_torrent)
+
+    extra = {"season_int": 1, "episode_int": 1} if categoria == "TV" else {}
+    assert run(instancia.upload({**upload_meta, "category": categoria, "variante": variante, **extra})) is True
+
+    (fields, _files), = tracker.bodies
+    assert fields["category_id"] == cat_id
+
+
 def test_las_tablas_no_se_mezclan(tracker, emu, monkeypatch, meta):
     """Cargar NOBS no cambia los ids de EMU: cada clase guarda los suyos."""
     nobs = _instancia(NOBS, tracker, monkeypatch)

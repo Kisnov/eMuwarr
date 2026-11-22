@@ -41,6 +41,13 @@ descripción y el cliente.
        ajustes por tracker (hoy `emu.*`), y en la cola, Peticiones y el Panel, de qué tracker es cada cosa.
   2. **Fase B: NOBS (nobs.rawsmoke.net) y Milnueve (tracker.milnueve.cc).** Los dos son UNIT3D y ya se sube a ellos con
      otras herramientas: se puede empezar (Gabriel les avisa). El primero valida la abstracción.
+     - Ya están sus normas de idioma y categoría (`services/reglas_tracker.py::reglas_de`): eMuwarez como siempre;
+       N.O.B.S admite castellano, latino o VOSE, y Milnueve además el catalán. El anime (instancia marcada de anime o
+       con id de MyAnimeList) va a sus categorías de anime; en Milnueve, sin castellano, el anime con catalán va a
+       «Anime en Catalan» y lo que tiene latino a las Latino. Llega a Uploadrr-EMU como `--variante`, que la tabla
+       del tracker convierte en el id. VHS/Retro y Documentales no se eligen solas. Falta que la subida por tracker
+       la use (comprobaciones con `tracker=` y `variante=` en el argv) y la regla por capítulo de los packs
+       (`season_pack._spanish_errors`, que sigue siendo la de eMuwarez).
   3. Después, los internacionales que ya tienen código en `uploadrr-emu/`, solo para contenido con el audio en inglés y
      donde haya permiso.
 - **Por estudiar: nekoBT (nekobt.to; añadido el 22/11).** Tracker de anime (Jackett lo indexa como público). No consta
