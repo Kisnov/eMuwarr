@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { InstanceSafeResponse } from '../../types/api'
-import { estadoDeInstancia } from '../instancias'
+import { estadoDeInstancia, validarInstancia } from '../instancias'
 
 function instancia(extra: Partial<InstanceSafeResponse> = {}): InstanceSafeResponse {
   return {
@@ -39,5 +39,22 @@ describe('Instancias: estado de cada tarjeta', () => {
   it('una caída de otra instancia no cuenta', () => {
     const e = estadoDeInstancia(instancia({ id: 2 }), [{ id: 1, nombre: 'Radarr', tipo: 'radarr', ultima_sincronizacion: null }])
     expect(e.etiqueta).toBe('Sin probar')
+  })
+})
+
+describe('Instancias: validar el formulario', () => {
+  it('Radarr y Sonarr piden URL http(s) y, al crearlas, la API key', () => {
+    expect(validarInstancia({ type: 'radarr', name: 'R', url: 'radarr:7878', api_key: '' }, true)).toEqual({
+      url: 'La URL debe empezar por http:// o https:// e incluir un host válido.',
+      api_key: 'Pega la API key de la instancia.',
+    })
+  })
+
+  it('una carpeta manual pide una ruta absoluta y nada de clave', () => {
+    expect(validarInstancia({ type: 'carpeta', name: 'Manual', url: '/data/manual', api_key: '' }, true)).toEqual({})
+    expect(validarInstancia({ type: 'carpeta', name: 'Manual', url: 'data/manual' }, true))
+      .toEqual({ url: 'La ruta tiene que ser absoluta: empieza por /.' })
+    expect(validarInstancia({ type: 'carpeta', name: '', url: ' ' }, false))
+      .toEqual({ name: 'Escribe un nombre.', url: 'Escribe la ruta de la carpeta.' })
   })
 })
