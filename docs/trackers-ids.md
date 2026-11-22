@@ -94,3 +94,29 @@ No hay ningún campo obligatorio que el payload de `UNIT3D.py` no envíe ya (`na
 - **Las categorías de anime y las de Milnueve por idioma/origen** (arriba): la categoría ya no sale solo de
   película/serie.
 - **`isbn13`/`asin`** (NOBS, libros y audiolibros): fuera del alcance de eMuwarr.
+
+## Normas de subida que afectan a eMuwarr
+
+Resumen de sus guías (las pasó Gabriel el 22/11; NOBS: [Normas](https://nobs.rawsmoke.net/pages/1),
+[FAQ](https://nobs.rawsmoke.net/pages/2), [Guía de subida](https://nobs.rawsmoke.net/wikis/2),
+[Nombrado](https://nobs.rawsmoke.net/wikis/3); Milnueve: su guía de subida y nombrado y sus normas).
+
+- **Nombre:** los dos piden `Título Año [SXX[EXX]] Fuente Resolución [Códec] [Bits] [HDR] Idiomas Códec_audio [SUB]`,
+  con el título de distribución en España, idiomas con tres letras (`ESP`, `LAT`, `ING`, `JAP`…), `DUAL` si el
+  castellano y la VO van con el mismo códec, `VOSE`/`VO` sin doblaje. Decisión del 22/11: se sube con la nomenclatura
+  de eMuwarez, porque en la práctica nadie sigue una norma fija. Solo cuenta el nombre del torrent: no el del fichero
+  ni el de la carpeta (FAQ de NOBS).
+- **Audio:** castellano obligatorio cuando existe el doblaje; mínimo recomendado castellano + VO. Sin doblaje
+  castellano se acepta el latino (en Milnueve, en sus categorías Latino, 10 y 14). VOSE se acepta.
+- **Calidad:** Milnueve recomienda 1080p, 720p solo si no hay 1080p y SD solo para DVD o casos justificados. NOBS no
+  pone mínimo en películas, pero en series pide 720p (1080p si existe). Ninguno acepta CAM/TS/TC ni reescalados.
+- **Duplicados:** Milnueve rechaza la misma calidad y fuente si no mejora nada; en NOBS es duplicado la misma obra con
+  el mismo tipo y la misma resolución ([Missing](https://nobs.rawsmoke.net/missing)), salvo que mejore claramente.
+- **Tipo en NOBS:** sale del MediaInfo, no del nombre. WEB-DL = el flujo del servicio sin recodificar (reempaquetar
+  con mkvmerge sigue siéndolo); WEBRip = cualquier recodificación de una fuente web, incluido un WEB-DL que pasó por
+  Tdarr, HandBrake o ffmpeg (firma de encoder en la pista de vídeo). En octubre corrigieron 327 torrents por esto.
+- **Descripción:** Milnueve, sinopsis/formato/calidad y capturas, nunca vacía. NOBS, MediaInfo completo, mínimo 4
+  capturas (≥ 1280×720), la configuración del encode si es un encode y el tráiler en películas; el id de TMDb.
+- **Torrent:** NOBS pide usar el torrent que devuelve el tracker (con su entropía), no el propio, y no distribuirlo
+  fuera. Milnueve: ningún requisito sobre el fichero; el nombre del `.torrent` con puntos es solo una convención.
+- **Seeding:** los dos con H&R de 96 h en 14 días (a partir del 50 % descargado); NOBS, ratio mínimo 0,4.
