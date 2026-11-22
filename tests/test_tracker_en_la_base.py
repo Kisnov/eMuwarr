@@ -113,8 +113,9 @@ def _clave(conn: sqlite3.Connection, tabla: str) -> list[str]:
 def test_el_por_defecto_de_la_base_es_el_de_los_trackers():
     assert TRACKER_POR_DEFECTO == trackers.POR_DEFECTO == trackers.EMU.id
     assert trackers.obtener("emu") is trackers.EMU
+    assert trackers.obtener("nobs") is trackers.NOBS and trackers.obtener("mnv") is trackers.MNV
     with pytest.raises(ValueError, match="desconocido"):
-        trackers.obtener("nobs")
+        trackers.obtener("blu")
 
 
 def test_una_base_nueva_ya_tiene_el_tracker_en_cada_tabla():

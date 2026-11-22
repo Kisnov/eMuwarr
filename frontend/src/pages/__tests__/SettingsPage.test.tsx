@@ -66,6 +66,10 @@ const AJUSTES: SettingsData = {
   tmdb_api_key_masked: 'tmdb****1234',
   emu_api_key_configured: true,
   emu_api_key_masked: 'emu****5678',
+  nobs_api_key_configured: true,
+  nobs_api_key_masked: 'nobs…1234',
+  mnv_api_key_configured: false,
+  mnv_api_key_masked: null,
   emu_username: 'gabriel',
   uploadrr_path: null,
   uploadrr_runtime_type: 'uploadrr_emu',
@@ -233,7 +237,7 @@ describe('Configuración: pestaña de ajustes', () => {
       upload_max_concurrent: 1,
     })
     // sin escribir una clave nueva no viaja ninguna
-    for (const k of ['tmdb_api_key', 'emu_api_key', 'qbit_password', 'qbit_qui_proxy_url', 'clear']) {
+    for (const k of ['tmdb_api_key', 'emu_api_key', 'nobs_api_key', 'mnv_api_key', 'qbit_password', 'qbit_qui_proxy_url', 'clear']) {
       expect(payload).not.toHaveProperty(k)
     }
     expect(texto()).toContain('✓ Configuración guardada')
@@ -265,6 +269,33 @@ describe('Configuración: pestaña de ajustes', () => {
     await pulsar(boton('Quitar la contraseña'))
     await pulsar(boton('Guardar'))
     expect(vi.mocked(updateSettings).mock.calls[0][0]).toMatchObject({ clear: ['qbit_password'] })
+  })
+
+  it('la clave de N.O.B.S viaja al guardar sin espacios, y la de Milnueve no si no se escribe', async () => {
+    await montar()
+    expect(texto()).toContain('nobs…1234')
+    expect(porPlaceholder('API key de N.O.B.S').value).toBe('')
+    await escribir(porPlaceholder('API key de N.O.B.S'), '  nobs-nueva  ')
+    expect(hayCambios()).toBe(true)
+    await pulsar(boton('Guardar'))
+    const payload = vi.mocked(updateSettings).mock.calls[0][0]
+    expect(payload.nobs_api_key).toBe('nobs-nueva')
+    expect(payload).not.toHaveProperty('mnv_api_key')
+    expect(payload).not.toHaveProperty('clear')
+    expect(porPlaceholder('API key de N.O.B.S').value).toBe('')
+    expect(hayCambios()).toBe(false)
+  })
+
+  it('«Quitar la clave» de N.O.B.S la manda en `clear`; Milnueve, sin clave guardada, no tiene el botón', async () => {
+    await montar()
+    expect([...document.body.querySelectorAll('button')].filter(x => x.textContent?.trim() === 'Quitar la clave')).toHaveLength(1)
+    await pulsar(boton('Quitar la clave'))
+    expect(campo('API key de N.O.B.S').placeholder).toBe('Se quitará al guardar')
+    expect(hayCambios()).toBe(true)
+    await pulsar(boton('Guardar'))
+    const payload = vi.mocked(updateSettings).mock.calls[0][0]
+    expect(payload.clear).toEqual(['nobs_api_key'])
+    expect(payload).not.toHaveProperty('nobs_api_key')
   })
 
   it('una URL de qBittorrent inválida no se guarda', async () => {
@@ -386,7 +417,7 @@ describe('Configuración: índice, buscador, barra de guardado y Avanzado', () =
     await montar()
     const nav = document.querySelector('nav[aria-label="Secciones de Configuración"]')!
     expect([...nav.querySelectorAll('button')].map(b => b.textContent)).toEqual([
-      'eMuwarez', 'TMDb', 'qBittorrent', 'Proveedores de vídeo', 'Proveedores de imágenes', 'Otros',
+      'eMuwarez', 'TMDb', 'qBittorrent', 'Proveedores de vídeo', 'Proveedores de imágenes', 'Otros trackers', 'Otros',
       'Widget para Homepage', 'Cuenta', 'Sesiones abiertas', 'Avanzado',
     ])
     expect(nav.querySelectorAll('[aria-current]').length).toBe(1)
@@ -431,19 +462,21 @@ describe('Configuración: índice, buscador, barra de guardado y Avanzado', () =
 
   it('el buscador filtra por título y por etiqueta de campo, y avisa si no hay resultados', async () => {
     await montar()
-    expect(visibles()).toHaveLength(10)
+    expect(visibles()).toHaveLength(11)
     await buscar('qbit')
     expect(visibles()).toEqual(['qbittorrent'])
     expect(document.querySelectorAll('.aj-indice__enlace')).toHaveLength(1)
     // etiqueta de un campo de la tarjeta de TMDb, sin acentos ni mayúsculas
     await buscar('REGION')
     expect(visibles()).toEqual(['tmdb'])
+    await buscar('milnueve')
+    expect(visibles()).toEqual(['otros-trackers'])
     await buscar('zzz')
     expect(visibles()).toEqual([])
     expect(texto()).toContain('Ninguna sección coincide con «zzz».')
     expect(texto()).toContain('Las notificaciones (Discord, Telegram)')
     await buscar('')
-    expect(visibles()).toHaveLength(10)
+    expect(visibles()).toHaveLength(11)
     expect(texto()).not.toContain('Ninguna sección coincide')
   })
 
