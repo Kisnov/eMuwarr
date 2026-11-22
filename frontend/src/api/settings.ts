@@ -32,6 +32,11 @@ export interface SettingsData {
   tmdb_api_key_masked: string | null
   emu_api_key_configured: boolean
   emu_api_key_masked: string | null
+  // Otros trackers (fase B del plan multitracker): opcionales.
+  nobs_api_key_configured: boolean
+  nobs_api_key_masked: string | null
+  mnv_api_key_configured: boolean
+  mnv_api_key_masked: string | null
   emu_username: string | null
   uploadrr_path: string | null
   uploadrr_runtime_type: UploadrrRuntimeType
@@ -85,6 +90,8 @@ export interface SettingsUpdatePayload {
   image_host_keys?: Record<string, string>
   tmdb_api_key?: string
   emu_api_key?: string
+  nobs_api_key?: string
+  mnv_api_key?: string
   emu_username?: string
   uploadrr_path?: string
   uploadrr_runtime_type?: UploadrrRuntimeType

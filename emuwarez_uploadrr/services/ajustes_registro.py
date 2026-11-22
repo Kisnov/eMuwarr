@@ -94,6 +94,9 @@ _REGISTRO: tuple[Ajuste, ...] = (
     # antes de guardar, y eso lo sigue haciendo el endpoint.
     Ajuste("tmdb_api_key", "tmdb.api_key", SECRET, campo_estado="tmdb_api_key"),
     Ajuste("emu_api_key", "emu.api_key", SECRET, campo_estado="emu_api_key"),
+    # Otros trackers (fase B): opcionales, se pueden quitar y no se validan al guardar.
+    Ajuste("nobs_api_key", "nobs.api_key", SECRET, campo_estado="nobs_api_key", borrable=True),
+    Ajuste("mnv_api_key", "mnv.api_key", SECRET, campo_estado="mnv_api_key", borrable=True),
     # qBittorrent
     Ajuste("qbit_url", "qbit.url", STR),
     Ajuste("qbit_tag", "qbit.tag", STR),

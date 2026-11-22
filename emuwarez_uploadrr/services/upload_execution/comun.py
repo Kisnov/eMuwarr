@@ -143,7 +143,8 @@ def _get_setting(conn, key: str, default=None):
 def _collect_secrets(conn) -> list[str]:
     secrets = []
     # Los dos de qBittorrent también: un error de conexión de Uploadrr-EMU escribe la URL de qui, clave incluida.
-    for key in ("emu.api_key", "tmdb.api_key", "qbit.password", "qbit.qui_proxy_url"):
+    # Las de los otros trackers (fase B) también se stagean en el config.yaml del hijo.
+    for key in ("emu.api_key", "nobs.api_key", "mnv.api_key", "tmdb.api_key", "qbit.password", "qbit.qui_proxy_url"):
         val = get_setting_canonical(conn, key)
         if val:
             secrets.append(val)

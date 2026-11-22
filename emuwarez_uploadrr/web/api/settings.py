@@ -70,6 +70,11 @@ class SettingsResponse(BaseModel):
     # Phase 11A: Emuwarez API key, editable from Settings (not just setup wizard).
     emu_api_key_configured: bool = False
     emu_api_key_masked: Optional[str] = None
+    # Otros trackers (fase B del plan multitracker): opcionales.
+    nobs_api_key_configured: bool = False
+    nobs_api_key_masked: Optional[str] = None
+    mnv_api_key_configured: bool = False
+    mnv_api_key_masked: Optional[str] = None
     # qBittorrent (torrent client used by Uploadrr)
     qbit_url: Optional[str] = None
     qbit_tag: Optional[str] = None
@@ -144,6 +149,8 @@ class SettingsUpdateRequest(BaseModel):
     tmdb_api_key: Optional[str] = None
     # Phase 11A
     emu_api_key: Optional[str] = None
+    nobs_api_key: Optional[str] = None
+    mnv_api_key: Optional[str] = None
     # qBittorrent
     qbit_url: Optional[str] = None
     qbit_tag: Optional[str] = None

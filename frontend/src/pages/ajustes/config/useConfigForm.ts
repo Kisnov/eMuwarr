@@ -17,12 +17,12 @@ function configSignature(v: {
   emuUsername: string; ignoreSpecials: boolean; sourceEngine: boolean; addLogo: boolean; capturasPorCapitulo: boolean; modoDePistas: ModoPistas; sinCopiasReflink: boolean; sincronizarAlVolver: boolean
   recentLimit: number; uploadMaxConcurrent: number; qbitUrl: string; qbitPublicUrl: string; qbitTag: string; qbitUser: string
   imgEnabled: string[]; allowedRoots: string
-  newKey?: string; newEmuKey?: string; qbitPass?: string; qbitQui?: string; quitarQui?: boolean; quitarQbitPass?: boolean
+  newKey?: string; newEmuKey?: string; newNobsKey?: string; newMnvKey?: string; quitarNobs?: boolean; quitarMnv?: boolean; qbitPass?: string; qbitQui?: string; quitarQui?: boolean; quitarQbitPass?: boolean
 }): Record<string, string> {
   const campos: Record<string, unknown> = {
     tags: v.tags, gruposPR: v.gruposPR, gruposAnon: v.gruposAnon, providerOrder: v.providerOrder, region: v.region, emuUsername: v.emuUsername,
     ignoreSpecials: v.ignoreSpecials, sourceEngine: v.sourceEngine, addLogo: v.addLogo, capturasPorCapitulo: v.capturasPorCapitulo, modoDePistas: v.modoDePistas, sinCopiasReflink: v.sinCopiasReflink, sincronizarAlVolver: v.sincronizarAlVolver, recentLimit: v.recentLimit, uploadMaxConcurrent: v.uploadMaxConcurrent, qbitUrl: v.qbitUrl, qbitPublicUrl: v.qbitPublicUrl, qbitTag: v.qbitTag, qbitUser: v.qbitUser, imgEnabled: v.imgEnabled, allowedRoots: v.allowedRoots,
-    newKey: v.newKey ?? '', newEmuKey: v.newEmuKey ?? '', qbitPass: v.qbitPass ?? '', qbitQui: v.qbitQui ?? '', quitarQui: v.quitarQui ?? false, quitarQbitPass: v.quitarQbitPass ?? false,
+    newKey: v.newKey ?? '', newEmuKey: v.newEmuKey ?? '', newNobsKey: v.newNobsKey ?? '', newMnvKey: v.newMnvKey ?? '', quitarNobs: v.quitarNobs ?? false, quitarMnv: v.quitarMnv ?? false, qbitPass: v.qbitPass ?? '', qbitQui: v.qbitQui ?? '', quitarQui: v.quitarQui ?? false, quitarQbitPass: v.quitarQbitPass ?? false,
   }
   return Object.fromEntries(Object.entries(campos).map(([k, x]) => [k, JSON.stringify(x)]))
 }
@@ -64,6 +64,11 @@ export function useConfigForm() {
   const [region, setRegion] = useState('')
   const [newKey, setNewKey] = useState('')
   const [newEmuKey, setNewEmuKey] = useState('')
+  // Las claves de NOBS y Milnueve: como las demás, no se cargan; quitar una se pide aparte.
+  const [newNobsKey, setNewNobsKey] = useState('')
+  const [newMnvKey, setNewMnvKey] = useState('')
+  const [quitarNobs, setQuitarNobs] = useState(false)
+  const [quitarMnv, setQuitarMnv] = useState(false)
   const [emuUsername, setEmuUsername] = useState('')
   const [ignoreSpecials, setIgnoreSpecials] = useState(true)
   // Internal Source Tool: apagada por defecto, sigue en desarrollo.
@@ -107,7 +112,7 @@ export function useConfigForm() {
   const currentSig = configSignature({
     tags: tagsAGuardar, gruposPR: prAGuardar, gruposAnon: anonAGuardar, providerOrder, region, emuUsername,
     ignoreSpecials, sourceEngine, addLogo, capturasPorCapitulo, modoDePistas, sinCopiasReflink, sincronizarAlVolver, recentLimit, uploadMaxConcurrent, qbitUrl, qbitPublicUrl, qbitTag, qbitUser, imgEnabled, allowedRoots,
-    newKey, newEmuKey, qbitPass, qbitQui, quitarQui, quitarQbitPass,
+    newKey, newEmuKey, newNobsKey, newMnvKey, quitarNobs, quitarMnv, qbitPass, qbitQui, quitarQui, quitarQbitPass,
   })
   const cambios = baseline ? contarCambios(baseline, currentSig) : 0
   // Validación en el sitio: un campo con una URL mal escrita lo dice al salir de él o al intentar guardar.
@@ -178,6 +183,10 @@ export function useConfigForm() {
     setNuevoTag('')
     setNewKey('')
     setNewEmuKey('')
+    setNewNobsKey('')
+    setNewMnvKey('')
+    setQuitarNobs(false)
+    setQuitarMnv(false)
     setQbitPass('')
     setQuitarQbitPass(false)
     setQbitQui('')
@@ -234,8 +243,14 @@ export function useConfigForm() {
       }
       if (newKey.trim()) payload.tmdb_api_key = newKey.trim()
       if (newEmuKey.trim()) payload.emu_api_key = newEmuKey.trim()
+      if (newNobsKey.trim()) payload.nobs_api_key = newNobsKey.trim()
+      if (newMnvKey.trim()) payload.mnv_api_key = newMnvKey.trim()
+      const quitar: string[] = []
       if (qbitPass.trim()) payload.qbit_password = qbitPass.trim()
-      else if (quitarQbitPass) payload.clear = ['qbit_password']
+      else if (quitarQbitPass) quitar.push('qbit_password')
+      if (!newNobsKey.trim() && quitarNobs) quitar.push('nobs_api_key')
+      if (!newMnvKey.trim() && quitarMnv) quitar.push('mnv_api_key')
+      if (quitar.length) payload.clear = quitar
       if (quitarQui) payload.qbit_qui_proxy_clear = true
       else if (qbitQui.trim()) payload.qbit_qui_proxy_url = qbitQui.trim()
       // Las API keys de imágenes ya NO viajan aquí: cada una se guarda desde
@@ -266,6 +281,10 @@ export function useConfigForm() {
       setImgEnabled(updated.image_hosts_enabled ?? [])
       setNewKey('')
       setNewEmuKey('')
+      setNewNobsKey('')
+      setNewMnvKey('')
+      setQuitarNobs(false)
+      setQuitarMnv(false)
       setAllowedRoots((updated.uploadrr_allowed_roots ?? []).join(', '))
       setBaseline(configSignature({
         tags: updated.upload_tags?.length ? updated.upload_tags : [updated.default_release_tag],
@@ -291,6 +310,7 @@ export function useConfigForm() {
     tags, setTags, nuevoTag, setNuevoTag, borrador, gruposPR, setGruposPR, gruposAnon, setGruposAnon,
     providerOrder, setProviderOrder, region, setRegion,
     newKey, setNewKey, newEmuKey, setNewEmuKey, emuUsername, setEmuUsername,
+    newNobsKey, setNewNobsKey, newMnvKey, setNewMnvKey, quitarNobs, setQuitarNobs, quitarMnv, setQuitarMnv,
     ignoreSpecials, setIgnoreSpecials, sourceEngine, setSourceEngine, addLogo, setAddLogo,
     capturasPorCapitulo, setCapturasPorCapitulo, modoDePistas, setModoDePistas,
     sinCopiasReflink, setSinCopiasReflink, sincronizarAlVolver, setSincronizarAlVolver, recentLimit, setRecentLimit,

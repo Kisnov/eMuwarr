@@ -257,6 +257,13 @@ def set_child_inline_mapping(lines: list[str], top_block: str, child: str, mappi
 
 
 def set_emu_config(lines: list[str], api_key: Optional[str] = None, anon: Optional[bool] = None) -> str:
+    return set_tracker_config(lines, "EMU", api_key=api_key, anon=anon)
+
+
+def set_tracker_config(
+    lines: list[str], tracker: str, api_key: Optional[str] = None, anon: Optional[bool] = None
+) -> str:
+    """TRACKERS.<tracker>.api_key / anon (tracker como lo nombra Uploadrr-EMU: EMU, NOBS, MNV)."""
     trackers_start, trackers_end = find_top_block(lines, "TRACKERS")
     if trackers_start < 0:
         if lines and lines[-1].strip():
@@ -264,15 +271,15 @@ def set_emu_config(lines: list[str], api_key: Optional[str] = None, anon: Option
         lines.append("TRACKERS:")
         trackers_start = len(lines) - 1
 
-    emu_start, emu_end = find_child_block(lines, "TRACKERS", "EMU", indent=2)
+    emu_start, emu_end = find_child_block(lines, "TRACKERS", tracker, indent=2)
     if emu_start < 0:
         insert_at = trackers_start + 1
-        block = ["  EMU:"]
+        block = [f"  {tracker}:"]
         if api_key is not None:
             block.append(f"    api_key: {yaml_scalar(api_key)}")
         block.append(f"    anon: {yaml_scalar(False if anon is None else anon)}")
         lines[insert_at:insert_at] = block
-        return "TRACKERS.EMU creado"
+        return f"TRACKERS.{tracker} creado"
 
     changed = False
     if api_key is not None:
@@ -299,4 +306,4 @@ def set_emu_config(lines: list[str], api_key: Optional[str] = None, anon: Option
             lines.insert(emu_start + 1, rendered)
         changed = True
 
-    return "TRACKERS.EMU actualizado" if changed else "TRACKERS.EMU sin cambios"
+    return f"TRACKERS.{tracker} actualizado" if changed else f"TRACKERS.{tracker} sin cambios"

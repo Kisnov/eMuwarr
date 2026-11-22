@@ -138,6 +138,31 @@ def test_el_config_de_la_subida_es_el_dorado_y_el_del_usuario_no_se_toca(tmp_pat
     assert _bytes_de(uploadrr) == antes  # ni config.yaml ni .bak, que tampoco se crea
 
 
+def test_las_claves_de_nobs_y_milnueve_van_en_su_bloque(tmp_path, sin_registro):
+    """Fase B: la clave de cada tracker con clave, con `anon: false`; el bloque que ya tenía el usuario se reescribe y
+    un tracker sin clave (o con solo espacios) no aparece."""
+    import yaml
+
+    uploadrr = _uploadrr(tmp_path, "completo")
+    (uploadrr / "data" / "config.yaml").write_text(
+        BASE_COMPLETA.replace("TORRENT_CLIENTS:", "  NOBS:\n    api_key: NOBS_VIEJA\n    anon: true\n\nTORRENT_CLIENTS:"),
+        encoding="utf-8")
+    _ajustes(nobs__api_key=" NOBS_NUEVA ", mnv__api_key="MNV_NUEVA")
+    ruta = ue.ruta_config(8)
+
+    ue.preparar_config_de_la_subida(8, str(uploadrr), ruta)
+
+    trackers = yaml.safe_load(ruta.read_text(encoding="utf-8"))["TRACKERS"]
+    assert trackers["NOBS"] == {"api_key": "NOBS_NUEVA", "anon": False}
+    assert trackers["MNV"] == {"api_key": "MNV_NUEVA", "anon": False}
+    assert trackers["EMU"]["api_key"] == "EMU_NUEVA"
+
+    _ajustes(nobs__api_key="", mnv__api_key="   ")
+    ue.preparar_config_de_la_subida(9, str(uploadrr), ue.ruta_config(9))
+    trackers = yaml.safe_load(ue.ruta_config(9).read_text(encoding="utf-8"))["TRACKERS"]
+    assert "MNV" not in trackers and trackers["NOBS"] == {"api_key": "NOBS_VIEJA", "anon": True}
+
+
 def test_cada_subida_tiene_el_suyo(tmp_path, sin_registro):
     uploadrr = _uploadrr(tmp_path, "completo")
     rutas = [ue.ruta_config(1), ue.ruta_config(2), ue.ruta_config(1, reenvio=True)]
