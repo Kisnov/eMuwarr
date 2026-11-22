@@ -35,12 +35,39 @@ descripción y el cliente.
      - Ya está la base (esquema 60): `services/trackers.py` con eMuwarez (`emu`) y la columna `tracker` en las
        subidas, peticiones, catálogo, «Tus subidas» y el historial del perfil; las claves de peticiones, «Tus subidas»
        y el perfil incluyen el tracker. Las sincronizaciones de eMuwarez (peticiones, catálogo, «Tus subidas», perfil)
-       solo escriben, borran y comparan filas de eMuwarez.
+       solo escriben, borran y comparan filas de eMuwarez. La clave y el usuario de un tracker se leen con
+       `settings.ajuste_de_tracker` (para eMuwarez, `emu.<nombre>`), nunca con la clave escrita a mano.
      - Queda: que esas sincronizaciones reciban el tracker como parámetro cuando haya un segundo adaptador, la
-       comparación con el catálogo por tracker (`library_items.emu_in_catalog`/`emu_aportes` son de eMuwarez), los
-       ajustes por tracker (hoy `emu.*`), y en la cola, Peticiones y el Panel, de qué tracker es cada cosa.
+       comparación con el catálogo por tracker (`library_items.emu_in_catalog`/`emu_aportes` son de eMuwarez), el
+       resto de ajustes por tracker (URL, grupos, anónimo) y su sitio en Configuración, y en la cola, Peticiones y el
+       Panel, de qué tracker es cada cosa.
   2. **Fase B: NOBS (nobs.rawsmoke.net) y Milnueve (tracker.milnueve.cc).** Los dos son UNIT3D y ya se sube a ellos con
-     otras herramientas: se puede empezar (Gabriel les avisa). El primero valida la abstracción.
+     otras herramientas: se puede empezar (Gabriel les avisa). El primero valida la abstracción. Decidido el 22/11:
+     - **Nomenclatura: la de eMuwarez, sin más.** Los dos son nuevos y cada uno sube como quiere; sus guías (formato
+       `Título Año Fuente Resolución Idiomas Códec_audio`, con `ESP`/`ING`/`DUAL`/`VOSE`) se leen con flexibilidad.
+       Solo cuenta el nombre del torrent (el campo `name` del formulario): ninguno de los dos exige nada al nombre del
+       fichero ni de la carpeta (la FAQ de NOBS lo dice expresamente).
+     - **Un solo fichero para los tres trackers, con cross-seed.** El mismo enlace de la carpeta de subidas, con el mismo
+       nombre, para eMuwarez, NOBS y Milnueve: nada de un enlace ni un nombre por tracker. Así los tres torrents tienen
+       los mismos ficheros (mismo `info.name`, mismos tamaños, mismo tamaño de pieza) y quien descargue de uno puede hacer
+       cross-seed en los otros. Encaja con lo que ya hace Uploadrr-EMU: crea un `BASE.torrent` genérico (sin anuncio,
+       `source` Uploadrr), lo sube a cada UNIT3D, descarga el torrent que devuelve cada tracker (con su anuncio y su
+       `source`: otro infohash, mismos datos; NOBS pide justo eso, que se use su torrent) y lo añade a qBittorrent con la
+       misma ruta. Cada tracker añadido no vuelve a hashear el fichero (un `BASE.torrent` para todos) ni ocupa disco.
+     - **Las subidas que ya están en eMuwarez (unas 50) se suben también a NOBS y Milnueve, cross-seedables.** Sin
+       volver a preparar nada: el fichero sigue en la carpeta de subidas sembrando, y el `BASE.torrent` sale del torrent
+       de eMuwarez (`torrentman.from_existing`, que ya existe: cambia el anuncio y el `source` y conserva nombre, ficheros y
+       piezas, sin hashear; el `tmp/<nombre>` original puede haberlo borrado el mantenimiento a los 7 días). Falta
+       decidir cómo se lanza (una acción en «Tus subidas» o un lote) y de dónde se lee el torrent de eMuwarez
+       (qBittorrent lo tiene; el tracker también, con la clave). Antes de cada una, buscar duplicados en ese tracker
+       (Milnueve rechaza la misma calidad y fuente; NOBS, la misma obra con el mismo tipo y resolución) y comprobar que el
+       fichero sigue ahí y completo en qBittorrent.
+     - **Lo que sí exigen y hay que respetar** (detalle en `docs/trackers-ids.md`): el castellano va si existe el
+       doblaje (sin él, Milnueve lo quiere en sus categorías Latino), pero Milnueve también acepta contenido solo en
+       catalán (tiene «Anime en Catalan»): la regla de idioma de eMuwarr no se le aplica tal cual; descripción con MediaInfo y capturas (NOBS: mínimo 4,
+       la configuración del encode si es un encode y el tráiler en películas); en NOBS el tipo sale del MediaInfo, no del
+       nombre (un WEB-DL que pasó por Tdarr/HandBrake/ffmpeg es WEBRip), y puede no coincidir con el que se usó en
+       eMuwarez.
      - Ya está: los adaptadores de Uploadrr-EMU (`-tk NOBS` / `-tk MNV`), sus claves en Configuración y la subida desde
        el Resumen del asistente (una sola subida, no una tanda): se eligen los trackers con clave y sale un trabajo por
        tracker (`upload_jobs.tracker`), con el mismo nombre y el mismo fichero. El segundo espera a que acabe el primero,
@@ -59,19 +86,45 @@ descripción y el cliente.
        en el NAS.
   3. Después, los internacionales que ya tienen código en `uploadrr-emu/`, solo para contenido con el audio en inglés y
      donde haya permiso.
-- **Por estudiar: nekoBT (nekobt.to; añadido el 22/11).** Tracker de anime (Jackett lo indexa como público). No consta
-  que sea UNIT3D: si no lo es, no sirven ni `cliente_unit3d.py` ni `UNIT3D_TEMPLATE`, y hace falta un adaptador con
-  cliente propio. Sus normas (wiki.nekobt.to/rules) permiten automatizar solo con clave de API y prohíben usarla para
-  spam. Antes de empezar: ver si sigue en pie (en octubre de 2026 Jackett lo dio por caído, issue Jackett#17212),
-  conseguir la documentación de su API de subida y preguntar al staff si acepta subidas automáticas. Encaja peor que los
-  demás: solo anime, mientras eMuwarr cataloga con TMDb desde Radarr/Sonarr; hay que ver qué ids pide (¿AniDB, MAL?),
-  su nomenclatura (grupo, fansub) y si acepta audio o subtítulos en español. Iría después de la fase B.
+- **Por estudiar: nekoBT (nekobt.to; añadido y estudiado el 22/11).** Tracker público de anime centrado en fansubs y
+  grupos, en open beta y en pie (≈ 9.500 usuarios y 47.000 torrents). Iría después de la fase B, con adaptador propio:
+  - **No es UNIT3D:** `/api/torrents/filter` da un 404 HTML; tiene su propia API JSON en `https://nekobt.to/api/v1`
+    ([documentación](https://wiki.nekobt.to/technical-details/json/)) y Torznab (`/api/torznab/api`). No sirven ni
+    `cliente_unit3d.py` ni `UNIT3D_TEMPLATE`: hace falta un cliente nuevo, con su propio límite de llamadas (no es
+    público; un 429 trae `retry_after`).
+  - **Autenticación:** una clave de API generada en los ajustes de la cuenta, enviada como cookie `ssid` con la clave
+    como valor ([API Keys](https://wiki.nekobt.to/technical-details/api-keys/)). Usar la cookie de la sesión en vez de
+    una clave está castigado. Sin clave, `POST /api/v1/upload` → 401 JSON `{"message":"Unauthorized.","error":true}`.
+  - **Subida:** `PUT /api/v1/upload/checks` (recomendado: corrige y analiza el título, devuelve avisos y fallos) y
+    `POST /api/v1/upload` con JSON: `torrent` (el .torrent en base64), `title` (≤ 512), `category` (solo 1),
+    `video_type`, `video_codec`, `level` (nivel de subtítulos, −1 a 3), `mtl`, `otl`, `hardsub`, `anonymous`, `hidden`,
+    `primary_group` (id y miembros con su rol), `secondary_groups`, `audio_langs`, `sub_langs`, `fansub_langs` (códigos
+    separados por comas, de `GET /api/v1/langs`: hay `es-es`, `es-419`, `ca`, `eu`, `gl`), `description` (Markdown,
+    ≤ 8192), `mediainfo` e `ignore_warnings`. Responde `data.id`, o `fails`/`warns`. Los ids de tipo de vídeo (14 BD
+    Remux, 13 BD Encode, 9 WEB-DL, 8 WEB Encode…) y de códec (1 H264, 2 H265, 3 AV1…) están en
+    [Metadata](https://wiki.nekobt.to/info/metadata/).
+  - **El .torrent es otro:** tiene que llevar su tracker público (`https://tracker.nekobt.to/api/tracker/public/announce`)
+    y al menos uno de respaldo ([Uploading](https://wiki.nekobt.to/info/uploading/)), nunca el anuncio privado de otro
+    tracker. La primera subida de la cuenta, o una cuyo título no reconoce, espera a que la apruebe el staff (hasta 24 h).
+  - **Normas** ([Rules](https://wiki.nekobt.to/rules/)): solo anime (con ficha en AniDB, AniList o MAL; nada de imagen
+    real); títulos en inglés o romaji; metadatos correctos (tipo, códec, nivel de subtítulos, idiomas); nada de
+    codificación por hardware (NVENC, QuickSync); automatizar solo con clave de API y sin spam (no piden permiso previo,
+    pero conviene avisar al staff); para subir hay que aprobar antes un examen. No prohíben el audio ni los subtítulos
+    en español: se declaran con sus códigos de idioma.
+  - **Identificación y nombre:** no pide ids de TMDb, IMDb, AniDB ni MAL. Deduce la serie o película del título con
+    Sonarr/Radarr/AniList, así que el nombre tiene que seguir la nomenclatura de anime (`[Grupo] Título - 01 [...]`), y la
+    etiqueta del título tiene que ser un grupo registrado en nekoBT, enviado como `primary_group`
+    ([Groups](https://wiki.nekobt.to/info/groups/)).
+  - **Encaje con eMuwarr:** peor que los UNIT3D: solo la parte de anime de la biblioteca, una nomenclatura propia, un
+    .torrent público aparte y campos que eMuwarr hoy no conoce (nivel de subtítulos, MTL/OTL, grupos con roles).
 - **Esperando permiso:** Torrentland (torrentland.li; no acepta automatizaciones: hace falta el OK del staff por
-  escrito antes de subir por API) y HDZero (hdzero.org, permiso improbable). Los cuatro son UNIT3D (`/api/torrents/filter`
+  escrito antes de subir por API. El 22/11 el staff respondió a Gabriel que puede preparar las subidas con una
+  herramienta propia y rellenar el formulario, presentándolo él a mano: «si no se necesita nada no te vamos a decir
+  nada de como realices las subidas si estan bien». Por API, preguntado el mismo día y sin respuesta aún) y HDZero (hdzero.org, permiso improbable). Los cuatro son UNIT3D (`/api/torrents/filter`
   anónimo → 401 JSON, comprobado el 18/11).
-- **Por resolver en la fase A:** de dónde salen los ids de cada tracker (su formulario de subida o el staff), una
-  nomenclatura por tracker y un nombre de fichero por tracker (un enlace duro por tracker en la carpeta de subidas, sin
-  ocupar más), etiqueta/categoría de qBittorrent por tracker, peticiones y catálogo por tracker sin pasar del límite de
+- **Por resolver en la fase A:** de dónde salen los ids de cada tracker (su formulario de subida o el staff; los de
+  NOBS y Milnueve están en `docs/trackers-ids.md`), una nomenclatura por tracker (para NOBS y Milnueve vale la de
+  eMuwarez; el fichero es el mismo para todos, ver la fase B), etiqueta/categoría de qBittorrent por tracker, peticiones y catálogo por tracker sin pasar del límite de
   cada API, y si la app cambia de nombre (hoy «eMuwarr» es de eMuwarez).
 
 ## Por probar en el NAS (`:dev`)

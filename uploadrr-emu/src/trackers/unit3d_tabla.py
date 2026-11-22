@@ -48,19 +48,11 @@ class Unit3dConTabla(Unit3d):
         else:
             emu_name = built_name
 
-        # Validate length
-        while len(emu_name) > 255:
-            emu_name = emu_name.replace(aka, "")
+        # Más de 255: fuera el AKA, luego la resolución y luego el tipo, hasta que quepa; si ni así, se corta. Una sola
+        # pasada: el bucle de antes no terminaba nunca con un nombre que seguía siendo largo sin los tres.
+        for sobra in (aka, meta.get("resolution", ""), meta.get("type", "")):
             if len(emu_name) <= 255:
                 break
-
-            resolution = meta.get("resolution", "")
-            emu_name = emu_name.replace(resolution, "")
-
-            if len(emu_name) <= 255:
-                break
-            type = meta.get("type", "")
-            emu_name = emu_name.replace(type, "")
-            if len(emu_name) <= 255:
-                break
+            if sobra:
+                emu_name = emu_name.replace(sobra, "")
         return emu_name[:255]

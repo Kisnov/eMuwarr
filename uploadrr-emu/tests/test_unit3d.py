@@ -1074,3 +1074,24 @@ def test_subida_a_nobs_y_milnueve(tracker, otro, upload_meta, signed_torrent, ca
     assert torf.Torrent.read(guardado).comment == f"{otro.comentario_torrent}\n{tracker.url}/torrents/42"
     assert "eMuwarez" not in otro.comentario_torrent
     assert f"Torrent URL: {tracker.url}/torrents/42" in capsys.readouterr().out
+
+
+# El nombre: el de eMuwarez en los tres trackers (Unit3dConTabla.edit_name)
+
+@pytest.mark.parametrize("cls", [EMU, NOBS, MNV], ids=["EMU", "NOBS", "MNV"])
+def test_el_nombre_es_el_de_emuwarez_en_los_tres(cls):
+    instancia = cls(config={"TRACKERS": {cls.__name__: {"api_key": TOKEN}}, "DEFAULT": {}})
+    espanola = {"name": "The Sea Inside AKA Mar adentro 2004 1080p", "title": "The Sea Inside", "aka": "AKA Mar adentro",
+                "original_title": "Mar adentro", "original_language": "es"}
+    assert instancia.edit_name(espanola) == "Mar adentro 2004 1080p"
+    assert instancia.edit_name({"name": NAME, "title": "Peli", "original_language": "en"}) == NAME
+
+
+def test_el_nombre_largo_pierde_aka_resolucion_y_tipo_hasta_caber():
+    largo = "T" * 240
+    meta = {"name": f"{largo} AKA Otro 2160p REMUX", "title": largo, "aka": "AKA Otro", "resolution": "2160p",
+            "type": "REMUX", "original_language": "en"}
+    nombre = EMU(config={"TRACKERS": {"EMU": {"api_key": TOKEN}}, "DEFAULT": {}}).edit_name(meta)
+    assert len(nombre) <= 255 and "AKA Otro" not in nombre
+    muy_largo = {**meta, "name": "X" * 300, "title": "X"}
+    assert len(EMU(config={"TRACKERS": {"EMU": {"api_key": TOKEN}}, "DEFAULT": {}}).edit_name(muy_largo)) == 255
