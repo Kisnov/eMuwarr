@@ -50,7 +50,7 @@ def _videos(raiz: str) -> list[str]:
 
 
 def probar_carpeta(ruta: str, conn: sqlite3.Connection | None = None) -> dict:
-    """{ok, message | error} para el botón «Comprobar carpeta». Nunca lanza."""
+    """{ok, message, warning | error} para el botón «Comprobar carpeta». Nunca lanza."""
     try:
         ruta = ruta_de_carpeta(ruta)
     except ValueError as exc:
@@ -65,8 +65,8 @@ def probar_carpeta(ruta: str, conn: sqlite3.Connection | None = None) -> dict:
         if not path_within_allowed_roots(ruta, get_allowed_roots(conn)):
             avisos.append("está fuera de las rutas permitidas para subir (Ajustes)")
     n = len(_videos(ruta))
-    mensaje = f"{n} vídeo{'s' if n != 1 else ''} en la carpeta"
-    return {"ok": True, "message": mensaje + (f"; ojo: {', '.join(avisos)}" if avisos else "")}
+    return {"ok": True, "message": f"{n} vídeo{'s' if n != 1 else ''} en la carpeta",
+            "warning": ("La carpeta " + " y ".join(avisos)) if avisos else None}
 
 
 def _clave(texto: str) -> str:

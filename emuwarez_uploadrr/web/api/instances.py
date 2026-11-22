@@ -139,6 +139,7 @@ def test_instance(
         username=result.get("username"),
         error=result.get("error"),
         message=result.get("message"),
+        warning=result.get("warning"),
     )
 
 

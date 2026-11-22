@@ -241,8 +241,9 @@ def test_probar_carpeta(conn, carpeta_dir, tmp_path):
     assert carpeta.probar_carpeta("relativa/x") == {
         "ok": False, "error": "La ruta de la carpeta debe ser absoluta (empieza por /)"}
     resultado = carpeta.probar_carpeta(str(carpeta_dir), conn)
-    assert resultado["ok"] is True and resultado["message"].startswith("3 vídeos en la carpeta")
-    assert "fuera de las rutas permitidas" in resultado["message"]   # tmp_path no cuelga de /data
+    assert resultado["ok"] is True
+    assert resultado["message"] == "3 vídeos en la carpeta"
+    assert "está fuera de las rutas permitidas" in resultado["warning"]   # tmp_path no cuelga de /data
 
 
 def test_la_migracion_admite_carpeta(isolated_db):

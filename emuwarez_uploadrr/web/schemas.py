@@ -311,7 +311,8 @@ class InstanceTestResponse(BaseModel):
     version: Optional[str] = None
     username: Optional[str] = None
     error: Optional[str] = None
-    message: Optional[str] = None  # carpeta manual: cuántos vídeos tiene y qué conviene mirar
+    message: Optional[str] = None  # carpeta manual: cuántos vídeos tiene
+    warning: Optional[str] = None  # carpeta manual: lo que conviene mirar (no se puede escribir, fuera de las rutas)
 
 
 _VALID_INSTANCE_TYPES = ("radarr", "sonarr", "carpeta")
