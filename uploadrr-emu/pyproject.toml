@@ -17,6 +17,30 @@ dev = [
 testpaths = ["tests"]
 pythonpath = ["."]
 
+# Lo heredado de Uploadrr fuera de la ruta de eMuwarez (README: «Solo se mantiene la ruta de eMuwarez») no cuenta en
+# la cobertura: otros trackers, música, contenido adulto, la subida MANUAL, los cogs de Discord y lo que nadie importa.
+# El informe que va a Codecov ya sale sin ellos, y el mínimo del CI (--cov-fail-under) se mide sobre el mismo conjunto.
+[tool.coverage.run]
+omit = [
+    "src/trackers/AITHER.py",
+    "src/trackers/BLU.py",
+    "src/trackers/HDB.py",
+    "src/trackers/PTP.py",
+    "src/metascraper.py",
+    "src/databases/ptgen.py",
+    "src/utils/cookieme.py",
+    "src/musicprocessor.py",
+    "src/databases/musicbrainz.py",
+    "src/databases/discogs.py",
+    "src/databases/deezer.py",
+    "src/databases/porndb.py",
+    "src/utils/phash.py",
+    "src/manual.py",
+    "src/search.py",
+    "src/vs.py",
+    "src/utils/distmapper.py",
+]
+
 [tool.ruff]
 line-length = 135
 select = ["E", "W", "F", "I"]

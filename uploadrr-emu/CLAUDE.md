@@ -102,8 +102,10 @@ or report their errors unless they break an eMuwarez upload.
   Docker (`upload.py` on a test folder, exit code).
 - The redactor rewrites config secrets in all Rich output.
 - The `uploadrr-emu` job of the root `.github/workflows/ci.yml` runs critical ruff rules (`E9,F63,F7,F82`), `compileall`
-  and pytest with coverage on every PR, and uploads it to Codecov (flag `uploadrr-emu`, informational only, root
-  `codecov.yml`). Style is left to CodeRabbit on changed lines.
+  and pytest with coverage on every PR (it fails below 55 %; raise `--cov-fail-under` as tests come in), and uploads it
+  to Codecov (flag `uploadrr-emu`, informational only, root `codecov.yml`). Code off the eMuwarez path (other trackers,
+  music, adult content, MANUAL, Discord cogs, unused modules) is left out by `[tool.coverage.run] omit` in
+  `pyproject.toml`, not by `codecov.yml`. Style is left to CodeRabbit on changed lines.
 
 ## Secrets and auth
 
