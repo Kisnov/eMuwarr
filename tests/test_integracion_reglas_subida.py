@@ -18,8 +18,12 @@ from emuwarez_uploadrr.services.upload_execution import build_uploadrr_execution
 
 @pytest.fixture(autouse=True)
 def _biblioteca_en_tmp(tmp_path, monkeypatch):
-    from emuwarez_uploadrr.services import uploadrr_contract
+    from emuwarez_uploadrr.services import carpeta_subida, uploadrr_contract
     monkeypatch.setattr(uploadrr_contract, "DEFAULT_ALLOWED_ROOTS", [str(tmp_path)])
+    # La carpeta de subidas de serie (/config/Uploadrr/uploads) no se puede escribir en CI: sin esto la comprobación
+    # «carpeta_subida» falla antes que la de idiomas.
+    (tmp_path / "uploads").mkdir()
+    monkeypatch.setattr(carpeta_subida, "RAIZ_SUBIDAS", str(tmp_path / "uploads"))
 
 
 @pytest.fixture
