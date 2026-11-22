@@ -24,6 +24,7 @@ from .uploadrr_contract import (
 )
 from .uploadrr_config import default_uploadrr_config_path
 from .upload_execution import CONFIRMATION_TOKEN
+from .settings import ajuste_de_tracker
 
 JOB_STATUS_DRAFT = "draft"
 JOB_STATUS_PREFLIGHT = "preflight"
@@ -72,7 +73,7 @@ def validate_upload_preconditions(library_item: dict, proposal: dict | None = No
                         "Uploadrr-EMU no podrá arrancar."
                     )
 
-        emu_key = get_setting_canonical(conn, "emu.api_key")
+        emu_key = ajuste_de_tracker(conn, "api_key")
         if not emu_key:
             errors.append("API key de eMuwarez no configurada.")
 
