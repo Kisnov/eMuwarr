@@ -36,6 +36,13 @@ descripción y el cliente.
      otras herramientas: se puede empezar (Gabriel les avisa). El primero valida la abstracción.
   3. Después, los internacionales que ya tienen código en `uploadrr-emu/`, solo para contenido con el audio en inglés y
      donde haya permiso.
+- **Por estudiar: nekoBT (nekobt.to; añadido el 22/11).** Tracker de anime (Jackett lo indexa como público). No consta
+  que sea UNIT3D: si no lo es, no sirven ni `cliente_unit3d.py` ni `UNIT3D_TEMPLATE`, y hace falta un adaptador con
+  cliente propio. Sus normas (wiki.nekobt.to/rules) permiten automatizar solo con clave de API y prohíben usarla para
+  spam. Antes de empezar: ver si sigue en pie (en octubre de 2026 Jackett lo dio por caído, issue Jackett#17212),
+  conseguir la documentación de su API de subida y preguntar al staff si acepta subidas automáticas. Encaja peor que los
+  demás: solo anime, mientras eMuwarr cataloga con TMDb desde Radarr/Sonarr; hay que ver qué ids pide (¿AniDB, MAL?),
+  su nomenclatura (grupo, fansub) y si acepta audio o subtítulos en español. Iría después de la fase B.
 - **Esperando permiso:** Torrentland (torrentland.li; no acepta automatizaciones: hace falta el OK del staff por
   escrito antes de subir por API) y HDZero (hdzero.org, permiso improbable). Los cuatro son UNIT3D (`/api/torrents/filter`
   anónimo → 401 JSON, comprobado el 18/11).
