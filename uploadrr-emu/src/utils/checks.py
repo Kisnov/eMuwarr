@@ -7,6 +7,7 @@ from rich.prompt import Confirm
 from src.progress import ProgressManager
 from src.trackers.COMMON import COMMON
 from src.trackers.UNIT3D import DupeSearchError
+from src.trackers.unit3d_tabla import Unit3dConTabla
 from src.utils import eventos
 from src.utils.console import console
 
@@ -49,8 +50,9 @@ async def pre_upload_checks(
                 tracker_upload_ok[tracker] = False
                 continue
 
-        # eMuwarez no tiene tipo 0: sin un tipo de data/trackers/EMU.json no se sube ni se buscan duplicados con él.
-        if tracker == "EMU" and await tracker_instance.get_type_id(meta) == "0":
+        # Los trackers de eMuwarr (EMU, NOBS, MNV) no tienen tipo 0: sin un tipo de su data/trackers/<tracker>.json no
+        # se sube ni se buscan duplicados con él.
+        if isinstance(tracker_instance, Unit3dConTabla) and await tracker_instance.get_type_id(meta) == "0":
             skipped_details.append((path, f"Unknown type on {tracker}: {meta.get('type') or '?'}"))
             tracker_upload_ok[tracker] = False
             continue

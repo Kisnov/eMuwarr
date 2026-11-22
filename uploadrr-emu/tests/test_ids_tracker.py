@@ -44,8 +44,14 @@ def test_mal_formada_falla(carpeta, romper):
         cargar_ids("EMU")
 
 
-def test_la_de_verdad_se_carga():
-    assert cargar_ids("EMU")["tracker"] == "EMU"
+@pytest.mark.parametrize("tracker", ["EMU", "NOBS", "MNV"])
+def test_la_de_verdad_se_carga(tracker):
+    assert cargar_ids(tracker)["tracker"] == tracker
+
+
+def test_los_tres_trackers_se_cargan():
+    claves = {t: {"api_key": "x"} for t in ("EMU", "NOBS", "MNV")}
+    assert set(load_trackers(["EMU", "NOBS", "MNV"], {"TRACKERS": claves, "DEFAULT": {}})) == {"EMU", "NOBS", "MNV"}
 
 
 def test_sin_tabla_emu_no_es_un_tracker_valido(carpeta, monkeypatch):
