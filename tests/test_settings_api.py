@@ -335,6 +335,24 @@ def test_clear_quita_cada_secreto(client, auth_headers):
     assert set(data["image_host_keys_configured"]) >= {"lensdump", "imgbb"}
 
 
+def test_las_claves_de_nobs_y_milnueve_se_guardan_sin_probarlas_y_se_pueden_quitar(client, auth_headers):
+    """Fase B: opcionales, sin prueba en vivo al guardar (no hay ningún mock de conexión aquí)."""
+    data = client.put("/api/settings", json={
+        "nobs_api_key": " clave-de-nobs-1234 ", "mnv_api_key": "clave-de-mnv-5678",
+    }, headers=auth_headers).json()
+    assert data["nobs_api_key_configured"] is True and data["nobs_api_key_masked"] == "clav…1234"
+    assert data["mnv_api_key_configured"] is True and data["mnv_api_key_masked"] == "clav…5678"
+    assert "clave-de-nobs-1234" not in str(data) and "clave-de-mnv-5678" not in str(data)
+
+    # Vacía deja la que hay.
+    data = client.put("/api/settings", json={"nobs_api_key": "", "mnv_api_key": "  "}, headers=auth_headers).json()
+    assert data["nobs_api_key_configured"] is True and data["mnv_api_key_configured"] is True
+
+    data = client.put("/api/settings", json={"clear": ["nobs_api_key", "mnv_api_key"]}, headers=auth_headers).json()
+    assert data["nobs_api_key_configured"] is False and data["nobs_api_key_masked"] is None
+    assert data["mnv_api_key_configured"] is False and data["mnv_api_key_masked"] is None
+
+
 def test_clear_quita_la_clave_de_un_proveedor_de_imagenes(client, auth_headers):
     _guardar_secretos(client, auth_headers)
     data = client.put("/api/settings", json={"clear": ["image_host_key:lensdump"]}, headers=auth_headers).json()
