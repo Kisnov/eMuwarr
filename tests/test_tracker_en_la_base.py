@@ -251,3 +251,16 @@ def test_sincronizar_las_peticiones_de_emuwarez_no_borra_las_de_otro_tracker(mon
         reqs.sync_emu_requests(conn, force=True)
         assert sorted(tuple(f) for f in conn.execute("SELECT tracker, emu_id FROM request_items")) == [
             ("emu", "1"), ("nobs", "99")]
+
+
+def test_tu_usuario_de_emuwarez_no_te_hace_dueno_de_la_reclamacion_de_otro_tracker():
+    import json
+
+    from emuwarez_uploadrr.services.compatibility import estado_emu_de, reclamada_por
+
+    raw = json.dumps({"claimed": True, "claimed_by": "yo"})
+    mia = {"tracker": "emu", "emu_status": "claimed", "raw_json": raw}
+    ajena = {"tracker": "nobs", "emu_status": "claimed", "raw_json": raw}
+    assert reclamada_por(mia, "yo") == "ti" and estado_emu_de(mia, "yo") is None
+    assert reclamada_por(ajena, "yo") == "desconocido"
+    assert estado_emu_de(ajena, "yo") == "Reclamado"

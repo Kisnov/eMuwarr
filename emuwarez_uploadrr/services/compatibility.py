@@ -16,6 +16,8 @@ import re
 import unicodedata
 from typing import Optional
 
+from .trackers import EMU
+
 # Pixel height ranks — higher is better
 _RESOLUTION_RANK: dict[str, int] = {
     "480p": 480, "480i": 480, "480": 480,
@@ -315,10 +317,13 @@ def reclamante(req: dict) -> Optional[str]:
 
 def reclamada_por(req: dict, mi_usuario: str | None) -> Optional[str]:
     """«ti», «otro» o «desconocido» si la petición está reclamada en eMuwarez; None si no lo está. Sin saber quién la
-    reclamó (o sin saber quién eres) cuenta como desconocida."""
+    reclamó (o sin saber quién eres) cuenta como desconocida. `mi_usuario` es tu usuario de eMuwarez: en la petición
+    de otro tracker no dice quién eres allí, así que su reclamación también cuenta como desconocida."""
     if emu_override_status(req.get("emu_status")) != "Reclamado":
         return None
     quien = reclamante(req)
+    if req.get("tracker", EMU.id) != EMU.id:
+        mi_usuario = None
     if quien is None or not (mi_usuario or "").strip():
         return "desconocido"
     return "ti" if quien == mi_usuario.strip().lower() else "otro"
