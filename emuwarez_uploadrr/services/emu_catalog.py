@@ -19,7 +19,7 @@ import sqlite3
 import threading
 from typing import Optional
 
-from ..database import get_setting_canonical, get_state, set_state, get_json_state, set_json_state
+from ..database import get_state, set_state, get_json_state, set_json_state
 from .settings import leer_ajuste
 from ..integrations import emu
 from ..integrations.base import IntegrationError, texto_de_error
@@ -27,6 +27,7 @@ from .tasks import start_task, finish_task
 from .upload_states import ACTIVE_JOB_STATUSES
 from .eventos import EVENTO_SYNC_EMPEZADA, EVENTO_SYNC_TERMINADA, publicar
 from .trackers import EMU
+from .settings import ajuste_de_tracker
 
 logger = logging.getLogger("emuwarez.emu")
 
@@ -880,7 +881,7 @@ def sync_emu_catalog(conn: sqlite3.Connection, *, force: bool = False, mode: str
 
     task_id = start_task(conn, "sync-emu-catalog", f"Sincronizando catálogo eMuwarez ({'completo' if mode == 'full' else 'nuevo'})")
     try:
-        api_key = get_setting_canonical(conn, "emu.api_key")
+        api_key = ajuste_de_tracker(conn, "api_key")
         if not api_key:
             raise IntegrationError("No hay API key de eMuwarez configurada")
 
