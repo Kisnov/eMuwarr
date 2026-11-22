@@ -109,10 +109,14 @@ def build_uploadrr_command_preview(
     conn=None,
     *,
     tracker: str = trackers.POR_DEFECTO,
+    variante: str | None = None,
 ) -> dict:
     """Build a preview of what the Uploadrr command would look like. NEVER executes it.
 
     `tracker`: el id del tracker de la subida; da el `-tk` (y si va `-avbc`, que es solo de eMuwarez).
+
+    `variante`: la categoría que le toca en ese tracker (services/reglas_tracker.py, la calcula quien llama), el
+    `--variante`. Nunca para eMuwarez. Se guarda con el comando, que es lo que lee la ejecución.
 
     For runtime_type=uploadrr_emu (the default), builds the real Uploadrr-EMU
     argv (-tk/-mt/-tmdb/-ua/-c/-res) via uploadrr_contract.py and validates it
@@ -169,6 +173,8 @@ def build_uploadrr_command_preview(
 
         category = "tv" if media_type in ("tv", "series", "anime", "season", "episode") else "movie"
         nombre_uploadrr = trackers.obtener(tracker).uploadrr
+        if trackers.obtener(tracker).id == trackers.EMU.id:
+            variante = None
 
         if runtime_type == RUNTIME_EMU:
             uploadrr_path = runtime["uploadrr_path"] or "/path/to/Uploadrr"
@@ -198,11 +204,14 @@ def build_uploadrr_command_preview(
                 episode=episode,
                 release_format=release_format,
                 tracker=nombre_uploadrr,
+                variante=variante,
             )
             command_preview = render_command_preview(command_args)
 
             # Lo que lee la ejecución (build_uploadrr_execution_command): lo que falte aquí no llega a Uploadrr.
+            # La variante solo si la hay: el comando de eMuwarez se guarda como siempre.
             return {
+                **({"variante": variante} if variante else {}),
                 "runtime_type": RUNTIME_EMU,
                 "uploadrr_path": uploadrr_path,
                 "tracker": nombre_uploadrr,

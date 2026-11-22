@@ -19,7 +19,7 @@ export function ResumenSubida({ a }: { a: Asistente }) {
     preview, seasonDisplayTitle, seasonPlan, fields, remuxPreview, remuxEdits, modoPistasAjuste,
     checks, batchContentChecks, nombresTanda, requestId, preselect,
     anonimoMarcado, personalReleaseMarcado, elegirAnonimo, elegirPersonalRelease, opcionesTracker, uploading,
-    sources, elegirTipo, trackersParaSubir, trackersElegidos, elegirTracker,
+    sources, elegirTipo, trackersParaSubir, trackersElegidos, elegirTracker, reglas,
   } = a
   const esTanda = batchQueue.length > 1
   const ids = esTanda ? batchQueue : targetId != null ? [targetId] : []
@@ -112,6 +112,15 @@ export function ResumenSubida({ a }: { a: Asistente }) {
                     </label>
                   ))}
                 </span>
+                {/* Las normas de idioma de cada otro tracker (las de eMuwarez van en las comprobaciones). */}
+                {trackersParaSubir.filter(t => t.id !== 'emu').map(t => {
+                  const r = reglas.get(t.id)
+                  return (
+                    <span key={t.id} className={`asist-dato-nota${r && !r.permitido ? ' asist-aviso-dato' : ''}`}>
+                      {t.nombre}: {r ? `${r.permitido ? '✓' : '✗'} ${r.motivo}` : 'comprobando sus normas de idioma…'}
+                    </span>
+                  )
+                })}
                 <span className="asist-dato-nota">
                   {trackersElegidos.length === 0
                     ? 'Elige al menos uno.'

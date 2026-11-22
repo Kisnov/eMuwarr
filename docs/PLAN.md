@@ -50,9 +50,11 @@ descripción y el cliente.
        N.O.B.S admite castellano, latino o VOSE, y Milnueve además el catalán. El anime (instancia marcada de anime o
        con id de MyAnimeList) va a sus categorías de anime; en Milnueve, sin castellano, el anime con catalán va a
        «Anime en Catalan» y lo que tiene latino a las Latino. Llega a Uploadrr-EMU como `--variante`, que la tabla
-       del tracker convierte en el id. VHS/Retro y Documentales no se eligen solas. Falta que la subida por tracker
-       la use (comprobaciones con `tracker=` y `variante=` en el argv) y la regla por capítulo de los packs
-       (`season_pack._spanish_errors`, que sigue siendo la de eMuwarez).
+       del tracker convierte en el id. VHS/Retro y Documentales no se eligen solas. La subida por tracker ya las usa:
+       las comprobaciones van con las del primer tracker elegido, el Resumen dice las de cada otro, un pack las mira
+       capítulo a capítulo, lo que un tracker no admite no se encola para él y su trabajo lanza con su `--variante`.
+       Falta que el paso del pack del asistente deje seguir con un pack que solo admite otro tracker (hoy su plan
+       usa las de eMuwarez).
      - Queda: subir a NOBS/Milnueve lo que ya está en eMuwarez (PR 4), la subida por lotes a otros trackers y probarlo
        en el NAS.
   3. Después, los internacionales que ya tienen código en `uploadrr-emu/`, solo para contenido con el audio en inglés y

@@ -133,4 +133,13 @@ def es_anime(conn: sqlite3.Connection, item: dict) -> bool:
     return bool(fila and fila[0])
 
 
-__all__ = ["VARIANTES", "Reglas", "reglas_de", "es_anime"]
+def reglas_para_subir(conn: sqlite3.Connection, item: dict, tracker_id: str) -> Reglas:
+    """`reglas_de` para una subida de verdad: dice si es anime, y una temporada se mira capítulo a capítulo
+    (season_pack.reglas_del_pack), con la variante del pack entero."""
+    if item.get("item_type") == "season":
+        from .season_pack import reglas_del_pack
+        return reglas_del_pack(item, tracker_id, conn)
+    return reglas_de(tracker_id, item, anime=obtener(tracker_id).id != EMU.id and es_anime(conn, item))
+
+
+__all__ = ["VARIANTES", "Reglas", "reglas_de", "es_anime", "reglas_para_subir"]

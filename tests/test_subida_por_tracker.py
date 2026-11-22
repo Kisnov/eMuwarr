@@ -38,10 +38,11 @@ def _clave(conn, tracker_id, valor="clave"):
 
 
 def _peli(conn, ruta):
+    # Con audio en castellano: N.O.B.S y Milnueve no encolan lo que sus normas de idioma no admiten (reglas_tracker).
     conn.execute(
         """INSERT INTO library_items (item_type, title, local_status, request_status, nomenclature_status, path,
-                                      size_bytes, updated_at)
-           VALUES ('movie', 'X', 'Disponible', 'Sin petición', 'N/A', ?, 100, CURRENT_TIMESTAMP)""", (ruta,))
+                                      size_bytes, audio_languages, updated_at)
+           VALUES ('movie', 'X', 'Disponible', 'Sin petición', 'N/A', ?, 100, 'spa', CURRENT_TIMESTAMP)""", (ruta,))
     conn.commit()
     return conn.execute("SELECT id FROM library_items ORDER BY id DESC LIMIT 1").fetchone()["id"]
 

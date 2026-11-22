@@ -76,8 +76,8 @@ def run_upload_checks(conn: sqlite3.Connection, item_id: int, *, scope: str = "a
     (`source`, `tag`, `title`, `idiomas`), para que el plan y su `nombre` sean los que saldrán de verdad. El
     Proveedor va aparte, en `provider_override`.
 
-    `tracker`: de quién son las normas de idioma de la comprobación «spanish» (services/reglas_tracker.py). Hoy la app
-    solo sube a eMuwarez, el de por defecto.
+    `tracker`: el de la subida (services/trackers.py). Sus normas de idioma (services/reglas_tracker.py) deciden la
+    comprobación «spanish» de un fichero y la de cada capítulo de un pack; eMuwarez, el de por defecto, las de siempre.
 
     `scope`:
 
@@ -167,7 +167,8 @@ def run_upload_checks(conn: sqlite3.Connection, item_id: int, *, scope: str = "a
         plan = build_season_pack_plan(
             item_id, conn=conn, provider_override=provider_override,
             source_override=aj.get("source") or None, tag_override=aj.get("tag") or None,
-            title_override=aj.get("title") or None, idiomas_audio=aj.get("idiomas") or None)
+            title_override=aj.get("title") or None, idiomas_audio=aj.get("idiomas") or None,
+            **({} if tracker == POR_DEFECTO else {"tracker": tracker}))
         ok = plan["status"] == "valid"
         if ok:
             nombre = plan.get("season_pack_title") or None
@@ -266,9 +267,9 @@ def run_upload_checks(conn: sqlite3.Connection, item_id: int, *, scope: str = "a
 
         # 1b. Idiomas — las normas del tracker (services/reglas_tracker.py). eMuwarez: castellano en el audio o, si
         # no, en los subtítulos; sin MediaInfo leído no se puede confirmar y bloquea.
-        from .reglas_tracker import reglas_de
+        from .reglas_tracker import es_anime, reglas_de
         from .trackers import EMU, obtener
-        reglas = reglas_de(tracker, item)
+        reglas = reglas_de(tracker, item, anime=tracker != EMU.id and es_anime(conn, item))
         if tracker == EMU.id:
             etiquetas = ("Tiene castellano", "No tiene castellano")
         else:

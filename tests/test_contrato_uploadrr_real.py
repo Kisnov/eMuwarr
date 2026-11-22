@@ -198,3 +198,33 @@ def test_cada_tracker_de_la_app_tiene_su_adaptador_en_uploadrr():
     from emuwarez_uploadrr.services.trackers import TRACKERS
     for tracker in TRACKERS.values():
         assert (CARPETA_UPLOADRR / "src" / "trackers" / f"{tracker.uploadrr}.py").is_file(), tracker.uploadrr
+
+
+# La subida a otro tracker de punta a punta: la variante la eligen las normas de la app (reglas_tracker), llega a la
+# meta por el parser real y la tabla del tracker en Uploadrr-EMU (`data/trackers/<TK>.json`, la que lee
+# Unit3dConTabla.get_cat_id con el token <CATEGORÍA>_<VARIANTE>) la convierte en el id de categoría.
+@pytest.mark.parametrize("tracker, audio, anime, categoria, cat_id", [
+    ("nobs", "spa / jpn", True, "movie", 4),     # anime a N.O.B.S: Anime (películas)
+    ("mnv", "es-419 / eng", False, "movie", 10),  # película solo en latino a Milnueve: Películas Latino
+])
+def test_el_trabajo_de_otro_tracker_llega_con_su_variante_hasta_la_categoria(
+        args_uploadrr, parser_uploadrr, tmp_path, tracker, audio, anime, categoria, cat_id):
+    import json
+
+    from emuwarez_uploadrr.services import trackers
+    from emuwarez_uploadrr.services.reglas_tracker import reglas_de
+
+    archivo = tmp_path / "Peli.2024.1080p.WEB-DL.mkv"
+    archivo.write_bytes(b"x")
+    reglas = reglas_de(tracker, {"audio_languages": audio}, anime=anime)
+    tk = trackers.obtener(tracker).uploadrr
+    argv = _cmd(prepared_path=str(archivo), tracker=tk, variante=reglas.variante, category=categoria)
+    assert argv[argv.index("-tk") + 1] == tk and argv[argv.index("--variante") + 1] == reglas.variante
+
+    meta = _meta_como_upload_py(args_uploadrr, parser_uploadrr, argv)
+    assert meta["trackers"] == [tk] and meta["variante"] == reglas.variante and meta["category"] == "MOVIE"
+    assert not meta.get("aviso_baja_calidad")
+
+    tabla = json.loads((CARPETA_UPLOADRR / "data" / "trackers" / f"{tk}.json").read_text(encoding="utf-8"))
+    ids = {t.upper(): e["id"] for e in tabla["categories"] for t in e["tokens"]}
+    assert ids[f"{meta['category']}_{meta['variante'].upper()}"] == cat_id

@@ -12,7 +12,8 @@ import {
   applyTrackRemux,
 } from '../../api/nomenclature'
 import {
-  queueUpload, getExistingJobForItem, runUploadChecks, fetchTrackersParaSubir, type OpcionesTracker, type TrackerParaSubir,
+  queueUpload, getExistingJobForItem, runUploadChecks, fetchTrackersParaSubir, fetchReglasTracker, type OpcionesTracker,
+  type TrackerParaSubir, type ReglasDeTracker,
 } from '../../api/uploads'
 import { nuevoLoteId } from '../../utils/lote'
 import { getLibrary, getMediaInfoReport, suggestProvider } from '../../api/library'
@@ -279,7 +280,12 @@ export function useAsistente({ item, onClose: onCloseProp, onDone, onNavigate, p
   const [preparing, setPreparing] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [uploadMsg, setUploadMsg] = useState<string | null>(null)
-  const { checks, checksLoading, checksError, liveChecks, runChecks: comprobar } = useComprobaciones(targetId, proveedorElegido)
+  // Las comprobaciones van con las normas del primero de los elegidos (eMuwarez si está); las de los demás, en `reglas`.
+  const trackerPrincipal = destinos[0]?.id ?? 'emu'
+  const { checks, checksLoading, checksError, liveChecks, runChecks: comprobar } =
+    useComprobaciones(targetId, proveedorElegido, trackerPrincipal)
+  // Las normas de idioma de cada otro tracker para este elemento (sin red, en el Resumen junto a su casilla).
+  const [reglas, setReglas] = useState<Map<string, ReglasDeTracker>>(new Map())
 
   // --- Step 0: load seasons (series) or episodes (season) ---
   useEffect(() => {
@@ -970,7 +976,32 @@ export function useAsistente({ item, onClose: onCloseProp, onDone, onNavigate, p
     await runChecks(source)
   }
 
+  // Las de los otros trackers para este elemento: se piden al llegar al paso 2 de una subida suelta.
+  const otrosTrackers = trackersParaSubir.filter(t => t.id !== 'emu').map(t => t.id).join(',')
+  useEffect(() => {
+    setReglas(new Map())
+    if (step !== 2 || targetId == null || esTanda(seleccion) || !otrosTrackers) return
+    let vigente = true
+    for (const tracker of otrosTrackers.split(',')) {
+      fetchReglasTracker(targetId, tracker)
+        .then(r => { if (vigente) setReglas(m => new Map(m).set(tracker, r)) })
+        .catch(() => { /* sin respuesta no se sabe: no deja subir a ese tracker */ })
+    }
+    return () => { vigente = false }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step, targetId, otrosTrackers])
+  // Si cambia el tracker principal (se desmarca eMuwarez), las comprobaciones se rehacen con sus normas.
+  const principalComprobado = useRef(trackerPrincipal)
+  useEffect(() => {
+    if (principalComprobado.current === trackerPrincipal) return
+    principalComprobado.current = trackerPrincipal
+    if (step === 2 && !esTanda(seleccion)) void runChecks()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [trackerPrincipal])
+
+  // Cada otro tracker elegido tiene que admitirlo por sus normas de idioma.
   const canUpload = !!checks?.ready && destinos.length > 0
+    && destinos.every(t => t.id === 'emu' || reglas.get(t.id)?.permitido === true)
   // Queues the upload and hands off to Subidas immediately — nomenclature
   // rename, track remux, and the actual Uploadrr start all run server-side
   // afterwards (services/upload_queue.py), against the SAME job the user
@@ -1162,7 +1193,7 @@ export function useAsistente({ item, onClose: onCloseProp, onDone, onNavigate, p
     // Paso 2
     checks, checksLoading, checksError, liveChecks, runChecks, elegirTipo, canUpload, uploading, uploadMsg, doUpload,
     anonimoMarcado, personalReleaseMarcado, elegirAnonimo, elegirPersonalRelease, opcionesTracker,
-    trackersParaSubir, trackersElegidos, elegirTracker, destinoSubida,
+    trackersParaSubir, trackersElegidos, elegirTracker, destinoSubida, reglas,
     batchQueue, batchIsEpisodes, batchItemTitle, batchPhase, batchIndex, batchResults,
     batchViewId, setBatchViewId, batchEnvChecks, batchContentChecks, batchChecksLoading, batchChecksIndex,
     batchChecksError, repetirComprobacionesTanda, uploadAllSeasons, uploadAllEpisodes, nombresTanda,

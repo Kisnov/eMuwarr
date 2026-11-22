@@ -213,6 +213,13 @@ def _insert_and_start_queued_job(
     motivo = trackers.motivo_para_no_subir(conn, tracker)
     if motivo:
         return {"status": "blocked", "errors": [motivo], "job": None}
+    if tracker != trackers.POR_DEFECTO:
+        # Las normas de idioma de otro tracker (services/reglas_tracker.py), antes de crear nada: lo que no admite no
+        # llega a lanzarse. Las de eMuwarez siguen donde siempre (comprobaciones del asistente y plan del pack).
+        from .reglas_tracker import reglas_para_subir
+        reglas = reglas_para_subir(conn, item, tracker)
+        if not reglas.permitido:
+            return {"status": "blocked", "errors": [reglas.motivo], "job": None}
     now_iso = _now_iso()
 
     # Comprobar y crear en la misma transacción: con dos clics en "Reintentar"
@@ -744,13 +751,16 @@ def _tracker_del_trabajo(job_id: int, conn) -> str:
     return (fila["tracker"] if fila else None) or trackers.POR_DEFECTO
 
 
-def _ajustes_de_pack(season_overrides: dict | None) -> dict:
+def _ajustes_de_pack(season_overrides: dict | None, tracker: str = trackers.POR_DEFECTO) -> dict:
     """Lo editado a mano para un pack en el asistente, como argumentos de
-    build_season_pack_plan() y apply_season_pack()."""
+    build_season_pack_plan() y apply_season_pack(). Con otro `tracker` que eMuwarez, también él (solo lo pasa quien
+    llama a build_season_pack_plan: sus normas de idioma por capítulo)."""
     ajustes = season_overrides or {}
     salida = {f"{k}_override": ajustes.get(k) for k in ("source", "provider", "tag", "title")}
     # El idioma elegido para las pistas de audio sin idioma, por posición.
     salida["idiomas_audio"] = ajustes.get("idiomas") or None
+    if tracker != trackers.POR_DEFECTO:
+        salida["tracker"] = tracker
     return salida
 
 
@@ -784,7 +794,7 @@ def _populate_ready(job_id: int, item_id: int, conn, season_overrides: dict | No
         # season-specific precondition check replaces it.
         from .season_pack import build_season_pack_plan
 
-        plan = build_season_pack_plan(item_id, conn=conn, **_ajustes_de_pack(season_overrides))
+        plan = build_season_pack_plan(item_id, conn=conn, **_ajustes_de_pack(season_overrides, tracker))
         if plan["status"] != "valid":
             _fail(job_id, "; ".join(plan.get("errors") or ["No se pudo preparar el pack de temporada."]))
             return False
@@ -810,7 +820,8 @@ def _populate_ready(job_id: int, item_id: int, conn, season_overrides: dict | No
             "episode": None,
             "release_format": plan.get("source"),
         }
-        command_preview = build_uploadrr_command_preview(synthetic_item, None, None, conn=conn, tracker=tracker)
+        command_preview = build_uploadrr_command_preview(synthetic_item, None, None, conn=conn, tracker=tracker,
+                                                         variante=plan.get("variante"))
         return _marcar_lista(job_id, command_preview, conn, grupo=plan.get("release_tag"))
 
     proposal_row = conn.execute(
@@ -825,7 +836,18 @@ def _populate_ready(job_id: int, item_id: int, conn, season_overrides: dict | No
         _fail(job_id, "; ".join(preconditions["errors"]))
         return False
 
-    command_preview = build_uploadrr_command_preview(item, proposal, None, conn=conn, tracker=tracker)
+    # La categoría en otro tracker (`--variante`): sus normas, que se vuelven a mirar aquí, justo antes de lanzar
+    # (los idiomas pueden haber cambiado desde que se encoló). eMuwarez no lleva nunca.
+    variante = None
+    if tracker != trackers.POR_DEFECTO:
+        from .reglas_tracker import reglas_para_subir
+        reglas = reglas_para_subir(conn, item, tracker)
+        if not reglas.permitido:
+            _fail(job_id, reglas.motivo)
+            return False
+        variante = reglas.variante
+    command_preview = build_uploadrr_command_preview(item, proposal, None, conn=conn, tracker=tracker,
+                                                     variante=variante)
     return _marcar_lista(job_id, command_preview, conn, grupo=(proposal or {}).get("release_tag"))
 
 
@@ -1301,7 +1323,9 @@ def _paso_nombre(t: _Trabajo) -> bool:
     if t.is_season:
         from .season_pack import build_season_pack_plan
         try:
-            plan_pack = build_season_pack_plan(t.item_id, conn=conn, **_ajustes_de_pack(t.season_overrides))
+            plan_pack = build_season_pack_plan(
+                t.item_id, conn=conn,
+                **_ajustes_de_pack(t.season_overrides, t.job.get("tracker") or trackers.POR_DEFECTO))
         except Exception as exc:
             _fail(job_id, f"Error aplicando la nomenclatura del pack de temporada: {texto_de_error(exc)}")
             return False
