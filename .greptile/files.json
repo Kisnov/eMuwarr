@@ -1,0 +1,17 @@
+{
+  "files": [
+    {
+      "path": "CLAUDE.md",
+      "description": "Contexto del proyecto: arquitectura, flujo de trabajo y comprobaciones"
+    },
+    {
+      "path": ".coderabbit.yaml",
+      "description": "Reglas de revisión del proyecto por ruta (path_instructions); son las mismas para Greptile"
+    },
+    {
+      "path": "uploadrr-emu/CLAUDE.md",
+      "description": "Reglas de Uploadrr-EMU: solo se mantiene el camino de eMuwarez",
+      "scope": ["uploadrr-emu/**"]
+    }
+  ]
+}

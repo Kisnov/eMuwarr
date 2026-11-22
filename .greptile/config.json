@@ -1,0 +1,4 @@
+{
+  "commentTypes": ["logic"],
+  "ignorePatterns": "frontend/package-lock.json\ntests/fixtures/**\ndocs/capturas/**"
+}
