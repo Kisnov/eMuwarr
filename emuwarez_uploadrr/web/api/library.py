@@ -448,6 +448,10 @@ def library_filter_options(current_user: dict = Depends(require_auth)) -> dict:
 
 def _error_de_identificar(exc: Exception) -> HTTPException:
     from ...integrations.base import IntegrationError
+    from ...services.library import SyncAlreadyRunning
+    if isinstance(exc, SyncAlreadyRunning):
+        return HTTPException(status_code=429, detail="Hay una sincronización de biblioteca en marcha: "
+                                                     "confírmala cuando termine")
     if isinstance(exc, LookupError):
         return HTTPException(status_code=404, detail=texto_de_error(exc))
     if isinstance(exc, (ValueError, IntegrationError)):
@@ -463,7 +467,10 @@ def library_identificar_sugeridas(
 ) -> dict:
     """Confirma la ficha de TMDb que propuso el escaneo en cada película o serie por identificar que la tenga."""
     from ...services.library.carpeta import identificar_sugeridas
-    hechas = identificar_sugeridas(conn, body.instance_id if body else None)
+    try:
+        hechas = identificar_sugeridas(conn, body.instance_id if body else None)
+    except Exception as exc:
+        raise _error_de_identificar(exc)
     return {"ok": True, "confirmadas": hechas,
             "message": f"{hechas} ficha{'s' if hechas != 1 else ''} confirmada{'s' if hechas != 1 else ''}"}
 

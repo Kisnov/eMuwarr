@@ -112,8 +112,8 @@ def test_el_escaneo_crea_la_pelicula_y_la_serie_por_identificar(conn, instancia,
         "WEB-DL", "1080p", "GRUPO", "Disponible")
     assert (peli["video_codec"], peli["audio_languages"]) == ("H.264", "ESP / ENG")
     assert json.loads(peli["raw_json"])["sugerencia"]["tmdb_id"] == "872585"
-    serie = filas["serie:shogun:1080p"]
-    temporada = filas["season:shogun:1080p:1"]
+    serie = filas["serie:shogun:2024:1080p"]
+    temporada = filas["season:shogun:2024:1080p:1"]
     capitulos = [filas[f"episode:{c}"] for c in CAPITULOS]
     assert temporada["parent_id"] == serie["id"] and {c["parent_id"] for c in capitulos} == {temporada["id"]}
     assert [c["title"] for c in capitulos] == ["Shogun S01E01", "Shogun S01E02"]
@@ -149,22 +149,22 @@ def test_identificar_la_serie_llega_a_sus_capitulos(conn, instancia, lecturas, b
     serie_id = carpeta.identificar(conn, capitulo["id"], "126308")   # desde un capítulo, la serie
     _escanear(conn, instancia)
     filas = _filas(conn, instancia)
-    assert filas["serie:shogun:1080p"]["id"] == serie_id
+    assert filas["serie:shogun:2024:1080p"]["id"] == serie_id
     capitulo = filas[f"episode:{CAPITULOS[0]}"]
     assert (capitulo["tmdb_id"], capitulo["tvdb_id"], capitulo["title"]) == ("126308", "392573", "Shōgun S01E01")
     assert json.loads(capitulo["raw_json"])["episode"]["airDate"] == "2024-02-27"
-    assert filas["season:shogun:1080p:1"]["title"] == "Shōgun - Temporada 1"
+    assert filas["season:shogun:2024:1080p:1"]["title"] == "Shōgun - Temporada 1"
 
 
 def test_el_pack_de_carpeta_pide_la_ficha_y_la_temporada_entera(conn, instancia, lecturas, busquedas, fichas):
     from emuwarez_uploadrr.services.season_pack import _get_season_episodes
     _escanear(conn, instancia)
-    temporada = _filas(conn, instancia)["season:shogun:1080p:1"]
-    serie = _filas(conn, instancia)["serie:shogun:1080p"]
+    temporada = _filas(conn, instancia)["season:shogun:2024:1080p:1"]
+    serie = _filas(conn, instancia)["serie:shogun:2024:1080p"]
     capitulos = _get_season_episodes(temporada["id"], conn)
     assert "Identifica la serie" in carpeta.errores_de_temporada(temporada, serie, capitulos)[0]
     carpeta.identificar(conn, serie["id"], "126308")
-    serie = _filas(conn, instancia)["serie:shogun:1080p"]
+    serie = _filas(conn, instancia)["serie:shogun:2024:1080p"]
     errores = carpeta.errores_de_temporada(temporada, serie, capitulos)
     assert errores == ["Temporada incompleta: hay 2 de 10 capítulos según TMDb (faltan 3, 4, 5, 6, 7, 8, 9, 10)."]
     # Una temporada de Sonarr no pasa por aquí.
@@ -212,14 +212,74 @@ def test_la_misma_serie_en_otra_resolucion_se_identifica_a_la_vez(
     otro.write_bytes(b"x")
     _escanear(conn, instancia)
     filas = _filas(conn, instancia)
-    assert {"serie:shogun:1080p", "serie:shogun:2160p"} <= filas.keys()   # un pack nunca mezcla resoluciones
-    carpeta.identificar(conn, filas["serie:shogun:1080p"]["id"], "126308")
-    assert _filas(conn, instancia)["serie:shogun:2160p"]["tmdb_id"] == "126308"
+    assert {"serie:shogun:2024:1080p", "serie:shogun:2024:2160p"} <= filas.keys()   # un pack nunca mezcla resoluciones
+    carpeta.identificar(conn, filas["serie:shogun:2024:1080p"]["id"], "126308")
+    assert _filas(conn, instancia)["serie:shogun:2024:2160p"]["tmdb_id"] == "126308"
+
+
+def test_dos_series_con_el_mismo_titulo_y_otro_anio_no_se_juntan(
+        conn, instancia, carpeta_dir, lecturas, busquedas, fichas):
+    (carpeta_dir / "Shogun.1980.S01E01.1080p.WEB-DL.H.264-GRUPO.mkv").write_bytes(b"x")
+    _escanear(conn, instancia)
+    filas = _filas(conn, instancia)
+    assert {"serie:shogun:2024:1080p", "serie:shogun:1980:1080p"} <= filas.keys()
+    carpeta.identificar(conn, filas["serie:shogun:2024:1080p"]["id"], "126308")
+    assert _filas(conn, instancia)["serie:shogun:1980:1080p"]["tmdb_id"] is None
+
+
+def test_una_subcarpeta_que_no_se_puede_leer_para_el_escaneo_sin_borrar_nada(
+        conn, instancia, monkeypatch, lecturas, busquedas):
+    _escanear(conn, instancia)
+    antes = set(_filas(conn, instancia))
+    paseo = carpeta.os.walk
+
+    def a_medias(raiz, onerror=None):
+        yield from paseo(raiz)
+        onerror(PermissionError(13, "Permission denied", str(raiz) + "/privada"))
+    monkeypatch.setattr(carpeta.os, "walk", a_medias)
+    with pytest.raises(IntegrationError, match="No se puede leer .*/privada"):
+        _escanear(conn, instancia)
+    assert set(_filas(conn, instancia)) == antes
+
+
+def test_no_se_confirma_con_una_sincronizacion_en_marcha(conn, instancia, monkeypatch, lecturas, busquedas, fichas):
+    _escanear(conn, instancia)
+    peli = _filas(conn, instancia)[f"peli:{PELI}"]
+    monkeypatch.setattr(library.sync, "_LIB_SYNC_PROGRESS", {**library.sync._LIB_SYNC_PROGRESS, "active": True})
+    with pytest.raises(library.SyncAlreadyRunning):
+        carpeta.identificar(conn, peli["id"], "872585")
+    assert _filas(conn, instancia)[f"peli:{PELI}"]["tmdb_id"] is None
+
+
+def test_un_fichero_con_varios_capitulos_no_se_sube_todavia(
+        conn, instancia, carpeta_dir, lecturas, busquedas, fichas):
+    from emuwarez_uploadrr.services.season_pack import _get_season_episodes
+    from emuwarez_uploadrr.services.upload_preflight import validate_upload_preconditions
+    doble = f"{PACK}/Shogun.2024.S01E03-E04.1080p.DSNP.WEB-DL.DDP5.1.H.264-GRUPO.mkv"
+    (carpeta_dir / doble).write_bytes(b"x")
+    _escanear(conn, instancia)
+    serie = _filas(conn, instancia)["serie:shogun:2024:1080p"]
+    carpeta.identificar(conn, serie["id"], "126308")
+    filas = _filas(conn, instancia)
+    errores = validate_upload_preconditions(filas[f"episode:{doble}"], conn=conn)["errors"]
+    assert any("varios capítulos" in e for e in errores)
+    temporada = filas["season:shogun:2024:1080p:1"]
+    errores = carpeta.errores_de_temporada(temporada, filas["serie:shogun:2024:1080p"],
+                                           _get_season_episodes(temporada["id"], conn))
+    assert len(errores) == 1 and "S01E03-E04" in errores[0]
+
+
+def test_las_sugeridas_recalculan_la_biblioteca_una_vez(conn, instancia, monkeypatch, lecturas, busquedas, fichas):
+    _escanear(conn, instancia)
+    veces = []
+    monkeypatch.setattr(carpeta, "recompute_after_sync", lambda c: veces.append(1))
+    assert carpeta.identificar_sugeridas(conn) == 2
+    assert veces == [1]
 
 
 def test_candidatos_sin_texto_usan_lo_que_leyo_guessit(conn, instancia, lecturas, busquedas):
     _escanear(conn, instancia)
-    serie = _filas(conn, instancia)["serie:shogun:1080p"]
+    serie = _filas(conn, instancia)["serie:shogun:2024:1080p"]
     respuesta = carpeta.candidatos(conn, serie["id"])
     assert (respuesta["tipo"], respuesta["consulta"], respuesta["anio"]) == ("tv", "Shogun", 2024)
     assert respuesta["candidatos"][0] == {"tmdb_id": "126308", "titulo": "Shōgun", "titulo_original": "Shōgun",

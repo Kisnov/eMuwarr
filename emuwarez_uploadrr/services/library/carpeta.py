@@ -17,7 +17,7 @@ from typing import Optional
 from ...integrations import tmdb
 from ...integrations.base import IntegrationError, extract_release_group, texto_de_error
 from ...models import InstanceConfig, LibraryItem, LocalStatus, MediaKind, NomenclatureStatus
-from .sync import _update_season_rollup, upsert_library_item
+from .sync import _sin_sincronizar, _update_season_rollup, recompute_after_sync, upsert_library_item
 
 logger = logging.getLogger(__name__)
 
@@ -39,9 +39,14 @@ def ruta_de_carpeta(ruta: str) -> str:
     return os.path.normpath(ruta)
 
 
+def _no_se_puede_leer(exc: OSError) -> None:
+    # Un recorrido a medias no vale: lo que no se ha visto se podaría con lo confirmado en TMDb.
+    raise IntegrationError(f"No se puede leer {exc.filename}: {exc.strerror}") from exc
+
+
 def _videos(raiz: str) -> list[str]:
     encontrados = []
-    for carpeta, subcarpetas, ficheros in os.walk(raiz):
+    for carpeta, subcarpetas, ficheros in os.walk(raiz, onerror=_no_se_puede_leer):
         subcarpetas[:] = sorted(d for d in subcarpetas if not d.startswith(".") and not _RE_MUESTRA.search(d))
         for nombre in ficheros:
             if os.path.splitext(nombre)[1].lower() in EXTENSIONES_VIDEO and not _RE_MUESTRA.search(nombre):
@@ -235,8 +240,9 @@ def escanear(conn: sqlite3.Connection, instance: InstanceConfig, *, visto: str, 
         if info["tipo"] == "movie":
             peliculas.append((ruta, info))
         else:
-            # Una serie por resolución, como una instancia de Sonarr 4K aparte: un pack nunca mezcla 1080p y 2160p.
-            clave = f"{_clave(info['titulo']) or info['titulo']}:{info['resolucion'] or ''}"
+            # Una serie por año (el Shōgun de 1980 no es el de 2024) y por resolución, como una instancia de Sonarr 4K
+            # aparte: un pack nunca mezcla 1080p y 2160p.
+            clave = f"{_clave(info['titulo']) or info['titulo']}:{info['anio'] or ''}:{info['resolucion'] or ''}"
             series.setdefault(clave, []).append((ruta, info))
     hechos = 0
 
@@ -374,9 +380,10 @@ def _iguales(conn, fila: dict) -> list[dict]:
     return filas
 
 
-def identificar(conn, item_id: int, tmdb_id: str, tipo: str | None = None) -> int:
+def identificar(conn, item_id: int, tmdb_id: str, tipo: str | None = None, *, recalcular: bool = True) -> int:
     """Pone la ficha de TMDb (título en castellano, original, año, IMDb/TVDb, póster) en la película o la serie, en
-    sus temporadas y capítulos, y en sus copias en otra resolución. Devuelve el id de la película o la serie."""
+    sus temporadas y capítulos, y en sus copias en otra resolución. Devuelve el id de la película o la serie. Con una
+    sincronización de biblioteca en marcha lanza SyncAlreadyRunning: el escaneo pisaría lo confirmado."""
     fila = ficha_principal(conn, item_id)
     kind = _kind(fila)
     if tipo and tipo != kind:
@@ -404,16 +411,18 @@ def identificar(conn, item_id: int, tmdb_id: str, tipo: str | None = None) -> in
         for t in datos.get("seasons") or [] if isinstance(t, dict) and t.get("season_number") is not None
     }
     comunes = {k: ficha[k] for k in ("tmdb_id", "imdb_id", "tvdb_id", "year", "original_title")}
-    for principal in _iguales(conn, fila):
-        raw = {k: v for k, v in _raw(principal).items() if k in ("guessit", "mtime")}
-        if kind == "tv":
-            raw["temporadas"] = temporadas
-        _escribir(conn, principal["id"], {**ficha, "raw_json": json.dumps(raw, ensure_ascii=False)})
-        if kind == "tv":
-            _identificar_capitulos(conn, principal["id"], titulo, temporadas, comunes)
-    conn.commit()
-    from .sync import recompute_after_sync
-    recompute_after_sync(conn)
+    # TMDb ya está leído: con el candado solo se escribe, y se relee lo guardado por si un escaneo lo cambió mientras.
+    with _sin_sincronizar():
+        for principal in _iguales(conn, ficha_principal(conn, item_id)):
+            raw = {k: v for k, v in _raw(principal).items() if k in ("guessit", "mtime")}
+            if kind == "tv":
+                raw["temporadas"] = temporadas
+            _escribir(conn, principal["id"], {**ficha, "raw_json": json.dumps(raw, ensure_ascii=False)})
+            if kind == "tv":
+                _identificar_capitulos(conn, principal["id"], titulo, temporadas, comunes)
+        conn.commit()
+    if recalcular:
+        recompute_after_sync(conn)
     return int(fila["id"])
 
 
@@ -449,16 +458,31 @@ def identificar_sugeridas(conn, instance_id: int | None = None) -> int:
         sql += " AND instance_id = ?"
         params.append(instance_id)
     hechas = 0
-    for fila in conn.execute(sql, params).fetchall():
-        sugerencia = _raw(dict(fila)).get("sugerencia")
-        if not sugerencia:
-            continue
-        try:
-            identificar(conn, fila["id"], sugerencia["tmdb_id"], sugerencia.get("tipo"))
-            hechas += 1
-        except (IntegrationError, ValueError, LookupError) as exc:
-            logger.warning("No se pudo confirmar la sugerencia del elemento %s: %s", fila["id"], texto_de_error(exc))
+    try:
+        for fila in conn.execute(sql, params).fetchall():
+            sugerencia = _raw(dict(fila)).get("sugerencia")
+            if not sugerencia:
+                continue
+            try:
+                identificar(conn, fila["id"], sugerencia["tmdb_id"], sugerencia.get("tipo"), recalcular=False)
+                hechas += 1
+            except (IntegrationError, ValueError, LookupError) as exc:
+                logger.warning("No se pudo confirmar la sugerencia del elemento %s: %s", fila["id"], texto_de_error(exc))
+    finally:
+        if hechas:  # una vez para todas: recorre la biblioteca entera
+            recompute_after_sync(conn)
     return hechas
+
+
+def error_de_varios_capitulos(fila: dict) -> Optional[str]:
+    """Un capítulo de carpeta con varios en el fichero (S01E01-E02): la nomenclatura solo nombra `episode_number`, y el
+    nombre se quedaría con el primero."""
+    if fila.get("instance_type") != TIPO or fila.get("item_type") != MediaKind.EPISODE.value:
+        return None
+    if len(_raw(fila).get("episodios") or []) < 2:
+        return None
+    return (f"«{fila.get('title')}» lleva varios capítulos en un fichero y el nombre solo tendría el primero: "
+            "todavía no se puede subir.")
 
 
 def errores_de_temporada(season: dict, series: dict | None, episodios: list[dict]) -> list[str]:
@@ -468,6 +492,9 @@ def errores_de_temporada(season: dict, series: dict | None, episodios: list[dict
         return []
     if not (series or {}).get("tmdb_id"):
         return ["Identifica la serie en TMDb antes de subir la temporada (viene de una carpeta manual)."]
+    varios = [e for e in (error_de_varios_capitulos(fila) for fila in episodios) if e]
+    if varios:
+        return varios[:1]
     n = season.get("season_number")
     esperados = ((_raw(series).get("temporadas") or {}).get(str(n)) or {}).get("capitulos")
     presentes = {e for fila in episodios for e in (_raw(fila).get("episodios") or [fila.get("episode_number")]) if e}
