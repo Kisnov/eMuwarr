@@ -42,7 +42,8 @@ PASOS: tuple[tuple[str, str, tuple[str, ...]], ...] = (
 )
 
 # Lo que Uploadrr-EMU va dando por hecho dentro del paso `subida`, en orden: (clave, nombre que ve el usuario).
-# `screenshots` y `torrent` los dice él con `Step done: <clave>`; `tracker` es su línea `Torrent URL:`.
+# `screenshots` y `torrent` los dice él con `Step done: <clave>`; `tracker` es su línea `Torrent URL:`. El nombre de
+# `tracker` es el de eMuwarez; el de una subida a otro tracker lo pone subpasos_de_subida.
 SUBPASOS: tuple[tuple[str, str], ...] = (
     ("screenshots", "Capturas"),
     ("torrent", "Torrent"),
@@ -90,8 +91,9 @@ def leer_subpasos(crudo: Optional[str]) -> list[str]:
     return [clave for clave, _n in SUBPASOS if clave in valor]
 
 
-def subpasos_de_subida(status: Optional[str], crudo: Optional[str]) -> list[dict]:
-    """Los subpasos de «Subir con Uploadrr» con su estado, o [] si no hay nada que enseñar.
+def subpasos_de_subida(status: Optional[str], crudo: Optional[str], tracker: str = "eMuwarez") -> list[dict]:
+    """Los subpasos de «Subir con Uploadrr» con su estado, o [] si no hay nada que enseñar. `tracker`: el nombre del
+    tracker de la subida («Subida a N.O.B.S»).
 
     Una subida completada los tiene todos hechos (exit 0 solo si se subió algo). Las demás,
     los que Uploadrr-EMU dijo que terminó; sin ninguno apuntado (subidas de antes, o que
@@ -99,7 +101,8 @@ def subpasos_de_subida(status: Optional[str], crudo: Optional[str]) -> list[dict
     hechos = [c for c, _n in SUBPASOS] if status == "completed" else leer_subpasos(crudo)
     if not hechos:
         return []
-    return [{"clave": c, "nombre": n, "hecho": c in hechos} for c, n in SUBPASOS]
+    return [{"clave": c, "nombre": f"Subida a {tracker}" if c == "tracker" else n, "hecho": c in hechos}
+            for c, n in SUBPASOS]
 
 
 def subpasos_que_reutilizaria(status: Optional[str], etapa_parada: Optional[str], crudo: Optional[str]) -> list[str]:
@@ -129,7 +132,7 @@ def uploadrr_puede_reanudar(status: Optional[str], etapa_parada: Optional[str], 
 
 
 def pasos_de_subida(status: Optional[str], stage: Optional[str], etapa_parada: Optional[str],
-                    pasos_uploadrr: Optional[str] = None) -> list[dict]:
+                    pasos_uploadrr: Optional[str] = None, tracker: str = "eMuwarez") -> list[dict]:
     """La lista de pasos con su estado, para enseñar en el detalle de una subida.
 
     - completada: todos hechos.
@@ -160,7 +163,7 @@ def pasos_de_subida(status: Optional[str], stage: Optional[str], etapa_parada: O
             estado = PENDIENTE
         paso = {"clave": clave, "nombre": nombre, "estado": estado}
         if clave == SUBIDA:
-            paso["subpasos"] = subpasos_de_subida(status, pasos_uploadrr)
+            paso["subpasos"] = subpasos_de_subida(status, pasos_uploadrr, tracker)
         pasos.append(paso)
     return pasos
 

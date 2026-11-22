@@ -23,7 +23,7 @@ class Tracker:
 
 EMU = Tracker(id="emu", nombre="eMuwarez", url=EMU_BASE_URL, plataforma="unit3d", prefijo_ajustes="emu",
               uploadrr="EMU")
-# Fase B: dos UNIT3D más, con la clave en sus propios ajustes. Aún no se sube a ellos desde la app.
+# Fase B: dos UNIT3D más, con la clave en sus propios ajustes. Se sube a ellos solo si se elige a mano (y con su clave).
 NOBS = Tracker(id="nobs", nombre="N.O.B.S", url="https://nobs.rawsmoke.net", plataforma="unit3d",
                prefijo_ajustes="nobs", uploadrr="NOBS")
 MNV = Tracker(id="mnv", nombre="Milnueve", url="https://tracker.milnueve.cc", plataforma="unit3d",
@@ -43,4 +43,27 @@ def obtener(tracker_id: str) -> Tracker:
         raise ValueError(f"Tracker desconocido: {tracker_id!r}") from None
 
 
-__all__ = ["Tracker", "EMU", "NOBS", "MNV", "TRACKERS", "POR_DEFECTO", "obtener"]
+def tiene_clave(conn, tracker: Tracker) -> bool:
+    """Si su clave de API está puesta en Configuración (`<prefijo>.api_key`)."""
+    from ..database import get_setting_canonical
+    return bool((get_setting_canonical(conn, f"{tracker.prefijo_ajustes}.api_key") or "").strip())
+
+
+def para_subir(conn) -> list[Tracker]:
+    """Los trackers a los que se puede subir ahora: eMuwarez siempre (sin su clave, la subida lo dice como siempre) y
+    los demás solo con su clave puesta."""
+    return [t for t in TRACKERS.values() if t is EMU or tiene_clave(conn, t)]
+
+
+def motivo_para_no_subir(conn, tracker_id: str) -> str | None:
+    """None si se puede crear una subida a ese tracker; si no, por qué (para el usuario)."""
+    tracker = TRACKERS.get(tracker_id)
+    if tracker is None:
+        return f"Tracker desconocido: {tracker_id!r}."
+    if tracker is not EMU and not tiene_clave(conn, tracker):
+        return f"Falta la clave de API de {tracker.nombre}: ponla en Configuración → Otros trackers."
+    return None
+
+
+__all__ = ["Tracker", "EMU", "NOBS", "MNV", "TRACKERS", "POR_DEFECTO", "obtener", "tiene_clave", "para_subir",
+           "motivo_para_no_subir"]

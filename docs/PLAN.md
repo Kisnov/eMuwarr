@@ -41,6 +41,13 @@ descripción y el cliente.
        ajustes por tracker (hoy `emu.*`), y en la cola, Peticiones y el Panel, de qué tracker es cada cosa.
   2. **Fase B: NOBS (nobs.rawsmoke.net) y Milnueve (tracker.milnueve.cc).** Los dos son UNIT3D y ya se sube a ellos con
      otras herramientas: se puede empezar (Gabriel les avisa). El primero valida la abstracción.
+     - Ya está: los adaptadores de Uploadrr-EMU (`-tk NOBS` / `-tk MNV`), sus claves en Configuración y la subida desde
+       el Resumen del asistente (una sola subida, no una tanda): se eligen los trackers con clave y sale un trabajo por
+       tracker (`upload_jobs.tracker`), con el mismo nombre y el mismo fichero. El segundo espera a que acabe el primero,
+       reutiliza su preparación y lanza Uploadrr-EMU con `--resume` (mismo BASE.torrent: mismas piezas). «Reenviar a
+       qBittorrent» pide el torrent al tracker de la subida.
+     - Queda: subir a NOBS/Milnueve lo que ya está en eMuwarez (PR 4), las reglas de idioma y categoría por tracker
+       (PR 5), la subida por lotes a otros trackers y probarlo en el NAS.
   3. Después, los internacionales que ya tienen código en `uploadrr-emu/`, solo para contenido con el audio en inglés y
      donde haya permiso.
 - **Por estudiar: nekoBT (nekobt.to; añadido el 22/11).** Tracker de anime (Jackett lo indexa como público). No consta

@@ -23,6 +23,7 @@ from .uploadrr_contract import (
     validate_uploadrr_emu_contract,
 )
 from .uploadrr_config import default_uploadrr_config_path
+from . import trackers
 from .upload_execution import CONFIRMATION_TOKEN
 
 JOB_STATUS_DRAFT = "draft"
@@ -31,7 +32,9 @@ JOB_STATUS_READY = "ready"
 JOB_STATUS_BLOCKED = "blocked"
 
 
-def validate_upload_preconditions(library_item: dict, proposal: dict | None = None, conn=None) -> dict:
+def validate_upload_preconditions(library_item: dict, proposal: dict | None = None, conn=None, *,
+                                  tracker: str = trackers.POR_DEFECTO) -> dict:
+    """`tracker`: el id del tracker de la subida (services/trackers.py); su clave es la que hace falta."""
     own = conn is None
     conn = conn or connect()
     errors = []
@@ -72,13 +75,7 @@ def validate_upload_preconditions(library_item: dict, proposal: dict | None = No
                         "Uploadrr-EMU no podrá arrancar."
                     )
 
-        emu_key = get_setting_canonical(conn, "emu.api_key")
-        if not emu_key:
-            errors.append("API key de eMuwarez no configurada.")
-
-        tmdb_key = get_setting_canonical(conn, "tmdb.api_key")
-        if not tmdb_key:
-            errors.append("API key de TMDb no configurada.")
+        errors += errores_de_claves(conn, tracker)
 
         if proposal and proposal.get("status") == "blocked":
             errors.append("Hay errores en la propuesta de nomenclatura que bloquean la subida.")
@@ -87,6 +84,17 @@ def validate_upload_preconditions(library_item: dict, proposal: dict | None = No
     finally:
         if own:
             conn.close()
+
+
+def errores_de_claves(conn, tracker: str = trackers.POR_DEFECTO) -> list[str]:
+    """Las claves sin poner que impiden subir a `tracker`: la suya y la de TMDb."""
+    errores = []
+    destino = trackers.obtener(tracker)
+    if not trackers.tiene_clave(conn, destino):
+        errores.append(f"API key de {destino.nombre} no configurada.")
+    if not get_setting_canonical(conn, "tmdb.api_key"):
+        errores.append("API key de TMDb no configurada.")
+    return errores
 
 
 def formato_de_subida(library_item: dict, proposal: dict | None) -> str | None:
@@ -99,8 +107,12 @@ def build_uploadrr_command_preview(
     proposal: dict | None = None,
     request_item: dict | None = None,
     conn=None,
+    *,
+    tracker: str = trackers.POR_DEFECTO,
 ) -> dict:
     """Build a preview of what the Uploadrr command would look like. NEVER executes it.
+
+    `tracker`: el id del tracker de la subida; da el `-tk` (y si va `-avbc`, que es solo de eMuwarez).
 
     For runtime_type=uploadrr_emu (the default), builds the real Uploadrr-EMU
     argv (-tk/-mt/-tmdb/-ua/-c/-res) via uploadrr_contract.py and validates it
@@ -156,6 +168,7 @@ def build_uploadrr_command_preview(
         release_format = formato_de_subida(library_item, prop)
 
         category = "tv" if media_type in ("tv", "series", "anime", "season", "episode") else "movie"
+        nombre_uploadrr = trackers.obtener(tracker).uploadrr
 
         if runtime_type == RUNTIME_EMU:
             uploadrr_path = runtime["uploadrr_path"] or "/path/to/Uploadrr"
@@ -184,6 +197,7 @@ def build_uploadrr_command_preview(
                 season=season,
                 episode=episode,
                 release_format=release_format,
+                tracker=nombre_uploadrr,
             )
             command_preview = render_command_preview(command_args)
 
@@ -191,7 +205,7 @@ def build_uploadrr_command_preview(
             return {
                 "runtime_type": RUNTIME_EMU,
                 "uploadrr_path": uploadrr_path,
-                "tracker": "EMU",
+                "tracker": nombre_uploadrr,
                 "category": category,
                 "title": title,
                 "tmdb_id": tmdb_id,
@@ -216,10 +230,9 @@ def build_uploadrr_command_preview(
         # forks whose exact flag mapping is unknown. Not validated against a
         # real contract — kept only for forward compatibility.
         uploadrr_path = runtime["uploadrr_path"] or "/path/to/Uploadrr"
-        tracker = "EMU"
         args = [
             f"python3 {uploadrr_path}/upload.py",
-            f"--tracker {tracker}",
+            f"--tracker {nombre_uploadrr}",
             f"--category {category}",
         ]
         if tmdb_id:
@@ -236,7 +249,7 @@ def build_uploadrr_command_preview(
         return {
             "runtime_type": RUNTIME_GENERIC,
             "uploadrr_path": uploadrr_path,
-            "tracker": tracker,
+            "tracker": nombre_uploadrr,
             "category": category,
             "title": title,
             "tmdb_id": tmdb_id,
@@ -340,8 +353,8 @@ def save_upload_job_preflight(data: dict, conn=None) -> dict:
             INSERT INTO upload_jobs (
                 library_item_id, request_item_id, status, stage, title,
                 path, source_path, uploadrr_command_json, preflight_json, error_message,
-                created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                tracker, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 data.get("library_item_id"),
@@ -354,6 +367,7 @@ def save_upload_job_preflight(data: dict, conn=None) -> dict:
                 data.get("uploadrr_command_json"),
                 data.get("preflight_json"),
                 data.get("error_message"),
+                data.get("tracker") or trackers.POR_DEFECTO,
                 now, now,
             ),
         )

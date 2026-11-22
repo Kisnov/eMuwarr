@@ -15,6 +15,7 @@ from ..uploadrr_contract import (
     get_runtime_settings,
     render_command_preview,
 )
+from .. import trackers
 from .comun import _get_db_conn
 from .config import ruta_config
 
@@ -178,9 +179,9 @@ def validate_upload_job_start(job_id: int, conn=None) -> dict:
             if not script.exists():
                 errors.append(f"Script de Uploadrr no encontrado: {script}")
 
-        emu_key = get_setting_canonical(conn, "emu.api_key")
-        if not emu_key:
-            errors.append("API key de eMuwarez no configurada.")
+        destino = tracker_del_trabajo(job)
+        if not trackers.tiene_clave(conn, destino):
+            errors.append(f"API key de {destino.nombre} no configurada.")
 
         tmdb_key = get_setting_canonical(conn, "tmdb.api_key")
         if not tmdb_key:
@@ -195,6 +196,11 @@ def validate_upload_job_start(job_id: int, conn=None) -> dict:
     finally:
         if own:
             conn.close()
+
+
+def tracker_del_trabajo(job: dict) -> trackers.Tracker:
+    """El tracker al que va una subida (`upload_jobs.tracker`); las de antes de la columna, eMuwarez."""
+    return trackers.obtener(job.get("tracker") or trackers.POR_DEFECTO)
 
 
 def build_uploadrr_execution_command(job: dict, conn=None, *, solo_cliente: str | None = None) -> dict:
@@ -265,11 +271,12 @@ def build_uploadrr_execution_command(job: dict, conn=None, *, solo_cliente: str 
                 solo_cliente=solo_cliente,
                 eventos=eventos,
                 config=config,
+                tracker=tracker_del_trabajo(job).uploadrr,
             )
             executable = full_argv[0]
             args = full_argv[1:]
         else:
-            tracker = cmd_data.get("tracker") or "EMU"
+            tracker = tracker_del_trabajo(job).uploadrr
             executable = sys.executable
             args = [script, active_path, "--tracker", tracker, "--category", category]
             if tmdb_id:

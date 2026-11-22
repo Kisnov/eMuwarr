@@ -147,7 +147,8 @@ def pendiente_de_moderacion(job: dict[str, Any], lectura: Optional[tuple[datetim
     """Una subida completada, con su torrent en eMuwarez y no anónima, que no sale en una lectura de tus subidas hecha
     después de terminar: eMuwarez no da las que un moderador aún no ha aprobado. Una rechazada o borrada se ve igual, y
     una recién aprobada sigue así hasta la lectura siguiente (cada 6 horas)."""
-    if lectura is None or job.get("status") != "completed" or _anonima(job):
+    # «Tus subidas» es la lectura de eMuwarez: de una subida a otro tracker no dice nada.
+    if lectura is None or job.get("status") != "completed" or _anonima(job) or (job.get("tracker") or "emu") != "emu":
         return False
     torrent_id = _entero(job.get("result_torrent_id"))
     try:
