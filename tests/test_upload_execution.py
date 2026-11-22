@@ -1033,6 +1033,16 @@ def test_collect_secrets_includes_qbittorrent_password_and_qui(db_conn):
     assert {"contrasena-qbit", "http://qui:7476/proxy/clave-de-qui"} <= set(_collect_secrets(db_conn))
 
 
+def test_collect_secrets_tapa_las_claves_de_nobs_y_milnueve(db_conn):
+    """Fase B: también van en el config.yaml de la subida, así que un error de Uploadrr-EMU puede escribirlas."""
+    from emuwarez_uploadrr.services.settings import set_setting
+    from emuwarez_uploadrr.services.upload_execution import _collect_secrets, redact_secrets
+    set_setting(db_conn, "nobs.api_key", "clave0de0nobs")
+    set_setting(db_conn, "mnv.api_key", "clave0de0mnv")
+    limpia = redact_secrets("NOBS: 401 con clave0de0nobs; MNV: 401 con clave0de0mnv", _collect_secrets(db_conn))
+    assert "clave0de0nobs" not in limpia and "clave0de0mnv" not in limpia
+
+
 def test_collect_secrets_tapa_la_clave_de_qui_sin_host_y_las_de_imagenes(db_conn):
     from emuwarez_uploadrr.services.settings import set_setting
     from emuwarez_uploadrr.services.upload_execution import _collect_secrets, redact_secrets

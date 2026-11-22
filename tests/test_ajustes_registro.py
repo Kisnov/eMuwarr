@@ -75,6 +75,8 @@ def test_los_secretos_son_los_de_siempre():
         "tmdb.api_key", "emu.api_key", "emu.endpoint_url",
         "notify.discord.webhook_url", "notify.telegram.bot_token",
         "tmdb_api_key", "emu_api_key", "qbit.password", "qbit.qui_proxy_url",
+        # Fase B: las de los otros trackers (fuera de la copia sin claves, tapadas en los registros).
+        "nobs.api_key", "mnv.api_key",
     }
     for clave in antes | {"imghost.key.imgbb"}:
         assert es_secreto(clave), clave

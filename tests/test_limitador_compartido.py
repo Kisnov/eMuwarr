@@ -100,6 +100,15 @@ def test_una_pausa_absurda_no_bloquea(directorio):
     assert lc.reservar(directorio, "EMU", CLAVE, reloj=lambda: 1000.0) == lc.PENALIZACION_MAXIMA
 
 
+@pytest.mark.parametrize("tracker", ["NOBS", "MNV"])
+def test_nobs_y_milnueve_tambien_se_limitan(directorio, tracker):
+    """Con el nombre con el que los llama Uploadrr-EMU (`self.tracker`): el hueco que pasa de la capacidad espera."""
+    assert lc.CAPACIDAD[tracker] > 0
+    for _ in range(lc.CAPACIDAD[tracker]):
+        assert lc.reservar(directorio, tracker, CLAVE, reloj=lambda: 1000.0) == 0
+    assert lc.reservar(directorio, tracker, CLAVE, reloj=lambda: 1000.0) > 0
+
+
 def test_un_tracker_sin_capacidad_no_se_limita(directorio):
     assert lc.reservar(directorio, "BLU", CLAVE) == 0 and lc.penalizar(directorio, "BLU", CLAVE) == 0
     assert not directorio.exists()
