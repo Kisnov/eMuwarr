@@ -15,6 +15,8 @@ import torf
 import src.trackers.UNIT3D as unit3d
 import upload
 from src.trackers.EMU import EMU
+from src.trackers.MNV import MNV
+from src.trackers.NOBS import NOBS
 from src.trackers.UNIT3D import DupeSearchError
 from src.utils import limitador
 from tracker_falso import FakeTracker
@@ -981,3 +983,56 @@ def test_solo_cliente_dice_por_que_no_bajo_el_torrent(tracker, upload_meta, emu,
     assert run(emu.descargar_subido(upload_meta, 42)) == (None, motivo)
     if motivo == "no_visible":
         assert "pendiente de moderación" in capsys.readouterr().out
+
+
+# NOBS y Milnueve: los mismos ids de vídeo de UNIT3D de serie, con 576i y 480i propios y sin 540p ni SD
+
+def _instancia(cls, tracker, monkeypatch):
+    monkeypatch.setattr(unit3d, "UPLOAD_RETRY_DELAYS", (0, 0))
+    monkeypatch.setattr(unit3d, "DOWNLOAD_RETRY_DELAYS", (0, 0, 0))
+    instance = cls(config={"TRACKERS": {cls.__name__: {"api_key": TOKEN}}, "DEFAULT": {}})
+    instance.domain = tracker.url
+    return instance
+
+
+@pytest.fixture(params=[NOBS, MNV], ids=["NOBS", "MNV"])
+def otro(request, tracker, monkeypatch):
+    return _instancia(request.param, tracker, monkeypatch)
+
+
+RESOLUCIONES_UNIT3D = {
+    "8640p": "10", "4320p": "1", "2160p": "2", "1440p": "3", "1080p": "3", "1080i": "4", "720p": "5", "576p": "6",
+    "576i": "7", "540p": "10", "480p": "8", "480i": "9", "other": "10", "OTHER": "10", "": "10",
+}
+TIPOS_UNIT3D = {**TIPOS_ENVIADOS, "SD": "0"}
+CATEGORIAS_UNIT3D = {**CATEGORIAS_ENVIADAS, "MUSIC": "0"}
+
+
+def test_ids_enviados_a_nobs_y_milnueve(otro, meta):
+    assert {c: run(otro.get_cat_id({**meta, "category": c})) for c in CATEGORIAS_UNIT3D} == CATEGORIAS_UNIT3D
+    assert {t: run(otro.get_type_id({**meta, "type": t})) for t in TIPOS_UNIT3D} == TIPOS_UNIT3D
+    assert {r: run(otro.get_res_id({**meta, "resolution": r})) for r in RESOLUCIONES_UNIT3D} == RESOLUCIONES_UNIT3D
+
+
+def test_las_tablas_no_se_mezclan(tracker, emu, monkeypatch, meta):
+    """Cargar NOBS no cambia los ids de EMU: cada clase guarda los suyos."""
+    nobs = _instancia(NOBS, tracker, monkeypatch)
+    assert run(nobs.get_res_id({**meta, "resolution": "576i"})) == "7"
+    assert run(emu.get_res_id({**meta, "resolution": "576i"})) == "6"
+
+
+def test_subida_a_nobs_y_milnueve(tracker, otro, upload_meta, signed_torrent, capsys):
+    nombre = type(otro).__name__
+    (Path(upload_meta["base_dir"]) / "tmp" / "u" / f"[{nombre}]DESCRIPTION.txt").write_text("descripción")
+    tracker.routes[("POST", UPLOAD)] = lambda q: (200, {"success": True, "data": download_url(tracker)})
+    serve_download(tracker, signed_torrent)
+
+    assert run(otro.upload({**upload_meta, "resolution": "576i", "type": "ENCODE"})) is True
+
+    (fields, files), = tracker.bodies
+    assert (fields["name"], fields["category_id"], fields["type_id"], fields["resolution_id"]) == (NAME, "1", "3", "7")
+    assert files["torrent"] == signed_torrent
+    guardado = Path(upload_meta["base_dir"]) / "tmp" / "u" / f"[{nombre}]Peli.torrent"
+    assert torf.Torrent.read(guardado).comment == f"{otro.comentario_torrent}\n{tracker.url}/torrents/42"
+    assert "eMuwarez" not in otro.comentario_torrent
+    assert f"Torrent URL: {tracker.url}/torrents/42" in capsys.readouterr().out

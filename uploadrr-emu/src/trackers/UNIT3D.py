@@ -79,6 +79,8 @@ class Unit3d:
 
     # Ids que compiten por el mismo hueco en la búsqueda de duplicados: 1080p y 1080i.
     resolution_groups = [["3", "4"]]
+    # Comentario del .torrent firmado que se guarda y se añade al cliente (se ve en qBittorrent).
+    comentario_torrent = COMENTARIO_TORRENT
 
     # fmt: off
     async def get_cat_id(self, meta: Dict[str, Any]) -> str:
@@ -333,7 +335,8 @@ class Unit3d:
         """Guarda el .torrent firmado como [TRACKER]<clean_name>.torrent, con el comentario y la ficha que se ven en el cliente."""
         new_torrent = Path(meta["base_dir"]) / "tmp" / meta["uuid"] / f"[{self.tracker}]{meta['clean_name']}.torrent"
         new_torrent.write_bytes(content)
-        await edit_torrent(torrent_path=new_torrent, comment=f"{COMENTARIO_TORRENT}\n{url}" if url else COMENTARIO_TORRENT)
+        comentario = self.comentario_torrent
+        await edit_torrent(torrent_path=new_torrent, comment=f"{comentario}\n{url}" if url else comentario)
         return new_torrent
 
     async def descargar_subido(self, meta: Dict[str, Any], torrent_id: int) -> Tuple[Optional[Path], str]:
