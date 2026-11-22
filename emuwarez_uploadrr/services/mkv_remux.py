@@ -33,7 +33,6 @@ import signal
 import subprocess
 import threading
 import time
-from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable
@@ -682,9 +681,11 @@ def build_track_plan(mkv_json: dict, *, known_resolution: str | None = None,
         # depends on what the audio offers (see _default_subtitle_id).
         t["default_after"] = (t["id"] == default_sub_id)
     # El mismo subtítulo en dos formatos (SRT y PGS) quedaba con el mismo nombre: ahí se añade el formato.
-    repetidos = Counter(t["new_name"] for t in subs_sorted)
+    formatos: dict[str, set[str]] = {}
     for t in subs_sorted:
-        if repetidos[t["new_name"]] > 1:
+        formatos.setdefault(t["new_name"], set()).add(_subtitle_codec_label(t["codec"]))
+    for t in subs_sorted:
+        if len(formatos[t["new_name"]]) > 1:
             t["new_name"] += f" ({_subtitle_codec_label(t['codec'])})"
 
     # Sin renombrar, cada pista se queda con el nombre que ya tiene. Se hace

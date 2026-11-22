@@ -152,6 +152,7 @@ def test_el_mismo_subtitulo_en_dos_formatos_lleva_el_formato_en_el_nombre():
         sub(2, "SubRip/SRT", forced_track=True), sub(3, "HDMV PGS", forced_track=True),
         sub(4, "SubRip/SRT"), sub(5, "HDMV PGS"),
         sub(6, "SubRip/SRT", flag_hearing_impaired=True),
+        sub(7, "SubRip/SRT", flag_commentary=True), sub(8, "SubRip/SRT", flag_commentary=True),
     ]})
 
     nombres = {t["id"]: t["new_name"] for t in plan["tracks"]}
@@ -160,6 +161,8 @@ def test_el_mismo_subtitulo_en_dos_formatos_lleva_el_formato_en_el_nombre():
     assert nombres[4] == "Español (Castellano) (SRT)"
     assert nombres[5] == "Español (Castellano) (PGS)"
     assert nombres[6] == "Español (Castellano) - SDH"  # sin pareja, como antes
+    # Dos iguales en el mismo formato: el formato no los distinguiría.
+    assert nombres[7] == nombres[8] == "Español (Castellano) - Comentarios"
 
 
 def test_build_track_plan_default_flags():
