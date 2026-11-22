@@ -55,7 +55,7 @@ came in from `Kisnov/Uploadrr-EMU` with `git subtree add`, history kept; that re
   the Uploadrr-EMU suite (job `uploadrr-emu`) and the frontend checks on every PR, and from
   `publicar.yml` before a release; it uploads coverage, test results and the frontend bundle size to Codecov
   (`codecov.yml`: the changed `emuwarez_uploadrr/` lines of a PR need 70 % coverage or `codecov/patch` fails; for
-  `uploadrr-emu/` it is informational; the frontend is not measured; the total is informational;
+  `uploadrr-emu/` it is informational, but its job fails below 55 % total, without the inherited code its `pyproject.toml` omits; the frontend is not measured; the total is informational;
   needs the `CODECOV_TOKEN` secret). On pushes to `dev` CI runs the backend only; `bundle.yml`
   only builds the frontend on each push that touches `frontend/` (~40 s) so PRs have a bundle size to compare against.
 - `imagen-pr.yml` builds `ghcr.io/kisnov/emuwarr:pr-<n>` (amd64) for PRs from this repo's branches; `etiquetas.yml` labels
