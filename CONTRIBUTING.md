@@ -32,7 +32,8 @@ salida que se leen), cambia los dos lados en el mismo PR: [`CLAUDE.md`](CLAUDE.m
 ## Revisión
 
 El CI corre en cada PR. Cada PR de una rama de este repo construye además la imagen `ghcr.io/kisnov/emuwarr:pr-<número>`
-para probarlo antes de fusionarlo. CodeRabbit revisa cuando se le pide con un comentario `@coderabbitai review`.
+para probarlo antes de fusionarlo. CodeRabbit revisa solo los PR a `dev`; los que van sobre otra rama, cuando se le pide
+con un comentario `@coderabbitai review`. Greptile (en prueba) revisa cada PR una vez, al abrirlo.
 
 ## Licencia
 
