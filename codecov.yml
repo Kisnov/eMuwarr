@@ -13,23 +13,9 @@ coverage:
         informational: true
         paths: ["uploadrr-emu/"]
 # El job uploadrr-emu mide desde su carpeta: src/... es uploadrr-emu/src/...
+# Lo heredado que no se mide se omite en uploadrr-emu/pyproject.toml ([tool.coverage.run]), no aquí.
 fixes:
   - "^src/::uploadrr-emu/src/"
-# Lo heredado de Uploadrr que no se mantiene (README de uploadrr-emu/): otros trackers, música y contenido adulto.
-ignore:
-  - uploadrr-emu/src/trackers/AITHER.py
-  - uploadrr-emu/src/trackers/BLU.py
-  - uploadrr-emu/src/trackers/HDB.py
-  - uploadrr-emu/src/trackers/PTP.py
-  - uploadrr-emu/src/metascraper.py
-  - uploadrr-emu/src/databases/ptgen.py
-  - uploadrr-emu/src/utils/cookieme.py
-  - uploadrr-emu/src/musicprocessor.py
-  - uploadrr-emu/src/databases/musicbrainz.py
-  - uploadrr-emu/src/databases/discogs.py
-  - uploadrr-emu/src/databases/deezer.py
-  - uploadrr-emu/src/databases/porndb.py
-  - uploadrr-emu/src/utils/phash.py
 comment:
   layout: "diff, flags, files"
   require_changes: true
