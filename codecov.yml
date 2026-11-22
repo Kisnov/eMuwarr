@@ -16,6 +16,12 @@ coverage:
 # Lo heredado que no se mide se omite en uploadrr-emu/pyproject.toml ([tool.coverage.run]), no aquí.
 fixes:
   - "^src/::uploadrr-emu/src/"
+# El backend tarda ~12 min y uploadrr-emu ~2: sin carryforward, mientras falta un informe el total cuenta solo el
+# otro (un 56 % en vez del 80 %). Con él, el flag que aún no ha subido (o que no corre, como el backend en un PR que
+# solo toca el frontend) conserva la cobertura de la base.
+flag_management:
+  default_rules:
+    carryforward: true
 comment:
   layout: "diff, flags, files"
   require_changes: true
