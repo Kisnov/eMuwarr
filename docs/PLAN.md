@@ -42,17 +42,42 @@ descripción y el cliente.
      otras herramientas: se puede empezar (Gabriel les avisa). El primero valida la abstracción.
   3. Después, los internacionales que ya tienen código en `uploadrr-emu/`, solo para contenido con el audio en inglés y
      donde haya permiso.
-- **Por estudiar: nekoBT (nekobt.to; añadido el 22/11).** Tracker de anime (Jackett lo indexa como público). No consta
-  que sea UNIT3D: si no lo es, no sirven ni `cliente_unit3d.py` ni `UNIT3D_TEMPLATE`, y hace falta un adaptador con
-  cliente propio. Sus normas (wiki.nekobt.to/rules) permiten automatizar solo con clave de API y prohíben usarla para
-  spam. Antes de empezar: ver si sigue en pie (en octubre de 2026 Jackett lo dio por caído, issue Jackett#17212),
-  conseguir la documentación de su API de subida y preguntar al staff si acepta subidas automáticas. Encaja peor que los
-  demás: solo anime, mientras eMuwarr cataloga con TMDb desde Radarr/Sonarr; hay que ver qué ids pide (¿AniDB, MAL?),
-  su nomenclatura (grupo, fansub) y si acepta audio o subtítulos en español. Iría después de la fase B.
+- **Por estudiar: nekoBT (nekobt.to; añadido y estudiado el 22/11).** Tracker público de anime centrado en fansubs y
+  grupos, en open beta y en pie (≈ 9.500 usuarios y 47.000 torrents). Iría después de la fase B, con adaptador propio:
+  - **No es UNIT3D:** `/api/torrents/filter` da un 404 HTML; tiene su propia API JSON en `https://nekobt.to/api/v1`
+    ([documentación](https://wiki.nekobt.to/technical-details/json/)) y Torznab (`/api/torznab/api`). No sirven ni
+    `cliente_unit3d.py` ni `UNIT3D_TEMPLATE`: hace falta un cliente nuevo, con su propio límite de llamadas (no es
+    público; un 429 trae `retry_after`).
+  - **Autenticación:** una clave de API generada en los ajustes de la cuenta, enviada como cookie `ssid` con la clave
+    como valor ([API Keys](https://wiki.nekobt.to/technical-details/api-keys/)). Usar la cookie de la sesión en vez de
+    una clave está castigado. Sin clave, `POST /api/v1/upload` → 401 JSON `{"message":"Unauthorized.","error":true}`.
+  - **Subida:** `PUT /api/v1/upload/checks` (recomendado: corrige y analiza el título, devuelve avisos y fallos) y
+    `POST /api/v1/upload` con JSON: `torrent` (el .torrent en base64), `title` (≤ 512), `category` (solo 1),
+    `video_type`, `video_codec`, `level` (nivel de subtítulos, −1 a 3), `mtl`, `otl`, `hardsub`, `anonymous`, `hidden`,
+    `primary_group` (id y miembros con su rol), `secondary_groups`, `audio_langs`, `sub_langs`, `fansub_langs` (códigos
+    separados por comas, de `GET /api/v1/langs`: hay `es-es`, `es-419`, `ca`, `eu`, `gl`), `description` (Markdown,
+    ≤ 8192), `mediainfo` e `ignore_warnings`. Responde `data.id`, o `fails`/`warns`. Los ids de tipo de vídeo (14 BD
+    Remux, 13 BD Encode, 9 WEB-DL, 8 WEB Encode…) y de códec (1 H264, 2 H265, 3 AV1…) están en
+    [Metadata](https://wiki.nekobt.to/info/metadata/).
+  - **El .torrent es otro:** tiene que llevar su tracker público (`https://tracker.nekobt.to/api/tracker/public/announce`)
+    y al menos uno de respaldo ([Uploading](https://wiki.nekobt.to/info/uploading/)), nunca el anuncio privado de otro
+    tracker. La primera subida de la cuenta, o una cuyo título no reconoce, espera a que la apruebe el staff (hasta 24 h).
+  - **Normas** ([Rules](https://wiki.nekobt.to/rules/)): solo anime (con ficha en AniDB, AniList o MAL; nada de imagen
+    real); títulos en inglés o romaji; metadatos correctos (tipo, códec, nivel de subtítulos, idiomas); nada de
+    codificación por hardware (NVENC, QuickSync); automatizar solo con clave de API y sin spam (no piden permiso previo,
+    pero conviene avisar al staff); para subir hay que aprobar antes un examen. No prohíben el audio ni los subtítulos
+    en español: se declaran con sus códigos de idioma.
+  - **Identificación y nombre:** no pide ids de TMDb, IMDb, AniDB ni MAL. Deduce la serie o película del título con
+    Sonarr/Radarr/AniList, así que el nombre tiene que seguir la nomenclatura de anime (`[Grupo] Título - 01 [...]`), y la
+    etiqueta del título tiene que ser un grupo registrado en nekoBT, enviado como `primary_group`
+    ([Groups](https://wiki.nekobt.to/info/groups/)).
+  - **Encaje con eMuwarr:** peor que los UNIT3D: solo la parte de anime de la biblioteca, una nomenclatura propia, un
+    .torrent público aparte y campos que eMuwarr hoy no conoce (nivel de subtítulos, MTL/OTL, grupos con roles).
 - **Esperando permiso:** Torrentland (torrentland.li; no acepta automatizaciones: hace falta el OK del staff por
   escrito antes de subir por API) y HDZero (hdzero.org, permiso improbable). Los cuatro son UNIT3D (`/api/torrents/filter`
   anónimo → 401 JSON, comprobado el 18/11).
-- **Por resolver en la fase A:** de dónde salen los ids de cada tracker (su formulario de subida o el staff), una
+- **Por resolver en la fase A:** de dónde salen los ids de cada tracker (su formulario de subida o el staff; los de
+  NOBS y Milnueve están en `docs/trackers-ids.md`), una
   nomenclatura por tracker y un nombre de fichero por tracker (un enlace duro por tracker en la carpeta de subidas, sin
   ocupar más), etiqueta/categoría de qBittorrent por tracker, peticiones y catálogo por tracker sin pasar del límite de
   cada API, y si la app cambia de nombre (hoy «eMuwarr» es de eMuwarez).
