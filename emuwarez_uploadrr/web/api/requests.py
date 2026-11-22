@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 
 from ..dependencies import require_auth
 from ..runtime import _db_path
+from emuwarez_uploadrr.services.settings import ajuste_de_tracker
 from ..schemas import (
     OkResponse,
     RequestDetailResponse,
@@ -125,9 +126,8 @@ def list_requests(
     current_user: dict = Depends(require_auth),
 ) -> RequestListResponse:
     from emuwarez_uploadrr.services.requests import list_request_items
-    from emuwarez_uploadrr.services.settings import get_setting_canonical
     with _get_conn() as conn:
-        my_username = get_setting_canonical(conn, "emu.username")
+        my_username = ajuste_de_tracker(conn, "username")
         result = list_request_items(
             conn, limit=limit, offset=offset, search=search, status=status,
             category=category, resolution=resolution, source=source,
@@ -190,9 +190,8 @@ def get_request_detail(
     current_user: dict = Depends(require_auth),
 ) -> RequestDetailResponse:
     from emuwarez_uploadrr.services.requests import get_request_detail as _svc_detail
-    from emuwarez_uploadrr.services.settings import get_setting_canonical
     with _get_conn() as conn:
-        my_username = get_setting_canonical(conn, "emu.username")
+        my_username = ajuste_de_tracker(conn, "username")
         data = _svc_detail(conn, request_id)
     if not data:
         raise HTTPException(status_code=404, detail="Petición no encontrada")
@@ -206,9 +205,8 @@ def rematch_request(
     current_user: dict = Depends(require_auth),
 ) -> RequestDetailResponse:
     from emuwarez_uploadrr.services.requests import match_single_request, get_request_detail as _svc_detail
-    from emuwarez_uploadrr.services.settings import get_setting_canonical
     with _get_conn() as conn:
-        my_username = get_setting_canonical(conn, "emu.username")
+        my_username = ajuste_de_tracker(conn, "username")
         match_single_request(conn, request_id)
         data = _svc_detail(conn, request_id)
     if not data:

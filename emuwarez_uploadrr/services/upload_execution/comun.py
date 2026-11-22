@@ -6,6 +6,7 @@ import re
 from datetime import datetime, timezone
 
 from ...database import connect, get_setting_canonical, init_db
+from ..trackers import TRACKERS
 from ...integrations.base import tapar_claves
 from ..uploadrr_eventos import MOTIVOS_CLIENTE
 
@@ -144,7 +145,7 @@ def _collect_secrets(conn) -> list[str]:
     secrets = []
     # Los dos de qBittorrent también: un error de conexión de Uploadrr-EMU escribe la URL de qui, clave incluida.
     # Las de los otros trackers (fase B) también se stagean en el config.yaml del hijo.
-    for key in ("emu.api_key", "nobs.api_key", "mnv.api_key", "tmdb.api_key", "qbit.password", "qbit.qui_proxy_url"):
+    for key in (*(t.clave("api_key") for t in TRACKERS.values()), "tmdb.api_key", "qbit.password", "qbit.qui_proxy_url"):
         val = get_setting_canonical(conn, key)
         if val:
             secrets.append(val)

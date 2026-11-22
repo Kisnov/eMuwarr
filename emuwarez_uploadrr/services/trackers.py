@@ -17,8 +17,12 @@ class Tracker:
     nombre: str           # lo que ve el usuario
     url: str              # origen por defecto (el usuario puede cambiarlo en sus ajustes)
     plataforma: str       # "unit3d": habla con integrations/cliente_unit3d.py
-    prefijo_ajustes: str  # espacio de nombres de sus ajustes: `emu` → emu.api_key, emu.url…
+    prefijo_ajustes: str  # espacio de nombres de sus ajustes: `emu` → emu.api_key, emu.username…
     uploadrr: str         # su nombre en Uploadrr-EMU: `-tk`, TRACKERS.<uploadrr> y src/trackers/<uploadrr>.py
+
+    def clave(self, nombre: str) -> str:
+        """La clave en la tabla `settings` del ajuste `nombre` de este tracker: `api_key` → `emu.api_key`."""
+        return f"{self.prefijo_ajustes}.{nombre}"
 
 
 EMU = Tracker(id="emu", nombre="eMuwarez", url=EMU_BASE_URL, plataforma="unit3d", prefijo_ajustes="emu",
@@ -45,8 +49,8 @@ def obtener(tracker_id: str) -> Tracker:
 
 def tiene_clave(conn, tracker: Tracker) -> bool:
     """Si su clave de API está puesta en Configuración (`<prefijo>.api_key`)."""
-    from ..database import get_setting_canonical
-    return bool((get_setting_canonical(conn, f"{tracker.prefijo_ajustes}.api_key") or "").strip())
+    from .settings import ajuste_de_tracker  # settings importa este módulo: aquí, no arriba
+    return bool((ajuste_de_tracker(conn, "api_key", tracker.id) or "").strip())
 
 
 def para_subir(conn) -> list[Tracker]:
