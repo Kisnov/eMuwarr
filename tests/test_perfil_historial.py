@@ -46,7 +46,7 @@ def _dia(dias_atras: int) -> str:
 def test_base_nueva_trae_la_tabla(conn):
     assert get_state(conn, "schema_version") == str(SCHEMA_VERSION)
     columnas = [f[1] for f in conn.execute("PRAGMA table_info(perfil_historial)")]
-    assert columnas == ["dia", "ratio", "subido_bytes", "bajado_bytes", "bonus", "usuario", "actualizado_at",
+    assert columnas == ["tracker", "dia", "ratio", "subido_bytes", "bajado_bytes", "bonus", "usuario", "actualizado_at",
                         "buffer_bytes", "seeding", "leeching", "hit_and_runs", "grupo"]
 
 

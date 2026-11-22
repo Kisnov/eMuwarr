@@ -32,6 +32,12 @@ descripción y el cliente.
   1. **Fase A:** el tracker pasa a ser un dato. Base de datos (cada subida, petición, catálogo y estadística lleva su
      tracker), ajustes por tracker (URL, clave, usuario, grupos, anónimo), cola y Panel. eMuwarez queda como el primer
      adaptador, sin cambiar lo que ve hoy quien solo usa eMuwarez.
+     - Ya está la base (esquema 60): `services/trackers.py` con eMuwarez (`emu`) y la columna `tracker` en las
+       subidas, peticiones, catálogo, «Tus subidas» y el historial del perfil; las claves de peticiones, «Tus subidas»
+       y el perfil incluyen el tracker.
+     - Queda: que las lecturas y sincronizaciones reciban el tracker en vez de suponer eMuwarez, la comparación con el
+       catálogo por tracker (`library_items.emu_in_catalog`/`emu_aportes` son de eMuwarez), los ajustes por tracker
+       (hoy `emu.*`), la cola y el Panel.
   2. **Fase B: NOBS (nobs.rawsmoke.net) y Milnueve (tracker.milnueve.cc).** Los dos son UNIT3D y ya se sube a ellos con
      otras herramientas: se puede empezar (Gabriel les avisa). El primero valida la abstracción.
   3. Después, los internacionales que ya tienen código en `uploadrr-emu/`, solo para contenido con el audio en inglés y

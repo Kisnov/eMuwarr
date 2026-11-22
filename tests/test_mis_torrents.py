@@ -172,7 +172,8 @@ def test_la_semana_se_cuenta_hasta_la_ultima_lectura_y_sin_fotos_mas_viejas(conn
     sincronizar(conn, AHORA)
     assert resumen(conn)["torrents"][0]["completados_semana"] is None
     # Abrir Estadísticas otro día sin leer de nuevo no mueve el corte: va con la fecha de la lectura.
-    conn.execute("INSERT INTO emu_mis_torrents_dia VALUES (?, 1, 5, 0, 12)",
+    conn.execute("INSERT INTO emu_mis_torrents_dia (dia, torrent_id, seeders, leechers, completados) "
+                 "VALUES (?, 1, 5, 0, 12)",
                  ((AHORA - timedelta(days=7)).strftime("%Y-%m-%d"),))
     conn.commit()
     assert resumen(conn)["torrents"][0]["completados_semana"] == 18

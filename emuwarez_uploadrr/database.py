@@ -20,7 +20,11 @@ logger = logging.getLogger(__name__)
 
 DB_FILE = CONFIG_DIR / "emuwarez_uploadrr.db"
 
-SCHEMA_VERSION = 59
+SCHEMA_VERSION = 60
+
+# Fase A del plan multitracker: el tracker de las filas de antes de que hubiera varios. Es `services.trackers.POR_DEFECTO`
+# (aquí en literal para que la base no importe servicios; test_tracker_en_la_base.py comprueba que coinciden).
+TRACKER_POR_DEFECTO = "emu"
 
 # Phase 10E: canonical settings namespace fix.
 #
@@ -1114,7 +1118,8 @@ def _migrate_mis_torrents(conn: sqlite3.Connection) -> None:
     `emu_mis_torrents_dia` una foto al día de cada torrent, para saber cuánto se ha bajado en la última semana."""
     conn.execute("""
         CREATE TABLE IF NOT EXISTS emu_mis_torrents (
-            torrent_id INTEGER PRIMARY KEY,
+            tracker TEXT NOT NULL DEFAULT 'emu',
+            torrent_id INTEGER NOT NULL,
             nombre TEXT NOT NULL,
             tamano INTEGER,
             subido_at TEXT,
@@ -1122,17 +1127,19 @@ def _migrate_mis_torrents(conn: sqlite3.Connection) -> None:
             leechers INTEGER,
             completados INTEGER,
             freeleech TEXT,
-            doble_subida INTEGER NOT NULL DEFAULT 0
+            doble_subida INTEGER NOT NULL DEFAULT 0,
+            PRIMARY KEY (tracker, torrent_id)
         )
     """)
     conn.execute("""
         CREATE TABLE IF NOT EXISTS emu_mis_torrents_dia (
+            tracker TEXT NOT NULL DEFAULT 'emu',
             dia TEXT NOT NULL,              -- YYYY-MM-DD, local
             torrent_id INTEGER NOT NULL,
             seeders INTEGER,
             leechers INTEGER,
             completados INTEGER,
-            PRIMARY KEY (torrent_id, dia)
+            PRIMARY KEY (tracker, torrent_id, dia)
         )
     """)
 
@@ -1164,13 +1171,15 @@ def _migrate_perfil_historial(conn: sqlite3.Connection) -> None:
     Solo añade una tabla."""
     conn.execute("""
         CREATE TABLE IF NOT EXISTS perfil_historial (
-            dia TEXT PRIMARY KEY,          -- YYYY-MM-DD, local
+            tracker TEXT NOT NULL DEFAULT 'emu',
+            dia TEXT NOT NULL,             -- YYYY-MM-DD, local
             ratio REAL,
             subido_bytes INTEGER,
             bajado_bytes INTEGER,
             bonus REAL,
             usuario TEXT,                  -- de qué cuenta es: si el perfil cambia de usuario, se empieza de cero
-            actualizado_at TEXT NOT NULL
+            actualizado_at TEXT NOT NULL,
+            PRIMARY KEY (tracker, dia)
         )
     """)
 
@@ -1213,6 +1222,97 @@ _COLUMNAS_SIN_USO = (
     ("library_items", ("arr_queue_raw_json", "arr_history_raw_json", "diagnostic_reasons_json")),
     ("request_items", ("emu_catalog_checked_at", "emu_catalog_result", "is_example")),
 )
+
+
+# Esquema 60: las tablas cuya clave pasa a incluir el tracker. Una base nueva ya las crea así.
+_CLAVES_CON_TRACKER: tuple[tuple[str, str], ...] = (
+    ("request_items", "UNIQUE(tracker, emu_id)"),
+    ("emu_mis_torrents", "PRIMARY KEY (tracker, torrent_id)"),
+    ("emu_mis_torrents_dia", "PRIMARY KEY (tracker, torrent_id, dia)"),
+    ("perfil_historial", "PRIMARY KEY (tracker, dia)"),
+)
+# Las que solo ganan la columna: su clave es un id propio.
+_COLUMNA_TRACKER_SIN_CLAVE = ("upload_jobs", "emu_catalog")
+
+
+def _columnas(conn: sqlite3.Connection, tabla: str) -> set[str]:
+    return {fila[1] for fila in conn.execute(f"PRAGMA table_info({tabla})")}
+
+
+def _rehacer_con_tracker(conn: sqlite3.Connection, tabla: str, clave: str) -> None:
+    """Rehace `tabla` con la columna `tracker` delante y `clave` como clave (SQLite no cambia una clave con ALTER).
+    Las columnas salen de PRAGMA table_info, no del texto del CREATE: ese lleva comentarios y lo que añadieron las
+    migraciones. Ninguna de estas tablas tiene CHECK ni REFERENCES. Quien llama abre la transacción con las claves
+    foráneas apagadas: soltar request_items con ellas encendidas borraría los cruces en cascada."""
+    sql_viejo = conn.execute(
+        "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = ?", (tabla,)).fetchone()[0]
+    autoincremento = "AUTOINCREMENT" in sql_viejo.upper()
+    clave_primaria_nueva = clave.startswith("PRIMARY KEY")
+    definiciones = [f"tracker TEXT NOT NULL DEFAULT '{TRACKER_POR_DEFECTO}'"]
+    nombres = []
+    for _, nombre, tipo, no_nulo, defecto, pk in conn.execute(f"PRAGMA table_info({tabla})").fetchall():
+        definicion = f"{nombre} {tipo}".strip()
+        if pk and not clave_primaria_nueva:
+            definicion += " PRIMARY KEY" + (" AUTOINCREMENT" if autoincremento else "")
+        elif no_nulo or pk:
+            definicion += " NOT NULL"
+        if defecto is not None:
+            definicion += f" DEFAULT {defecto}"
+        definiciones.append(definicion)
+        nombres.append(nombre)
+    indices = [fila[0] for fila in conn.execute(
+        "SELECT sql FROM sqlite_master WHERE type = 'index' AND tbl_name = ? AND sql IS NOT NULL", (tabla,))]
+    secuencia = conn.execute("SELECT seq FROM sqlite_sequence WHERE name = ?", (tabla,)).fetchone() \
+        if autoincremento else None
+    columnas = ", ".join(nombres)
+    conn.execute(f"DROP TABLE IF EXISTS {tabla}_nueva")
+    conn.execute(f"CREATE TABLE {tabla}_nueva ({', '.join(definiciones + [clave])})")
+    conn.execute(f"INSERT INTO {tabla}_nueva ({columnas}) SELECT {columnas} FROM {tabla}")
+    conn.execute(f"DROP TABLE {tabla}")
+    conn.execute(f"ALTER TABLE {tabla}_nueva RENAME TO {tabla}")
+    for sql in indices:
+        conn.execute(sql)
+    if secuencia is not None:
+        # Que no se reutilicen los ids de las últimas filas borradas: la biblioteca y las subidas guardan el id.
+        conn.execute("UPDATE sqlite_sequence SET seq = ? WHERE name = ? AND seq < ?", (secuencia[0], tabla, secuencia[0]))
+        conn.execute("INSERT INTO sqlite_sequence (name, seq) SELECT ?, ? WHERE NOT EXISTS "
+                     "(SELECT 1 FROM sqlite_sequence WHERE name = ?)", (tabla, secuencia[0], tabla))
+
+
+def _migrate_tracker_en_tablas(conn: sqlite3.Connection) -> None:
+    """Esquema 60 (fase A del plan multitracker): cada subida, petición, fila del catálogo, de «Tus subidas» y del
+    historial del perfil lleva su tracker. Las que había son de eMuwarez (`TRACKER_POR_DEFECTO`, el valor por
+    defecto de la columna). Donde el id del tracker era la clave (`emu_id`, `torrent_id`, el día del perfil), la clave
+    pasa a ser el par: el mismo número en dos trackers son dos filas.
+
+    Segura dos veces: solo rehace las tablas que aún no tienen la columna. Va en su propia transacción, con las claves
+    foráneas apagadas (PRAGMA foreign_keys no cambia dentro de una transacción), y comprueba al final que los cruces
+    no han perdido su petición."""
+    for tabla in _COLUMNA_TRACKER_SIN_CLAVE:
+        _anadir_columna(conn, tabla, "tracker", f"TEXT NOT NULL DEFAULT '{TRACKER_POR_DEFECTO}'")
+    if all("tracker" in _columnas(conn, tabla) for tabla, _ in _CLAVES_CON_TRACKER):
+        return
+    conn.commit()
+    previo = conn.isolation_level
+    conn.isolation_level = None
+    conn.execute("PRAGMA foreign_keys = OFF")
+    try:
+        conn.execute("BEGIN IMMEDIATE")
+        try:
+            # Lo que ya estuviera huérfano no puede impedir arrancar; solo lo que rompiera esta migración.
+            huerfanos = len(conn.execute("PRAGMA foreign_key_check(request_matches)").fetchall())
+            for tabla, clave in _CLAVES_CON_TRACKER:
+                if "tracker" not in _columnas(conn, tabla):
+                    _rehacer_con_tracker(conn, tabla, clave)
+            if len(conn.execute("PRAGMA foreign_key_check(request_matches)").fetchall()) > huerfanos:
+                raise sqlite3.IntegrityError("Tras rehacer request_items hay cruces sin su petición")
+            conn.execute("COMMIT")
+        except BaseException:
+            conn.execute("ROLLBACK")
+            raise
+    finally:
+        conn.execute("PRAGMA foreign_keys = ON")
+        conn.isolation_level = previo
 
 
 def _migrate_quitar_esquema_sin_uso(conn: sqlite3.Connection) -> None:
@@ -1621,7 +1721,8 @@ def init_db(conn: Optional[sqlite3.Connection] = None) -> None:
 
             CREATE TABLE IF NOT EXISTS request_items (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                emu_id TEXT NOT NULL UNIQUE,
+                tracker TEXT NOT NULL DEFAULT 'emu',
+                emu_id TEXT NOT NULL,
                 title TEXT NOT NULL,
                 category TEXT,
                 requested_source TEXT,
@@ -1636,7 +1737,8 @@ def init_db(conn: Optional[sqlite3.Connection] = None) -> None:
                 author TEXT,
                 author_visible INTEGER NOT NULL DEFAULT 0,
                 raw_json TEXT,
-                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(tracker, emu_id)
             );
 
             CREATE INDEX IF NOT EXISTS idx_requests_tmdb ON request_items(tmdb_id);
@@ -1786,6 +1888,7 @@ def init_db(conn: Optional[sqlite3.Connection] = None) -> None:
         _migrate_mis_torrents(conn)
         recortadas = _migrate_library_items_raw_json_recortado(conn) if desde < 58 else 0
         _migrate_quitar_esquema_sin_uso(conn)
+        _migrate_tracker_en_tablas(conn)
         set_state(conn, "schema_version", str(SCHEMA_VERSION))
         if sin_copia:
             set_state(conn, "migracion_sin_copia", str(version))  # backup_service.avisar_migracion_sin_copia
