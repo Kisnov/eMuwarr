@@ -99,7 +99,9 @@ descripción y el cliente.
   - **Encaje con eMuwarr:** peor que los UNIT3D: solo la parte de anime de la biblioteca, una nomenclatura propia, un
     .torrent público aparte y campos que eMuwarr hoy no conoce (nivel de subtítulos, MTL/OTL, grupos con roles).
 - **Esperando permiso:** Torrentland (torrentland.li; no acepta automatizaciones: hace falta el OK del staff por
-  escrito antes de subir por API) y HDZero (hdzero.org, permiso improbable). Los cuatro son UNIT3D (`/api/torrents/filter`
+  escrito antes de subir por API. El 22/11 el staff respondió a Gabriel que puede preparar las subidas con una
+  herramienta propia y rellenar el formulario, presentándolo él a mano: «si no se necesita nada no te vamos a decir
+  nada de como realices las subidas si estan bien». Por API, preguntado el mismo día y sin respuesta aún) y HDZero (hdzero.org, permiso improbable). Los cuatro son UNIT3D (`/api/torrents/filter`
   anónimo → 401 JSON, comprobado el 18/11).
 - **Por resolver en la fase A:** de dónde salen los ids de cada tracker (su formulario de subida o el staff; los de
   NOBS y Milnueve están en `docs/trackers-ids.md`), una nomenclatura por tracker (para NOBS y Milnueve vale la de
