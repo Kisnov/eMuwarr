@@ -312,7 +312,7 @@ def _importar_peticiones(conn: sqlite3.Connection) -> dict[str, int | str]:
         conn.commit()
 
     # Sin un recorrido previo completo (la primera vez, o tras uno cortado) todo lo que llega ya estaba ahí: no se avisa.
-    conocidas = ({r[0] for r in conn.execute("SELECT emu_id FROM request_items")}
+    conocidas = ({r[0] for r in conn.execute("SELECT emu_id FROM request_items WHERE tracker = ?", (EMU.id,))}
                  if get_state(conn, SYNC_COMPLETA_KEY) == "1" else None)
 
     logger.info("Sincronización de peticiones iniciada")
@@ -326,15 +326,17 @@ def _importar_peticiones(conn: sqlite3.Connection) -> dict[str, int | str]:
         for item in items:
             upsert_request(conn, item, seen_at=sync_at, commit=False)
         if conocidas is not None:
-            conn.executemany("UPDATE request_items SET aviso_pendiente = 1 WHERE emu_id = ?",
-                             [(i.emu_id,) for i in items if i.emu_id not in conocidas])
+            conn.executemany("UPDATE request_items SET aviso_pendiente = 1 WHERE tracker = ? AND emu_id = ?",
+                             [(EMU.id, i.emu_id) for i in items if i.emu_id not in conocidas])
         # Solo un recorrido que cuadra con el total de eMuwarez dice cuáles ya no están abiertas.
         complete = total is not None and len(items) == total == len({i.emu_id for i in items})
         if complete:
             set_state(conn, SYNC_COMPLETA_KEY, "1")  # un recorrido cortado después no quita la base que ya había
         else:
             logger.warning("El recorrido de peticiones no cuadra con el total de eMuwarez; no se borra ninguna")
-        removed = borrar_peticiones(conn, "last_seen_at IS NULL OR last_seen_at != ?", (sync_at,)) if complete else 0
+        # Las de otro tracker no salen en este recorrido: no se borran por no estar en él.
+        removed = borrar_peticiones(conn, "tracker = ? AND (last_seen_at IS NULL OR last_seen_at != ?)",
+                                    (EMU.id, sync_at)) if complete else 0
         set_state(conn, SYNC_STATE_KEY, _utcnow().isoformat())
         conn.commit()
         _set_progress(phase="Cruzando con tu biblioteca…")

@@ -214,3 +214,40 @@ def test_lo_que_se_escribe_hoy_va_a_emuwarez():
         assert conn.execute("SELECT COUNT(*) FROM perfil_historial WHERE tracker = 'nobs'").fetchone()[0] == 1
         assert [f["dia"] for f in perfil_historial.serie_cuenta(conn, 7, datetime(2026, 11, 22, 13))] == [
             "2026-11-22"]
+
+
+# ---- lo que sincroniza eMuwarez solo toca filas de eMuwarez ----
+
+def test_el_catalogo_de_emuwarez_no_pisa_ni_cuenta_el_de_otro_tracker():
+    from emuwarez_uploadrr.services import emu_catalog
+
+    with db() as conn:
+        conn.execute("INSERT INTO emu_catalog (tracker, torrent_id, category, tmdb_id, name) "
+                     "VALUES ('nobs', '1', 'movie', '550', 'Ajena 1080p')")
+        emu_catalog._store_catalog(conn, [{"torrent_id": "1", "category": "movie", "tmdb_id": "550", "tvdb_id": None,
+                                           "season_number": None, "resolution": "1080p", "source": "WEB-DL",
+                                           "codec": None, "has_spanish": 1, "size": 1, "name": "Mía 1080p"}])
+        emu_catalog._append_catalog(conn, [{"torrent_id": "1", "category": "movie", "tmdb_id": "550",
+                                            "tvdb_id": None, "season_number": None, "resolution": "2160p",
+                                            "source": "WEB-DL", "codec": None, "has_spanish": 1, "size": 1,
+                                            "name": "Mía 2160p"}])
+        assert [tuple(f) for f in conn.execute("SELECT tracker, name FROM emu_catalog ORDER BY tracker")] == [
+            ("emu", "Mía 2160p"), ("nobs", "Ajena 1080p")]
+        pelicula = {"item_type": "movie", "tmdb_id": "550"}
+        assert [f["name"] for f in emu_catalog.filas_del_catalogo(conn, pelicula)] == ["Mía 2160p"]
+
+
+def test_sincronizar_las_peticiones_de_emuwarez_no_borra_las_de_otro_tracker(monkeypatch):
+    from emuwarez_uploadrr.services import requests as reqs
+    from emuwarez_uploadrr.services.settings import set_setting
+
+    fila = {"id": 1, "name": "Pedida", "category_id": 1, "tmdb": 550, "status": "unfilled", "bounty": "10.00",
+            "created": "2025-01-01T00:00:00+00:00"}
+    monkeypatch.setattr(reqs.emu, "emu_fetch_all_pages", lambda *a, **kw: ([fila], 1))
+    with db() as conn:
+        set_setting(conn, "emu.api_key", "clave")
+        conn.execute("INSERT INTO request_items (tracker, emu_id, title) VALUES ('nobs', '99', 'Ajena')")
+        conn.commit()
+        reqs.sync_emu_requests(conn, force=True)
+        assert sorted(tuple(f) for f in conn.execute("SELECT tracker, emu_id FROM request_items")) == [
+            ("emu", "1"), ("nobs", "99")]
