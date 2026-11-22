@@ -21,6 +21,7 @@ from typing import Any, Optional
 from ..constants import EMU_BASE_URL
 from ..integrations import http_cliente
 from ..integrations.base import tapar_claves, texto_de_error, url_sin_claves
+from .settings import ajuste_de_tracker
 
 _TIMEOUT = 10  # seconds — short timeout for connection probes
 _CABECERAS_PRUEBA = {"Accept": "application/json", "User-Agent": "emuwarr/3"}
@@ -199,7 +200,7 @@ def test_emuwarez_connection(
     if conn is not None:
         from .settings import get_setting_canonical
         if not _key:
-            _key = get_setting_canonical(conn, "emu.api_key")
+            _key = ajuste_de_tracker(conn, "api_key")
         if not _base:
             _base = get_setting_canonical(conn, "emu.endpoint_url")
 

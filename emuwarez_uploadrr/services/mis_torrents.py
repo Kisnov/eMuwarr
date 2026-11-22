@@ -19,10 +19,11 @@ import threading
 from datetime import datetime, timedelta
 from typing import Any, Optional
 
-from ..database import get_json_state, get_setting_canonical, set_json_state
+from ..database import get_json_state, set_json_state
 from ..integrations.base import IntegrationError, texto_de_error
 from ..integrations.emu import emu_fetch_all_torrents
 from .trackers import EMU
+from .settings import ajuste_de_tracker
 
 logger = logging.getLogger(__name__)
 
@@ -70,8 +71,8 @@ def sincronizar(conn: sqlite3.Connection, ahora: Optional[datetime] = None) -> t
 def _sincronizar(conn: sqlite3.Connection, ahora: Optional[datetime]) -> tuple[str, str]:
     from .emu_catalog import motivo_subida_en_marcha
 
-    clave = (get_setting_canonical(conn, "emu.api_key") or "").strip()
-    usuario = (get_setting_canonical(conn, "emu.username") or "").strip()
+    clave = (ajuste_de_tracker(conn, "api_key") or "").strip()
+    usuario = (ajuste_de_tracker(conn, "username") or "").strip()
     if not clave:
         return "skipped", "Sin API key de eMuwarez en Configuración"
     if not usuario:
@@ -124,7 +125,7 @@ def lectura_para_moderacion(conn: sqlite3.Connection) -> Optional[tuple[datetime
     """(cuándo, ids) de la última lectura de tus subidas, para `pendiente_de_moderacion`; None si no hay una del usuario
     de Ajustes. Una consulta: se pide una vez para toda la lista de subidas."""
     estado = get_json_state(conn, ESTADO) or {}
-    usuario = (get_setting_canonical(conn, "emu.username") or "").strip()
+    usuario = (ajuste_de_tracker(conn, "username") or "").strip()
     if not estado.get("leido_at") or estado.get("usuario") != usuario:
         return None
     ids = frozenset(fila[0] for fila in conn.execute("SELECT torrent_id FROM emu_mis_torrents WHERE tracker = ?", (EMU.id,)))
@@ -176,7 +177,7 @@ def resumen(conn: sqlite3.Connection) -> dict[str, Any]:
     la semana es la diferencia con la foto del día de corte; un torrent subido ese día o después, sin foto de entonces,
     cuenta entero, y uno más antiguo sin foto de ese día queda a None. Si la lectura es de otro usuario que el de Ajustes, no se enseña."""
     estado = get_json_state(conn, ESTADO) or {}
-    usuario = (get_setting_canonical(conn, "emu.username") or "").strip()
+    usuario = (ajuste_de_tracker(conn, "username") or "").strip()
     if not estado.get("leido_at") or estado.get("usuario") != usuario:
         return {"leido_at": None, "torrents": [], "totales": dict(VACIO)}
     leido = datetime.fromisoformat(estado["leido_at"]).astimezone()

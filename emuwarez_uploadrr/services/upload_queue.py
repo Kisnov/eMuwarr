@@ -41,6 +41,7 @@ from .ajustes_registro import AJUSTES as _AJUSTES
 from .subida_pasos import reanudar_desde, subpasos_que_reutilizaria, uploadrr_puede_reanudar
 from .upload_states import ACTIVE_JOB_STATUSES, asignacion_etapa_parada, escribir_estado  # noqa: E402
 from .eventos import EVENTO_SUBIDA_ESTADO, publicar
+from .settings import ajuste_de_tracker
 
 # Remux overrides the user edited in the wizard's "Ver Pistas" card are
 # persisted on the job row itself (remux_overrides_json): a later retry has
@@ -623,7 +624,7 @@ def _season_upload_preconditions(conn) -> list[str]:
         errors.append("Ruta de Uploadrr no configurada (uploadrr.path).")
     elif not os.path.exists(uploadrr_path):
         errors.append(f"Ruta de Uploadrr no existe: {uploadrr_path}")
-    if not get_setting_canonical(conn, "emu.api_key"):
+    if not ajuste_de_tracker(conn, "api_key"):
         errors.append("API key de eMuwarez no configurada.")
     if not get_setting_canonical(conn, "tmdb.api_key"):
         errors.append("API key de TMDb no configurada.")
