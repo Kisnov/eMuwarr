@@ -22,6 +22,7 @@ from typing import Any, Optional
 from ..database import get_json_state, get_setting_canonical, set_json_state
 from ..integrations.base import IntegrationError, texto_de_error
 from ..integrations.emu import emu_fetch_all_torrents
+from .trackers import EMU
 
 logger = logging.getLogger(__name__)
 
@@ -92,19 +93,22 @@ def _sincronizar(conn: sqlite3.Connection, ahora: Optional[datetime]) -> tuple[s
     dia = ahora.strftime("%Y-%m-%d")
     try:
         # La lista es entera cada vez: lo que ya no sale es que se ha borrado del tracker.
-        conn.execute("DELETE FROM emu_mis_torrents")
+        conn.execute("DELETE FROM emu_mis_torrents WHERE tracker = ?", (EMU.id,))
         conn.executemany(
-            """INSERT INTO emu_mis_torrents (torrent_id, nombre, tamano, subido_at, seeders, leechers, completados,
-                   freeleech, doble_subida) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""", filas)
+            """INSERT INTO emu_mis_torrents (tracker, torrent_id, nombre, tamano, subido_at, seeders, leechers,
+                   completados, freeleech, doble_subida) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            [(EMU.id, *f) for f in filas])
         conn.executemany(
-            """INSERT INTO emu_mis_torrents_dia (dia, torrent_id, seeders, leechers, completados) VALUES (?, ?, ?, ?, ?)
-               ON CONFLICT(torrent_id, dia) DO UPDATE SET seeders = excluded.seeders, leechers = excluded.leechers,
-                   completados = excluded.completados""",
-            [(dia, f[0], f[4], f[5], f[6]) for f in filas])
-        conn.execute("DELETE FROM emu_mis_torrents_dia WHERE dia < ?",
-                     ((ahora - timedelta(days=RETENCION_DIAS)).strftime("%Y-%m-%d"),))
+            """INSERT INTO emu_mis_torrents_dia (tracker, dia, torrent_id, seeders, leechers, completados)
+               VALUES (?, ?, ?, ?, ?, ?)
+               ON CONFLICT(tracker, torrent_id, dia) DO UPDATE SET seeders = excluded.seeders,
+                   leechers = excluded.leechers, completados = excluded.completados""",
+            [(EMU.id, dia, f[0], f[4], f[5], f[6]) for f in filas])
+        conn.execute("DELETE FROM emu_mis_torrents_dia WHERE tracker = ? AND dia < ?",
+                     (EMU.id, (ahora - timedelta(days=RETENCION_DIAS)).strftime("%Y-%m-%d")))
         conn.execute(
-            "DELETE FROM emu_mis_torrents_dia WHERE torrent_id NOT IN (SELECT torrent_id FROM emu_mis_torrents)")
+            "DELETE FROM emu_mis_torrents_dia WHERE tracker = ? AND torrent_id NOT IN "
+            "(SELECT torrent_id FROM emu_mis_torrents WHERE tracker = ?)", (EMU.id, EMU.id))
         # Con su zona: la interfaz lee una hora sin zona como UTC.
         set_json_state(conn, ESTADO, {"leido_at": ahora.astimezone().isoformat(timespec="seconds"),
                                       "usuario": usuario})
@@ -123,7 +127,7 @@ def lectura_para_moderacion(conn: sqlite3.Connection) -> Optional[tuple[datetime
     usuario = (get_setting_canonical(conn, "emu.username") or "").strip()
     if not estado.get("leido_at") or estado.get("usuario") != usuario:
         return None
-    ids = frozenset(fila[0] for fila in conn.execute("SELECT torrent_id FROM emu_mis_torrents"))
+    ids = frozenset(fila[0] for fila in conn.execute("SELECT torrent_id FROM emu_mis_torrents WHERE tracker = ?", (EMU.id,)))
     return datetime.fromisoformat(estado["leido_at"]).astimezone(), ids
 
 
@@ -181,8 +185,9 @@ def resumen(conn: sqlite3.Connection) -> dict[str, Any]:
         """SELECT t.torrent_id, t.nombre, t.tamano, t.subido_at, t.seeders, t.leechers, t.completados, t.freeleech,
                   t.doble_subida,
                   (SELECT d.completados FROM emu_mis_torrents_dia d
-                    WHERE d.torrent_id = t.torrent_id AND d.dia = ?) AS completados_antes
-           FROM emu_mis_torrents t ORDER BY t.completados DESC, t.torrent_id DESC""", (corte,))]
+                    WHERE d.tracker = t.tracker AND d.torrent_id = t.torrent_id AND d.dia = ?) AS completados_antes
+           FROM emu_mis_torrents t WHERE t.tracker = ?
+           ORDER BY t.completados DESC, t.torrent_id DESC""", (corte, EMU.id))]
     for f in filas:
         antes = f.pop("completados_antes")
         if antes is None and _dia_local(f["subido_at"]) >= corte:

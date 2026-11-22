@@ -14,6 +14,8 @@ from datetime import datetime, timedelta
 from statistics import median
 from typing import Any, Optional
 
+from .trackers import EMU
+
 logger = logging.getLogger(__name__)
 
 RETENCION_DIAS = 730
@@ -65,18 +67,19 @@ def guardar_instantanea(conn: sqlite3.Connection, datos: dict[str, Any], ahora: 
         usuario = datos.get("username") or None
         nombres = ", ".join(_COLUMNAS)
         conn.execute(
-            f"""INSERT INTO perfil_historial (dia, {nombres}, usuario, actualizado_at)
-                VALUES ({", ".join("?" * (len(_COLUMNAS) + 3))})
-                ON CONFLICT(dia) DO UPDATE SET {", ".join(f"{c} = excluded.{c}" for c in _COLUMNAS)},
+            f"""INSERT INTO perfil_historial (tracker, dia, {nombres}, usuario, actualizado_at)
+                VALUES ({", ".join("?" * (len(_COLUMNAS) + 4))})
+                ON CONFLICT(tracker, dia) DO UPDATE SET {", ".join(f"{c} = excluded.{c}" for c in _COLUMNAS)},
                     usuario = excluded.usuario, actualizado_at = excluded.actualizado_at""",
-            (ahora.strftime("%Y-%m-%d"), *valores, usuario, ahora.isoformat(timespec="seconds")),
+            (EMU.id, ahora.strftime("%Y-%m-%d"), *valores, usuario, ahora.isoformat(timespec="seconds")),
         )
         # El historial es de una cuenta: si el perfil es de otro usuario (otra clave), lo anterior no se mezcla. Va
         # después de escribir la de hoy: si esa falla, no se ha borrado nada.
         if usuario:
-            conn.execute("DELETE FROM perfil_historial WHERE usuario IS NOT NULL AND usuario != ?", (usuario,))
-        conn.execute("DELETE FROM perfil_historial WHERE dia < ?",
-                     ((ahora - timedelta(days=RETENCION_DIAS)).strftime("%Y-%m-%d"),))
+            conn.execute("DELETE FROM perfil_historial WHERE tracker = ? AND usuario IS NOT NULL AND usuario != ?",
+                         (EMU.id, usuario))
+        conn.execute("DELETE FROM perfil_historial WHERE tracker = ? AND dia < ?",
+                     (EMU.id, (ahora - timedelta(days=RETENCION_DIAS)).strftime("%Y-%m-%d")))
     except Exception:
         logger.warning("No se pudo guardar la instantánea de la cuenta", exc_info=True)
 
@@ -85,7 +88,8 @@ def serie_cuenta(conn: sqlite3.Connection, dias: int, ahora: Optional[datetime] 
     """Las instantáneas de los últimos `dias` días (hoy incluido), de la más antigua a la más reciente."""
     desde = ((ahora or datetime.now()) - timedelta(days=dias - 1)).strftime("%Y-%m-%d")
     filas = conn.execute(
-        f"SELECT dia, {', '.join(_COLUMNAS)} FROM perfil_historial WHERE dia >= ? ORDER BY dia", (desde,))
+        f"SELECT dia, {', '.join(_COLUMNAS)} FROM perfil_historial WHERE tracker = ? AND dia >= ? ORDER BY dia",
+        (EMU.id, desde))
     return [dict(f) for f in filas]
 
 
@@ -97,7 +101,7 @@ def ritmos_cuenta(conn: sqlite3.Connection, ahora: Optional[datetime] = None) ->
     desde = ((ahora or datetime.now()) - timedelta(days=VENTANA_RITMOS_DIAS)).strftime("%Y-%m-%d")
     filas = [dict(f) for f in conn.execute(
         """SELECT actualizado_at, subido_bytes, bajado_bytes, bonus
-           FROM perfil_historial WHERE dia >= ? ORDER BY dia""", (desde,))]
+           FROM perfil_historial WHERE tracker = ? AND dia >= ? ORDER BY dia""", (EMU.id, desde))]
 
     def por_hora(campo: str, solo_subidas: bool = False) -> Optional[float]:
         tramos = []

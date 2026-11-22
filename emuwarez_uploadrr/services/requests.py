@@ -99,7 +99,7 @@ def upsert_request(
             emu_status, points, comments, created_at, tmdb_id, imdb_id, tvdb_id, mal_id, url,
             author, author_visible, req_scope, req_season, req_episode, raw_json, last_seen_at, updated_at
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-        ON CONFLICT(emu_id) DO UPDATE SET
+        ON CONFLICT(tracker, emu_id) DO UPDATE SET
             title = excluded.title,
             category = excluded.category,
             requested_source = excluded.requested_source,
