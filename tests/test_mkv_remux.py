@@ -140,6 +140,28 @@ def test_build_track_plan_names_are_professional():
     assert by_id[3]["new_name"] == "Inglés"
 
 
+def test_el_mismo_subtitulo_en_dos_formatos_lleva_el_formato_en_el_nombre():
+    from emuwarez_uploadrr.services.mkv_remux import build_track_plan
+
+    def sub(id_, codec, **props):
+        return {"id": id_, "type": "subtitles", "codec": codec, "properties": {"language": "spa", **props}}
+
+    plan = build_track_plan({"tracks": [
+        {"id": 0, "type": "video", "codec": "HEVC", "properties": {"pixel_dimensions": "1920x1080"}},
+        {"id": 1, "type": "audio", "codec": "FLAC", "properties": {"language": "spa", "audio_channels": 6}},
+        sub(2, "SubRip/SRT", forced_track=True), sub(3, "HDMV PGS", forced_track=True),
+        sub(4, "SubRip/SRT"), sub(5, "HDMV PGS"),
+        sub(6, "SubRip/SRT", flag_hearing_impaired=True),
+    ]})
+
+    nombres = {t["id"]: t["new_name"] for t in plan["tracks"]}
+    assert nombres[2] == "Español (Castellano) - Forzado (SRT)"
+    assert nombres[3] == "Español (Castellano) - Forzado (PGS)"
+    assert nombres[4] == "Español (Castellano) (SRT)"
+    assert nombres[5] == "Español (Castellano) (PGS)"
+    assert nombres[6] == "Español (Castellano) - SDH"  # sin pareja, como antes
+
+
 def test_build_track_plan_default_flags():
     from emuwarez_uploadrr.services.mkv_remux import build_track_plan
     plan = build_track_plan(_SAMPLE_MKV_JSON)

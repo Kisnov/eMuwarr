@@ -33,6 +33,7 @@ import signal
 import subprocess
 import threading
 import time
+from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable
@@ -321,6 +322,19 @@ def _video_codec_label(mkv_codec: str | None) -> str:
         return "AV1"
     if "vp9" in text:
         return "VP9"
+    return (mkv_codec or "").strip() or "?"
+
+
+def _subtitle_codec_label(mkv_codec: str | None) -> str:
+    text = (mkv_codec or "").lower()
+    if "pgs" in text:
+        return "PGS"
+    if "srt" in text or "subrip" in text:
+        return "SRT"
+    if "substation" in text:
+        return "ASS"
+    if "vobsub" in text:
+        return "VobSub"
     return (mkv_codec or "").strip() or "?"
 
 
@@ -667,6 +681,11 @@ def build_track_plan(mkv_json: dict, *, known_resolution: str | None = None,
         # Unlike audio, the default subtitle is NOT simply the first one: it
         # depends on what the audio offers (see _default_subtitle_id).
         t["default_after"] = (t["id"] == default_sub_id)
+    # El mismo subtítulo en dos formatos (SRT y PGS) quedaba con el mismo nombre: ahí se añade el formato.
+    repetidos = Counter(t["new_name"] for t in subs_sorted)
+    for t in subs_sorted:
+        if repetidos[t["new_name"]] > 1:
+            t["new_name"] += f" ({_subtitle_codec_label(t['codec'])})"
 
     # Sin renombrar, cada pista se queda con el nombre que ya tiene. Se hace
     # AQUÍ y no antes para no repetir la regla del nombre predeterminado: los
