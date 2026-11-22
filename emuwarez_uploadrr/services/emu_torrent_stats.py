@@ -19,7 +19,7 @@ from typing import Any, Optional
 
 from ..integrations.base import IntegrationError, texto_de_error
 from ..integrations.emu import emu_get_torrent
-from .settings import get_setting_canonical
+from .settings import ajuste_de_tracker
 
 logger = logging.getLogger(__name__)
 
@@ -66,7 +66,7 @@ def estadisticas_de_la_subida(conn: sqlite3.Connection, job_id: int, *, refresca
             "actualizado": None}
     if torrent_id is None:
         return base
-    clave = (get_setting_canonical(conn, "emu.api_key") or "").strip()
+    clave = (ajuste_de_tracker(conn, "api_key") or "").strip()
     if not clave:
         return {**base, "mensaje": "Falta la API key de eMuwarez en Configuración."}
     base["configurado"] = True

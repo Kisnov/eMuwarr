@@ -12,7 +12,7 @@ import unicodedata
 import urllib.parse
 from typing import Optional, Sequence
 
-from ..database import borrar_peticiones, get_json_state, get_setting_canonical, get_state, set_state
+from ..database import borrar_peticiones, get_json_state, get_state, set_state
 from .settings import leer_ajuste
 from . import cli_config, emu_catalog
 from .emu_perfil import PERFIL_STATE_KEY
@@ -25,6 +25,7 @@ from .eventos import EVENTO_SYNC_EMPEZADA, EVENTO_SYNC_TERMINADA, publicar
 from .tasks import start_task, finish_task
 from .tmdb_titles import tmdb_configured
 from .trackers import EMU
+from .settings import ajuste_de_tracker
 from .compatibility import (
     match_request_to_library,
     classify_request_match,
@@ -157,7 +158,7 @@ def _resolve_emu_api_key(conn: sqlite3.Connection) -> Optional[str]:
     El respaldo se lee con services/cli_config, no con legacy.load_app_config:
     aquella podía terminar en SystemExit o pidiendo una contraseña por teclado
     desde el hilo del servidor. Ver la cabecera de cli_config.py."""
-    key = get_setting_canonical(conn, "emu.api_key")
+    key = ajuste_de_tracker(conn, "api_key")
     if key:
         return key
     return cli_config.emu_api_key()
@@ -631,7 +632,7 @@ def mi_usuario_emu(conn: sqlite3.Connection) -> Optional[str]:
     """Tu usuario de eMuwarez sin llamar a la API: el del perfil guardado (emu_perfil) y, si aún no hay, el de
     Ajustes. Sirve para saber si una petición reclamada la has reclamado tú."""
     perfil = (get_json_state(conn, PERFIL_STATE_KEY) or {}).get("perfil") or {}
-    return perfil.get("username") or get_setting_canonical(conn, "emu.username") or None
+    return perfil.get("username") or ajuste_de_tracker(conn, "username") or None
 
 
 def clasificar_peticion(
@@ -1521,7 +1522,6 @@ def dashboard_request_counters(conn: sqlite3.Connection) -> dict[str, int | str 
     autor visible no es tuya aunque el texto coincida por casualidad; y
     "Reclamadas" busca por subcadena porque eMuwarez no dice si la reclamación
     es tuya. Ese criterio es de dominio, no de HTTP."""
-    from .settings import get_setting_canonical
 
     def _cuenta(sql: str, params: tuple = ()) -> int:
         try:
@@ -1551,7 +1551,7 @@ def dashboard_request_counters(conn: sqlite3.Connection) -> dict[str, int | str 
         )
 
     mias = 0
-    usuario = get_setting_canonical(conn, "emu.username")
+    usuario = ajuste_de_tracker(conn, "username")
     if usuario:
         mias = _cuenta(
             "SELECT COUNT(*) AS cnt FROM request_items "
