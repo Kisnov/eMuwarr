@@ -22,6 +22,13 @@ class Unit3dConTabla(Unit3d):
         cls.resolution_groups = [[str(i) for i in grupo] for grupo in tabla["search"]["resolution_groups"]]
 
     async def get_cat_id(self, meta: Dict[str, Any]) -> str:
+        """La de `--variante` (token `<CATEGORÍA>_<VARIANTE>`, p. ej. MOVIE_ANIME) si la tabla la tiene; si no, la normal:
+        eMuwarez no tiene categorías de anime y su anime va a Películas o Series."""
+        variante = meta.get("variante")
+        if variante:
+            cat_id = self.category_ids.get(f"{meta['category']}_{variante.upper()}")
+            if cat_id:
+                return cat_id
         return self.category_ids.get(meta["category"], self.defaults["categories"])
 
     async def get_res_id(self, meta: Dict[str, Any]) -> str:

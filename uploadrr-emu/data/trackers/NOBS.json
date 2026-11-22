@@ -1,13 +1,13 @@
 {
   "version": 1,
   "tracker": "NOBS",
-  "description": "Ids de UNIT3D de N.O.B.S (nobs.rawsmoke.net), de su formulario de subida el 22/11/2026 (docs/trackers-ids.md). Uploadrr-EMU envía el id del token que recibe; una entrada sin tokens solo se etiqueta, nunca se envía. Solo están los tipos de vídeo: los de libros, audiolibros y juegos (7-49) no los sube eMuwarr.",
+  "description": "Ids de UNIT3D de N.O.B.S (nobs.rawsmoke.net), de su formulario de subida el 22/11/2026 (docs/trackers-ids.md). Uploadrr-EMU envía el id del token que recibe; una entrada sin tokens solo se etiqueta, nunca se envía. Las de anime tienen token <categoría>_anime (--variante anime, la elige la app). Solo están los tipos de vídeo: los de libros, audiolibros y juegos (7-49) no los sube eMuwarr.",
   "categories": [
     {"id": 1, "label": "Movies", "tokens": ["movie"]},
     {"id": 2, "label": "TV", "tokens": ["tv"]},
     {"id": 3, "label": "Arcade", "tokens": []},
-    {"id": 4, "label": "Anime Movies", "tokens": []},
-    {"id": 5, "label": "Anime TV Shows", "tokens": []},
+    {"id": 4, "label": "Anime Movies", "tokens": ["movie_anime"]},
+    {"id": 5, "label": "Anime TV Shows", "tokens": ["tv_anime"]},
     {"id": 7, "label": "E-Books", "tokens": []},
     {"id": 8, "label": "Audiobooks", "tokens": []},
     {"id": 9, "label": "Consolas", "tokens": []},

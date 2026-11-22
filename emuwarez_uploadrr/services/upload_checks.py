@@ -22,6 +22,7 @@ _CHECKS_LOCK = threading.Lock()
 _CHECKS_PROGRESS: dict[int, dict] = {}
 
 from .eventos import EVENTO_COMPROBACIONES, publicar
+from .trackers import POR_DEFECTO
 
 
 def get_checks_progress(item_id: int) -> dict:
@@ -50,25 +51,6 @@ CONTENT_CHECK_IDS = ("accesible", "season_pack", "capitulos_accesibles",
 ENVIRONMENT_CHECK_IDS = ("output", "qbittorrent", "imghosts", "emuwarez")
 
 
-def _short_langs(value: Optional[str], limit: int = 3) -> str:
-    """Los primeros idiomas de una lista "spa/eng/fre/…" y cuántos quedan.
-
-    Se repiten los duplicados que trae el fichero (dos pistas en inglés
-    llegan como "eng/eng"), así que se colapsan: nombrar "eng, eng, ara" no
-    dice nada que "eng, ara" no diga ya.
-    """
-    vistos: list[str] = []
-    for part in str(value or "").split("/"):
-        part = part.strip()
-        if part and part not in vistos:
-            vistos.append(part)
-    if not vistos:
-        return "sin detectar"
-    if len(vistos) <= limit:
-        return ", ".join(vistos)
-    return f"{', '.join(vistos[:limit])} y {len(vistos) - limit} más"
-
-
 def _se_puede_leer(ruta: str | None) -> bool:
     """Si el fichero existe y se puede abrir para lectura.
 
@@ -88,10 +70,14 @@ def _se_puede_leer(ruta: str | None) -> bool:
 
 
 def run_upload_checks(conn: sqlite3.Connection, item_id: int, *, scope: str = "all",
-                      provider_override: str | None = None, ajustes: dict | None = None) -> dict:
+                      provider_override: str | None = None, ajustes: dict | None = None,
+                      tracker: str = POR_DEFECTO) -> dict:
     """`ajustes` (solo una temporada): lo que el asistente editó a mano para el pack, con las claves de la cola
     (`source`, `tag`, `title`, `idiomas`), para que el plan y su `nombre` sean los que saldrán de verdad. El
     Proveedor va aparte, en `provider_override`.
+
+    `tracker`: de quién son las normas de idioma de la comprobación «spanish» (services/reglas_tracker.py). Hoy la app
+    solo sube a eMuwarez, el de por defecto.
 
     `scope`:
 
@@ -278,39 +264,17 @@ def run_upload_checks(conn: sqlite3.Connection, item_id: int, *, scope: str = "a
                      bool(parent) and os.access(parent, os.W_OK), parent):
             return done()
 
-        # 1b. Castilian — eMuwarez wants it present, dubbed or at least
-        # subtitled. The audio alone is enough: a film in Castilian needs no
-        # subtitles. Without Castilian audio, Castilian subtitles are what
-        # makes it acceptable. Same rule a season pack applies per episode
-        # (services/season_pack.py::_spanish_errors), which is why it reuses
-        # the same predicate.
-        #
-        # Unknown blocks: an item whose MediaInfo was never read can't be
-        # confirmed either way, and "we didn't look" is not evidence that the
-        # rule is met.
-        from .emu_format import has_castellano
-        audio_langs = item.get("audio_languages")
-        sub_langs = item.get("subtitle_languages")
-        has_audio_es = has_castellano(audio_langs) == 1
-        has_subs_es = has_castellano(sub_langs) == 1
-        if has_audio_es:
-            spanish_msg = "Audio en castellano. No son obligatorios subtítulos en castellano."
-        elif has_subs_es:
-            # Sin la lista de subtítulos: un release puede traer 37 pistas y
-            # volcarlas aquí no dice nada que el mensaje no diga ya. El audio
-            # sí se nombra, porque ahí lo que importa es en qué idioma está.
-            spanish_msg = f"Sin audio en castellano ({audio_langs or 'desconocido'}), pero subtítulos en castellano."
+        # 1b. Idiomas — las normas del tracker (services/reglas_tracker.py). eMuwarez: castellano en el audio o, si
+        # no, en los subtítulos; sin MediaInfo leído no se puede confirmar y bloquea.
+        from .reglas_tracker import reglas_de
+        from .trackers import EMU, obtener
+        reglas = reglas_de(tracker, item)
+        if tracker == EMU.id:
+            etiquetas = ("Tiene castellano", "No tiene castellano")
         else:
-            # Aquí la comprobación FALLA y bloquea la subida, así que saber qué
-            # idiomas hay ayuda a decidir qué hacer. Pero un release puede
-            # traer 37 pistas de subtítulos y volcarlas enteras convierte el
-            # aviso en un muro: se nombran las primeras y se cuenta el resto.
-            spanish_msg = (
-                f"Ni el audio ({_short_langs(audio_langs)}) ni los subtítulos "
-                f"({_short_langs(sub_langs)}) están en castellano."
-            )
-        if not add("spanish", "Tiene castellano", "No tiene castellano",
-                   has_audio_es or has_subs_es, spanish_msg):
+            nombre_tracker = obtener(tracker).nombre
+            etiquetas = (f"Idiomas admitidos en {nombre_tracker}", f"Idiomas no admitidos en {nombre_tracker}")
+        if not add("spanish", *etiquetas, reglas.permitido, reglas.motivo):
             return done()
 
         # El formato del `-t` de la subida: el Source elegido en el asistente, el que leerá el comando de la propuesta
