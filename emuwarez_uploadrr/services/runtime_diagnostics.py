@@ -6,6 +6,7 @@ import sqlite3
 from pathlib import Path
 
 from ..integrations.base import texto_de_error
+from .settings import ajuste_de_tracker
 
 
 def _check(name: str, status: str, message: str, details: dict | None = None) -> dict:
@@ -155,7 +156,7 @@ def check_required_secrets() -> dict:
         conn = _connect(db_path)
         try:
             tmdb_ok = bool((get_setting_canonical(conn, "tmdb.api_key") or "").strip())
-            emu_ok = bool((get_setting_canonical(conn, "emu.api_key") or "").strip())
+            emu_ok = bool((ajuste_de_tracker(conn, "api_key") or "").strip())
         finally:
             conn.close()
         if tmdb_ok and emu_ok:
