@@ -26,6 +26,7 @@ from ..integrations.base import IntegrationError, texto_de_error
 from .tasks import start_task, finish_task
 from .upload_states import ACTIVE_JOB_STATUSES
 from .eventos import EVENTO_SYNC_EMPEZADA, EVENTO_SYNC_TERMINADA, publicar
+from .trackers import EMU
 
 logger = logging.getLogger("emuwarez.emu")
 
@@ -197,22 +198,23 @@ def _index_catalog(torrents: list[dict]) -> list[dict]:
 
 
 _INSERT_CATALOG_SQL = (
-    "INSERT INTO emu_catalog (torrent_id, category, tmdb_id, tvdb_id, season_number, "
+    "INSERT INTO emu_catalog (tracker, torrent_id, category, tmdb_id, tvdb_id, season_number, "
     "resolution, source, codec, has_spanish, size, name) VALUES "
-    "(:torrent_id, :category, :tmdb_id, :tvdb_id, :season_number, :resolution, :source, "
+    "(:tracker, :torrent_id, :category, :tmdb_id, :tvdb_id, :season_number, :resolution, :source, "
     ":codec, :has_spanish, :size, :name)"
 )
 
 
 def _sin_repetidos(rows: list[dict]) -> list[dict]:
     """Una fila por torrent: si eMuwarez recibe una subida mientras se pagina, la lista se desplaza y el último torrent
-    de una página vuelve a salir en la siguiente (contaba dos veces en los aportes)."""
-    return list({r["torrent_id"]: r for r in rows}.values())
+    de una página vuelve a salir en la siguiente (contaba dos veces en los aportes). Cada fila sale ya con su tracker:
+    este catálogo es el de eMuwarez."""
+    return [{**r, "tracker": EMU.id} for r in {r["torrent_id"]: r for r in rows}.values()]
 
 
 def _store_catalog(conn: sqlite3.Connection, rows: list[dict]) -> None:
     """Full replace — used on the first (complete) download."""
-    conn.execute("DELETE FROM emu_catalog")
+    conn.execute("DELETE FROM emu_catalog WHERE tracker = ?", (EMU.id,))
     conn.executemany(_INSERT_CATALOG_SQL, _sin_repetidos(rows))
     conn.commit()
 
@@ -222,7 +224,8 @@ def _append_catalog(conn: sqlite3.Connection, rows: list[dict]) -> None:
     que se cortó antes de apuntar hasta dónde llegó) se sustituyen."""
     rows = _sin_repetidos(rows)
     if rows:
-        conn.executemany("DELETE FROM emu_catalog WHERE torrent_id = ?", [(r["torrent_id"],) for r in rows])
+        conn.executemany("DELETE FROM emu_catalog WHERE tracker = ? AND torrent_id = ?",
+                         [(EMU.id, r["torrent_id"]) for r in rows])
         conn.executemany(_INSERT_CATALOG_SQL, rows)
         conn.commit()
 
@@ -400,7 +403,7 @@ def recompute_emu_catalog_status(conn: sqlite3.Connection) -> int:
 def _compute_and_store_item_status(conn: sqlite3.Connection) -> int:
     """Compute emu_in_catalog/emu_aportes for every movie, season and series."""
     # Load the catalog into in-memory indexes.
-    cat = [dict(r) for r in conn.execute("SELECT * FROM emu_catalog").fetchall()]
+    cat = [dict(r) for r in conn.execute("SELECT * FROM emu_catalog WHERE tracker = ?", (EMU.id,)).fetchall()]
     # TMDb numera aparte películas y series: un mismo id no es el mismo contenido. Las series se indexan por su
     # tvdb y por su tmdb (hay torrents con uno solo), y una temporada de un pack S01-S03 está en las tres.
     movies: dict[str, list] = {}
@@ -577,8 +580,9 @@ def _series_rows(conn: sqlite3.Connection, tvdb, tmdb) -> list[dict]:
     ids = [(col, str(v)) for col, v in (("tvdb_id", tvdb), ("tmdb_id", tmdb)) if v]
     if not ids:
         return []
-    rows = conn.execute("SELECT * FROM emu_catalog WHERE " + " OR ".join(f"{col} = ?" for col, _ in ids),
-                        [v for _, v in ids]).fetchall()
+    rows = conn.execute("SELECT * FROM emu_catalog WHERE tracker = ? AND ("
+                        + " OR ".join(f"{col} = ?" for col, _ in ids) + ")",
+                        [EMU.id, *(v for _, v in ids)]).fetchall()
     return [r for r in map(dict, rows) if _is_series(r)]
 
 
@@ -588,7 +592,8 @@ def filas_del_catalogo(conn: sqlite3.Connection, item: dict) -> list[dict]:
     if kind == "movie":
         if not item["tmdb_id"]:
             return []
-        rows = conn.execute("SELECT * FROM emu_catalog WHERE tmdb_id = ?", (str(item["tmdb_id"]),)).fetchall()
+        rows = conn.execute("SELECT * FROM emu_catalog WHERE tracker = ? AND tmdb_id = ?",
+                            (EMU.id, str(item["tmdb_id"]))).fetchall()
         return [r for r in map(dict, rows) if not _is_series(r)]
     if kind == "series":
         return _series_rows(conn, item["tvdb_id"], item["tmdb_id"])
@@ -907,7 +912,8 @@ def sync_emu_catalog(conn: sqlite3.Connection, *, force: bool = False, mode: str
         if not prev_count:
             # Fall back to whatever is already stored (e.g. a catalog downloaded
             # before this bookkeeping existed) so the first full bar has an estimate.
-            prev_count = int(conn.execute("SELECT COUNT(*) AS n FROM emu_catalog").fetchone()["n"])
+            prev_count = int(conn.execute("SELECT COUNT(*) AS n FROM emu_catalog WHERE tracker = ?",
+                                          (EMU.id,)).fetchone()["n"])
         est_full_pages = ((prev_count + 99) // 100) if (prev_count and not incremental) else None
 
         phase_label = "Buscando torrents nuevos en eMuwarez…" if incremental else "Descargando catálogo de eMuwarez…"
@@ -942,7 +948,8 @@ def sync_emu_catalog(conn: sqlite3.Connection, *, force: bool = False, mode: str
 
         # Track the highest id + total count for the next incremental / estimate.
         new_max_id = max(known_max_id, _max_torrent_id(rows))
-        total_now = int(conn.execute("SELECT COUNT(*) AS n FROM emu_catalog").fetchone()["n"])
+        total_now = int(conn.execute("SELECT COUNT(*) AS n FROM emu_catalog WHERE tracker = ?",
+                                      (EMU.id,)).fetchone()["n"])
         if new_max_id > 0:
             set_state(conn, MAX_ID_STATE_KEY, str(new_max_id))
         set_state(conn, COUNT_STATE_KEY, str(total_now))

@@ -12,6 +12,8 @@ from __future__ import annotations
 import sqlite3
 from pathlib import Path
 
+from .trackers import EMU
+
 DEMO_CONFIRM_TOKEN = "DEMO_SEED"
 DEMO_RESET_TOKEN = "DEMO_RESET"
 
@@ -102,12 +104,12 @@ def seed_demo_data(
     conn.execute(
         """
         INSERT OR IGNORE INTO request_items
-            (emu_id, title, category, requested_source, requested_resolution,
+            (tracker, emu_id, title, category, requested_source, requested_resolution,
              emu_status, points, comments, tmdb_id, imdb_id, url, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
         """,
         (
-            DEMO_EMU_ID, DEMO_TITLE, "peliculas",
+            EMU.id, DEMO_EMU_ID, DEMO_TITLE, "peliculas",
             DEMO_SOURCE, DEMO_RESOLUTION,
             "approved", 10, 2,
             DEMO_TMDB_ID, DEMO_IMDB_ID,
@@ -116,7 +118,7 @@ def seed_demo_data(
     )
 
     req_row = conn.execute(
-        "SELECT id FROM request_items WHERE emu_id = ?", (DEMO_EMU_ID,)
+        "SELECT id FROM request_items WHERE tracker = ? AND emu_id = ?", (EMU.id, DEMO_EMU_ID)
     ).fetchone()
     request_item_id = req_row["id"] if req_row else None
 
@@ -159,7 +161,7 @@ def reset_demo_data(conn: sqlite3.Connection, confirm_token: str) -> dict:
             f"Token de confirmación incorrecto. Debes pasar --confirm {DEMO_RESET_TOKEN}"
         )
 
-    conn.execute("DELETE FROM request_items WHERE emu_id = ?", (DEMO_EMU_ID,))
+    conn.execute("DELETE FROM request_items WHERE tracker = ? AND emu_id = ?", (EMU.id, DEMO_EMU_ID))
     conn.execute(
         "DELETE FROM library_items WHERE title = ? AND year = ? AND item_type = 'movie'",
         (DEMO_TITLE, DEMO_YEAR),
