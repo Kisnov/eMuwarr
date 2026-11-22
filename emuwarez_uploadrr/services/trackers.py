@@ -49,8 +49,8 @@ def obtener(tracker_id: str) -> Tracker:
 
 def tiene_clave(conn, tracker: Tracker) -> bool:
     """Si su clave de API está puesta en Configuración (`<prefijo>.api_key`)."""
-    from ..database import get_setting_canonical
-    return bool((get_setting_canonical(conn, f"{tracker.prefijo_ajustes}.api_key") or "").strip())
+    from .settings import ajuste_de_tracker  # settings importa este módulo: aquí, no arriba
+    return bool((ajuste_de_tracker(conn, "api_key", tracker.id) or "").strip())
 
 
 def para_subir(conn) -> list[Tracker]:
