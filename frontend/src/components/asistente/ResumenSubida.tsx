@@ -19,7 +19,7 @@ export function ResumenSubida({ a }: { a: Asistente }) {
     preview, seasonDisplayTitle, seasonPlan, fields, remuxPreview, remuxEdits, modoPistasAjuste,
     checks, batchContentChecks, nombresTanda, requestId, preselect,
     anonimoMarcado, personalReleaseMarcado, elegirAnonimo, elegirPersonalRelease, opcionesTracker, uploading,
-    sources, elegirTipo,
+    sources, elegirTipo, trackersParaSubir, trackersElegidos, elegirTracker,
   } = a
   const esTanda = batchQueue.length > 1
   const ids = esTanda ? batchQueue : targetId != null ? [targetId] : []
@@ -95,6 +95,28 @@ export function ResumenSubida({ a }: { a: Asistente }) {
                   {sources.map(s => <option key={s.code} value={s.code}>{s.label}</option>)}
                 </select>
                 <span className="asist-dato-nota">El tipo de eMuwarez sale del Source, que también va en el nombre.</span>
+              </dd>
+            </>
+          )}
+          {/* Solo con otro tracker con clave, y solo para una subida suelta: una tanda sigue yendo a eMuwarez. */}
+          {!esTanda && trackersParaSubir.length > 1 && (
+            <>
+              <dt>Trackers</dt>
+              <dd>
+                <span className="asist-marcas">
+                  {trackersParaSubir.map(t => (
+                    <label key={t.id} className="asist-casilla">
+                      <input type="checkbox" checked={trackersElegidos.includes(t.id)} disabled={uploading}
+                        onChange={e => elegirTracker(t.id, e.target.checked)} />
+                      {t.nombre}
+                    </label>
+                  ))}
+                </span>
+                <span className="asist-dato-nota">
+                  {trackersElegidos.length === 0
+                    ? 'Elige al menos uno.'
+                    : 'Una subida por tracker, una detrás de otra, con el mismo fichero y el mismo nombre.'}
+                </span>
               </dd>
             </>
           )}

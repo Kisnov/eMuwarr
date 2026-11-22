@@ -416,7 +416,7 @@ function PhasesSection({ phases, globalPct, job }: { phases: UploadProgressPhase
             return (
             <tr key={p.key}>
               <td className="dsub-muted dsub-num">{i + 1}</td>
-              <td>{p.label}</td>
+              <td>{p.key === 'uploading_emu' && job.tracker_nombre ? `Subida a ${job.tracker_nombre}` : p.label}</td>
               <td>
                 <span
                   className={`${PHASE_STATUS_BADGE[status] || 'badge status-unknown'} dsub-badge-chico`}
@@ -567,6 +567,7 @@ export function UploadJobDetailPage({ job, onBack, onStart, onRetry, onCancel, o
       <DetailHero backdropUrl={job.backdrop_url}>
       <div className="dsub-barra-sup">
         <button className="btn btn-ghost btn-sm btn-volver" onClick={onBack}>Volver a Subidas</button>
+        {job.tracker && job.tracker !== 'emu' && <span className="dsub-lote">Subida a {job.tracker_nombre}</span>}
         {loteId && (
           <span className="dsub-lote">
             Parte de un lote de {job.lote_total}

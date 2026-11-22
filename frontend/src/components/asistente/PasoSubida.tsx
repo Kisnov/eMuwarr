@@ -10,7 +10,7 @@ import type { Asistente } from './useAsistente'
 export function PasoSubida({ a }: { a: Asistente }) {
   const {
     item, targetIsSeason, checks, checksLoading, checksError, liveChecks, runChecks,
-    uploadMsg, uploading, canUpload, recalculandoIdioma, setStep, doUpload,
+    uploadMsg, uploading, canUpload, recalculandoIdioma, setStep, doUpload, destinoSubida,
   } = a
   // Lo que dice el pie: el fallo al encolar, si lo hubo; si no, lo que dijeron las comprobaciones.
   const veredicto = uploadMsg
@@ -38,7 +38,7 @@ export function PasoSubida({ a }: { a: Asistente }) {
           disabled={!canUpload || uploading || checksLoading || recalculandoIdioma}
           {...uploadBtnTip.triggerProps}
         >
-          {uploading ? 'Subiendo…' : 'Subir a eMuwarez'}
+          {uploading ? 'Subiendo…' : destinoSubida ? `Subir a ${destinoSubida}` : 'Subir'}
           {uploadBtnTip.tooltipNode}
         </button>
       </>}
@@ -73,7 +73,7 @@ export function PasoSubida({ a }: { a: Asistente }) {
 
       {checks?.ready && (
         <p className="asist-mt-12 asist-t13">
-          ¿Seguro que quieres subir <strong>«{item.title}»</strong> a eMuwarez? Se iniciará la subida real.
+          ¿Seguro que quieres subir <strong>«{item.title}»</strong> a {destinoSubida || 'eMuwarez'}? Se iniciará la subida real.
         </p>
       )}
 

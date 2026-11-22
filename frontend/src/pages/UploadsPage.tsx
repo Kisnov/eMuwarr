@@ -278,6 +278,7 @@ const JobRow = memo(function JobRow({ job, instances, seeding, onOpen, indent, i
           </div>
           {/* Aparte del título: en la tarjeta de móvil bajan a la última línea. */}
           <div className="sub-chips">
+            {job.tracker && job.tracker !== 'emu' && <span className="sub-tracker-chip">{job.tracker_nombre}</span>}
             {loteId && onFiltrarLote && (
               <button
                 type="button"

@@ -11,7 +11,9 @@ import {
   previewTrackRemux,
   applyTrackRemux,
 } from '../../api/nomenclature'
-import { queueUpload, getExistingJobForItem, runUploadChecks, type OpcionesTracker } from '../../api/uploads'
+import {
+  queueUpload, getExistingJobForItem, runUploadChecks, fetchTrackersParaSubir, type OpcionesTracker, type TrackerParaSubir,
+} from '../../api/uploads'
 import { nuevoLoteId } from '../../utils/lote'
 import { getLibrary, getMediaInfoReport, suggestProvider } from '../../api/library'
 import type { MediaInfoReport } from '../../api/library'
@@ -167,6 +169,22 @@ export function useAsistente({ item, onClose: onCloseProp, onDone, onNavigate, p
       setGruposAnonimos(s.upload_tags_anonimos ?? [])
     }).catch(() => { /* quedan los de siempre */ })
   }, [])
+  // Los trackers a los que se puede subir (eMuwarez y los que tienen clave) y los elegidos: eMuwarez de entrada.
+  const [trackersParaSubir, setTrackersParaSubir] = useState<TrackerParaSubir[]>([])
+  const [trackersElegidos, setTrackersElegidos] = useState<string[]>(['emu'])
+  useEffect(() => {
+    fetchTrackersParaSubir().then(setTrackersParaSubir).catch(() => { /* solo eMuwarez, como siempre */ })
+  }, [])
+  const elegirTracker = (id: string, si: boolean) =>
+    setTrackersElegidos(t => si ? [...new Set([...t, id])] : t.filter(x => x !== id))
+  // Los elegidos, en el orden de la lista (eMuwarez primero). Sin lista (no se pudo leer), eMuwarez, como siempre.
+  const destinos = trackersParaSubir.length
+    ? trackersParaSubir.filter(t => trackersElegidos.includes(t.id))
+    : [{ id: 'emu', nombre: 'eMuwarez' }]
+  // «eMuwarez», «eMuwarez y N.O.B.S»: lo que dicen el botón y la confirmación.
+  const destinoSubida = destinos.length > 1
+    ? `${destinos.slice(0, -1).map(t => t.nombre).join(', ')} y ${destinos[destinos.length - 1].nombre}`
+    : destinos[0]?.nombre ?? ''
   const opcionesTag = Array.from(new Set([fields.tag, initialTag, ...(gruposDeSubida.length ? gruposDeSubida : ['EMUWAREZ'])].filter(Boolean))) as string[]
   const [titleWarning, setTitleWarning] = useState<string | null>(null)
   const [titleOptions, setTitleOptions] = useState<{ value: string; kind: string; label: string }[]>([])
@@ -952,7 +970,7 @@ export function useAsistente({ item, onClose: onCloseProp, onDone, onNavigate, p
     await runChecks(source)
   }
 
-  const canUpload = !!checks?.ready
+  const canUpload = !!checks?.ready && destinos.length > 0
   // Queues the upload and hands off to Subidas immediately — nomenclature
   // rename, track remux, and the actual Uploadrr start all run server-side
   // afterwards (services/upload_queue.py), against the SAME job the user
@@ -965,20 +983,26 @@ export function useAsistente({ item, onClose: onCloseProp, onDone, onNavigate, p
       const remuxSnapshot = remuxPreview
         ? { ordered_tracks: mergeRemuxTracks(remuxPreview, edicionesFinales()) }
         : null
-      const r = await queueUpload(
-        targetId, edicionesFinales(), checks, remuxSnapshot,
-        targetIsSeason
-          ? ajustesDeTemporada(
-              { source: fields.source, tag: fields.tag, title: fields.title }, proveedorElegido, targetId,
-              idiomasPorTemporada.get(targetId))
-          : undefined,
-        requestId,
-        undefined,
-        opcionesTracker,
-      )
-      if (r.status !== 'queued' || !r.job?.id) {
-        setUploadMsg(`✗ No se pudo encolar la subida (estado: ${r.status}). ${(r.errors || []).join(' ')}`)
-        return
+      // Una subida por tracker, en el orden de la lista (eMuwarez primero): el servidor hace esperar cada una a la
+      // anterior del mismo contenido y reutiliza su fichero, así que los torrents tienen las mismas piezas.
+      for (const { id: tracker, nombre } of destinos) {
+        const r = await queueUpload(
+          targetId, edicionesFinales(), checks, remuxSnapshot,
+          targetIsSeason
+            ? ajustesDeTemporada(
+                { source: fields.source, tag: fields.tag, title: fields.title }, proveedorElegido, targetId,
+                idiomasPorTemporada.get(targetId))
+            : undefined,
+          requestId,
+          undefined,
+          opcionesTracker,
+          // eMuwarez no lo manda: es lo de siempre.
+          ...(tracker === 'emu' ? [] : [tracker]),
+        )
+        if (r.status !== 'queued' || !r.job?.id) {
+          setUploadMsg(`✗ No se pudo encolar la subida a ${nombre} (estado: ${r.status}). ${(r.errors || []).join(' ')}`)
+          return
+        }
       }
       onDone?.()
       onNavigate?.('uploads')
@@ -1138,6 +1162,7 @@ export function useAsistente({ item, onClose: onCloseProp, onDone, onNavigate, p
     // Paso 2
     checks, checksLoading, checksError, liveChecks, runChecks, elegirTipo, canUpload, uploading, uploadMsg, doUpload,
     anonimoMarcado, personalReleaseMarcado, elegirAnonimo, elegirPersonalRelease, opcionesTracker,
+    trackersParaSubir, trackersElegidos, elegirTracker, destinoSubida,
     batchQueue, batchIsEpisodes, batchItemTitle, batchPhase, batchIndex, batchResults,
     batchViewId, setBatchViewId, batchEnvChecks, batchContentChecks, batchChecksLoading, batchChecksIndex,
     batchChecksError, repetirComprobacionesTanda, uploadAllSeasons, uploadAllEpisodes, nombresTanda,
