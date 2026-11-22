@@ -16,7 +16,8 @@ came in from `Kisnov/Uploadrr-EMU` with `git subtree add`, history kept; that re
   without the fork link and with his commit e-mail replaced. The image moved with it to `ghcr.io/kisnov/emuwarr` (the old `emuwarez-uploadrr` package is retired).
 - Docs-only changes and very simple fixes go straight to `dev` as a commit, no PR. Everything else: branch and
   PR. Group related changes: no PR per one-line fix. Open PRs as non-draft so CodeRabbit reviews them; its standing
-  rules per path live in `.coderabbit.yaml`.
+  rules per path live in `.coderabbit.yaml`. Greptile (on trial until 2026-12-06) reviews each PR once, when it opens;
+  `.greptile/` points it at this file and `.coderabbit.yaml`, so the rules live in one place.
 - UI text is in Spanish (the users are Spanish speakers), and so are the README and docs. Code comments and commits
   may be in Spanish or English; most of the code is in Spanish, so Spanish keeps it consistent, but don't translate
   existing comments just to change their language. Conventional Commits with a one-line summary of the user-visible
@@ -28,7 +29,8 @@ came in from `Kisnov/Uploadrr-EMU` with `git subtree add`, history kept; that re
 
 - Run the full backend suite locally only when code changed or a merge conflict was resolved. A clean merge of
   `dev` into a PR branch is left to CI.
-- CodeRabbit allows 10 reviews per hour, and every push to an open PR costs one. Fix real Major/Critical findings
+- CodeRabbit's free OSS tier allows only a few reviews per hour (more as the repo gains stars), and every push to an
+  open PR costs one. Fix real Major/Critical findings
   right away. A Minor, nitpick or trivial finding gets a reply on its thread (fix it or say why not), and its fix
   rides on the next push that is happening anyway, not on a push of its own.
 - Don't fight CodeRabbit's auto-pause on busy branches: post `@coderabbitai review` (alone in the comment) only
@@ -55,7 +57,7 @@ came in from `Kisnov/Uploadrr-EMU` with `git subtree add`, history kept; that re
   the Uploadrr-EMU suite (job `uploadrr-emu`) and the frontend checks on every PR, and from
   `publicar.yml` before a release; it uploads coverage, test results and the frontend bundle size to Codecov
   (`codecov.yml`: the changed `emuwarez_uploadrr/` lines of a PR need 70 % coverage or `codecov/patch` fails; for
-  `uploadrr-emu/` it is informational; the frontend is not measured; the total is informational;
+  `uploadrr-emu/` it is informational, but its job fails below 55 % total, without the inherited code its `pyproject.toml` omits; the frontend is not measured; the total is informational;
   needs the `CODECOV_TOKEN` secret). On pushes to `dev` CI runs the backend only; `bundle.yml`
   only builds the frontend on each push that touches `frontend/` (~40 s) so PRs have a bundle size to compare against.
 - `imagen-pr.yml` builds `ghcr.io/kisnov/emuwarr:pr-<n>` (amd64) for PRs from this repo's branches; `etiquetas.yml` labels
