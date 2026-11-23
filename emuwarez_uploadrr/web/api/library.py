@@ -466,12 +466,15 @@ def library_emu_sync_progress(current_user: dict = Depends(require_auth)) -> dic
 
 @router.get("/library/{item_id}/emu-comparison")
 def library_emu_comparison(item_id: int, resolution: Optional[str] = None, source: Optional[str] = None,
-                           current_user: dict = Depends(require_auth)) -> dict:
-    """Your copy vs eMuwarez's matching torrents, for the detail-card table. `resolution` y `source`
-    sustituyen a los de tu copia (lo que el asistente de subida va a poner en el nombre)."""
+                           tracker: str = "emu", current_user: dict = Depends(require_auth)) -> dict:
+    """Your copy vs `tracker`'s matching torrents (eMuwarez by default), for the detail-card table. `resolution` y
+    `source` sustituyen a los de tu copia (lo que el asistente de subida va a poner en el nombre)."""
     from emuwarez_uploadrr.services.emu_catalog import get_item_comparison
+    from emuwarez_uploadrr.services.trackers import TRACKERS
+    if tracker not in TRACKERS:
+        raise HTTPException(status_code=422, detail=f"Tracker desconocido: {tracker}.")
     with _get_conn() as conn:
-        return get_item_comparison(conn, item_id, resolution=resolution, source=source)
+        return get_item_comparison(conn, item_id, resolution=resolution, source=source, tracker=TRACKERS[tracker])
 
 
 @router.get("/library/{item_id}", response_model=LibraryItemResponse)

@@ -1233,7 +1233,7 @@ export function useAsistente({ item, onClose: onCloseProp, onDone, onNavigate, p
     // Paso 2
     checks, checksLoading, checksError, liveChecks, runChecks, elegirTipo, canUpload, uploading, uploadMsg, doUpload,
     anonimoMarcado, personalReleaseMarcado, elegirAnonimo, elegirPersonalRelease, opcionesTracker,
-    trackersParaSubir, trackersElegidos, elegirTracker, destinoSubida, reglas, reglasDe,
+    trackersParaSubir, trackersElegidos, elegirTracker, destinos, destinoSubida, reglas, reglasDe,
     batchQueue, batchIsEpisodes, batchItemTitle, batchPhase, batchIndex, batchResults,
     batchViewId, setBatchViewId, batchEnvChecks, batchContentChecks, batchChecksLoading, batchChecksIndex,
     batchChecksError, repetirComprobacionesTanda, uploadAllSeasons, uploadAllEpisodes, nombresTanda,

@@ -1,5 +1,5 @@
-// El paso Resumen: lo que se va a mandar a eMuwarez y lo que el catálogo local ya tiene de lo mismo. Es la última
-// ocasión de ver una categoría, una pista o un duplicado equivocados, y sirve igual para una película, un pack
+// El paso Resumen: lo que se va a mandar y lo que el catálogo local de cada tracker elegido ya tiene de lo mismo. Es la
+// última ocasión de ver una categoría, una pista o un duplicado equivocados, y sirve igual para una película, un pack
 // y una tanda de temporadas o capítulos.
 import { useId } from 'react'
 import { timeAgo } from '../../utils/format'
@@ -20,7 +20,7 @@ export function ResumenSubida({ a }: { a: Asistente }) {
     preview, seasonDisplayTitle, seasonPlan, fields, remuxPreview, remuxEdits, modoPistasAjuste,
     checks, batchContentChecks, nombresTanda, requestId, preselect,
     anonimoMarcado, personalReleaseMarcado, elegirAnonimo, elegirPersonalRelease, opcionesTracker, uploading,
-    sources, elegirTipo, trackersParaSubir, trackersElegidos, elegirTracker, reglas, reglasDe, batchChecksLoading,
+    sources, elegirTipo, trackersParaSubir, trackersElegidos, elegirTracker, destinos, reglas, reglasDe, batchChecksLoading,
   } = a
   const esTanda = batchQueue.length > 1
   // Si eMuwarez no lo admite (sus normas de idioma), se dice junto a su casilla: sale desmarcada de entrada.
@@ -34,8 +34,8 @@ export function ResumenSubida({ a }: { a: Asistente }) {
     ? filas.filter(f => !f || peticionCubre(preselect, f)).length
     : requestId != null ? 1 : 0
 
-  const { yaHay, sincronizado, peticion } = useResumen({
-    ids, requestId, cubiertos,
+  const { yaHayEn, peticion } = useResumen({
+    ids, trackers: destinos, requestId, cubiertos,
     // Un fichero o un pack: lo que irá en el nombre; una tanda lleva el de cada elemento.
     tuya: esTanda ? undefined : { resolution: fields.resolution, source: fields.source },
     alcance: esTanda ? null : ALCANCE[tipo] ?? 'este contenido',
@@ -62,7 +62,6 @@ export function ResumenSubida({ a }: { a: Asistente }) {
   // Sin un tipo que eMuwarez conozca no se sube (la comprobación «tipo»): aquí se elige, con el Source.
   const tipoDesconocido = !esTanda && checks?.checks.some(c => c.id === 'tipo' && c.status === 'fail')
   const idTitulo = useId()
-  const idYaHay = useId()
   return (
     <div className="asist-resumen">
       <section className="detail-card asist-panel" aria-labelledby={idTitulo}>
@@ -166,16 +165,26 @@ export function ResumenSubida({ a }: { a: Asistente }) {
         </dl>
       </section>
 
-      <section className="detail-card asist-panel" aria-labelledby={idYaHay}>
-        <h3 className="asist-panel-titulo" id={idYaHay}>En eMuwarez ya hay</h3>
-        <YaHayEnEmu yaHay={yaHay} />
-        {yaHay.estado === 'listo' && (
-          <p className="asist-nota-catalogo">
-            Del catálogo local, sincronizado {timeAgo(sincronizado)}. No cuenta como permiso: revisa las reglas de trumps.
-          </p>
-        )}
-      </section>
+      {/* Uno por tracker elegido, uno debajo de otro. */}
+      <div className="asist-resumen-yahay">
+        {destinos.map(t => <PanelYaHay key={t.id} tracker={t.nombre} yaHay={yaHayEn(t.id)} />)}
+      </div>
     </div>
+  )
+}
+
+function PanelYaHay({ tracker, yaHay }: { tracker: string; yaHay: YaHay }) {
+  const id = useId()
+  return (
+    <section className="detail-card asist-panel" aria-labelledby={id}>
+      <h3 className="asist-panel-titulo" id={id}>En {tracker} ya hay</h3>
+      <YaHayEn tracker={tracker} yaHay={yaHay} />
+      {yaHay.estado === 'listo' && (
+        <p className="asist-nota-catalogo">
+          Del catálogo local, sincronizado {timeAgo(yaHay.sincronizado)}. No cuenta como permiso: revisa las reglas de trumps.
+        </p>
+      )}
+    </section>
   )
 }
 
@@ -186,20 +195,26 @@ export function NombreDeLaTanda({ nombre }: { nombre: string | null | undefined 
   return <span className="asist-lista-nombre" translate="no">{nombre}</span>
 }
 
-function YaHayEnEmu({ yaHay }: { yaHay: YaHay }) {
+function YaHayEn({ tracker, yaHay }: { tracker: string; yaHay: YaHay }) {
   if (yaHay.estado === 'cargando') {
     return <p className="asist-t12 text-muted"><span className="spinner asist-spinner-12" /> Mirando el catálogo local…</p>
   }
   if (yaHay.estado === 'error') return <p className="asist-t13">No se pudo leer el catálogo local.</p>
   if (yaHay.estado === 'sin-catalogo') {
-    return <p className="asist-t13">Sin catálogo local: sincroniza con eMuwarez para saber si ya está.</p>
+    return (
+      <p className="asist-t13">
+        {tracker === 'eMuwarez'
+          ? 'Sin catálogo local: sincroniza con eMuwarez para saber si ya está.'
+          : `Sin catálogo local de ${tracker}: se lee al sincronizar el de eMuwarez.`}
+      </p>
+    )
   }
   const { filas, sinNada, total } = yaHay
-  const conclusion = conclusionDuplicados(filas)
+  const conclusion = conclusionDuplicados(filas, tracker)
   return (
     <>
       {filas.length === 0 ? (
-        <p className="asist-t13">Nada de esto está en eMuwarez todavía.</p>
+        <p className="asist-t13">Nada de esto está en {tracker} todavía.</p>
       ) : (
         <>
         {conclusion && (
@@ -210,7 +225,7 @@ function YaHayEnEmu({ yaHay }: { yaHay: YaHay }) {
         )}
         <div className="asist-tabla-caja asist-tabla-caja-yahay">
           <table className="asist-tabla asist-tabla-yahay">
-            <caption className="solo-lector">Torrents de eMuwarez del mismo contenido</caption>
+            <caption className="solo-lector">Torrents de {tracker} del mismo contenido</caption>
             <thead>
               <tr>
                 <th className="asist-th" scope="col">Torrent</th>
@@ -226,7 +241,7 @@ function YaHayEnEmu({ yaHay }: { yaHay: YaHay }) {
         </>
       )}
       {total > 1 && sinNada > 0 && (
-        <p className="asist-t12 text-muted asist-mt-10">{sinNada} de {total} no están en eMuwarez.</p>
+        <p className="asist-t12 text-muted asist-mt-10">{sinNada} de {total} no están en {tracker}.</p>
       )}
     </>
   )
