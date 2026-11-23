@@ -124,7 +124,9 @@ export function useComprobacionesTanda({ step, batchQueue, batchPhase, proveedor
   const entornoVale = !!batchEnvChecks?.ready && entornoCon.current === tracker
   useEffect(() => {
     if (step !== 2 || batchQueue.length < minimo || batchPhase !== 'idle') return
-    if (batchChecksLoading || (entornoVale && batchQueue.every(sigueValiendo))) return
+    if (batchChecksLoading) return
+    // Todo lo de este tracker sigue valiendo: el error de otro (uno elegido antes) ya no cuenta.
+    if (entornoVale && batchQueue.every(sigueValiendo)) { setBatchChecksError(null); return }
     let alive = true
     const run = async () => {
       setBatchChecksLoading(true)

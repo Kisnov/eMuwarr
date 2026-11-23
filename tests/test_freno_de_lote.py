@@ -552,3 +552,58 @@ def test_si_un_tracker_se_para_mientras_se_encola_los_demas_siguen(db_conn, tmp_
     ultimo = [(x["tracker"], x["status"], x["errors"]) for x in r["resultados"] if x["item_id"] == items[-1]]
     assert ultimo == [("emu", "queued", []), ("nobs", "blocked", [PARADO])]
     assert (r["encolados"], r["saltados"]) == (11, 1)
+
+
+def _lote_a_dos_trackers(db_conn, tmp_path, monkeypatch, despues_de_encolar):
+    """Seis películas a eMuwarez y N.O.B.S; `despues_de_encolar(job_id, tracker, n)` corre tras crear cada trabajo."""
+    from emuwarez_uploadrr.services import upload_checks
+    from emuwarez_uploadrr.services.settings import set_setting
+    monkeypatch.setattr(uq, "_season_upload_preconditions", lambda conn, *_tracker: [])
+    monkeypatch.setattr(upload_checks, "run_upload_checks", lambda conn, item_id, scope="all", **kw: LISTO)
+    set_setting(db_conn, "nobs.api_key", "clave")
+    db_conn.commit()
+    encolar = uq.queue_upload_for_item
+    creados: list[str] = []
+
+    def encolar_y_seguir(*a, **kw):
+        resultado = encolar(*a, **kw)
+        if resultado.get("status") == "queued":
+            creados.append(kw.get("tracker"))
+            despues_de_encolar(resultado["job"]["id"], kw.get("tracker"), creados.count(kw.get("tracker")))
+        return resultado
+    monkeypatch.setattr(uq, "queue_upload_for_item", encolar_y_seguir)
+    items = [_peli(db_conn, tmp_path, t) for t in "ABCDEFG"]
+    db_conn.execute("UPDATE library_items SET audio_languages = 'spa'")
+    db_conn.commit()
+    r = lotes.encolar_lote(db_conn, [{"item_id": i, "checks": LISTO} for i in items], ["emu", "nobs"])
+    return items, r
+
+
+def test_un_tracker_parado_no_vuelve_aunque_luego_se_complete_una_suya(db_conn, tmp_path, monkeypatch, retiradas):
+    nobs: list[int] = []
+
+    def despues(job_id, tracker, n):
+        if tracker == "nobs":
+            nobs.append(job_id)
+            uq._fail(job_id, SISTEMICO)
+        elif n == 6:
+            # Una de N.O.B.S que se reintentó por fuera y acabó bien, después de la racha.
+            _completar(db_conn, nobs[0])
+    items, r = _lote_a_dos_trackers(db_conn, tmp_path, monkeypatch, despues)
+
+    nobs_de = {x["item_id"]: (x["status"], x["errors"]) for x in r["resultados"] if x["tracker"] == "nobs"}
+    assert nobs_de[items[5]] == ("blocked", [PARADO])
+    assert nobs_de[items[6]] == ("blocked", [PARADO])
+
+
+def test_con_todos_parados_cada_tracker_dice_su_motivo(db_conn, tmp_path, monkeypatch, retiradas):
+    otro = "Timeout esperando a N.O.B.S\nExit code: 1"
+
+    def despues(job_id, tracker, n):
+        uq._fail(job_id, SISTEMICO if tracker == "emu" else otro)
+    items, r = _lote_a_dos_trackers(db_conn, tmp_path, monkeypatch, despues)
+
+    for item in items[5:]:
+        assert [(x["tracker"], x["errors"]) for x in r["resultados"] if x["item_id"] == item] == [
+            ("emu", [PARADO]), ("nobs", ["Lote parado: 5 fallos seguidos por «Timeout esperando a N.O.B.S»"])]
+    assert r["encolados"] == 10

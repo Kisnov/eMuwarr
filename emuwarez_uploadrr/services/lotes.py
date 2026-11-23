@@ -537,14 +537,6 @@ class LoteRechazado(Exception):
         self.motivos = motivos
 
 
-class _LoteParado(Exception):
-    """Mientras se encolaba el lote, sus primeros elementos ya han fallado seguidos por el mismo motivo."""
-
-    def __init__(self, motivo: str):
-        super().__init__(motivo)
-        self.motivo = motivo
-
-
 _ERROR_INESPERADO = "Error inesperado al encolarlo; mira el registro."
 
 
@@ -572,11 +564,17 @@ def _peticion_de(conn: sqlite3.Connection, item_id: int) -> int | None:
         return None
 
 
+def _saltados_por_el_freno(item_id: int, tracker_ids: list[str], parados: dict[str, str]) -> list[dict]:
+    """El elemento, saltado para cada tracker con el texto de su propia parada."""
+    return [r for t in tracker_ids for r in _bloqueado(item_id, [t], parados[t])]
+
+
 def _encolar_uno(conn: sqlite3.Connection, el: dict, lote_id: str, vistos: set[int], temporadas: set[int],
-                 tracker_ids: list[str]) -> list[dict]:
+                 tracker_ids: list[str], parados: dict[str, str]) -> list[dict]:
     """Un elemento del lote, un trabajo por tracker. Todo lo que puede saltarlo va antes de escribir nada: guardar
     `campos` caduca la propuesta vigente del elemento, y hacerlo para uno que luego se salta cambiaría el nombre de su
-    subida en marcha. Las normas de idioma de cada tracker que no es el primero las mira queue_upload_for_item."""
+    subida en marcha. Las normas de idioma de cada tracker que no es el primero las mira queue_upload_for_item.
+    `parados` (tracker → texto de su parada) es del lote entero: un tracker que se para aquí ya no vuelve."""
     from .source_assistant import update_nomenclature_fields_preview
     from .nomenclature import save_manual_nomenclature_fields
     from .upload_checks import run_upload_checks
@@ -616,9 +614,12 @@ def _encolar_uno(conn: sqlite3.Connection, el: dict, lote_id: str, vistos: set[i
     # escribir nada: un elemento que se salta no cambia su propuesta de nomenclatura.
     with _FRENO:
         puntas = _puntas(conn, lote_id)
-        parados = {t: m for t in tracker_ids if (m := _racha_de_fallos(_del_tracker(puntas, t)))}
+        for t in tracker_ids:
+            if t not in parados and (motivo := _racha_de_fallos(_del_tracker(puntas, t))):
+                parados[t] = texto_de_parada(motivo)
+                logger.warning("Lote %s: %s en %s; no se encola el resto para él", lote_id, parados[t], t)
         if len(parados) == len(tracker_ids):
-            raise _LoteParado(parados[tracker_ids[0]])
+            return _saltados_por_el_freno(item_id, tracker_ids, parados)
         if campos and tipo != "season":
             preview = update_nomenclature_fields_preview(item_id, campos, conn=conn)
             save_manual_nomenclature_fields(item_id, campos, preview, conn=conn)
@@ -626,7 +627,7 @@ def _encolar_uno(conn: sqlite3.Connection, el: dict, lote_id: str, vistos: set[i
         # En el orden dado: cada uno espera al anterior del mismo contenido y reutiliza su preparación.
         for tracker in tracker_ids:
             if tracker in parados:
-                resultados += _bloqueado(item_id, [tracker], texto_de_parada(parados[tracker]))
+                resultados += _bloqueado(item_id, [tracker], parados[tracker])
                 continue
             try:
                 resultado = queue_upload_for_item(
@@ -680,20 +681,15 @@ def encolar_lote(conn: sqlite3.Connection, elementos: list[dict],
     lote_id = nuevo_lote_id()
     vistos: set[int] = set()
     resultados: list[dict] = []
-    parado: str | None = None
+    parados: dict[str, str] = {}
     for el in elementos:
-        if parado:
-            # El freno ya saltó: el resto no se crea (ni se lanza), con el mismo motivo que las paradas.
-            resultados += _bloqueado(int(el["item_id"]), tracker_ids, parado)
+        if len(parados) == len(tracker_ids):
+            # El freno ya saltó en todos: el resto no se crea (ni se lanza), con el motivo de cada parada.
+            resultados += _saltados_por_el_freno(int(el["item_id"]), tracker_ids, parados)
             continue
         try:
-            resultado = _encolar_uno(conn, el, lote_id, vistos, temporadas, tracker_ids)
+            resultado = _encolar_uno(conn, el, lote_id, vistos, temporadas, tracker_ids, parados)
             conn.commit()
-        except _LoteParado as exc:
-            conn.rollback()
-            parado = texto_de_parada(exc.motivo)
-            logger.warning("Lote %s: %s; no se encola el resto", lote_id, parado)
-            resultado = _bloqueado(int(el["item_id"]), tracker_ids, parado)
         except Exception:
             logger.exception("Lote %s: no se pudo encolar el elemento %s", lote_id, el.get("item_id"))
             conn.rollback()

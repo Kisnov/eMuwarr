@@ -692,6 +692,24 @@ describe('a varios trackers', () => {
     expect(m(subidas.queueLote).mock.calls[0][1]).toEqual(['nobs'])
   })
 
+  it('el fallo al comprobar con otro tracker no bloquea al volver al que ya estaba comprobado', async () => {
+    m(subidas.runUploadChecks).mockImplementation(async (_id, scope, _p, _a, tracker) => {
+      if (tracker === 'nobs') throw new Error('N.O.B.S no responde')
+      return scope === 'environment' ? ENTORNO : LISTO
+    })
+    await abrir([DUNE])
+    await alResumen(1)
+    await pulsar(casillaTracker('N.O.B.S'))
+    await pulsar(casillaTracker('eMuwarez'))
+    await esperar(() => texto().includes('N.O.B.S no responde'))
+    expect(boton('Subir (1) a N.O.B.S')!.disabled).toBe(true)
+
+    await pulsar(casillaTracker('eMuwarez'))
+    await esperar(() => !texto().includes('N.O.B.S no responde'))
+    expect(boton('Subir (1) a eMuwarez y N.O.B.S')!.disabled).toBe(false)
+    expect(llamadas('environment')).toHaveLength(2)
+  })
+
   it('sin ninguno marcado no se sube', async () => {
     await abrir([DUNE])
     await alResumen(1)
