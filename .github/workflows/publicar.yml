@@ -201,6 +201,7 @@ jobs:
         run: |
           echo "commit=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
           echo "fecha=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
+          echo "dia=$(date -u +%F)" >> "$GITHUB_OUTPUT"
           # Una versión se construye solo con su sha; :X.Y.Z, :latest y :dev llegan cuando dev ya la tiene.
           imagen=ghcr.io/kisnov/emuwarr
           if [ "$ACCION" = publicar ]; then
@@ -237,6 +238,7 @@ jobs:
           build-args: |
             APP_COMMIT=${{ steps.sello.outputs.commit }}
             APP_BUILD_DATE=${{ steps.sello.outputs.fecha }}
+            APT_UPGRADE_DATE=${{ steps.sello.outputs.dia }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 

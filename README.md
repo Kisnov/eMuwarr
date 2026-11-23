@@ -1,14 +1,12 @@
 # eMuwarr
 
 [![CI](https://github.com/Kisnov/eMuwarr/actions/workflows/ci.yml/badge.svg?branch=dev)](https://github.com/Kisnov/eMuwarr/actions/workflows/ci.yml)
-[![Publicar versión](https://github.com/Kisnov/eMuwarr/actions/workflows/publicar.yml/badge.svg)](https://github.com/Kisnov/eMuwarr/actions/workflows/publicar.yml)
-[![zizmor](https://github.com/Kisnov/eMuwarr/actions/workflows/zizmor.yml/badge.svg?branch=dev)](https://github.com/Kisnov/eMuwarr/actions/workflows/zizmor.yml)
 [![CodeQL](https://github.com/Kisnov/eMuwarr/actions/workflows/github-code-scanning/codeql/badge.svg?branch=dev)](https://github.com/Kisnov/eMuwarr/security/code-scanning)
-[![Bundle](https://github.com/Kisnov/eMuwarr/actions/workflows/bundle.yml/badge.svg?branch=dev)](https://github.com/Kisnov/eMuwarr/actions/workflows/bundle.yml)
 [![Cobertura](https://codecov.io/gh/Kisnov/eMuwarr/branch/dev/graph/badge.svg)](https://app.codecov.io/gh/Kisnov/eMuwarr/tree/dev)
-[![Revisión: CodeRabbit](https://img.shields.io/badge/revisi%C3%B3n-CodeRabbit-FF570A)](https://coderabbit.ai)
-[![Dependabot](https://img.shields.io/badge/dependabot-activo-025E8C?logo=dependabot&logoColor=white)](.github/dependabot.yml)
+[![Revisión: CodeRabbit](https://img.shields.io/coderabbit/prs/github/Kisnov/eMuwarr?label=CodeRabbit&labelColor=171717&color=FF570A)](.coderabbit.yaml)
+[![Último commit](https://img.shields.io/github/last-commit/Kisnov/eMuwarr/dev?label=%C3%BAltimo%20commit)](https://github.com/Kisnov/eMuwarr/commits/dev)
 [![Imagen](https://img.shields.io/github/v/release/Kisnov/eMuwarr?label=imagen&logo=docker&logoColor=white&color=2496ED)](https://github.com/users/Kisnov/packages/container/package/emuwarr)
+[![Descargas](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2FKisnov%2FeMuwarr%2Finsignias%2Fdescargas.json)](https://github.com/Kisnov/eMuwarr/pkgs/container/emuwarr/versions?filters%5Bversion_type%5D=tagged)
 [![Python](https://img.shields.io/python/required-version-toml?tomlFilePath=https%3A%2F%2Fraw.githubusercontent.com%2FKisnov%2FeMuwarr%2Fdev%2Fpyproject.toml&logo=python&logoColor=white&color=3776AB)](pyproject.toml)
 [![Node 26](https://img.shields.io/badge/node-26-5FA04E?logo=nodedotjs&logoColor=white)](frontend/package.json)
 
@@ -32,10 +30,16 @@ qBittorrent. Todo desde el navegador.
 4. **Sube** con [Uploadrr-EMU](uploadrr-emu/), que va dentro de la imagen: capturas,
    torrent, subida a eMuwarez y alta en qBittorrent, con el progreso en directo.
 
+**Sin Radarr ni Sonarr:** en Instancias añade una **carpeta manual** (por ejemplo `/data/torrents/manual`) y deja ahí
+los vídeos. Al escanearla, la aplicación lee del nombre de cada fichero el título, el año, la temporada y el capítulo,
+la fuente y el grupo, y busca la ficha en TMDb. Tú la confirmas en Biblioteca (o confirmas de una vez las que sugiere)
+y a partir de ahí se sube como lo demás. La carpeta tiene que estar en el mismo disco que la de subidas y dentro de las
+rutas permitidas.
+
 ## Qué necesitas
 
 - Un equipo con **Docker** (24+ con Compose v2). La imagen lleva todo lo demás.
-- **Radarr** y/o **Sonarr** con tu biblioteca.
+- **Radarr** y/o **Sonarr** con tu biblioteca, o una **carpeta manual** con lo que quieras subir sin pasar por ellos.
 - Una cuenta de **eMuwarez** con su API key, y una API key de **TMDb** (gratuita).
 - **qBittorrent**, que vea la carpeta de subidas en la misma ruta que este contenedor.
 - La media y la carpeta de subidas en el **mismo sistema de ficheros**, para que la subida sea un enlace duro y no
@@ -95,7 +99,7 @@ qBittorrent, «Reenviar a qBittorrent» lo vuelve a añadir sin subir nada.
 - **Estadísticas**: tu ratio, lo subido, lo bajado y el bonus, día a día.
 - **Guía**: cada campo de la nomenclatura de eMuwarez, con ejemplos.
 - **Tareas**: sincronización periódica, vigilancia de instancias, copias automáticas y aviso de versión nueva.
-- **Instancias**: tus Radarr y Sonarr.
+- **Instancias**: tus Radarr y Sonarr, y tus carpetas manuales.
 - **Logs**: registros de la aplicación y de cada subida, con los secretos tapados.
 - **Configuración**: claves, qBittorrent, proveedores de imágenes, notificaciones (Discord, Telegram, webhook), un
   widget para [Homepage](https://gethomepage.dev), diagnóstico y copias de seguridad.
@@ -142,7 +146,7 @@ qBittorrent, «Reenviar a qBittorrent» lo vuelve a añadir sin subir nada.
 - **Guía**: cada campo de la nomenclatura de eMuwarez, con ejemplos y de dónde lo saca la aplicación.
 - **Tareas**: sincronización periódica de biblioteca y peticiones, vigilancia de instancias (sincroniza una Radarr o
   Sonarr cuando vuelve a responder), mantenimiento nocturno con copias automáticas y aviso de versión nueva en la campana.
-- **Instancias**: tus Radarr y Sonarr.
+- **Instancias**: tus Radarr y Sonarr, y tus carpetas manuales.
 - **Logs**: registros de la aplicación y de cada subida, con los secretos redactados.
 - **Configuración**: un índice de secciones con buscador y una barra de guardado que cuenta los campos cambiados.
   Claves de TMDb, eMuwarez y hosts de imágenes (se comprueban contra el proveedor), qBittorrent, mapeo de rutas,

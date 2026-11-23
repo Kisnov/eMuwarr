@@ -131,10 +131,14 @@ export interface DashboardSummaryResponse {
   requests_last_sync_at?: string | null
 }
 
+// Una carpeta manual (`carpeta`) es una carpeta del disco con vídeos que no vienen de Radarr/Sonarr: su `url` es la ruta.
+export type TipoDeInstancia = 'radarr' | 'sonarr' | 'carpeta'
+
 export interface InstanceSafeResponse {
   id: number
   type: string
   name: string
+  // En una carpeta manual, la ruta de la carpeta (y `api_key_masked` vacía).
   url: string
   api_key_masked: string
   enabled: boolean
@@ -155,6 +159,9 @@ export interface InstanceTestResponse {
   version: string | null
   username: string | null
   error: string | null
+  // Carpeta manual: cuántos vídeos tiene, y lo que conviene mirar.
+  message?: string | null
+  warning?: string | null
 }
 
 // Una petición de eMuwarez vista desde la ficha de Biblioteca (PeticionDeLaFichaResponse).
@@ -261,6 +268,18 @@ export interface LibraryItemResponse {
   // eMuwarez catalog comparison: 1 = already on eMuwarez, 0 = not, null = not synced.
   emu_in_catalog: number | null
   emu_aportes: EmuAporte[] | null
+  // Carpeta manual: sin ficha de TMDb confirmada (a cualquier nivel), no se puede subir.
+  por_identificar?: boolean
+  // Lo que el escaneo encontró claro en TMDb; solo en la película o la serie por identificar.
+  sugerencia_tmdb?: SugerenciaTmdb | null
+}
+
+export interface SugerenciaTmdb {
+  tmdb_id: string
+  tipo: 'movie' | 'tv'
+  titulo: string
+  anio: number | null
+  poster_url: string | null
 }
 
 export interface EmuAporte {

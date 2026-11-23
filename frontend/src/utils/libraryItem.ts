@@ -203,3 +203,12 @@ export function idVerifyUrl(kind: 'tmdb' | 'imdb' | 'tvdb' | 'tvmaze' | 'mal', i
     case 'mal':  return `https://myanimelist.net/anime/${digits}`
   }
 }
+
+// Al revés que idVerifyUrl('tmdb'): el id de un número pegado o de la dirección de una ficha de themoviedb.org, y su
+// tipo si la dirección lo dice. null si no es ninguna de las dos cosas.
+export function leerIdTmdb(texto: string): { id: string; tipo?: 'movie' | 'tv' } | null {
+  const t = texto.trim()
+  if (/^\d+$/.test(t)) return { id: t }
+  const m = t.match(/themoviedb\.org\/(movie|tv)\/(\d+)/i)
+  return m ? { id: m[2], tipo: m[1].toLowerCase() as 'movie' | 'tv' } : null
+}

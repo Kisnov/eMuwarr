@@ -848,6 +848,12 @@ def build_season_pack_plan(
             empty["errors"] = errors
             return empty
 
+        from .library.carpeta import errores_de_temporada
+        errors += errores_de_temporada(season, series, all_episodes)
+        if errors:
+            empty["errors"] = errors
+            return empty
+
         # Every available episode must already live in the same directory
         # (the common Sonarr/Radarr convention: one folder per season).
         # Radarr/Sonarr-reported paths (raw convention, e.g. /data/media/…)
