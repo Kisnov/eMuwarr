@@ -9,6 +9,7 @@ import { MAX_ELEMENTOS_LOTE } from '../../utils/lote'
 import { SubirTambienBloque, SubirTambienModal } from '../SubirTambien'
 import { boton, desmontar, esperar, montar, pulsar, texto } from './dom'
 
+const EMU = { id: 'emu', nombre: 'eMuwarez' }
 const NOBS = { id: 'nobs', nombre: 'N.O.B.S' }
 const MNV = { id: 'mnv', nombre: 'Milnueve' }
 const job = (extra: Partial<UploadJob>) => ({ id: 7, status: 'completed', ...extra } as UploadJob)
@@ -40,6 +41,12 @@ describe('SubirTambienBloque', () => {
     expect(encolado).toHaveBeenCalled()
   })
 
+  it('de otro tracker a eMuwarez: la ayuda nombra el tracker de origen', async () => {
+    await montar(<SubirTambienBloque job={job({ tracker: 'nobs', tracker_nombre: 'N.O.B.S', subir_tambien_a: [EMU] })} />)
+    expect(texto()).toContain('las mismas piezas que en N.O.B.S')
+    expect(boton('Subir también a eMuwarez')).toBeTruthy()
+  })
+
   it('el motivo por el que no se encoló (qBittorrent) se enseña', async () => {
     vi.mocked(subirTambien).mockResolvedValue({
       lote_id: null, encolados: 0, saltados: 1,
@@ -57,32 +64,34 @@ describe('SubirTambienBloque', () => {
 describe('SubirTambienModal', () => {
   it('solo lo elegido a mano: una petición con las subidas y los trackers marcados', async () => {
     vi.mocked(getSubirTambien).mockResolvedValue({
-      trackers: [NOBS, MNV],
+      trackers: [EMU, NOBS, MNV],
       subidas: [
-        { job_id: 1, title: 'Peli A', nombre: 'A.mkv', result_url: null, finished_at: null, trackers: [NOBS, MNV] },
-        { job_id: 2, title: 'Peli B', nombre: 'B.mkv', result_url: null, finished_at: null, trackers: [MNV] },
-        { job_id: 3, title: 'Peli C', nombre: 'C.mkv', result_url: null, finished_at: null, trackers: [NOBS] },
+        { job_id: 1, title: 'Peli A', nombre: 'A.mkv', result_url: null, finished_at: null, origen: EMU, trackers: [NOBS, MNV] },
+        { job_id: 2, title: 'Peli B', nombre: 'B.mkv', result_url: null, finished_at: null, origen: NOBS, trackers: [EMU, MNV] },
+        { job_id: 3, title: 'Peli C', nombre: 'C.mkv', result_url: null, finished_at: null, origen: EMU, trackers: [NOBS] },
       ],
     })
     vi.mocked(subirTambien).mockResolvedValue({ lote_id: '0123456789ab', encolados: 3, saltados: 1, resultados: [] })
     const encolado = vi.fn()
     await montar(<SubirTambienModal onClose={() => {}} onEncolado={encolado} />)
     await esperar(() => texto().includes('Peli B'))
+    expect(texto()).toContain('en N.O.B.S · falta en eMuwarez, Milnueve')
     expect(boton('Subir')?.getAttribute('aria-disabled')).toBe('true')
 
     await pulsar(casilla('Peli A'))
     await pulsar(casilla('Peli B'))
     await pulsar(boton('Subir 2 subidas'))
 
-    expect(subirTambien).toHaveBeenCalledWith([1, 2], ['nobs', 'mnv'])
+    expect(subirTambien).toHaveBeenCalledWith([1, 2], ['emu', 'nobs', 'mnv'])
     await esperar(() => encolado.mock.calls.length > 0)
     expect(encolado).toHaveBeenCalledWith('0123456789ab')
   })
 
   it('no deja marcar más subidas que un lote, enseña el tope y deja desmarcar', async () => {
     const subidas = Array.from({ length: MAX_ELEMENTOS_LOTE + 1 }, (_, i) => (
-      { job_id: i + 1, title: `Peli ${i + 1}.`, nombre: `${i + 1}.mkv`, result_url: null, finished_at: null, trackers: [NOBS] }))
-    vi.mocked(getSubirTambien).mockResolvedValue({ trackers: [NOBS], subidas })
+      { job_id: i + 1, title: `Peli ${i + 1}.`, nombre: `${i + 1}.mkv`, result_url: null, finished_at: null, origen: EMU,
+        trackers: [NOBS] }))
+    vi.mocked(getSubirTambien).mockResolvedValue({ trackers: [EMU, NOBS], subidas })
     await montar(<SubirTambienModal onClose={() => {}} onEncolado={() => {}} />)
     await esperar(() => texto().includes('Peli 1.'))
     expect(texto()).toContain(`máximo ${MAX_ELEMENTOS_LOTE} a la vez`)

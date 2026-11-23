@@ -205,13 +205,15 @@ def tracker_del_trabajo(job: dict) -> trackers.Tracker:
 
 def subida_con_el_mismo_fichero(job: dict, conn) -> dict | None:
     """La subida completada del mismo elemento a otro tracker que siembra el mismo fichero de la carpeta de subidas
-    (`prepared_path`) y tiene apuntado su torrent: la que da las piezas a una subida que reutiliza su preparación."""
+    (`prepared_path`) y tiene apuntado su torrent: la que da las piezas a una subida que reutiliza su preparación. La de
+    «Subir también a…» (`copia_de_job_id`) primero: es la que el usuario eligió."""
     if not job.get("prepared_path") or not job.get("library_item_id"):
         return None
     return row_to_dict(conn.execute(
         "SELECT * FROM upload_jobs WHERE library_item_id = ? AND prepared_path = ? AND tracker != ? AND id != ? "
-        "AND status = 'completed' AND result_torrent_id IS NOT NULL ORDER BY id LIMIT 1",
-        (job["library_item_id"], job["prepared_path"], job.get("tracker") or trackers.POR_DEFECTO, job.get("id") or 0),
+        "AND status = 'completed' AND result_torrent_id IS NOT NULL ORDER BY id = ? DESC, id LIMIT 1",
+        (job["library_item_id"], job["prepared_path"], job.get("tracker") or trackers.POR_DEFECTO, job.get("id") or 0,
+         job.get("copia_de_job_id") or 0),
     ).fetchone())
 
 

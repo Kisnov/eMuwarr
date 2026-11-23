@@ -340,18 +340,19 @@ def salud_del_seeding(conn: sqlite3.Connection, *, refrescar: bool = False) -> d
             "items": items, "url_publica": publica}
 
 
-def completo_en_qbit(conn: sqlite3.Connection, rutas: list[str]) -> dict[str, Optional[str]]:
-    """Para cada ruta de la carpeta de subidas, None si qBittorrent tiene entero (100 %, sin error) un torrent con esa
-    ruta como contenido (`content_path`, el casamiento por ruta de arriba; el nombre no basta); si no, por qué no.
+def completo_en_qbit(conn: sqlite3.Connection, rutas: dict[str, str]) -> dict[str, Optional[str]]:
+    """Para cada ruta de la carpeta de subidas (→ el nombre del tracker de su subida), None si qBittorrent tiene entero
+    (100 %, sin error) un torrent con esa ruta como contenido (`content_path`, el casamiento por ruta de arriba; el
+    nombre no basta); si no, por qué no.
     Lee qBittorrent en ese momento (sin la caché): «Subir también a…» se fía de esto para no comprobar los datos."""
     url, usuario, clave, _etiqueta = _configuracion(conn)
     if not url:
-        return {r: f"{MENSAJE_SIN_CONFIGURAR}: no se puede comprobar que el torrent de eMuwarez se siembra entero."
-                for r in rutas}
+        return {r: f"{MENSAJE_SIN_CONFIGURAR}: no se puede comprobar que el torrent de {t} se siembra entero."
+                for r, t in rutas.items()}
     torrents, motivo, _leido = _torrents(url, usuario, clave, refrescar=True)
     if torrents is None:
-        return {r: f"{motivo or MENSAJE_SIN_RESPUESTA}: no se puede comprobar que el torrent de eMuwarez se siembra entero."
-                for r in rutas}
+        return {r: f"{motivo or MENSAJE_SIN_RESPUESTA}: no se puede comprobar que el torrent de {t} se siembra entero."
+                for r, t in rutas.items()}
     por_contenido = _indices(torrents)["contenido"]
     salida: dict[str, Optional[str]] = {}
     for ruta in rutas:

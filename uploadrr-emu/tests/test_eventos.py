@@ -308,13 +308,14 @@ def _info(contenido: bytes) -> dict:
     return torf.Torrent.read_stream(io.BytesIO(contenido), validate=False).metainfo["info"]
 
 
-def _ya_en_emu(flujo, monkeypatch):
-    """Una subida a eMuwarez hecha (id 42) cuyo tmp/<nombre> borró el mantenimiento. Devuelve (ruta, .torrent de eMuwarez)."""
+def _ya_en_emu(flujo, monkeypatch, argv=ARGV_PELICULA):
+    """Una subida a eMuwarez (o al tracker de `argv`) hecha (id 42) cuyo tmp/<nombre> borró el mantenimiento. Devuelve
+    (ruta, .torrent de ese tracker)."""
     flujo.config["TRACKERS"]["NOBS"] = {"api_key": TOKEN, "anon": False}
     monkeypatch.setattr(NOBS, "domain", flujo.tracker.url)
     ruta = flujo.crear_video(PELICULA)
     flujo.tracker_que_acepta()
-    assert _correr(flujo, ruta, ARGV_PELICULA)[0] == 0
+    assert _correr(flujo, ruta, argv)[0] == 0
     firmado = flujo.tracker.routes[("GET", "/torrent/download/42.rsskey")](None)[1]  # el que da eMuwarez (source eMuwarez)
     atributos = {"name": NOMBRE_PELICULA, "download_link": f"{flujo.tracker.url}/torrent/download/42.rsskey"}
     flujo.tracker.routes[("GET", "/api/torrents/42")] = lambda q: (200, {"data": {"attributes": atributos}})
@@ -358,6 +359,24 @@ def test_base_desde_hace_el_base_torrent_con_el_de_emu_y_no_hashea(flujo, monkey
     guardados = sorted(p.name for p in (flujo.base / "tmp" / f"{PELICULA}.mkv").glob("[[]*.torrent"))
     assert guardados and all(n.startswith("[NOBS]") for n in guardados)
     assert len(Qbit.anadidos) == 1
+
+
+def test_base_desde_tambien_de_nobs_a_emu(flujo, monkeypatch):
+    """Al revés: lo que ya está en N.O.B.S se sube a eMuwarez con el torrent de N.O.B.S (su adaptador y su clave)."""
+    ruta, firmado = _ya_en_emu(flujo, monkeypatch, ["-tk", "NOBS", *ARGV_PELICULA[2:]])
+    _sin_hashear(monkeypatch)
+
+    codigo, salida = _correr(flujo, ruta, [*ARGV_PELICULA, "--resume", "--base-desde", "NOBS:42"])
+
+    assert codigo == 0, salida
+    assert _resultado(_revisar(flujo)) == ("subido", True)
+    nobs = _info(firmado)
+    base = _info((flujo.base / "tmp" / f"{PELICULA}.mkv" / "BASE.torrent").read_bytes())
+    (_emu, torrent_emu), = flujo.tracker.bodies
+    for info in (base, _info(torrent_emu["torrent"])):
+        assert info["pieces"] == nobs["pieces"] and info["piece length"] == nobs["piece length"]
+    guardados = sorted(p.name for p in (flujo.base / "tmp" / f"{PELICULA}.mkv").glob("[[]*.torrent"))
+    assert guardados and all(n.startswith("[EMU]") for n in guardados)
 
 
 def test_base_desde_con_otro_fichero_falla_sin_subir_nada(flujo, monkeypatch):
