@@ -7,6 +7,7 @@ import { peticionCubre } from '../../utils/seleccionSubida'
 import {
   conclusionDuplicados, textoCategoria, textoCopia, textoFicheros, textoPistas, tipoDeEnlace, type FilaYaHay, type YaHay,
 } from '../../utils/resumenSubida'
+import { CasillasTrackers } from './piezas'
 import { mergeRemuxTracks } from './RemuxTable'
 import type { Asistente } from './useAsistente'
 import { useResumen } from './useResumen'
@@ -19,7 +20,7 @@ export function ResumenSubida({ a }: { a: Asistente }) {
     preview, seasonDisplayTitle, seasonPlan, fields, remuxPreview, remuxEdits, modoPistasAjuste,
     checks, batchContentChecks, nombresTanda, requestId, preselect,
     anonimoMarcado, personalReleaseMarcado, elegirAnonimo, elegirPersonalRelease, opcionesTracker, uploading,
-    sources, elegirTipo, trackersParaSubir, trackersElegidos, elegirTracker, reglas, reglasDe,
+    sources, elegirTipo, trackersParaSubir, trackersElegidos, elegirTracker, reglas, reglasDe, batchChecksLoading,
   } = a
   const esTanda = batchQueue.length > 1
   // Si eMuwarez no lo admite (sus normas de idioma), se dice junto a su casilla: sale desmarcada de entrada.
@@ -100,25 +101,22 @@ export function ResumenSubida({ a }: { a: Asistente }) {
               </dd>
             </>
           )}
-          {/* Solo con otro tracker con clave, y solo para una subida suelta: una tanda sigue yendo a eMuwarez. */}
-          {!esTanda && trackersParaSubir.length > 1 && (
+          {/* Solo con otro tracker con clave. Cambiar el primero rehace las comprobaciones de la tanda: no mientras se hacen. */}
+          {trackersParaSubir.length > 1 && (
             <>
               <dt>Trackers</dt>
               <dd>
-                <span className="asist-marcas">
-                  {trackersParaSubir.map(t => (
-                    <label key={t.id} className="asist-casilla">
-                      <input type="checkbox" checked={trackersElegidos.includes(t.id)} disabled={uploading}
-                        onChange={e => elegirTracker(t.id, e.target.checked)} />
-                      {t.nombre}
-                    </label>
-                  ))}
-                </span>
+                <CasillasTrackers trackers={trackersParaSubir} elegidos={trackersElegidos} onElegir={elegirTracker}
+                  disabled={uploading || (esTanda && batchChecksLoading)} />
                 {emuNoLoAdmite && (
                   <span className="asist-dato-nota asist-aviso-dato">eMuwarez: ✗ no lo admite. {emuNoLoAdmite.motivo}</span>
                 )}
                 {/* Las normas de idioma de cada otro tracker (las de eMuwarez van en las comprobaciones). */}
-                {trackersParaSubir.filter(t => t.id !== 'emu').map(t => {
+                {esTanda ? (
+                  <span className="asist-dato-nota">
+                    Las comprobaciones son las del primero; lo que otro no admita se salta solo para él.
+                  </span>
+                ) : trackersParaSubir.filter(t => t.id !== 'emu').map(t => {
                   const r = reglas.get(t.id)
                   return (
                     <span key={t.id} className={`asist-dato-nota${r && !r.permitido ? ' asist-aviso-dato' : ''}`}>

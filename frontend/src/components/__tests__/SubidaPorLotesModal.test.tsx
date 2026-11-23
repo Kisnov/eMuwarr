@@ -8,7 +8,10 @@
 import { act } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-vi.mock('../../api/uploads', () => ({ queueLote: vi.fn(), runUploadChecks: vi.fn(), getUploadChecksProgress: vi.fn() }))
+vi.mock('../../api/uploads', () => ({
+  queueLote: vi.fn(), runUploadChecks: vi.fn(), getUploadChecksProgress: vi.fn(), fetchTrackersParaSubir: vi.fn(),
+  fetchReglasTracker: vi.fn(),
+}))
 vi.mock('../../api/nomenclature', () => ({ getNomenclatureFields: vi.fn(), previewNomenclatureFields: vi.fn() }))
 vi.mock('../../api/library', () => ({ getEmuComparison: vi.fn(), getLibrary: vi.fn(), suggestProvider: vi.fn() }))
 vi.mock('../../api/settings', () => ({ fetchSettings: vi.fn() }))
@@ -72,6 +75,7 @@ async function alResumen(n: number) {
 }
 
 beforeEach(() => {
+  m(subidas.fetchTrackersParaSubir).mockResolvedValue([])
   m(subidas.runUploadChecks).mockImplementation(async (_id, scope) => (scope === 'environment' ? ENTORNO : LISTO))
   m(nom.getNomenclatureFields).mockImplementation(async id => ({
     fields: { ...CAMPOS }, torrent_name: nombreDe(id), internal_mkv_title: '', blocked: false,
@@ -80,7 +84,7 @@ beforeEach(() => {
   m(fetchSettings).mockResolvedValue({ upload_max_concurrent: 1 } as never)
   m(subidas.queueLote).mockImplementation(async elementos => ({
     lote_id: '0123456789ab', encolados: elementos.length, saltados: 0,
-    resultados: elementos.map((e, i) => ({ item_id: e.item_id, status: 'queued', job_id: 100 + i, errors: [] })),
+    resultados: elementos.map((e, i) => ({ item_id: e.item_id, tracker: 'emu', status: 'queued', job_id: 100 + i, errors: [] })),
   }))
 })
 afterEach(async () => {
@@ -299,8 +303,8 @@ describe('lo que se manda y lo que vuelve', () => {
     m(subidas.queueLote).mockResolvedValue({
       lote_id: '0123456789ab', encolados: 1, saltados: 1,
       resultados: [
-        { item_id: 11, status: 'queued', job_id: 100, errors: [] },
-        { item_id: 12, status: 'blocked', job_id: null, errors: ['Ya hay una subida en curso para este contenido.'] },
+        { item_id: 11, tracker: 'emu', status: 'queued', job_id: 100, errors: [] },
+        { item_id: 12, tracker: 'emu', status: 'blocked', job_id: null, errors: ['Ya hay una subida en curso para este contenido.'] },
       ],
     })
     await abrir([DUNE, ALIEN])
@@ -356,7 +360,7 @@ describe('lo que se manda y lo que vuelve', () => {
     await escape()
     expect(onClose).not.toHaveBeenCalled()
     await act(async () => {
-      respuesta.resolver({ lote_id: '0123456789ab', encolados: 1, saltados: 0, resultados: [{ item_id: 11, status: 'queued', job_id: 1, errors: [] }] })
+      respuesta.resolver({ lote_id: '0123456789ab', encolados: 1, saltados: 0, resultados: [{ item_id: 11, tracker: 'emu', status: 'queued', job_id: 1, errors: [] }] })
     })
     await esperar(() => texto().includes('1 de 1 encolada'))
     await escape()
@@ -621,5 +625,78 @@ describe('desde el Panel', () => {
     ])
     expect(texto()).toContain('«Fargo - Temporada 2»: la petición es del capítulo S02E04, que no está en la biblioteca.')
     expect(titulosPaso1()).toEqual(['Dune (2021)'])
+  })
+})
+
+describe('a varios trackers', () => {
+  const NOBS_NO = { tracker: 'nobs', permitido: false, motivo: 'N.O.B.S no lo admite: el audio (jpn) no está en castellano ni latino.', variante: null }
+  const casillaTracker = (nombre: string) =>
+    [...document.querySelectorAll<HTMLLabelElement>('.lote-trackers label')].find(l => l.textContent === nombre)!.querySelector('input')!
+
+  beforeEach(() => {
+    m(subidas.fetchTrackersParaSubir).mockResolvedValue([{ id: 'emu', nombre: 'eMuwarez' }, { id: 'nobs', nombre: 'N.O.B.S' }])
+    m(subidas.fetchReglasTracker).mockImplementation(async (id, tracker) =>
+      id === 12 ? NOBS_NO : { tracker, permitido: true, motivo: 'Audio en castellano.', variante: null })
+  })
+
+  it('con solo eMuwarez no se ve nada nuevo ni se manda el tracker', async () => {
+    m(subidas.fetchTrackersParaSubir).mockResolvedValue([{ id: 'emu', nombre: 'eMuwarez' }])
+    await abrir([DUNE])
+    await alResumen(1)
+    expect(document.querySelector('.lote-trackers')).toBeNull()
+    await pulsar(boton('Subir (1)'))
+    await esperar(() => texto().includes('1 de 1 encolada'))
+    expect(m(subidas.queueLote).mock.calls[0]).toHaveLength(1)
+  })
+
+  it('eMuwarez de entrada; con otro marcado, dice lo que ese no admite y manda los dos en orden', async () => {
+    await abrir([DUNE, ALIEN])
+    await alResumen(2)
+    expect(casillaTracker('eMuwarez').checked).toBe(true)
+    expect(casillaTracker('N.O.B.S').checked).toBe(false)
+    expect(boton('Subir (2) a eMuwarez')).toBeDefined()
+
+    await pulsar(casillaTracker('N.O.B.S'))
+    await esperar(() => fila(12).textContent?.includes('No va a N.O.B.S'))
+    expect(fila(12).textContent).toContain(`⚠ No va a N.O.B.S: ${NOBS_NO.motivo}`)
+    expect(fila(11).textContent).not.toContain('No va a')
+    expect(m(subidas.fetchReglasTracker).mock.calls.map(c => c.join(':')).sort()).toEqual(['11:nobs', '12:nobs'])
+    // Las comprobaciones siguen siendo las de eMuwarez, el primero: no se repiten.
+    expect(llamadas('content')).toHaveLength(2)
+
+    m(subidas.queueLote).mockResolvedValue({
+      lote_id: '0123456789ab', encolados: 3, saltados: 1,
+      resultados: [
+        { item_id: 11, tracker: 'emu', status: 'queued', job_id: 100, errors: [] },
+        { item_id: 11, tracker: 'nobs', status: 'queued', job_id: 101, errors: [] },
+        { item_id: 12, tracker: 'emu', status: 'queued', job_id: 102, errors: [] },
+        { item_id: 12, tracker: 'nobs', status: 'blocked', job_id: null, errors: [NOBS_NO.motivo] },
+      ],
+    })
+    await pulsar(boton('Subir (2) a eMuwarez y N.O.B.S'))
+    await esperar(() => texto().includes('3 de 4 encoladas'))
+    expect(m(subidas.queueLote).mock.calls[0][1]).toEqual(['emu', 'nobs'])
+    expect(texto()).toContain(`✗ Alien (N.O.B.S): ${NOBS_NO.motivo}`)
+  })
+
+  it('sin eMuwarez, las comprobaciones se rehacen con las normas del primero que queda', async () => {
+    await abrir([DUNE])
+    await alResumen(1)
+    await pulsar(casillaTracker('N.O.B.S'))
+    await pulsar(casillaTracker('eMuwarez'))
+    await esperar(() => boton('Subir (1) a N.O.B.S') && !boton('Subir (1) a N.O.B.S')!.disabled)
+    expect(llamadas('environment').map(c => c[4])).toEqual([undefined, 'nobs'])
+    expect(llamadas('content').map(c => c[4])).toEqual([undefined, 'nobs'])
+    await pulsar(boton('Subir (1) a N.O.B.S'))
+    await esperar(() => m(subidas.queueLote).mock.calls.length)
+    expect(m(subidas.queueLote).mock.calls[0][1]).toEqual(['nobs'])
+  })
+
+  it('sin ninguno marcado no se sube', async () => {
+    await abrir([DUNE])
+    await alResumen(1)
+    await pulsar(casillaTracker('eMuwarez'))
+    expect(texto()).toContain('Elige al menos uno.')
+    expect(boton('Subir (1)')!.disabled).toBe(true)
   })
 })

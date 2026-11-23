@@ -88,8 +88,8 @@ descripción y el cliente.
        Con más de un tracker con clave, el paso «Contenido» del asistente deja elegir el pack o los capítulos que
        admite alguno (`/upload/elegibilidad`), dice cuáles, y el Resumen marca de entrada eMuwarez si lo admite y, si
        no, los que lo admiten; el plan del pack usa las normas del primero de ellos.
-     - Queda: la subida por lotes del asistente a otros trackers y probarlo en el NAS (una subida vieja a N.O.B.S:
-       los dos torrents sembrando el mismo fichero sin comprobar datos).
+     - Queda: probarlo en el NAS (una subida vieja a N.O.B.S: los dos torrents sembrando el mismo fichero sin comprobar
+       datos).
      - Por hacer: «Subir también a…» entre cualquier par de trackers, no solo desde eMuwarez: de una subida
        completada con eMuwarr a cualquier tracker, a cualquier otro con clave. Solo las hechas con eMuwarr; las
        subidas a mano quedan fuera (Gabriel, 23/11).
