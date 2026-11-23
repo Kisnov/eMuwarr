@@ -408,6 +408,9 @@ export function LibraryPage({ onNavigate }: { onNavigate?: (page: string) => voi
       }
     }
   }, [consulta, offset])
+  // Lo que acaba tras un await (confirmar fichas) recarga con los filtros de ese momento, no con los de cuando empezó.
+  const loadRef = useRef(load)
+  loadRef.current = load
 
   useEffect(() => { load() }, [load])
 
@@ -581,7 +584,7 @@ export function LibraryPage({ onNavigate }: { onNavigate?: (page: string) => voi
       // Con una sola carpeta elegida en Origen, solo las suyas.
       const r = await identificarSugeridas(filterInstanceId.length === 1 ? Number(filterInstanceId[0]) : undefined)
       setAviso({ texto: r.message, error: !r.ok })
-      load()
+      loadRef.current()
       contarPorIdentificar()
     } catch (e) {
       setAviso({ texto: e instanceof Error && e.message ? e.message : 'No se pudieron confirmar las sugeridas', error: true })
@@ -592,7 +595,7 @@ export function LibraryPage({ onNavigate }: { onNavigate?: (page: string) => voi
   function alIdentificar(mensaje: string) {
     setIdentificarItem(null)
     setAviso({ texto: mensaje, error: false })
-    load()
+    loadRef.current()
     contarPorIdentificar()
     // En la ficha, el título, el póster y los botones cambian con la ficha confirmada.
     if (selected) {

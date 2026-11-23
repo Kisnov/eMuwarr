@@ -358,6 +358,69 @@ def test_el_escaneo_no_ve_enlaces_rotos_ficheros_de_mac_ni_la_carpeta_de_subidas
     assert carpeta.probar_carpeta(str(carpeta_dir))["message"] == "3 vídeos en la carpeta"
 
 
+def test_capitulos_sin_resolucion_en_el_nombre_se_separan_por_la_del_fichero(
+        conn, instancia, carpeta_dir, monkeypatch, lecturas, busquedas):
+    medidas = []
+    monkeypatch.setattr(media_info_service, "read_resolution",
+                        lambda ruta: medidas.append(ruta) or ("2160p" if "E02" in ruta else "1080p"))
+    for n in (1, 2):
+        (carpeta_dir / f"Pluribus.2025.S01E0{n}.WEB-DL.DDP5.1.H.264-GRUPO.mkv").write_bytes(b"x")
+    _escanear(conn, instancia)
+    filas = _filas(conn, instancia)
+    assert {"serie:pluribus:2025:1080p", "serie:pluribus:2025:2160p"} <= filas.keys()
+    assert filas["episode:Pluribus.2025.S01E02.WEB-DL.DDP5.1.H.264-GRUPO.mkv"]["resolution"] == "2160p"
+    _escanear(conn, instancia)
+    assert len(medidas) == 2   # el segundo escaneo usa la guardada
+
+
+def test_otra_carpeta_con_el_mismo_nombre_no_hereda_la_ficha(
+        conn, instancia, carpeta_dir, tmp_path, lecturas, busquedas, fichas):
+    import shutil
+    from emuwarez_uploadrr.services.instances import update_instance
+    _escanear(conn, instancia)
+    carpeta.identificar(conn, _filas(conn, instancia)[f"peli:{PELI}"]["id"], "872585")
+    movida = tmp_path / "movida"
+    shutil.copytree(carpeta_dir, movida)
+    update_instance(conn, instancia.id, url=str(movida))
+    _escanear(conn, instancia)
+    assert _filas(conn, instancia)[f"peli:{PELI}"]["tmdb_id"] == "872585"   # el mismo disco montado en otro sitio
+    otra = tmp_path / "otra"
+    otra.mkdir()
+    (otra / PELI).write_bytes(b"y" * 20)
+    update_instance(conn, instancia.id, url=str(otra))
+    _escanear(conn, instancia)
+    assert _filas(conn, instancia)[f"peli:{PELI}"]["tmdb_id"] is None
+
+
+def test_titulos_en_otro_alfabeto_no_se_identifican_a_la_vez(conn, instancia, carpeta_dir, lecturas, busquedas, fichas):
+    for titulo in ("山", "海"):
+        (carpeta_dir / f"{titulo}.2020.1080p.WEB-DL.H.264-GRUPO.mkv").write_bytes(b"x")
+    _escanear(conn, instancia)
+    carpeta.identificar(conn, _filas(conn, instancia)["peli:山.2020.1080p.WEB-DL.H.264-GRUPO.mkv"]["id"], "872585")
+    assert _filas(conn, instancia)["peli:海.2020.1080p.WEB-DL.H.264-GRUPO.mkv"]["tmdb_id"] is None
+
+
+def test_el_pack_pide_cada_capitulo_no_cuantos_hay():
+    temporada = {"instance_type": "carpeta", "season_number": 1}
+    serie = {"tmdb_id": "1", "raw_json": json.dumps({"temporadas": {"1": {"capitulos": 2}}})}
+    capitulos = [{"raw_json": json.dumps({"episodios": [e]}), "episode_number": e} for e in (1, 3)]
+    assert carpeta.errores_de_temporada(temporada, serie, capitulos) == [
+        "Temporada incompleta: hay 1 de 2 capítulos según TMDb (faltan 2)."]
+
+
+def test_reconstruir_instancias_no_reutiliza_el_id_de_una_borrada(isolated_db):
+    from emuwarez_uploadrr import database
+    c = connect(isolated_db / "emuwarez_uploadrr.db")
+    init_db(c)
+    for nombre in ("a", "b"):
+        c.execute("INSERT INTO instances (type, name, url, api_key) VALUES ('radarr', ?, 'http://r', 'k')", (nombre,))
+    c.execute("DELETE FROM instances WHERE name = 'b'")
+    database._rebuild_instances_table(c, "'radarr','sonarr','carpeta'", unique_clause="UNIQUE(name)")
+    nueva = c.execute("INSERT INTO instances (type, name, url, api_key) VALUES ('radarr', 'c', 'http://r', 'k')")
+    assert nueva.lastrowid == 3
+    c.close()
+
+
 def test_sin_anio_el_mismo_titulo_no_se_identifica_a_la_vez(conn, instancia, carpeta_dir, lecturas, busquedas, fichas):
     for res in ("1080p", "2160p"):
         (carpeta_dir / f"Dune.{res}.WEB-DL.DDP5.1.H.264-GRUPO.mkv").write_bytes(b"x")

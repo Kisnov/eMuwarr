@@ -201,10 +201,10 @@ def refresh_arr_and_resync(
                 pass
         (logger.warning if level == "warning" else logger.info)(message)
 
-    fila = conn.execute("SELECT instance_id, instance_type FROM library_items WHERE id = ?", (item_id,)).fetchone()
-    if fila and fila["instance_type"] == "carpeta":
-        return _reescanear_carpeta(conn, fila["instance_id"], _log)
     try:
+        fila = conn.execute("SELECT instance_id, instance_type FROM library_items WHERE id = ?", (item_id,)).fetchone()
+        if fila and fila["instance_type"] == "carpeta":
+            return _reescanear_carpeta(conn, fila["instance_id"], _log)
         resolved = _resolve_arr_top(conn, item_id)
         if not resolved["ok"]:
             _log("warning", f"No se pudo localizar la instancia de Radarr/Sonarr: {resolved['message']}")

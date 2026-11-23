@@ -184,6 +184,8 @@ def _rebuild_instances_table(
     and the idempotency guard — this just issues the DDL/DML statements one
     at a time (never `executescript()`, which issues its own implicit commit
     and would break a caller-managed transaction)."""
+    # El contador de AUTOINCREMENT, no el id más alto que quede: el de una instancia borrada no se reutiliza.
+    contador = conn.execute("SELECT seq FROM sqlite_sequence WHERE name = 'instances'").fetchone()
     conn.execute(f"""
         CREATE TABLE instances_new (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -213,6 +215,10 @@ def _rebuild_instances_table(
     """)
     conn.execute("DROP TABLE instances")
     conn.execute("ALTER TABLE instances_new RENAME TO instances")
+    if contador:
+        if not conn.execute("UPDATE sqlite_sequence SET seq = MAX(seq, ?) WHERE name = 'instances'",
+                            (contador[0],)).rowcount:
+            conn.execute("INSERT INTO sqlite_sequence (name, seq) VALUES ('instances', ?)", (contador[0],))
 
 
 def _migrate_instances_widen_type_check(conn: sqlite3.Connection) -> None:

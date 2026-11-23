@@ -192,15 +192,29 @@ def _titulo_capitulo(serie: str, temporada: int, episodios: list[int]) -> str:
     return titulo + (f"-E{episodios[-1]:02d}" if len(episodios) > 1 else "")
 
 
+def _sin_cambios(guardada: dict, ruta: str, mtime: int, size: int) -> bool:
+    """El fichero es el que leyó el último escaneo."""
+    return guardada.get("path") == ruta and guardada.get("size_bytes") == size and _raw(guardada).get("mtime") == mtime
+
+
 def _media(ruta: str, guardada: dict, mtime: int, size: int) -> dict:
     """Códec e idiomas de MediaInfo; si el fichero no ha cambiado desde el último escaneo, los guardados."""
     campos = ("video_codec", "audio_codec", "audio_languages", "subtitle_languages")
-    if (guardada.get("path") == ruta and guardada.get("size_bytes") == size and _raw(guardada).get("mtime") == mtime
-            and guardada.get("video_codec")):
+    if _sin_cambios(guardada, ruta, mtime, size) and guardada.get("video_codec"):
         return {c: guardada.get(c) for c in campos}
     from ..media_info_service import read_media_info_summary
     leido = read_media_info_summary(ruta) or {}
     return {c: leido.get(c) for c in campos}
+
+
+def _resolucion_medida(conn, instance_id: int, ruta: str, external_id: str) -> Optional[str]:
+    """La resolución de MediaInfo de un capítulo sin ella en el nombre; la guardada si el fichero no ha cambiado."""
+    guardada = _guardada(conn, instance_id, MediaKind.EPISODE.value, external_id)
+    estado = os.stat(ruta)
+    if _sin_cambios(guardada, ruta, int(estado.st_mtime), int(estado.st_size)) and guardada.get("resolution"):
+        return guardada["resolution"]
+    from ..media_info_service import read_resolution
+    return read_resolution(ruta)
 
 
 class _Busquedas:
@@ -247,12 +261,14 @@ def escanear(conn: sqlite3.Connection, instance: InstanceConfig, *, visto: str, 
     peliculas: list[tuple[str, dict]] = []
     series: dict[str, list[tuple[str, dict]]] = {}
     for ruta in ficheros:
-        info = analizar_nombre(os.path.relpath(ruta, raiz))
+        rel = os.path.relpath(ruta, raiz)
+        info = analizar_nombre(rel)
         if info["tipo"] == "movie":
             peliculas.append((ruta, info))
         else:
             # Una serie por año (el Shōgun de 1980 no es el de 2024) y por resolución, como una instancia de Sonarr 4K
-            # aparte: un pack nunca mezcla 1080p y 2160p.
+            # aparte: un pack nunca mezcla 1080p y 2160p. Sin ella en el nombre, la del fichero.
+            info["resolucion"] = info["resolucion"] or _resolucion_medida(conn, instance.id, ruta, f"episode:{rel}")
             clave = f"{_clave(info['titulo']) or info['titulo']}:{info['anio'] or ''}:{info['resolucion'] or ''}"
             series.setdefault(clave, []).append((ruta, info))
     hechos = 0
@@ -279,6 +295,9 @@ def escanear(conn: sqlite3.Connection, instance: InstanceConfig, *, visto: str, 
         rel = os.path.relpath(ruta, raiz)
         external_id = f"peli:{rel}"
         guardada = _guardada(conn, instance.id, MediaKind.MOVIE.value, external_id)
+        # Con la carpeta en otra ruta, otro fichero con el mismo nombre no hereda la ficha: solo si pesa lo mismo.
+        if guardada.get("path") not in (None, ruta) and guardada.get("size_bytes") != os.path.getsize(ruta):
+            guardada = {}
         raw = {k: v for k, v in _raw(guardada).items() if k in ("candidatos", "sugerencia")}
         ficha = _ficha_de(guardada) or {"title": info["titulo"], "year": info["anio"]}
         if not guardada.get("tmdb_id"):
@@ -378,17 +397,19 @@ def candidatos(conn, item_id: int, *, consulta: str | None = None, anio: int | N
 
 def _iguales(conn, fila: dict) -> list[dict]:
     """La fila y las de su carpeta por identificar con el mismo título y año de guessit (la misma película o serie en
-    otra resolución): se identifican juntas. Solo con año: sin él, la Dune de 1984 y la de 2021 serían la misma."""
+    otra resolución): se identifican juntas. Solo con año (sin él, la Dune de 1984 y la de 2021 serían la misma) y con
+    un título comparable (_clave deja vacío uno en otro alfabeto)."""
     guessit = _raw(fila).get("guessit") or {}
     filas = [fila]
-    if not guessit.get("anio"):
+    clave = _clave(guessit.get("titulo"))
+    if not guessit.get("anio") or not clave:
         return filas
     for otra in conn.execute(
         "SELECT * FROM library_items WHERE instance_id = ? AND item_type = ? AND tmdb_id IS NULL AND id != ?",
         (fila["instance_id"], fila["item_type"], fila["id"]),
     ).fetchall():
         suya = _raw(dict(otra)).get("guessit") or {}
-        if _clave(suya.get("titulo")) == _clave(guessit.get("titulo")) and suya.get("anio") == guessit["anio"]:
+        if _clave(suya.get("titulo")) == clave and suya.get("anio") == guessit["anio"]:
             filas.append(dict(otra))
     return filas
 
@@ -511,8 +532,8 @@ def error_de_varios_capitulos(fila: dict) -> Optional[str]:
 
 
 def errores_de_temporada(season: dict, series: dict | None, episodios: list[dict]) -> list[str]:
-    """Lo que impide el pack de una temporada de carpeta: la serie sin identificar, o menos capítulos de los que dice
-    TMDb (en una carpeta solo hay filas de lo que hay en el disco, así que nada más lo detecta)."""
+    """Lo que impide el pack de una temporada de carpeta: la serie sin identificar, o que falte alguno de los capítulos
+    que dice TMDb (en una carpeta solo hay filas de lo que hay en el disco, así que nada más lo detecta)."""
     if season.get("instance_type") != TIPO:
         return []
     if not (series or {}).get("tmdb_id"):
@@ -523,11 +544,12 @@ def errores_de_temporada(season: dict, series: dict | None, episodios: list[dict
     n = season.get("season_number")
     esperados = ((_raw(series).get("temporadas") or {}).get(str(n)) or {}).get("capitulos")
     presentes = {e for fila in episodios for e in (_raw(fila).get("episodios") or [fila.get("episode_number")]) if e}
-    if not esperados or len(presentes) >= esperados:
+    previstos = set(range(1, (esperados or 0) + 1))
+    if previstos <= presentes:
         return []
-    faltan = sorted(set(range(1, esperados + 1)) - presentes)
-    return [f"Temporada incompleta: hay {len(presentes)} de {esperados} capítulos según TMDb"
-            + (f" (faltan {', '.join(str(e) for e in faltan[:20])})" if faltan else "") + "."]
+    faltan = sorted(previstos - presentes)
+    return [f"Temporada incompleta: hay {len(previstos & presentes)} de {esperados} capítulos según TMDb "
+            f"(faltan {', '.join(str(e) for e in faltan[:20])})."]
 
 
 def contar_por_identificar(conn, instance_id: int) -> int:

@@ -118,6 +118,20 @@ def read_media_info_summary(path: str) -> Optional[dict]:
         return None
 
 
+def read_resolution(path: str) -> Optional[str]:
+    """La resolución de la pista de vídeo («1080p»…, la de resolution_code), o None si MediaInfo no la lee. Nunca lanza."""
+    from .path_mapping import resolve_local_path
+    path = resolve_local_path(path)
+    if not path or not mediainfo_available():
+        return None
+    try:
+        video = media_probe.first_track(media_probe.run_mediainfo_json(Path(path)), "Video")
+    except Exception:
+        logger.warning("MediaInfo falló para %s", path, exc_info=True)
+        return None
+    return media_probe.video_resolution_code(video) if video else None
+
+
 def build_mediainfo_report(path: str, radarr_source: str | None = None,
                            idiomas_audio: dict[int, str] | None = None) -> dict:
     """Run MediaInfo on the actual file and return, for each field, the raw
