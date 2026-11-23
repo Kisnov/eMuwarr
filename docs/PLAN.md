@@ -85,10 +85,14 @@ descripción y el cliente.
        del tracker convierte en el id. VHS/Retro y Documentales no se eligen solas. La subida por tracker ya las usa:
        las comprobaciones van con las del primer tracker elegido, el Resumen dice las de cada otro, un pack las mira
        capítulo a capítulo, lo que un tracker no admite no se encola para él y su trabajo lanza con su `--variante`.
-       Falta que el paso del pack del asistente deje seguir con un pack que solo admite otro tracker (hoy su plan
-       usa las de eMuwarez).
+       Con más de un tracker con clave, el paso «Contenido» del asistente deja elegir el pack o los capítulos que
+       admite alguno (`/upload/elegibilidad`), dice cuáles, y el Resumen marca de entrada eMuwarez si lo admite y, si
+       no, los que lo admiten; el plan del pack usa las normas del primero de ellos.
      - Queda: la subida por lotes del asistente a otros trackers y probarlo en el NAS (una subida vieja a N.O.B.S:
        los dos torrents sembrando el mismo fichero sin comprobar datos).
+     - Por hacer: «Subir también a…» entre cualquier par de trackers, no solo desde eMuwarez: de una subida
+       completada con eMuwarr a cualquier tracker, a cualquier otro con clave. Solo las hechas con eMuwarr; las
+       subidas a mano quedan fuera (Gabriel, 23/11).
   3. Después, los internacionales que ya tienen código en `uploadrr-emu/`, solo para contenido con el audio en inglés y
      donde haya permiso.
 - **Por estudiar: nekoBT (nekobt.to; añadido y estudiado el 22/11).** Tracker público de anime centrado en fansubs y

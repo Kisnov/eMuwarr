@@ -56,6 +56,7 @@ from ..schemas import (
     UploadStartResult,
     TrackerParaSubir,
     ReglasDeTracker,
+    ElegibilidadSubida,
     SubirTambienBody,
     SubirTambienCandidata,
     SubirTambienCandidatas,
@@ -307,6 +308,19 @@ def upload_checks_progress(
     POST above is running; returns the empty/initial shape if none is running."""
     from emuwarez_uploadrr.services.upload_checks import get_checks_progress
     return get_checks_progress(item_id)
+
+
+@router.get("/library/{item_id}/upload/elegibilidad", response_model=ElegibilidadSubida)
+def elegibilidad_para_subir(item_id: int, current_user: dict = Depends(require_auth)):
+    """Qué trackers de los que se puede subir admiten el elemento por sus normas y, de una temporada, cada capítulo
+    (services/reglas_tracker.py::elegibilidad). Sin red: el asistente lo pide al abrirse, con más de un tracker."""
+    from ...services.library import get_library_item
+    from ...services.reglas_tracker import elegibilidad
+    with _get_conn() as conn:
+        item = get_library_item(conn, item_id)
+        if not item:
+            raise HTTPException(status_code=404, detail="Elemento no encontrado.")
+        return elegibilidad(conn, item)
 
 
 @router.get("/upload/trackers", response_model=list[TrackerParaSubir])
