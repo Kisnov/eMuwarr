@@ -2,6 +2,7 @@ import type { LibraryItemResponse } from '../types/api'
 import type { LibraryActionKind } from './LibraryTreeRow'
 import { Tooltip } from './Tooltip'
 import { UploadButtonIcon, RequestButtonIcon } from './DetailCard'
+import { RAZON_POR_IDENTIFICAR } from '../utils/lote'
 
 // Single source of truth for the per-item action buttons, shared by the detail
 // page and the tree. Both [Subir] and [Petición] are always shown; when the item is
@@ -26,9 +27,12 @@ export function LibraryActionButtons({ item, onAction, title, soloIcono = false 
   // exactly one season to offer.
 }) {
   const missing = item.local_status === 'Faltante'
+  // Carpeta manual sin ficha de TMDb: en la ficha la acción principal pasa a «Identificar»; en la tabla lo hace la
+  // chapa «Por identificar» de la columna Estado.
+  const porIdentificar = !!item.por_identificar
   // El brillo de btn-primary es para la acción principal de la vista (DESIGN.md): en la ficha, «Subir». En la
   // tabla se repiten en cada fila y van en secundario; «Petición» nunca es la principal.
-  const claseSubir = soloIcono ? 'btn btn-secondary btn-sm btn-icon-only' : 'btn btn-primary btn-sm'
+  const claseSubir = soloIcono ? 'btn btn-secondary btn-sm btn-icon-only' : porIdentificar ? 'btn btn-secondary btn-sm' : 'btn btn-primary btn-sm'
   // A season no longer gets disabled for being incomplete or for its episodes
   // disagreeing: both of those only rule out the PACK, and the wizard now
   // offers a per-episode mode where neither applies. The reason moves to the
@@ -37,13 +41,19 @@ export function LibraryActionButtons({ item, onAction, title, soloIcono = false 
   // no file to upload by any route.
   return (
     <>
+      {porIdentificar && !soloIcono && (
+        <Tooltip content="Busca su ficha en TMDb y confírmala para poder subirlo.">
+          <button className="btn btn-primary btn-sm" onClick={() => onAction('identificar', item)}>Identificar</button>
+        </Tooltip>
+      )}
       <Tooltip content={missing
         ? 'No se puede subir: contenido faltante (no lo tienes en disco).'
+        : porIdentificar ? `No se puede subir: ${RAZON_POR_IDENTIFICAR}`
         : (title ?? 'Prepara y sube este contenido a eMuwarez (nomenclatura, comprobaciones y subida).')}>
         <button
           className={claseSubir}
           onClick={() => onAction('upload', item)}
-          disabled={missing}
+          disabled={missing || porIdentificar}
           aria-label="Subir"
         >
           <UploadButtonIcon />{soloIcono ? null : ' Subir'}

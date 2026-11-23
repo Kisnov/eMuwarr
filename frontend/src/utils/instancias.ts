@@ -5,9 +5,17 @@ import { isValidHttpUrl } from './validation'
 // Errores de campo de un formulario de instancia (Instancias y el asistente); vacío si todo está bien.
 export interface ErroresDeCampo { name?: string; url?: string; api_key?: string }
 
-export function validarInstancia(f: { name?: string; url?: string; api_key?: string }, exigirClave: boolean): ErroresDeCampo {
+// Una carpeta manual no lleva URL ni clave: `url` es su ruta, absoluta tal como la ve la aplicación.
+export function validarInstancia(
+  f: { type?: string; name?: string; url?: string; api_key?: string }, exigirClave: boolean,
+): ErroresDeCampo {
   const e: ErroresDeCampo = {}
   if (!f.name?.trim()) e.name = 'Escribe un nombre.'
+  if (f.type === 'carpeta') {
+    if (!f.url?.trim()) e.url = 'Escribe la ruta de la carpeta.'
+    else if (!f.url.trim().startsWith('/')) e.url = 'La ruta tiene que ser absoluta: empieza por /.'
+    return e
+  }
   if (!f.url?.trim()) e.url = 'Escribe la URL de la instancia.'
   else if (!isValidHttpUrl(f.url)) e.url = 'La URL debe empezar por http:// o https:// e incluir un host válido.'
   if (exigirClave && !f.api_key?.trim()) e.api_key = 'Pega la API key de la instancia.'

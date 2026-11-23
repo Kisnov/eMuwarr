@@ -4,7 +4,7 @@ Uses the HTTP helper from base.py (request_json, over httpx).
 """
 from __future__ import annotations
 
-from .base import request_json, IntegrationError
+from .base import build_url, request_json, IntegrationError
 
 _TMDB_BASE = "https://api.themoviedb.org/3"
 
@@ -97,6 +97,33 @@ def find_images_by_imdb(imdb_id: str, *, language: str = "es-ES", api_key: str |
         if resultados:
             return resultados[0].get("poster_path") or None, resultados[0].get("backdrop_path") or None
     return None, None
+
+
+def search(kind: str, query: str, *, year: int | None = None, language: str = "es-ES", api_key: str | None = None,
+           conn=None) -> list[dict]:
+    """Los resultados de /search/movie o /search/tv (`kind` = "movie" o "tv") para ese título, filtrados por año si
+    se da (el de estreno o el del primer episodio)."""
+    _key = api_key or _get_tmdb_api_key(conn)
+    if not _key:
+        raise IntegrationError("TMDb API key no configurada")
+    anio = "year" if kind == "movie" else "first_air_date_year"
+    data = request_json("GET", build_url(_TMDB_BASE, f"search/{kind}",
+                                         {"api_key": _key, "query": query, "language": language, anio: year}))
+    resultados = data.get("results") if isinstance(data, dict) else None
+    return [r for r in resultados if isinstance(r, dict) and r.get("id")] if isinstance(resultados, list) else []
+
+
+def get_details(kind: str, tmdb_id: int | str, *, language: str = "es-ES", api_key: str | None = None,
+                conn=None) -> dict:
+    """/movie/{id} o /tv/{id} con sus `external_ids` (imdb_id, tvdb_id) en la misma llamada."""
+    _key = api_key or _get_tmdb_api_key(conn)
+    if not _key:
+        raise IntegrationError("TMDb API key no configurada")
+    data = request_json("GET", build_url(_TMDB_BASE, f"{kind}/{tmdb_id}",
+                                         {"api_key": _key, "language": language, "append_to_response": "external_ids"}))
+    if not isinstance(data, dict) or not data.get("id"):
+        raise IntegrationError(f"TMDb no tiene la ficha {kind}/{tmdb_id}")
+    return data
 
 
 def map_tmdb_provider_to_emu_provider(provider_name: str) -> str | None:

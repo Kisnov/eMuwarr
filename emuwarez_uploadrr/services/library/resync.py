@@ -161,6 +161,21 @@ def resync_single_item(conn: sqlite3.Connection, item_id: int) -> dict:
         return {"ok": False, "message": texto_de_error(exc)}
 
 
+def _reescanear_carpeta(conn: sqlite3.Connection, instance_id: int, _log) -> dict:
+    """Una carpeta manual no tiene a quién avisar: se vuelve a escanear (tamaño y MediaInfo del original editado)."""
+    from .sync import SyncAlreadyRunning, sync_instance_con_candado
+    try:
+        sync_instance_con_candado(conn, instance_id)
+    except SyncAlreadyRunning:
+        _log("info", "Hay una sincronización de biblioteca en marcha: la carpeta se relee en el próximo escaneo.")
+        return {"ok": False, "message": "sincronización en marcha"}
+    except Exception as exc:
+        _log("warning", f"No se pudo volver a escanear la carpeta: {texto_de_error(exc)}")
+        return {"ok": False, "message": texto_de_error(exc)}
+    _log("info", "Carpeta escaneada de nuevo con el fichero preparado.")
+    return {"ok": True, "message": "carpeta escaneada"}
+
+
 def refresh_arr_and_resync(
     conn: sqlite3.Connection, item_id: int, *,
     on_log: Optional[Callable[[str, str], None]] = None,
@@ -187,6 +202,9 @@ def refresh_arr_and_resync(
         (logger.warning if level == "warning" else logger.info)(message)
 
     try:
+        fila = conn.execute("SELECT instance_id, instance_type FROM library_items WHERE id = ?", (item_id,)).fetchone()
+        if fila and fila["instance_type"] == "carpeta":
+            return _reescanear_carpeta(conn, fila["instance_id"], _log)
         resolved = _resolve_arr_top(conn, item_id)
         if not resolved["ok"]:
             _log("warning", f"No se pudo localizar la instancia de Radarr/Sonarr: {resolved['message']}")

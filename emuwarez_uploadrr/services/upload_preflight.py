@@ -52,7 +52,14 @@ def validate_upload_preconditions(library_item: dict, proposal: dict | None = No
             warnings.append(f"La ruta no existe actualmente en disco: {path}")
 
         if not library_item.get("tmdb_id"):
-            warnings.append("No hay TMDb ID asociado. Se recomienda para la subida.")
+            if library_item.get("instance_type") == "carpeta":
+                errors.append("Identifica la ficha en TMDb antes de subirla (viene de una carpeta manual).")
+            else:
+                warnings.append("No hay TMDb ID asociado. Se recomienda para la subida.")
+        from .library.carpeta import error_de_varios_capitulos
+        varios = error_de_varios_capitulos(library_item)
+        if varios:
+            errors.append(varios)
 
         # Same fallback as the runtime layer: when the setting is unset, use the
         # bundled path (/opt/Uploadrr in the Docker image). Only fail when it's

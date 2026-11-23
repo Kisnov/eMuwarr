@@ -30,10 +30,16 @@ qBittorrent. Todo desde el navegador.
 4. **Sube** con [Uploadrr-EMU](uploadrr-emu/), que va dentro de la imagen: capturas,
    torrent, subida a eMuwarez y alta en qBittorrent, con el progreso en directo.
 
+**Sin Radarr ni Sonarr:** en Instancias añade una **carpeta manual** (por ejemplo `/data/torrents/manual`) y deja ahí
+los vídeos. Al escanearla, la aplicación lee del nombre de cada fichero el título, el año, la temporada y el capítulo,
+la fuente y el grupo, y busca la ficha en TMDb. Tú la confirmas en Biblioteca (o confirmas de una vez las que sugiere)
+y a partir de ahí se sube como lo demás. La carpeta tiene que estar en el mismo disco que la de subidas y dentro de las
+rutas permitidas.
+
 ## Qué necesitas
 
 - Un equipo con **Docker** (24+ con Compose v2). La imagen lleva todo lo demás.
-- **Radarr** y/o **Sonarr** con tu biblioteca.
+- **Radarr** y/o **Sonarr** con tu biblioteca, o una **carpeta manual** con lo que quieras subir sin pasar por ellos.
 - Una cuenta de **eMuwarez** con su API key, y una API key de **TMDb** (gratuita).
 - **qBittorrent**, que vea la carpeta de subidas en la misma ruta que este contenedor.
 - La media y la carpeta de subidas en el **mismo sistema de ficheros**, para que la subida sea un enlace duro y no
@@ -93,7 +99,7 @@ qBittorrent, «Reenviar a qBittorrent» lo vuelve a añadir sin subir nada.
 - **Estadísticas**: tu ratio, lo subido, lo bajado y el bonus, día a día.
 - **Guía**: cada campo de la nomenclatura de eMuwarez, con ejemplos.
 - **Tareas**: sincronización periódica, vigilancia de instancias, copias automáticas y aviso de versión nueva.
-- **Instancias**: tus Radarr y Sonarr.
+- **Instancias**: tus Radarr y Sonarr, y tus carpetas manuales.
 - **Logs**: registros de la aplicación y de cada subida, con los secretos tapados.
 - **Configuración**: claves, qBittorrent, proveedores de imágenes, notificaciones (Discord, Telegram, webhook), un
   widget para [Homepage](https://gethomepage.dev), diagnóstico y copias de seguridad.
@@ -140,7 +146,7 @@ qBittorrent, «Reenviar a qBittorrent» lo vuelve a añadir sin subir nada.
 - **Guía**: cada campo de la nomenclatura de eMuwarez, con ejemplos y de dónde lo saca la aplicación.
 - **Tareas**: sincronización periódica de biblioteca y peticiones, vigilancia de instancias (sincroniza una Radarr o
   Sonarr cuando vuelve a responder), mantenimiento nocturno con copias automáticas y aviso de versión nueva en la campana.
-- **Instancias**: tus Radarr y Sonarr.
+- **Instancias**: tus Radarr y Sonarr, y tus carpetas manuales.
 - **Logs**: registros de la aplicación y de cada subida, con los secretos redactados.
 - **Configuración**: un índice de secciones con buscador y una barra de guardado que cuenta los campos cambiados.
   Claves de TMDb, eMuwarez y hosts de imágenes (se comprueban contra el proveedor), qBittorrent, mapeo de rutas,

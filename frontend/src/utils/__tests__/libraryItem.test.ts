@@ -10,7 +10,7 @@
  */
 import { describe, it, expect } from 'vitest'
 import {
-  isSeasonReady, episodeNotReadyReason, seasonNotReadyReason, posterUrl, tituloEnFicha,
+  isSeasonReady, episodeNotReadyReason, seasonNotReadyReason, posterUrl, tituloEnFicha, leerIdTmdb,
 } from '../libraryItem'
 import type { LibraryItemResponse } from '../../types/api'
 
@@ -159,5 +159,24 @@ describe('tituloEnFicha', () => {
 
   it('una película o una serie, como en la lista', () => {
     expect(tituloEnFicha(item({ item_type: 'movie', title: 'Dune', year: 2021 }))).toBe('Dune (2021)')
+  })
+})
+
+describe('el id de TMDb que se pega al identificar una carpeta manual', () => {
+  it('vale un número solo, sin tipo', () => {
+    expect(leerIdTmdb(' 603 ')).toEqual({ id: '603' })
+  })
+
+  it('de la dirección de una ficha saca el id y el tipo, con el nombre, la consulta o la temporada detrás', () => {
+    expect(leerIdTmdb('https://www.themoviedb.org/movie/693134-dune-part-two')).toEqual({ id: '693134', tipo: 'movie' })
+    expect(leerIdTmdb('https://www.themoviedb.org/tv/1399-game-of-thrones?language=es-ES')).toEqual({ id: '1399', tipo: 'tv' })
+    expect(leerIdTmdb('themoviedb.org/tv/95396/season/1')).toEqual({ id: '95396', tipo: 'tv' })
+  })
+
+  it('lo demás no es un id de TMDb', () => {
+    expect(leerIdTmdb('')).toBeNull()
+    expect(leerIdTmdb('tt0133093')).toBeNull()
+    expect(leerIdTmdb('https://www.imdb.com/title/tt0133093/')).toBeNull()
+    expect(leerIdTmdb('https://www.themoviedb.org/person/287')).toBeNull()
   })
 })
