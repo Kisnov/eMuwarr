@@ -68,6 +68,13 @@ descripción y el cliente.
        la configuración del encode si es un encode y el tráiler en películas); en NOBS el tipo sale del MediaInfo, no del
        nombre (un WEB-DL que pasó por Tdarr/HandBrake/ffmpeg es WEBRip), y puede no coincidir con el que se usó en
        eMuwarez.
+     - Ya está: los adaptadores de Uploadrr-EMU (`-tk NOBS` / `-tk MNV`), sus claves en Configuración y la subida desde
+       el Resumen del asistente (una sola subida, no una tanda): se eligen los trackers con clave y sale un trabajo por
+       tracker (`upload_jobs.tracker`), con el mismo nombre y el mismo fichero. El segundo espera a que acabe el primero,
+       reutiliza su preparación y lanza Uploadrr-EMU con `--resume` (mismo BASE.torrent: mismas piezas). «Reenviar a
+       qBittorrent» pide el torrent al tracker de la subida.
+     - Queda: subir a NOBS/Milnueve lo que ya está en eMuwarez (PR 4), las reglas de idioma y categoría por tracker
+       (PR 5), la subida por lotes a otros trackers y probarlo en el NAS.
   3. Después, los internacionales que ya tienen código en `uploadrr-emu/`, solo para contenido con el audio en inglés y
      donde haya permiso.
 - **Por estudiar: nekoBT (nekobt.to; añadido y estudiado el 22/11).** Tracker público de anime centrado en fansubs y

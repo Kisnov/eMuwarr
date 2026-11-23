@@ -509,7 +509,7 @@ LISTO = {"checks": [{"id": "accesible", "label": "El archivo es accesible", "sta
 def sin_comprobaciones(monkeypatch):
     """Claves configuradas y contenido apto: cada test decide qué falla."""
     from emuwarez_uploadrr.services import upload_checks, upload_queue
-    monkeypatch.setattr(upload_queue, "_season_upload_preconditions", lambda conn: [])
+    monkeypatch.setattr(upload_queue, "_season_upload_preconditions", lambda conn, *_tracker: [])
     contenido = {}
     monkeypatch.setattr(upload_checks, "run_upload_checks",
                         lambda conn, item_id, scope="all", **kw: contenido.get(item_id, LISTO))
@@ -730,6 +730,6 @@ def test_la_api_valida_el_lote(client, auth_headers, db_conn, tmp_path, monkeypa
     assert client.post("/api/uploads/lote", json={"elementos": [_el(1)]}).status_code == 401
 
     from emuwarez_uploadrr.services import upload_queue
-    monkeypatch.setattr(upload_queue, "_season_upload_preconditions", lambda conn: ["Ruta de Uploadrr no existe: /x"])
+    monkeypatch.setattr(upload_queue, "_season_upload_preconditions", lambda conn, *_tracker: ["Ruta de Uploadrr no existe: /x"])
     resp = client.post("/api/uploads/lote", json={"elementos": [_el(_peli(db_conn, tmp_path))]}, headers=auth_headers)
     assert (resp.status_code, resp.json()["detail"]) == (409, ["Ruta de Uploadrr no existe: /x"])

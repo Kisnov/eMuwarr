@@ -49,7 +49,7 @@ export function OtrosTrackersCard({ form }: { form: ConfigForm }) {
     <div className="placeholder-card">
       <CabeceraTarjeta
         titulo="Otros trackers"
-        descripcion="Para subir también a N.O.B.S y a Milnueve, con el mismo fichero que en eMuwarez. La subida a estos trackers aún no está disponible: por ahora solo se guardan sus claves."
+        descripcion="Para subir también a N.O.B.S y a Milnueve, con el mismo fichero que en eMuwarez. Con su clave puesta, el Resumen del asistente deja elegirlos (una subida por tracker); una tanda sigue yendo solo a eMuwarez."
       />
       <ClaveTracker nombre="N.O.B.S" configurado={settings?.nobs_api_key_configured}
         enmascarado={settings?.nobs_api_key_masked} valor={newNobsKey} setValor={setNewNobsKey}

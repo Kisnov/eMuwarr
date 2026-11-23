@@ -24,7 +24,7 @@ from ...services.upload_execution import (
     reenviar_a_qbittorrent,
 )
 from ...services.subida_pasos import NOMBRES, pasos_de_subida, reanudar_desde, subpasos_que_reutilizaria
-from ...services import lotes
+from ...services import lotes, trackers
 from ...services.mis_torrents import lectura_para_moderacion, pendiente_de_moderacion
 from ...services.lotes import PATRON_LOTE_ID, contar_por_lote
 from ...services.trailer_check import marcar_trailer_a_mano
@@ -53,6 +53,7 @@ from ..schemas import (
     UploadRetryRequest,
     UploadStartRequest,
     UploadStartResult,
+    TrackerParaSubir,
 )
 
 router = APIRouter(tags=["uploads"])
@@ -140,6 +141,7 @@ def _job_to_detail(
     prepared = j.get("prepared_path")
     source = j.get("source_path") or j.get("path")
     using_prepared = bool(prepared) if (prepared or source) else None
+    tracker = trackers.TRACKERS.get(j.get("tracker") or trackers.POR_DEFECTO, trackers.EMU)
     return UploadJobDetail(
         media_type=media_type,
         poster_url=poster_url,
@@ -186,7 +188,10 @@ def _job_to_detail(
         runtime_type=_extract_runtime_type(j),
         command_preview=_extract_command_preview(j),
         progress_phase=compute_progress_phase(j.get("status", ""), j.get("stage")),
-        pasos=pasos_de_subida(j.get("status"), j.get("stage"), j.get("etapa_parada"), j.get("pasos_uploadrr_json")),
+        tracker=tracker.id,
+        tracker_nombre=tracker.nombre,
+        pasos=pasos_de_subida(j.get("status"), j.get("stage"), j.get("etapa_parada"), j.get("pasos_uploadrr_json"),
+                              tracker.nombre),
         reintento_reutiliza=subpasos_que_reutilizaria(j.get("status"), j.get("etapa_parada"), j.get("pasos_uploadrr_json")),
         reintento_desde=_reintento_desde(j),
         reintento_desde_nombre=NOMBRES.get(_reintento_desde(j) or ""),
@@ -263,6 +268,13 @@ def upload_checks_progress(
     return get_checks_progress(item_id)
 
 
+@router.get("/upload/trackers", response_model=list[TrackerParaSubir])
+def trackers_para_subir(current_user: dict = Depends(require_auth)):
+    """Los trackers que el Resumen ofrece: eMuwarez y los que tienen su clave puesta."""
+    with _get_conn() as conn:
+        return [TrackerParaSubir(id=t.id, nombre=t.nombre) for t in trackers.para_subir(conn)]
+
+
 @router.post("/library/{item_id}/upload/queue", response_model=UploadQueueResponse)
 def queue_upload(
     item_id: int,
@@ -286,13 +298,17 @@ def queue_upload(
             except (TypeError, ValueError):
                 continue
     checks = body.checks.model_dump() if body.checks else None
+    tracker = body.tracker or trackers.POR_DEFECTO
     with _get_conn() as conn:
+        motivo = trackers.motivo_para_no_subir(conn, tracker)
+        if motivo:
+            raise HTTPException(status_code=422, detail=motivo)
         result = queue_upload_for_item(
             item_id, request_item_id=body.request_item_id,
             remux_overrides=overrides, remux_snapshot=body.remux_snapshot, checks=checks, conn=conn,
             source_override=body.source, provider_override=body.provider, tag_override=body.tag,
             title_override=body.title, idiomas_audio=body.idiomas, lote_id=body.lote_id,
-            anonimo=body.anonimo, personal_release=body.personal_release,
+            anonimo=body.anonimo, personal_release=body.personal_release, tracker=tracker,
         )
 
     job = result.get("job")
