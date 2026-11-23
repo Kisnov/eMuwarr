@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 
 DB_FILE = CONFIG_DIR / "emuwarez_uploadrr.db"
 
-SCHEMA_VERSION = 62
+SCHEMA_VERSION = 63
 
 # Fase A del plan multitracker: el tracker de las filas de antes de que hubiera varios. Es `services.trackers.POR_DEFECTO`
 # (aquí en literal para que la base no importe servicios; test_tracker_en_la_base.py comprueba que coinciden).
@@ -1138,6 +1138,12 @@ def _migrate_upload_jobs_copia_de(conn: sqlite3.Connection) -> None:
     _anadir_columna(conn, "upload_jobs", "copia_de_job_id", "INTEGER")
 
 
+def _migrate_upload_jobs_descripcion(conn: sqlite3.Connection) -> None:
+    """Esquema 63: la descripción propia (BBCode) que se escribió en el Resumen para esta subida; Uploadrr-EMU la pone
+    tras el tráiler y antes de las capturas (`-df`). NULL: solo la que genera Uploadrr-EMU."""
+    _anadir_columna(conn, "upload_jobs", "descripcion", "TEXT")
+
+
 def _migrate_perfil_historial_completo(conn: sqlite3.Connection) -> None:
     """Esquema 56: el historial de la cuenta guarda también buffer, seeding, leeching, H&R y grupo, que ya trae la
     misma lectura de /api/user. Las filas de antes se quedan con esas columnas a NULL."""
@@ -1925,6 +1931,7 @@ def init_db(conn: Optional[sqlite3.Connection] = None) -> None:
         _migrate_tracker_en_tablas(conn)
         _migrate_upload_jobs_copia_de(conn)
         _migrate_instances_carpeta(conn)  # esquema 62: en dev era el 60
+        _migrate_upload_jobs_descripcion(conn)
         set_state(conn, "schema_version", str(SCHEMA_VERSION))
         if sin_copia:
             set_state(conn, "migracion_sin_copia", str(version))  # backup_service.avisar_migracion_sin_copia

@@ -98,7 +98,9 @@ came in from `Kisnov/Uploadrr-EMU` with `git subtree add`, history kept; that re
   folder on the media's filesystem (e.g. under `/data`): a symlink only seeds if qBittorrent resolves its target.
 - Contract with Uploadrr-EMU, change both sides in the same PR: argv in `services/uploadrr_contract.py` (`--variante` only for a non-plain category of
   `services/reglas_tracker.py`, never for eMuwarez; below 720p it
-  adds `-avbc`, and Uploadrr-EMU puts its `AVISO_BAJA_CALIDAD` notice at the top of the description;
+  adds `-avbc`, and Uploadrr-EMU puts its `AVISO_BAJA_CALIDAD` notice at the top of the description; a job's own
+  description (`upload_jobs.descripcion`, typed in the Resumen) goes as `-df config_uploadrr/<job>-descripcion.txt`,
+  written before launch and deleted with the job's config;
   `test_contrato_uploadrr_real.py` parses the app's argv with the real `uploadrr-emu/src/args.py`);
   `config.yaml` keys set by `upload_execution/config.py` with `uploadrr_config.py` / `uploadrr_yaml.py` (among them the stock signature image, replaced by the current one, `AUTO.keep_quiet`, `SCREENS.use_oxipng`/`oxipng_level`, `DEFAULT.always_anon`
   and `TRACKERS.EMU.anon`, all `false`: only the `-a` flag makes an upload anonymous), on top of the user's

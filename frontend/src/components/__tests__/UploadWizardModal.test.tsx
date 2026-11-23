@@ -212,7 +212,7 @@ describe('película', () => {
     await esperar(() => onClose.mock.calls.length > 0)
     expect(subidas.queueUpload).toHaveBeenCalledWith(
       10, {}, LISTO, { ordered_tracks: PISTAS.ordered_tracks }, undefined, undefined, undefined,
-      { anonimo: null, personalRelease: null })
+      { anonimo: null, personalRelease: null }, undefined, '')
     expect(onDone).toHaveBeenCalled()
     expect(onNavigate).toHaveBeenCalledWith('uploads')
   })
@@ -235,7 +235,7 @@ describe('película', () => {
     await esperar(() => onClose.mock.calls.length > 0)
     expect(subidas.queueUpload).toHaveBeenCalledWith(
       10, {}, LISTO, { ordered_tracks: PISTAS.ordered_tracks }, undefined, undefined, undefined,
-      { anonimo: true, personalRelease: null })
+      { anonimo: true, personalRelease: null }, undefined, '')
   })
 
   it('con otro tracker con clave, se elige en el Resumen y sale una subida por tracker, eMuwarez primero', async () => {
@@ -347,6 +347,78 @@ describe('película', () => {
     expect(m(subidas.queueUpload).mock.calls.map(c => c[8])).toEqual([undefined, 'nobs', 'nobs'])
   })
 
+  it('la descripción del Resumen va a todos los trackers, salvo al que tenga la suya', async () => {
+    m(subidas.fetchTrackersParaSubir).mockResolvedValue([
+      { id: 'emu', nombre: 'eMuwarez' }, { id: 'nobs', nombre: 'N.O.B.S' }, { id: 'mnv', nombre: 'Milnueve' }])
+    await abrir(PELICULA)
+    await esperar(() => texto().includes('Dune WEB-DL AMZN [GRP]'))
+    await pulsar(boton('Continuar'))
+    await esperar(() => texto().includes('✓ Todo listo para subir'))
+    const casilla = (nombre: string) => [...document.querySelectorAll<HTMLLabelElement>('label.asist-casilla')]
+      .find(l => l.textContent?.trim() === nombre)!.querySelector('input')!
+    const area = (nombre: string) => document.querySelector<HTMLTextAreaElement>(`textarea[aria-label="${nombre}"]`)!
+    const escribirEn = async (el: HTMLTextAreaElement, valor: string) => {
+      await act(async () => {
+        Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(el, valor)
+        el.dispatchEvent(new Event('input', { bubbles: true }))
+      })
+    }
+    await pulsar(casilla('N.O.B.S'))
+    await pulsar(casilla('Milnueve'))
+    await escribirEn(area('Descripción propia (BBCode)'), '[b]Común[/b]')
+    await pulsar(casilla('Otra para Milnueve'))
+    expect(area('Descripción para Milnueve').value).toBe('[b]Común[/b]')  // empieza con la común
+    await escribirEn(area('Descripción para Milnueve'), '[b]Solo Milnueve[/b]')
+
+    await pulsar(boton('Subir a eMuwarez, N.O.B.S y Milnueve'))
+    await esperar(() => onClose.mock.calls.length > 0)
+    expect(m(subidas.queueUpload).mock.calls.map(c => [c[8], c[9]])).toEqual([
+      [undefined, '[b]Común[/b]'], ['nobs', '[b]Común[/b]'], ['mnv', '[b]Solo Milnueve[/b]']])
+  })
+
+  it('la plantilla de Configuración llena la descripción y se sube con lo que se le añada', async () => {
+    m(fetchSettings).mockResolvedValue({
+      upload_tags: ['GRP'], descripcion_plantilla: '[i]firma[/i]',
+    } as unknown as Awaited<ReturnType<typeof fetchSettings>>)
+    await abrir(PELICULA)
+    await esperar(() => texto().includes('Dune WEB-DL AMZN [GRP]'))
+    await pulsar(boton('Continuar'))
+    await esperar(() => texto().includes('✓ Todo listo para subir'))
+    const area = document.querySelector<HTMLTextAreaElement>('textarea[aria-label="Descripción propia (BBCode)"]')!
+    expect(area.value).toBe('[i]firma[/i]')
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(area, 'Notas\n[i]firma[/i]')
+      area.dispatchEvent(new Event('input', { bubbles: true }))
+    })
+
+    await pulsar(boton('Subir a eMuwarez'))
+    await esperar(() => onClose.mock.calls.length > 0)
+    expect(m(subidas.queueUpload).mock.calls.map(c => c[9])).toEqual(['Notas\n[i]firma[/i]'])
+  })
+
+  it('con un solo tracker se sube la común, aunque antes tuviera la suya', async () => {
+    m(subidas.fetchTrackersParaSubir).mockResolvedValue([{ id: 'emu', nombre: 'eMuwarez' }, { id: 'nobs', nombre: 'N.O.B.S' }])
+    await abrir(PELICULA)
+    await esperar(() => texto().includes('Dune WEB-DL AMZN [GRP]'))
+    await pulsar(boton('Continuar'))
+    await esperar(() => texto().includes('✓ Todo listo para subir'))
+    const casilla = (nombre: string) => [...document.querySelectorAll<HTMLLabelElement>('label.asist-casilla')]
+      .find(l => l.textContent?.trim() === nombre)!.querySelector('input')!
+    await pulsar(casilla('N.O.B.S'))
+    await pulsar(casilla('Otra para N.O.B.S'))
+    const propia = document.querySelector<HTMLTextAreaElement>('textarea[aria-label="Descripción para N.O.B.S"]')!
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(propia, 'Solo N.O.B.S')
+      propia.dispatchEvent(new Event('input', { bubbles: true }))
+    })
+    await pulsar(casilla('eMuwarez'))
+    expect(document.querySelector('textarea[aria-label="Descripción para N.O.B.S"]')).toBeNull()
+
+    await pulsar(boton('Subir a N.O.B.S'))
+    await esperar(() => onClose.mock.calls.length > 0)
+    expect(m(subidas.queueUpload).mock.calls.map(c => [c[8], c[9]])).toEqual([['nobs', '']])
+  })
+
   it('sin tipo conocido, el Resumen deja elegirlo con el Source, lo guarda y vuelve a comprobar', async () => {
     m(subidas.runUploadChecks).mockResolvedValueOnce(SIN_TIPO as never)
     await abrir(PELICULA)
@@ -450,6 +522,21 @@ describe('cerrar', () => {
     expect(onClose).toHaveBeenCalledTimes(1)
   })
 
+  it('con solo una descripción escrita también pregunta', async () => {
+    await abrir(PELICULA)
+    await esperar(() => texto().includes('Dune WEB-DL AMZN [GRP]'))
+    await pulsar(boton('Continuar'))
+    await esperar(() => texto().includes('✓ Todo listo para subir'))
+    const area = document.querySelector<HTMLTextAreaElement>('textarea[aria-label="Descripción propia (BBCode)"]')!
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(area, 'Notas')
+      area.dispatchEvent(new Event('input', { bubbles: true }))
+    })
+    await pulsar(document.querySelector('[aria-label="Cerrar"]') ?? undefined)
+    expect(onClose).not.toHaveBeenCalled()
+    expect(texto()).toContain('¿Descartar los cambios?')
+  })
+
   it('cerrar mientras se prepara el pack se lo dice al servidor', async () => {
     m(biblioteca.getLibrary).mockResolvedValue({ items: [E1, E2], total: 2 } as never)
     m(temporada.previewSeasonPack).mockReturnValue(new Promise(() => {}))
@@ -497,7 +584,7 @@ describe('pack de temporada', () => {
     expect(subidas.queueUpload).toHaveBeenCalledWith(
       20, {}, LISTO, null,
       { source: 'WEB-DL', tag: 'GRP', title: 'Serie', provider: undefined, idiomas: { 1: 'spa' } },
-      undefined, undefined, { anonimo: null, personalRelease: null })
+      undefined, undefined, { anonimo: null, personalRelease: null }, undefined, '')
   })
 
   it('«Ver nombre de todos los capítulos» pide los nombres con lo elegido', async () => {

@@ -204,6 +204,7 @@ def build_uploadrr_emu_command(
     config: Optional[str] = None,
     tracker: str = "EMU",
     variante: Optional[str] = None,
+    descripcion: Optional[str] = None,
 ) -> list[str]:
     """Build the real Uploadrr-EMU argv. Always a list[str], never a shell string.
 
@@ -235,6 +236,9 @@ def build_uploadrr_emu_command(
 
     `variante` (la de services/reglas_tracker.py: anime, latino, anime_catalan) añade `--variante <v>`: Uploadrr-EMU
     elige con ella la categoría del tracker (MOVIE_ANIME…). Sin ella, la de siempre.
+
+    `descripcion` (la ruta del fichero con la descripción propia de la subida) añade `-df <ruta absoluta>`: Uploadrr-EMU
+    la pone tras el tráiler y antes de las capturas y la firma.
 
     Only accepts prepared_path (or applied_path passed as prepared_path by
     the caller) — there is intentionally no source_path parameter, so the
@@ -273,6 +277,8 @@ def build_uploadrr_emu_command(
     if personal_release:
         cmd.append("-pr")
     cmd += argv_variante(variante)
+    if descripcion:
+        cmd += ["-df", os.path.abspath(descripcion)]
     if reanudar or solo_cliente or base_desde:
         cmd.append("--resume")
     if solo_cliente:

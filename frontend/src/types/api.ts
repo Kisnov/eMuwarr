@@ -705,6 +705,8 @@ export interface UploadJob {
   // subida creada así, la de origen cuyo fichero y torrent reutiliza.
   subir_tambien_a?: { id: string; nombre: string }[]
   copia_de_job_id?: number | null
+  // La descripción propia (BBCode) escrita en el Resumen; Uploadrr-EMU la añade a la que genera.
+  descripcion?: string | null
   // Completada pero eMuwarez aún no la enseña: se deduce de «Tus subidas» (cada 6 h), puede ir con retraso.
   pendiente_moderacion?: boolean
   nomenclature_snapshot?: UploadNomenclatureSnapshot | null

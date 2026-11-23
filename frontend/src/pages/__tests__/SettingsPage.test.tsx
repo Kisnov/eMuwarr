@@ -50,6 +50,7 @@ const AJUSTES: SettingsData = {
   source_engine_enabled: false,
   emu_add_logo: true,
   emu_per_episode_screens: false,
+  descripcion_plantilla: null,
   remux_track_mode: 'solo_renombrar',
   remux_no_reflink_copies: false,
   qbit_username: 'admin',

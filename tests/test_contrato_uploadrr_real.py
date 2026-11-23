@@ -129,6 +129,22 @@ def test_el_config_de_la_subida_llega_como_global_con_la_ruta_absoluta(parser_up
     assert _parsear(parser_uploadrr, _cmd()).config is None
 
 
+def test_la_descripcion_propia_llega_como_descfile_y_no_como_otro_video(parser_uploadrr, args_uploadrr, tmp_path):
+    archivo = tmp_path / "Peli.2024.1080p.WEB-DL.mkv"
+    archivo.write_bytes(b"x")
+    descripcion = tmp_path / "config_uploadrr" / "7-descripcion.txt"
+    descripcion.parent.mkdir()
+    descripcion.write_text("[b]Notas[/b]", encoding="utf-8")  # existe: no debe contarse como otro ítem
+    for cambios in ({}, dict(category="tv", season=1, reanudar=True, config=str(tmp_path / "7.yaml"))):
+        argv = _cmd(prepared_path=str(archivo), descripcion=str(descripcion), **cambios)
+        items, globales = args_uploadrr.group_args_by_path(argv)
+        assert items == [([], str(archivo.resolve()))]
+        ns = parser_uploadrr.parse_args(globales)
+        args_uploadrr.enforce_global_only(ns, is_global=True, parser=parser_uploadrr)
+        assert ns.descfile == str(descripcion)
+    assert _parsear(parser_uploadrr, _cmd()).descfile is None
+
+
 def _choices(parser: argparse.ArgumentParser, opcion: str) -> set[str]:
     (accion,) = [a for a in parser._actions if opcion in a.option_strings]
     return set(accion.choices)

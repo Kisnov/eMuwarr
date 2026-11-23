@@ -9,7 +9,7 @@ import { CabeceraTarjeta } from '../CabeceraTarjeta'
 import type { ConfigForm } from './useConfigForm'
 
 export function OtrosCard({ form }: { form: ConfigForm }) {
-  const { modoDePistas, setModoDePistas, sinCopiasReflink, setSinCopiasReflink, sincronizarAlVolver, setSincronizarAlVolver, sourceEngine, setSourceEngine, addLogo, setAddLogo, capturasPorCapitulo, setCapturasPorCapitulo, uploadMaxConcurrent, setUploadMaxConcurrent, ignoreSpecials, setIgnoreSpecials, recentLimit, setRecentLimit } = form
+  const { modoDePistas, setModoDePistas, sinCopiasReflink, setSinCopiasReflink, sincronizarAlVolver, setSincronizarAlVolver, sourceEngine, setSourceEngine, addLogo, setAddLogo, capturasPorCapitulo, setCapturasPorCapitulo, plantillaDescripcion, setPlantillaDescripcion, uploadMaxConcurrent, setUploadMaxConcurrent, ignoreSpecials, setIgnoreSpecials, recentLimit, setRecentLimit } = form
   // Tamaño de interfaz. Arranca de lo que ya está aplicado (utils/uiScale lo
   // puso al cargar la página desde localStorage), no de un valor por defecto:
   // si no, el desplegable diría 100% mientras la interfaz está al 130%.
@@ -56,6 +56,12 @@ export function OtrosCard({ form }: { form: ConfigForm }) {
           )}
         </Campo>
         <Interruptor etiqueta="Subir el logo del contenido" info={<InfoIcon text="Incrusta el logo del contenido al principio de la descripción del torrent, en español cuando TMDb lo tiene en ese idioma. Desactivado, la descripción se sube sin logo; el resto (capturas, ficha técnica y tráiler) no cambia." />} marcado={addLogo} onCambio={setAddLogo} />
+        <Campo etiqueta="Plantilla de descripción" info={<InfoIcon text="El texto (BBCode) con el que empieza la descripción propia del Resumen de cada subida, por ejemplo tu firma. En cada subida se puede cambiar o borrar. Va al final de la descripción generada, tras el tráiler y antes de las capturas, y a todos los trackers de la subida." />}>
+          {c => (
+            <textarea {...c} className="form-input" rows={4} maxLength={30000} spellCheck={false}
+                      value={plantillaDescripcion} onChange={e => setPlantillaDescripcion(e.target.value)} />
+          )}
+        </Campo>
         <Interruptor etiqueta="No hacer nunca copias reflink" info={<InfoIcon text="Si el archivo lo comparte un torrent o la biblioteca (un hardlink), renombrar las pistas y poner el título interno se hacen en una copia por reflink dentro de la carpeta de subidas, para no tocar el original. Activado, nunca se hace esa copia: esas ediciones se omiten con un aviso en el registro de la subida y se sube el archivo tal cual, con un enlace duro. Un archivo que no comparte nadie se sigue editando en su sitio." />} marcado={sinCopiasReflink} onCambio={setSinCopiasReflink} />
         <Campo etiqueta="Capturas de los packs" info={<InfoIcon text="En un pack de temporada o de serie completa, de qué capítulos genera y sube capturas Uploadrr. Por defecto, solo del primero (el de número más bajo, sin contar los especiales si el pack trae otra temporada). Con todos los capítulos, cada uno lleva además las suyas en un desplegable de la descripción, y con muchos capítulos la subida tarda bastante más." />}>
           {c => (
