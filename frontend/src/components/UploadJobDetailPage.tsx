@@ -8,6 +8,7 @@ import { formatDate, parseServerDate } from '../utils/format'
 import { segundosDeFase } from '../utils/lineaDeTiempo'
 import { InfoIcon } from './InfoIcon'
 import { SeedingBloque } from './SaludSeeding'
+import { SubirTambienBloque } from './SubirTambien'
 import { StatsTrackerBloque } from './StatsTracker'
 import type { SeedingEstado } from '../hooks/useSeeding'
 import { DetailHero, DetailTitle, DetailTitleText } from './DetailCard'
@@ -610,6 +611,7 @@ export function UploadJobDetailPage({ job, onBack, onStart, onRetry, onCancel, o
         <SeedingBloque job={job} seeding={seeding} onVerRegistro={() => setShowActividad(true)} onReenviado={onReenviado} />
         <StatsTrackerBloque key={job.id} job={job} />
       </div>
+      {completada && <SubirTambienBloque job={job} onEncolado={onReenviado} />}
 
       {completada ? (
         // Terminada, las fases ya no son la noticia: quedan a un clic.

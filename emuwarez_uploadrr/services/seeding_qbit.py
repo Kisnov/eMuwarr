@@ -336,3 +336,34 @@ def salud_del_seeding(conn: sqlite3.Connection, *, refrescar: bool = False) -> d
         items.append(_entrada(fila["id"], t, como))
     return {"configurado": True, "disponible": True, "mensaje": None, "actualizado": actualizado,
             "items": items, "url_publica": publica}
+
+
+def completo_en_qbit(conn: sqlite3.Connection, rutas: list[str]) -> dict[str, Optional[str]]:
+    """Para cada ruta de la carpeta de subidas, None si qBittorrent tiene entero (100 %, sin error) un torrent con esa
+    ruta como contenido (`content_path`, el casamiento por ruta de arriba; el nombre no basta); si no, por qué no.
+    Lee qBittorrent en ese momento (sin la caché): «Subir también a…» se fía de esto para no comprobar los datos."""
+    url, usuario, clave, _etiqueta = _configuracion(conn)
+    if not url:
+        return {r: f"{MENSAJE_SIN_CONFIGURAR}: no se puede comprobar que el torrent de eMuwarez se siembra entero."
+                for r in rutas}
+    torrents, motivo, _leido = _torrents(url, usuario, clave, refrescar=True)
+    if torrents is None:
+        return {r: f"{motivo or MENSAJE_SIN_RESPUESTA}: no se puede comprobar que el torrent de eMuwarez se siembra entero."
+                for r in rutas}
+    por_contenido = _indices(torrents)["contenido"]
+    salida: dict[str, Optional[str]] = {}
+    for ruta in rutas:
+        nombre = posixpath.basename(_norm(ruta))
+        candidatos = por_contenido.get(_norm(ruta), [])
+        if not candidatos:
+            salida[ruta] = f"qBittorrent no tiene ningún torrent con «{nombre}» de la carpeta de subidas como contenido."
+            continue
+        enteros = [t for t in candidatos
+                   if (t["progress"] or 0) >= 1 and estado_de(t)[0] in ("sembrando", "en_cola", "pausado")]
+        if enteros:
+            salida[ruta] = None
+            continue
+        t = candidatos[0]
+        salida[ruta] = (f"El torrent de «{nombre}» no está entero en qBittorrent ({estado_de(t)[1].lower()}, "
+                        f"{int((t['progress'] or 0) * 100)} %).")
+    return salida

@@ -3,6 +3,7 @@
 import { useId } from 'react'
 import type { LibraryItemResponse } from '../../types/api'
 import { episodeNotReadyReason, isSeasonReady, seasonNotReadyReason } from '../../utils/libraryItem'
+import { admiten, resumenDeCapitulos, resumenPorTracker } from '../../utils/elegibilidad'
 import { IconoAviso } from '../Iconos'
 import { Tooltip } from '../Tooltip'
 import { MarcoPaso } from './piezas'
@@ -12,10 +13,22 @@ export function PasoSeleccion({ a }: { a: Asistente }) {
   const {
     item, allowMultiSeason, seasons, episodes, multiSelected, setMultiSelected, seasonUploadMode, setSeasonUploadMode,
     episodeSelected, setEpisodeSelected, selError, confirmMultiSelection, confirmEpisodeSelection, confirmSeasonWhole,
+    reglasDe,
   } = a
   const idMotivo = useId()
 
-  const eligibleEpisodes = episodes.filter(ep => !episodeNotReadyReason(ep))
+  // Con más de un tracker con clave, decide lo que admite cada uno (reglasDe); solo con eMuwarez, su regla de siempre.
+  const reglasPack = reglasDe(item.id)
+  const admitenCapitulo = (ep: LibraryItemResponse) => {
+    const r = reglasDe(ep.id)
+    return r ? admiten(r) : undefined
+  }
+  const eligibleEpisodes = episodes.filter(ep => !episodeNotReadyReason(ep, admitenCapitulo(ep)))
+  const enDisco = episodes.filter(ep => ep.local_status === 'Disponible' || ep.local_status === 'Subido')
+  const reglasCapitulos = enDisco.map(ep => reglasDe(ep.id)).filter(r => r !== undefined)
+  // Varios capítulos se suben en tanda, y una tanda va solo a eMuwarez: si no admite alguno de los elegidos, avisa.
+  const tandaSinEmu = reglasPack !== undefined && episodeSelected.size > 1
+    && [...episodeSelected].some(id => reglasDe(id)?.some(r => r.tracker === 'emu' && !r.permitido))
   const allEligibleSelected = eligibleEpisodes.length > 0
     && eligibleEpisodes.every(ep => episodeSelected.has(ep.id))
 
@@ -45,7 +58,7 @@ export function PasoSeleccion({ a }: { a: Asistente }) {
   // pack and the per-episode selection answer to different rules, so they are
   // two cards and not two entries of one dropdown — only one of them can be
   // unavailable, and it needs room to say why.
-  const seasonPackReason = seasonNotReadyReason(item)
+  const seasonPackReason = seasonNotReadyReason(item, reglasPack ? admiten(reglasPack) : undefined)
   const seasonModeSelection = (
     <>
       <div className="asist-rejilla-modos">
@@ -53,16 +66,22 @@ export function PasoSeleccion({ a }: { a: Asistente }) {
           {
             key: 'whole' as const,
             title: 'Temporada entera',
-            body: 'Un único release con todos los capítulos. Exige tenerlos todos, que coincidan en códec de vídeo, y que todos tengan audio en castellano o, si está en otro idioma, al menos subtítulos en castellano.',
+            body: reglasPack
+              ? 'Un único release con todos los capítulos. Exige tenerlos todos, que coincidan en códec de vídeo, y que el tracker admita los idiomas de todos.'
+              : 'Un único release con todos los capítulos. Exige tenerlos todos, que coincidan en códec de vídeo, y que todos tengan audio en castellano o, si está en otro idioma, al menos subtítulos en castellano.',
             reason: seasonPackReason,
+            trackers: reglasPack ? resumenPorTracker(reglasPack) : null,
           },
           {
             key: 'episodes' as const,
             title: 'Selección de capítulos',
-            body: 'Cada capítulo se sube por separado, con su propia nomenclatura, así que pueden diferir en resolución, códec o audio. Cada uno sigue necesitando audio en castellano o, si está en otro idioma, al menos subtítulos en castellano.',
+            body: reglasPack
+              ? 'Cada capítulo se sube por separado, con su propia nomenclatura, así que pueden diferir en resolución, códec o audio. Cada uno sigue necesitando idiomas que admita el tracker.'
+              : 'Cada capítulo se sube por separado, con su propia nomenclatura, así que pueden diferir en resolución, códec o audio. Cada uno sigue necesitando audio en castellano o, si está en otro idioma, al menos subtítulos en castellano.',
             reason: eligibleEpisodes.length === 0
               ? 'Ningún capítulo de esta temporada cumple las condiciones de subida.'
               : null,
+            trackers: reglasPack && reglasCapitulos.length ? resumenDeCapitulos(reglasCapitulos) : null,
           },
         ]).map(m => {
           const enabled = !m.reason
@@ -90,6 +109,8 @@ export function PasoSeleccion({ a }: { a: Asistente }) {
             <div key={m.key}>
               {card}
               {!enabled && <MotivoNoDisponible id={motivoId}>{m.reason}</MotivoNoDisponible>}
+              {/* Qué tracker con clave lo admite: solo con más de uno. */}
+              {m.trackers && <span className="asist-dato-nota">{m.trackers}</span>}
             </div>
           )
         })}
@@ -108,7 +129,8 @@ export function PasoSeleccion({ a }: { a: Asistente }) {
           </div>
           <div className="asist-rejilla-tarjetas">
             {episodes.map(ep => {
-              const reason = episodeNotReadyReason(ep)
+              const admitenEste = admitenCapitulo(ep)
+              const reason = episodeNotReadyReason(ep, admitenEste)
               const ready = !reason
               const selected = episodeSelected.has(ep.id)
               // Already on eMuwarez stays selectable on purpose: re-uploading a
@@ -132,12 +154,22 @@ export function PasoSeleccion({ a }: { a: Asistente }) {
                   )}
                 </button>
               )
-              const tip = reason ?? (onEmu ? 'Ya existe en eMuwarez. Puedes subirlo igualmente (por ejemplo, una versión mejor).' : null)
+              const yaEnEmu = onEmu ? 'Ya existe en eMuwarez. Puedes subirlo igualmente (por ejemplo, una versión mejor).' : null
+              const loAdmiten = admitenEste?.length
+                ? `Lo ${admitenEste.length > 1 ? 'admiten' : 'admite'}: ${admitenEste.join(', ')}.`
+                : null
+              const tip = reason ?? ([loAdmiten, yaEnEmu].filter(Boolean).join(' ') || null)
               return tip
                 ? <Tooltip key={ep.id} content={tip} style={{ width: '100%' }}>{card}</Tooltip>
                 : <div key={ep.id}>{card}</div>
             })}
           </div>
+          {tandaSinEmu && (
+            <p className="text-muted asist-t12 asist-mt-10" role="status">
+              Varios capítulos se suben en tanda y una tanda va solo a eMuwarez, que no admite alguno de los elegidos.
+              Para subirlos a otro tracker, elige un capítulo cada vez.
+            </p>
+          )}
         </div>
       )}
     </>

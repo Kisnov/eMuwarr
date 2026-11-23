@@ -233,3 +233,73 @@ def test_el_pack_a_milnueve_llega_al_argv_con_su_variante(db_conn, tmp_path, mon
     _, argv = _argv_del_trabajo(db_conn, job_id)
     assert argv[argv.index("-tk") + 1] == "MNV" and argv[argv.index("--variante") + 1] == "latino"
     assert trackers.obtener("mnv").uploadrr == "MNV"
+
+
+# ---------------------------------------------------------------------------
+# Elegibilidad: el paso «Contenido» del asistente mira cada tracker con clave
+# ---------------------------------------------------------------------------
+
+def _anime_solo_en_catalan(conn, tmp_path):
+    """Una temporada de anime (id de MyAnimeList, como la deja la sincronización en serie, temporada y capítulos) con
+    el audio solo en catalán y japonés, sin subtítulos: Detective Conan T1 en el NAS de Gabriel."""
+    temporada = _temporada(conn, tmp_path, ["cat / jpn", "cat / jpn"])
+    conn.execute("UPDATE library_items SET mal_id = '235'")
+    conn.commit()
+    return temporada
+
+
+def _por_tracker(filas):
+    return {f["tracker"]: f for f in filas}
+
+
+def test_la_elegibilidad_de_un_anime_solo_en_catalan_lo_deja_solo_a_milnueve(db_conn, tmp_path):
+    from emuwarez_uploadrr.services.library import get_library_item
+    from emuwarez_uploadrr.services.reglas_tracker import elegibilidad
+    temporada = _anime_solo_en_catalan(db_conn, tmp_path)
+    r = elegibilidad(db_conn, get_library_item(db_conn, temporada))
+    pack = _por_tracker(r["trackers"])
+    assert list(pack) == ["emu", "nobs", "mnv"]
+    assert pack["mnv"]["permitido"] is True and pack["mnv"]["variante"] == "anime_catalan"
+    assert pack["mnv"]["nombre"] == "Milnueve"
+    assert pack["emu"]["permitido"] is False and "no tiene castellano" in pack["emu"]["motivo"]
+    assert pack["nobs"]["permitido"] is False and pack["nobs"]["motivo"].startswith("Capítulo 1: N.O.B.S no lo admite")
+    assert len(r["capitulos"]) == 2
+    for capitulo in r["capitulos"]:
+        cada = _por_tracker(capitulo["trackers"])
+        assert cada["mnv"]["permitido"] is True and cada["mnv"]["variante"] == "anime_catalan"
+        assert cada["emu"]["permitido"] is False and cada["nobs"]["permitido"] is False
+    # Con lo que dice la elegibilidad, el plan del pack para Milnueve no se bloquea y el de eMuwarez sí, como siempre.
+    assert build_season_pack_plan(temporada, conn=db_conn, tracker="mnv")["status"] == "valid"
+    assert build_season_pack_plan(temporada, conn=db_conn)["status"] == "blocked"
+
+
+def test_la_api_de_elegibilidad_y_el_plan_del_pack_por_tracker(db_conn, tmp_path, client, auth_headers):
+    temporada = _anime_solo_en_catalan(db_conn, tmp_path)
+    r = client.get(f"/api/library/{temporada}/upload/elegibilidad", headers=auth_headers)
+    assert r.status_code == 200
+    pack = _por_tracker(r.json()["trackers"])
+    assert pack["mnv"] == {"tracker": "mnv", "nombre": "Milnueve", "permitido": True,
+                           "motivo": "Todos los capítulos tienen idiomas admitidos.", "variante": "anime_catalan"}
+    assert client.get("/api/library/999999/upload/elegibilidad", headers=auth_headers).status_code == 404
+
+    url = f"/api/library/season/{temporada}/pack-preview"
+    mnv = client.get(url, params={"tracker": "mnv"}, headers=auth_headers).json()
+    assert mnv["status"] == "valid", mnv["errors"]
+    emu = client.get(url, headers=auth_headers).json()
+    assert emu["status"] == "blocked" and any("no tiene castellano" in e for e in emu["errors"])
+    assert client.get(url, params={"tracker": "xyz"}, headers=auth_headers).status_code == 422
+
+
+def test_solo_con_emuwarez_la_elegibilidad_es_la_de_siempre(db_conn, tmp_path):
+    from emuwarez_uploadrr.services.library import get_library_item
+    from emuwarez_uploadrr.services.reglas_tracker import elegibilidad
+    for clave in ("nobs.api_key", "mnv.api_key"):
+        set_setting(db_conn, clave, "")
+    db_conn.commit()
+    temporada = _anime_solo_en_catalan(db_conn, tmp_path)
+    r = elegibilidad(db_conn, get_library_item(db_conn, temporada))
+    assert [t["tracker"] for t in r["trackers"]] == ["emu"]
+    assert r["trackers"][0]["permitido"] is False and r["trackers"][0]["variante"] is None
+    assert all([t["tracker"] for t in c["trackers"]] == ["emu"] for c in r["capitulos"])
+    espanol = _temporada(db_conn, tmp_path / "otra", ["spa", "spa"])
+    assert elegibilidad(db_conn, get_library_item(db_conn, espanol))["trackers"][0]["permitido"] is True

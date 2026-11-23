@@ -50,6 +50,14 @@ def _validate_mbid(mbid: str) -> str:
     return mbid
 
 
+def _tracker_e_id(value: str) -> str:
+    """--base-desde TRACKER:ID → "TRACKER:ID" con el tracker en mayúsculas y el id un entero positivo."""
+    tracker, sep, torrent_id = value.strip().partition(":")
+    if not sep or not re.fullmatch(r"[A-Za-z0-9]+", tracker) or not torrent_id.isdecimal() or int(torrent_id) < 1:
+        raise argparse.ArgumentTypeError(f"Invalid --base-desde: '{value}'. Must be TRACKER:ID (e.g., EMU:123)")
+    return f"{tracker.upper()}:{int(torrent_id)}"
+
+
 def _validate_porndb_id(value: str) -> str:
     if value.isdigit():
         return value
@@ -448,6 +456,13 @@ def build_parser(config: Dict[str, Any]) -> argparse.ArgumentParser:
     parser.add_argument("-th", "--torrenthash", nargs="*", help="Reuse existing torrent hash")
     parser.add_argument(
         "-sc", "--solo-cliente", dest="solo_cliente", type=int, help="Torrent id already uploaded to the -tk tracker: only re-add it to the client"
+    )
+    parser.add_argument(
+        "-bd",
+        "--base-desde",
+        dest="base_desde",
+        type=_tracker_e_id,
+        help="TRACKER:ID of the same content already on another tracker: build BASE.torrent from that torrent (same pieces, no hashing)",
     )
     parser.add_argument("--eventos", dest="eventos", help="Append JSON Lines events to this file (see contrato_eventos.json)")
     parser.add_argument("--config", dest="config", help="Read this config.yaml instead of data/config.yaml")

@@ -13,7 +13,7 @@ vi.mock('../../api/nomenclature', () => ({
 }))
 vi.mock('../../api/uploads', () => ({
   queueUpload: vi.fn(), getExistingJobForItem: vi.fn(), runUploadChecks: vi.fn(), getUploadChecksProgress: vi.fn(),
-  fetchTrackersParaSubir: vi.fn(), fetchReglasTracker: vi.fn(),
+  fetchTrackersParaSubir: vi.fn(), fetchReglasTracker: vi.fn(), fetchElegibilidad: vi.fn(),
 }))
 vi.mock('../../api/library', () => ({
   getLibrary: vi.fn(), getMediaInfoReport: vi.fn(), suggestProvider: vi.fn(),
@@ -158,6 +158,8 @@ beforeEach(() => {
   m(subidas.fetchTrackersParaSubir).mockResolvedValue([{ id: 'emu', nombre: 'eMuwarez' }])
   m(subidas.fetchReglasTracker).mockImplementation(async (_id, tracker) =>
     ({ tracker, permitido: true, motivo: 'Audio en castellano.', variante: null }))
+  // Sin respuesta de /upload/elegibilidad, todo sigue con la regla de eMuwarez.
+  m(subidas.fetchElegibilidad).mockRejectedValue(new Error('sin elegibilidad'))
   m(temporada.previewSeasonPack).mockResolvedValue(plan())
   m(temporada.getSeasonPlanProgress).mockResolvedValue({ done: 0, total: 0, current_title: null })
   m(temporada.previewSeasonPackFields).mockImplementation(async (_id, f) => ({
@@ -1584,5 +1586,90 @@ describe('el Resumen de una tanda lista el nombre de cada torrent', () => {
         'Serie (2021) - S01E02 | Sin nombre: este elemento no se podrá subir',
       ])
     })
+  })
+})
+
+describe('varios trackers con clave: el paso «Contenido» mira las normas de cada uno', () => {
+  // Detective Conan T1: anime solo en catalán. Solo Milnueve lo admite («Anime en Catalan»).
+  const SIN_CASTELLANO = { has_spanish_ok: 0, has_spanish_audio: 0, has_spanish_subs: 0, audio_languages: 'cat/jpn' }
+  const TEMPORADA_CAT = elemento({ ...TEMPORADA, ...SIN_CASTELLANO })
+  const CAPITULOS_CAT = [elemento({ ...E1, ...SIN_CASTELLANO }), elemento({ ...E2, ...SIN_CASTELLANO })]
+  const TRES = [{ id: 'emu', nombre: 'eMuwarez' }, { id: 'nobs', nombre: 'N.O.B.S' }, { id: 'mnv', nombre: 'Milnueve' }]
+  const reglas = (permite: Record<string, boolean>) => TRES.map(t => ({
+    tracker: t.id, nombre: t.nombre, permitido: permite[t.id] ?? false,
+    motivo: permite[t.id] ? 'Audio en catalán, sin castellano.' : `${t.nombre} no lo admite.`,
+    variante: permite[t.id] && t.id === 'mnv' ? 'anime_catalan' : null,
+  }))
+  const SOLO_MNV = reglas({ mnv: true })
+
+  beforeEach(() => {
+    m(biblioteca.getLibrary).mockResolvedValue({ items: CAPITULOS_CAT, total: 2 } as never)
+    m(subidas.fetchTrackersParaSubir).mockResolvedValue(TRES)
+    m(subidas.fetchElegibilidad).mockResolvedValue({
+      trackers: SOLO_MNV, capitulos: [{ item_id: 21, trackers: SOLO_MNV }, { item_id: 22, trackers: SOLO_MNV }],
+    })
+    m(subidas.fetchReglasTracker).mockImplementation(async (_id, tracker) => ({
+      tracker, permitido: tracker === 'mnv', motivo: tracker === 'mnv' ? 'Audio en catalán, sin castellano.' : 'No.',
+      variante: tracker === 'mnv' ? 'anime_catalan' : null,
+    }))
+  })
+
+  it('con solo Milnueve admitiéndolo, deja elegir el pack y los capítulos y dice quién lo admite', async () => {
+    await abrir(TEMPORADA_CAT)
+    await esperar(() => texto().includes('Milnueve ✓ (Anime en Catalan) · eMuwarez ✗ sin castellano · N.O.B.S ✗'))
+    expect(subidas.fetchElegibilidad).toHaveBeenCalledWith(20)
+    expect(tarjeta('Temporada entera')!.disabled).toBe(false)
+    expect(tarjeta('Selección de capítulos')!.disabled).toBe(false)
+    expect(texto()).toContain('Milnueve ✓ 2 de 2 · eMuwarez ✗ sin castellano · N.O.B.S ✗')
+    expect(texto()).not.toContain('eMuwarez lo exige')
+    expect(texto()).not.toContain('Ningún capítulo de esta temporada cumple las condiciones de subida.')
+
+    await pulsar(tarjeta('Selección de capítulos'))
+    expect([...document.querySelectorAll<HTMLButtonElement>('.asist-opcion-capitulo')].every(b => !b.disabled)).toBe(true)
+  })
+
+  it('el pack se prepara con las normas de Milnueve y el Resumen lo marca solo a él, sin eMuwarez', async () => {
+    await abrir(TEMPORADA_CAT)
+    await esperar(() => texto().includes('Milnueve ✓ (Anime en Catalan)'))
+    await pulsar(tarjeta('Temporada entera'))
+    await pulsar(boton('Continuar'))
+    await esperar(() => texto().includes('Serie S01 WEB-DL DD 5.1 [GRP]'))
+    expect(temporada.previewSeasonPack).toHaveBeenCalledWith(20, undefined, undefined, 'mnv')
+
+    await pulsar(boton('Continuar'))
+    await esperar(() => texto().includes('✓ Todo listo para subir'))
+    const casilla = (nombre: string) => [...document.querySelectorAll<HTMLLabelElement>('.asist-marcas label')]
+      .find(l => l.textContent?.includes(nombre))!.querySelector('input')!
+    expect(casilla('Milnueve').checked).toBe(true)
+    expect(casilla('eMuwarez').checked).toBe(false)
+    expect(casilla('N.O.B.S').checked).toBe(false)
+    expect(texto()).toContain('eMuwarez: ✗ no lo admite. eMuwarez no lo admite.')
+    expect(texto()).toContain('Milnueve: ✓ Audio en catalán, sin castellano.')
+    expect(m(subidas.runUploadChecks).mock.calls.some(c => c[0] === 20 && c[4] === 'mnv')).toBe(true)
+
+    await pulsar(boton('Subir a Milnueve'))
+    await esperar(() => onClose.mock.calls.length > 0)
+    expect(m(subidas.queueUpload).mock.calls.map(c => c[8])).toEqual(['mnv'])
+  })
+
+  it('si no lo admite ninguno, el pack no se puede elegir y no habla de eMuwarez', async () => {
+    const NINGUNO = reglas({})
+    m(subidas.fetchElegibilidad).mockResolvedValue({
+      trackers: NINGUNO, capitulos: [{ item_id: 21, trackers: NINGUNO }, { item_id: 22, trackers: NINGUNO }],
+    })
+    await abrir(TEMPORADA_CAT)
+    await esperar(() => texto().includes('Ningún tracker con clave admite los idiomas de todos los capítulos'))
+    expect(tarjeta('Temporada entera')!.disabled).toBe(true)
+    expect(tarjeta('Selección de capítulos')!.disabled).toBe(true)
+    expect(texto()).not.toContain('eMuwarez lo exige')
+  })
+
+  it('solo con eMuwarez no se pide la elegibilidad y sale el mensaje de siempre', async () => {
+    m(subidas.fetchTrackersParaSubir).mockResolvedValue([{ id: 'emu', nombre: 'eMuwarez' }])
+    await abrir(TEMPORADA_CAT)
+    await esperar(() => texto().includes('eMuwarez lo exige en todos para aceptar el pack.'))
+    expect(texto()).toContain('Ningún capítulo de esta temporada cumple las condiciones de subida.')
+    expect(tarjeta('Temporada entera')!.disabled).toBe(true)
+    expect(subidas.fetchElegibilidad).not.toHaveBeenCalled()
   })
 })
