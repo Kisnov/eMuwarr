@@ -90,6 +90,9 @@ descripción y el cliente.
        no, los que lo admiten; el plan del pack usa las normas del primero de ellos.
      - Queda: probarlo en el NAS (una subida vieja a N.O.B.S: los dos torrents sembrando el mismo fichero sin comprobar
        datos).
+     - Por hacer: lo que eMuwarez no admite (sin castellano) aún no entra en «Subir por lotes» ni en una tanda de
+       temporadas, aunque N.O.B.S o Milnueve lo admitan: el paso 1 y la selección de Biblioteca usan su regla
+       (`utils/lote.ts::razonNoSubible`, `seasonNotReadyReason` sin elegibilidad). Hoy va por la subida suelta.
      - Por hacer: «Subir también a…» entre cualquier par de trackers, no solo desde eMuwarez: de una subida
        completada con eMuwarr a cualquier tracker, a cualquier otro con clave. Solo las hechas con eMuwarr; las
        subidas a mano quedan fuera (Gabriel, 23/11).
