@@ -277,6 +277,34 @@ def test_las_sugeridas_recalculan_la_biblioteca_una_vez(conn, instancia, monkeyp
     assert veces == [1]
 
 
+def test_las_sugeridas_no_repiten_la_copia_en_otra_resolucion(
+        conn, instancia, carpeta_dir, monkeypatch, lecturas, busquedas, fichas):
+    (carpeta_dir / PELI.replace("1080p", "2160p")).write_bytes(b"x")
+    _escanear(conn, instancia)
+    pedidas, detalles = [], tmdb.get_details
+    monkeypatch.setattr(tmdb, "get_details", lambda kind, tmdb_id, **kw: pedidas.append(tmdb_id) or detalles(kind, tmdb_id, **kw))
+    assert carpeta.identificar_sugeridas(conn, instancia.id) == 2
+    assert sorted(pedidas) == ["126308", "872585"]
+    assert carpeta.contar_por_identificar(conn, instancia.id) == 0
+
+
+def test_las_sugeridas_paran_si_empieza_una_sincronizacion(conn, instancia, monkeypatch, lecturas, busquedas, fichas):
+    _escanear(conn, instancia)
+    real, hechas, recalculos = carpeta.identificar, [], []
+
+    def a_la_segunda(*args, **kw):
+        if hechas:
+            raise library.SyncAlreadyRunning()
+        hechas.append(1)
+        return real(*args, **kw)
+    monkeypatch.setattr(carpeta, "identificar", a_la_segunda)
+    monkeypatch.setattr(carpeta, "recompute_after_sync", lambda c: recalculos.append(1))
+    assert carpeta.identificar_sugeridas(conn) == 1
+    assert recalculos == []   # ya recalcula la sincronización en marcha al acabar
+    with pytest.raises(library.SyncAlreadyRunning):   # sin confirmar ninguna, el 429 de siempre
+        carpeta.identificar_sugeridas(conn)
+
+
 def test_candidatos_sin_texto_usan_lo_que_leyo_guessit(conn, instancia, lecturas, busquedas):
     _escanear(conn, instancia)
     serie = _filas(conn, instancia)["serie:shogun:2024:1080p"]

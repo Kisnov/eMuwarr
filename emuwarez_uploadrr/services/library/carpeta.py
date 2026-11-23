@@ -17,7 +17,7 @@ from typing import Optional
 from ...integrations import tmdb
 from ...integrations.base import IntegrationError, extract_release_group, texto_de_error
 from ...models import InstanceConfig, LibraryItem, LocalStatus, MediaKind, NomenclatureStatus
-from .sync import _sin_sincronizar, _update_season_rollup, recompute_after_sync, upsert_library_item
+from .sync import SyncAlreadyRunning, _sin_sincronizar, _update_season_rollup, recompute_after_sync, upsert_library_item
 
 logger = logging.getLogger(__name__)
 
@@ -71,7 +71,8 @@ def probar_carpeta(ruta: str, conn: sqlite3.Connection | None = None) -> dict:
         return {"ok": False, "error": f"No existe o no se puede leer la carpeta {ruta} dentro del contenedor"}
     avisos = []
     if not os.access(ruta, os.W_OK):
-        avisos.append("no se puede escribir en ella, y la nomenclatura lo necesita")
+        # La nomenclatura renombra en la carpeta de subidas; lo que escribe aquí es la edición de pistas y título.
+        avisos.append("no se puede escribir en ella, así que al preparar las pistas y el título no se editan en el original")
     if conn is not None:
         from ..uploadrr_contract import get_allowed_roots, path_within_allowed_roots
         if not path_within_allowed_roots(ruta, get_allowed_roots(conn)):
@@ -462,7 +463,8 @@ def _escribir(conn, item_id: int, campos: dict) -> None:
 
 
 def identificar_sugeridas(conn, instance_id: int | None = None) -> int:
-    """Confirma la sugerencia de cada película o serie de carpeta por identificar que la tenga. Devuelve cuántas."""
+    """Confirma la sugerencia de cada película o serie de carpeta por identificar que la tenga. Devuelve cuántas. Si
+    empieza una sincronización a medias, para ahí; SyncAlreadyRunning solo si aún no había confirmado ninguna."""
     sql = ("SELECT id, raw_json FROM library_items WHERE instance_type = ? AND tmdb_id IS NULL "
            "AND item_type IN ('movie', 'series')")
     params: list = [TIPO]
@@ -470,18 +472,29 @@ def identificar_sugeridas(conn, instance_id: int | None = None) -> int:
         sql += " AND instance_id = ?"
         params.append(instance_id)
     hechas = 0
+    sincronizando = False
     try:
         for fila in conn.execute(sql, params).fetchall():
             sugerencia = _raw(dict(fila)).get("sugerencia")
             if not sugerencia:
                 continue
+            # La copia en otra resolución ya la identificó la suya (_iguales), o una sincronización la quitó.
+            actual = conn.execute("SELECT tmdb_id FROM library_items WHERE id = ?", (fila["id"],)).fetchone()
+            if actual is None or actual["tmdb_id"]:
+                continue
             try:
                 identificar(conn, fila["id"], sugerencia["tmdb_id"], sugerencia.get("tipo"), recalcular=False)
                 hechas += 1
+            except SyncAlreadyRunning:
+                if not hechas:
+                    raise
+                sincronizando = True
+                break
             except (IntegrationError, ValueError, LookupError) as exc:
                 logger.warning("No se pudo confirmar la sugerencia del elemento %s: %s", fila["id"], texto_de_error(exc))
     finally:
-        if hechas:  # una vez para todas: recorre la biblioteca entera
+        # Una vez para todas: recorre la biblioteca entera. La sincronización en marcha ya recalcula al acabar.
+        if hechas and not sincronizando:
             recompute_after_sync(conn)
     return hechas
 
