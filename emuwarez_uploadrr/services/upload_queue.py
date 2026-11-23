@@ -165,6 +165,7 @@ def _insert_and_start_queued_job(
     anonimo: bool | None = None,
     personal_release: bool | None = None,
     tracker: str = trackers.POR_DEFECTO,
+    copia_de_job_id: int | None = None,
 ) -> dict:
     """Shared by queue_upload_for_item() and queue_retry_for_job(): insert a
     fresh 'queued' row for `item` and start its pipeline right away.
@@ -209,6 +210,9 @@ def _insert_and_start_queued_job(
 
     `tracker` — el id del tracker (services/trackers.py) al que va: un trabajo por tracker. Uno en marcha del mismo
     contenido a OTRO tracker no lo impide: este espera a que acabe (_esperar_a_la_anterior) y reutiliza su preparación.
+
+    `copia_de_job_id` — «Subir también a…» (services/subir_tambien.py): la subida completada a otro tracker cuyo fichero
+    y torrent reutiliza esta. Con él, la preparación no rehace nada: o es el mismo fichero, o falla (_paso_preparar).
     """
     motivo = trackers.motivo_para_no_subir(conn, tracker)
     if motivo:
@@ -256,8 +260,9 @@ def _insert_and_start_queued_job(
                 retry_of_job_id, retry_count, checks_snapshot_json,
                 nomenclature_proposal_id, nomenclature_snapshot_json,
                 remux_overrides_json, remux_snapshot_json, season_overrides_json,
-                reutiliza_preparacion, lote_id, anonimo, personal_release, tracker, created_at, updated_at
-            ) VALUES (?, ?, ?, ?, 'queued', 'queued', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                reutiliza_preparacion, lote_id, anonimo, personal_release, tracker, copia_de_job_id,
+                created_at, updated_at
+            ) VALUES (?, ?, ?, ?, 'queued', 'queued', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 item["id"], request_item_id, request_title, request_url,
@@ -276,6 +281,7 @@ def _insert_and_start_queued_job(
                 None if anonimo is None else int(bool(anonimo)),
                 None if personal_release is None else int(bool(personal_release)),
                 tracker,
+                copia_de_job_id,
                 now_iso, now_iso,
             ),
         )
@@ -490,10 +496,42 @@ def queue_retry_for_job(original_job_id: int, conn=None, *, desde_el_principio: 
             anonimo=None if original.get("anonimo") is None else bool(original.get("anonimo")),
             personal_release=None if original.get("personal_release") is None else bool(original.get("personal_release")),
             tracker=original.get("tracker") or trackers.POR_DEFECTO,
+            copia_de_job_id=original.get("copia_de_job_id"),
         )
     finally:
         if own:
             conn.close()
+
+
+def queue_copia_a_otro_tracker(conn, fuente: dict, tracker: str, *, lote_id: str | None = None) -> dict:
+    """«Subir también a…»: encola la subida a `tracker` de lo que `fuente` (una subida completada a otro tracker) ya
+    sembró, con su mismo fichero de la carpeta de subidas. Fija la propuesta de nombre y los ajustes del pack de
+    `fuente` para que salga el mismo nombre; si aun así saliera otro, la preparación falla (_paso_preparar).
+    services/subir_tambien.py comprueba antes que se puede."""
+    item = row_to_dict(conn.execute("SELECT * FROM library_items WHERE id = ?",
+                                    (fuente.get("library_item_id"),)).fetchone())
+    if not item:
+        return {"status": "blocked", "errors": ["El elemento ya no existe en la biblioteca."], "job": None}
+
+    def _json(columna: str):
+        try:
+            return json.loads(fuente[columna]) if fuente.get(columna) else None
+        except ValueError:
+            return None
+
+    latest = _find_latest_job_for_item(conn, item["id"], tracker)
+    return _insert_and_start_queued_job(
+        conn, item,
+        retry_of_job_id=latest["id"] if latest else None,
+        retry_count=(latest.get("retry_count") or 0) + 1 if latest else 0,
+        nomenclature_proposal_id=fuente.get("nomenclature_proposal_id"),
+        nomenclature_snapshot=_json("nomenclature_snapshot_json"),
+        remux_snapshot=_json("remux_snapshot_json"),
+        season_overrides=_json("season_overrides_json"),
+        lote_id=lote_id,
+        tracker=tracker,
+        copia_de_job_id=fuente["id"],
+    )
 
 
 def reconcile_interrupted_jobs(conn=None) -> int:
@@ -1151,20 +1189,25 @@ def _motivo_no_reutilizable(job: dict, destino: str, ficheros: list, is_season: 
     return (None, motivo) if motivo else (anterior, None)
 
 
-def _motivo_preparacion_cambiada(anterior: dict, destino: str, ficheros: list, is_season: bool) -> str | None:
-    """None si lo que `anterior` dejó preparado en `destino` sigue siendo lo que hay que subir; si no, por qué no."""
+def _motivo_preparacion_cambiada(anterior: dict, destino: str, ficheros: list, is_season: bool, *,
+                                 sin_huellas_vale: bool = False) -> str | None:
+    """None si lo que `anterior` dejó preparado en `destino` sigue siendo lo que hay que subir; si no, por qué no.
+
+    `sin_huellas_vale`: una subida de antes de que se apuntaran las huellas (noviembre de 2026) vale igual si su
+    fichero sigue ahí. Solo para «Subir también a…», que ya comprobó en qBittorrent que ese fichero es el que siembra
+    entero, y donde Uploadrr-EMU compara el torrent del otro tracker con él antes de subir nada."""
     if anterior.get("prepared_path") != destino:
         return "el nombre o el sitio en la carpeta de subidas ha cambiado"
-    if not anterior.get("remux_snapshot_json"):
+    if not anterior.get("remux_snapshot_json") and not sin_huellas_vale:
         return "no quedó apuntado qué pistas se prepararon"
     # El nombre no basta: si la biblioteca sustituyó el original, lo preparado es del anterior.
     try:
         huellas = json.loads(anterior.get("huellas_preparacion_json") or "null")
     except ValueError:
         huellas = None
-    if not isinstance(huellas, dict):
+    if not isinstance(huellas, dict) and not sin_huellas_vale:
         return "no quedó apuntada la huella de los originales con que se preparó"
-    for _i, origen, nombre in ficheros:
+    for _i, origen, nombre in ficheros if isinstance(huellas, dict) else ():
         if huellas.get(nombre) is None or huellas.get(nombre) != _huella_de(origen):
             return f"el original de «{nombre}» ha cambiado desde que se preparó"
     if is_season:
@@ -1195,12 +1238,14 @@ def _preparada_para_otro_tracker(conn, ruta: str, t: "_Trabajo") -> dict | None:
 
 def _reutilizar_de_otro_tracker(t: "_Trabajo", otra: dict) -> bool:
     """Reutiliza lo que dejó preparado la subida a otro tracker (`otra`) y lanza Uploadrr-EMU con `--resume`: las
-    capturas y el BASE.torrent de su `tmp/<nombre>` valen para este tracker también. Si lo preparado ya no vale, falla:
-    rehacerlo rompería el torrent que siembra la otra."""
+    capturas y el BASE.torrent de su `tmp/<nombre>` valen para este tracker también (si ya no está, se hace con el torrent
+    de la otra: upload_execution.consultas.base_desde_para). Si lo preparado ya no vale, falla: rehacerlo rompería el
+    torrent que siembra la otra."""
     from .upload_execution import append_upload_log, update_phase_progress
     job_id, conn = t.job_id, t.conn
     nombre_otro = trackers.obtener(otra.get("tracker") or trackers.POR_DEFECTO).nombre
-    motivo = _motivo_preparacion_cambiada(otra, t.destino_uploadrr, t.ficheros, t.is_season)
+    motivo = _motivo_preparacion_cambiada(otra, t.destino_uploadrr, t.ficheros, t.is_season,
+                                          sin_huellas_vale=bool(t.job.get("copia_de_job_id")))
     if motivo:
         _fail(job_id, f"«{os.path.basename(t.destino_uploadrr)}» ya está preparado para la subida #{otra['id']} "
                       f"({nombre_otro}), pero {motivo}: no se rehace para no romper ese torrent.")
@@ -1413,6 +1458,17 @@ def _paso_preparar(t: _Trabajo) -> bool:
         t.destino_uploadrr = os.path.join(RAIZ_SUBIDAS, carpeta_pack)
     else:
         t.destino_uploadrr = os.path.join(RAIZ_SUBIDAS, ficheros[0][2])
+    copia_de = t.job.get("copia_de_job_id")
+    if copia_de:
+        # «Subir también a…»: el mismo fichero que la subida de la que es copia, o nada (otro nombre no se siembra junto).
+        from .upload_execution import get_upload_job
+        fuente = get_upload_job(copia_de, conn=conn)
+        if not fuente or fuente.get("prepared_path") != t.destino_uploadrr:
+            antes = os.path.basename((fuente or {}).get("prepared_path") or "") or "?"
+            _fail(job_id, f"El nombre de este contenido ya no es el de la subida #{copia_de} («{antes}», ahora "
+                          f"«{os.path.basename(t.destino_uploadrr)}»): no se sube con otro nombre, porque no se "
+                          "podría sembrar con el mismo fichero.")
+            return False
     # La ruta se apunta ANTES de crearla: así un borrado de otra subida la ve en uso.
     with ENLACES:
         otra = _subida_que_lo_usa(conn, t.destino_uploadrr, job_id)
@@ -1424,6 +1480,10 @@ def _paso_preparar(t: _Trabajo) -> bool:
             conn.commit()
     if de_otro_tracker is not None:
         return _reutilizar_de_otro_tracker(t, de_otro_tracker)
+    if copia_de and otra is None:
+        _fail(job_id, f"«{os.path.basename(t.destino_uploadrr)}» ya no lo siembra la subida #{copia_de}: «Subir "
+                      "también a…» solo reutiliza un fichero que sigue en la carpeta de subidas.")
+        return False
     if otra is not None:
         _fail(job_id, f"«{os.path.basename(t.destino_uploadrr)}» es de la subida #{otra}, que lo siembra "
                       "o lo tiene en qBittorrent: no se rehace para no romper ese torrent. "

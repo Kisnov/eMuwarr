@@ -161,6 +161,9 @@ MENSAJES_RESULTADO: dict[str, str] = {
     "config_invalida": "El config.yaml de Uploadrr-EMU no es válido",
     "interrumpido": "Uploadrr-EMU fue interrumpido",
     "tipo_desconocido": "eMuwarez no tiene el tipo de esta copia (Unknown type on EMU)",
+    "base_sin_torrent": "No se pudo bajar el torrent del otro tracker para hacer el de esta subida con las mismas piezas",
+    "base_no_coincide": "El torrent del otro tracker no coincide con el fichero de la carpeta de subidas: no se sube "
+                        "para no crear un torrent que no se pueda sembrar junto al otro",
 }
 
 

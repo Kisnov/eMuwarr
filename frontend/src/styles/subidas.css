@@ -929,3 +929,21 @@ input.sub-confirmar.sub-confirmar-ok:not([type="checkbox"]):not([type="radio"]):
   .sub-trailer-chip,
   .sub-trailer-banner { animation: none; }
 }
+
+/* «Subir también a…» (components/SubirTambien.tsx): la lista de subidas a eMuwarez que se pueden elegir. */
+.subir-tambien-trackers {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  border: 0;
+  padding: 0;
+  margin: 12px 0;
+}
+.subir-tambien-lista {
+  list-style: none;
+  margin: 0 0 12px;
+  padding: 0;
+  max-height: calc(var(--vh100) * 0.5);
+  overflow-y: auto;
+}
+.subir-tambien-lista li { padding: 4px 0; }

@@ -199,6 +199,7 @@ def build_uploadrr_emu_command(
     anonimo: bool = False,
     personal_release: bool = False,
     solo_cliente: Optional[int | str] = None,
+    base_desde: Optional[str] = None,
     eventos: Optional[str] = None,
     config: Optional[str] = None,
     tracker: str = "EMU",
@@ -211,6 +212,10 @@ def build_uploadrr_emu_command(
 
     `solo_cliente` (el id del torrent en eMuwarez) añade `--resume --solo-cliente <id>`: Uploadrr-EMU no sube nada,
     solo baja el .torrent firmado de ese id y lo vuelve a añadir a qBittorrent, que lo comprueba.
+
+    `base_desde` («EMU:<id>», el tracker en Uploadrr-EMU y el id del torrent en él) añade `--resume --base-desde <valor>`:
+    el mismo contenido ya está en ese tracker y en su `tmp/<nombre>` ya no queda un BASE.torrent reutilizable, así que Uploadrr-EMU
+    lo hace con el torrent de allí (mismas piezas, sin hashear) en vez de crear otro que no se podría sembrar junto.
 
     `release_format` is the nomenclature's source code (WEB-DL, BDRemux…), sent as `-t`.
 
@@ -268,10 +273,12 @@ def build_uploadrr_emu_command(
     if personal_release:
         cmd.append("-pr")
     cmd += argv_variante(variante)
-    if reanudar or solo_cliente:
+    if reanudar or solo_cliente or base_desde:
         cmd.append("--resume")
     if solo_cliente:
         cmd += ["--solo-cliente", str(solo_cliente)]
+    elif base_desde:
+        cmd += ["--base-desde", base_desde]
     if eventos:
         cmd += ["--eventos", os.path.abspath(eventos)]
     if config:

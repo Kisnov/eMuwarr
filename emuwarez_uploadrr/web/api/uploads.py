@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import os
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query
@@ -24,7 +25,7 @@ from ...services.upload_execution import (
     reenviar_a_qbittorrent,
 )
 from ...services.subida_pasos import NOMBRES, pasos_de_subida, reanudar_desde, subpasos_que_reutilizaria
-from ...services import lotes, trackers
+from ...services import lotes, subir_tambien, trackers
 from ...services.mis_torrents import lectura_para_moderacion, pendiente_de_moderacion
 from ...services.lotes import PATRON_LOTE_ID, contar_por_lote
 from ...services.trailer_check import marcar_trailer_a_mano
@@ -56,6 +57,10 @@ from ..schemas import (
     TrackerParaSubir,
     ReglasDeTracker,
     ElegibilidadSubida,
+    SubirTambienBody,
+    SubirTambienCandidata,
+    SubirTambienCandidatas,
+    SubirTambienResponse,
 )
 
 router = APIRouter(tags=["uploads"])
@@ -206,6 +211,7 @@ def _job_to_detail(
         reenvio_qbit_estado=j.get("reenvio_qbit_estado"),
         reenvio_qbit_at=j.get("reenvio_qbit_at"),
         puede_reenviar_qbit=puede_reenviar_qbit(j),
+        copia_de_job_id=j.get("copia_de_job_id"),
         pendiente_moderacion=pendiente_moderacion,
         nomenclature_snapshot=_extract_json_dict(j, "nomenclature_snapshot_json"),
         remux_snapshot=_extract_json_dict(j, "remux_snapshot_json"),
@@ -450,6 +456,38 @@ def encolar_lote(body: UploadLoteBody, current_user: dict = Depends(require_auth
             raise HTTPException(status_code=409, detail=e.motivos) from e
 
 
+def _tracker_para_subir(t: trackers.Tracker) -> TrackerParaSubir:
+    return TrackerParaSubir(id=t.id, nombre=t.nombre)
+
+
+@router.get("/uploads/subir-tambien", response_model=SubirTambienCandidatas)
+def candidatas_subir_tambien(current_user: dict = Depends(require_auth)):
+    """«Subir también a…»: las subidas a eMuwarez que se pueden subir también a N.O.B.S o Milnueve, y a cuáles."""
+    with _get_conn() as conn:
+        destinos = subir_tambien.destinos(conn)
+        filas = subir_tambien.candidatas(conn)
+    return SubirTambienCandidatas(
+        trackers=[_tracker_para_subir(t) for t in destinos],
+        subidas=[SubirTambienCandidata(
+            job_id=f["job"]["id"], title=f["job"].get("title"),
+            nombre=os.path.basename(f["job"]["prepared_path"]), result_url=f["job"].get("result_url"),
+            finished_at=f["job"].get("finished_at"), trackers=[_tracker_para_subir(t) for t in f["trackers"]],
+        ) for f in filas],
+    )
+
+
+@router.post("/uploads/subir-tambien", response_model=SubirTambienResponse)
+def encolar_subir_tambien(body: SubirTambienBody, current_user: dict = Depends(require_auth)):
+    """«Subir también a…»: una subida por cada subida a eMuwarez y tracker elegidos, con el mismo fichero y el mismo
+    torrent. La que no se puede (sin el torrent entero en qBittorrent, ya subida a ese tracker…) se salta con su
+    motivo; si falta algo que haría fallar a todas (la clave del tracker), 422 y nada encolado."""
+    with db(_db_path()) as conn:
+        try:
+            return SubirTambienResponse(**subir_tambien.subir_tambien(conn, body.job_ids, body.trackers))
+        except subir_tambien.SubirTambienRechazado as e:
+            raise HTTPException(status_code=422, detail=" ".join(e.args[0])) from e
+
+
 def _resumen_o_404(conn, lote_id: str) -> LoteResumen:
     resumen = lotes.resumen_de_lote(conn, lote_id)
     if resumen is None:
@@ -522,8 +560,11 @@ def get_upload(job_id: int, current_user: dict = Depends(require_auth)):
         display_title = content_display_title(conn, row) if row else None
         lote_total = contar_por_lote(conn, [job["lote_id"]]).get(job["lote_id"]) if job.get("lote_id") else None
         pendiente = pendiente_de_moderacion(job, lectura_para_moderacion(conn))
-    return _con_ficha(job, row, display_title=display_title, queue_position=queue_position, queue_total=queue_total,
-                      lote_total=lote_total, pendiente_moderacion=pendiente)
+        ofrecidos = subir_tambien.ofrecidos(conn, job)
+    detalle = _con_ficha(job, row, display_title=display_title, queue_position=queue_position, queue_total=queue_total,
+                         lote_total=lote_total, pendiente_moderacion=pendiente)
+    detalle.subir_tambien_a = [TrackerParaSubir(id=t.id, nombre=t.nombre) for t in ofrecidos]
+    return detalle
 
 
 @router.get("/uploads/{job_id}/logs", response_model=UploadJobLogsResponse)

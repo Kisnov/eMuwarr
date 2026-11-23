@@ -1195,6 +1195,11 @@ class UploadJobDetail(BaseModel):
     reenvio_qbit_estado: Optional[str] = None
     reenvio_qbit_at: Optional[str] = None
     puede_reenviar_qbit: bool = False
+    # «Subir también a…» (services/subir_tambien.py): los trackers a los que se puede subir también esta subida a
+    # eMuwarez con el mismo fichero. Solo lo rellena el detalle (GET /uploads/{id}); en la lista va vacío.
+    subir_tambien_a: list[TrackerParaSubir] = []
+    # La subida completada a otro tracker cuyo fichero y torrent reutiliza esta («Subir también a…»).
+    copia_de_job_id: Optional[int] = None
     # En eMuwarez, pendiente de que un moderador la apruebe (services/mis_torrents.py, pendiente_de_moderacion).
     pendiente_moderacion: bool = False
     # Read-only snapshots taken at apply time — the nomenclature field
@@ -1514,6 +1519,43 @@ class UploadLoteResponse(BaseModel):
     encolados: int
     saltados: int
     resultados: list[UploadLoteResultado]
+
+
+class SubirTambienBody(BaseModel):
+    """«Subir también a…»: las subidas a eMuwarez y los trackers a los que subirlas (una subida por cada par)."""
+    job_ids: list[int] = Field(min_length=1, max_length=MAX_ELEMENTOS_LOTE)
+    trackers: list[str] = Field(min_length=1, max_length=8)
+
+
+class SubirTambienResultado(BaseModel):
+    job_id: int  # la subida a eMuwarez
+    tracker: str
+    status: str  # "queued" | "blocked"
+    nuevo_job_id: Optional[int] = None
+    motivo: Optional[str] = None
+
+
+class SubirTambienResponse(BaseModel):
+    # None si no se encoló ninguna, o si era una sola (no hace falta lote).
+    lote_id: Optional[str] = None
+    encolados: int
+    saltados: int
+    resultados: list[SubirTambienResultado]
+
+
+class SubirTambienCandidata(BaseModel):
+    job_id: int
+    title: Optional[str] = None
+    nombre: str  # el del fichero o carpeta en la carpeta de subidas (el del torrent)
+    result_url: Optional[str] = None
+    finished_at: Optional[str] = None
+    trackers: list[TrackerParaSubir]
+
+
+class SubirTambienCandidatas(BaseModel):
+    # Los trackers con clave (sin eMuwarez) y las subidas a eMuwarez que aún no están en alguno de ellos.
+    trackers: list[TrackerParaSubir]
+    subidas: list[SubirTambienCandidata]
 
 
 class UploadQueueResponse(BaseModel):
