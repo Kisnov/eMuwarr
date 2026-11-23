@@ -142,4 +142,25 @@ def reglas_para_subir(conn: sqlite3.Connection, item: dict, tracker_id: str) -> 
     return reglas_de(tracker_id, item, anime=obtener(tracker_id).id != EMU.id and es_anime(conn, item))
 
 
-__all__ = ["VARIANTES", "Reglas", "reglas_de", "es_anime", "reglas_para_subir"]
+def elegibilidad(conn: sqlite3.Connection, item: dict) -> dict:
+    """Qué trackers de los que se puede subir (trackers.para_subir) admiten `item` por sus normas, y, de una temporada,
+    cada capítulo por separado: el paso «Contenido» del asistente decide con esto si deja elegir el pack entero o
+    capítulos sueltos, y el Resumen qué trackers marca de entrada. Las mismas reglas que se miran al encolar
+    (reglas_para_subir), sin red.
+
+    {"trackers": [{tracker, nombre, permitido, motivo, variante}], "capitulos": [{item_id, trackers: [...]}]}"""
+    from .trackers import para_subir
+    destinos = para_subir(conn)
+
+    def de(fila: dict) -> list[dict]:
+        return [{"tracker": t.id, "nombre": t.nombre, **reglas_para_subir(conn, fila, t.id)._asdict()}
+                for t in destinos]
+
+    capitulos: list[dict] = []
+    if item.get("item_type") == "season":
+        from .season_pack import _get_season_episodes
+        capitulos = [{"item_id": ep["id"], "trackers": de(ep)} for ep in _get_season_episodes(item["id"], conn=conn)]
+    return {"trackers": de(item), "capitulos": capitulos}
+
+
+__all__ = ["VARIANTES", "Reglas", "reglas_de", "es_anime", "reglas_para_subir", "elegibilidad"]

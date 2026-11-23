@@ -14,6 +14,7 @@ import json
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from ...database import connect, init_db
+from ...services import trackers
 from ...services.season_pack import (
     build_season_pack_plan,
     get_season_episode_mediainfo,
@@ -52,18 +53,28 @@ def preview_season_pack(
     provider: str | None = Query(None),
     # {"2": "spa"}: el idioma elegido para la pista de audio 2 de todos los capítulos.
     idiomas: str | None = Query(None),
+    # El tracker de cuyas normas de idioma es el plan (emu, nobs, mnv); sin él, eMuwarez.
+    tracker: str | None = Query(None),
     current_user: dict = Depends(require_auth),
 ):
     """Can take a while for a big season (real work per episode) — poll
     GET .../pack-preview/progress concurrently for a live "N de M" counter.
 
     `provider`: el Proveedor elegido en el asistente, sobre todo para salir de
-    un plan bloqueado por capítulos con proveedores distintos."""
+    un plan bloqueado por capítulos con proveedores distintos.
+
+    `tracker`: el primero de los elegidos en el asistente; un pack que solo admite otro tracker no se bloquea por las
+    normas de eMuwarez. Uno desconocido es un 422."""
+    try:
+        tracker = trackers.obtener(tracker or trackers.POR_DEFECTO).id
+    except ValueError:
+        raise HTTPException(status_code=422, detail=f"Tracker desconocido: {tracker}.") from None
     with _get_conn() as conn:
         # "" (?provider=) es "Sin proveedor" elegido a mano; sin parámetro, se detecta.
         plan = build_season_pack_plan(season_id, conn=conn,
                                       provider_override=None if provider is None else provider.strip(),
-                                      idiomas_audio=_idiomas(idiomas))
+                                      idiomas_audio=_idiomas(idiomas),
+                                      **({} if tracker == trackers.POR_DEFECTO else {"tracker": tracker}))
     if plan["status"] == "blocked" and plan["errors"] == ["Temporada no encontrada."]:
         raise HTTPException(status_code=404, detail="Temporada no encontrada.")
     return SeasonPackPlanResponse(**plan)

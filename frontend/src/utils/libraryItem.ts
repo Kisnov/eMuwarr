@@ -106,9 +106,15 @@ export function isSeasonReady(item: LibraryItemResponse): boolean {
 // the per-episode mode: those rules exist because a pack ships ONE release
 // name for everything inside it, while each episode ships its own, which can
 // state its own codec and audio truthfully.
-export function episodeNotReadyReason(item: LibraryItemResponse): string | null {
+//
+// `admiten`: con más de un tracker con clave, los que lo admiten por sus normas de idioma (el asistente,
+// /upload/elegibilidad). Entonces decide eso y no la regla de eMuwarez; sin él, la de siempre.
+export function episodeNotReadyReason(item: LibraryItemResponse, admiten?: readonly string[]): string | null {
   if (item.local_status !== 'Disponible' && item.local_status !== 'Subido') {
     return `No se puede subir: el capítulo está "${item.local_status}", no lo tienes en disco.`
+  }
+  if (admiten) {
+    return admiten.length ? null : 'No se puede subir: ningún tracker con clave admite sus idiomas.'
   }
   if (item.has_spanish_ok !== 1) {
     return item.has_spanish_ok === 0
@@ -128,7 +134,9 @@ export function episodeNotReadyReason(item: LibraryItemResponse): string | null 
 // entera" salía habilitada y te dejaba avanzar dos pasos para que el servidor
 // lo rechazara al final. Una regla repartida entre la función y quien la llama
 // se cumple solo donde alguien se acordó de completarla.
-export function seasonNotReadyReason(item: LibraryItemResponse): string | null {
+//
+// `admiten`: como en episodeNotReadyReason, los trackers que admiten el pack entero; sin él, la regla de eMuwarez.
+export function seasonNotReadyReason(item: LibraryItemResponse, admiten?: readonly string[]): string | null {
   if (item.item_type !== 'season') return null
   if (item.local_status !== 'Disponible') {
     return 'Temporada incompleta: no todos los capítulos están Disponibles.'
@@ -136,6 +144,9 @@ export function seasonNotReadyReason(item: LibraryItemResponse): string | null {
   const field = seasonInconsistentField(item)
   if (field) {
     return `Los capítulos de esta temporada no coinciden en ${field.label}. Revísalos antes de subir el pack.`
+  }
+  if (admiten) {
+    return admiten.length ? null : 'Ningún tracker con clave admite los idiomas de todos los capítulos de esta temporada.'
   }
   if (seasonMissingSpanish(item)) {
     return 'Algún capítulo de esta temporada no tiene castellano ni en el audio ni en los subtítulos. eMuwarez lo exige en todos para aceptar el pack.'

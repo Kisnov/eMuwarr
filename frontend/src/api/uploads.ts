@@ -99,6 +99,20 @@ export async function fetchReglasTracker(itemId: number, tracker: string): Promi
   return api.get<ReglasDeTracker>(`/library/${itemId}/upload/reglas?tracker=${encodeURIComponent(tracker)}`)
 }
 
+// Qué trackers con clave admiten un elemento y, de una temporada, cada capítulo (web/schemas.py::ElegibilidadSubida).
+export interface ReglasConNombre extends ReglasDeTracker {
+  nombre: string
+}
+
+export interface ElegibilidadSubida {
+  trackers: ReglasConNombre[]
+  capitulos: { item_id: number; trackers: ReglasConNombre[] }[]
+}
+
+export async function fetchElegibilidad(itemId: number): Promise<ElegibilidadSubida> {
+  return api.get<ElegibilidadSubida>(`/library/${itemId}/upload/elegibilidad`)
+}
+
 // Un elemento de «Subir por lotes» (web/schemas.py::UploadLoteElemento).
 export interface ElementoLote {
   item_id: number

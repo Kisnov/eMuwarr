@@ -1411,6 +1411,23 @@ class ReglasDeTracker(BaseModel):
     variante: Optional[str] = None  # la categoría allí (--variante); None, la de siempre
 
 
+class ElegibilidadTracker(ReglasDeTracker):
+    """Las normas de un tracker para un elemento, con su nombre para enseñarlo."""
+    nombre: str
+
+
+class ElegibilidadCapitulo(BaseModel):
+    item_id: int
+    trackers: list[ElegibilidadTracker]
+
+
+class ElegibilidadSubida(BaseModel):
+    """Qué trackers con clave admiten un elemento y, de una temporada, cada capítulo
+    (services/reglas_tracker.py::elegibilidad)."""
+    trackers: list[ElegibilidadTracker]
+    capitulos: list[ElegibilidadCapitulo] = []
+
+
 class LoteResumen(BaseModel):
     """Cuántos elementos de un lote hay en cada estado (services/lotes.resumen_de_lote)."""
     lote_id: str

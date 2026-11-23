@@ -12,8 +12,8 @@ import {
   applyTrackRemux,
 } from '../../api/nomenclature'
 import {
-  queueUpload, getExistingJobForItem, runUploadChecks, fetchTrackersParaSubir, fetchReglasTracker, type OpcionesTracker,
-  type TrackerParaSubir, type ReglasDeTracker,
+  queueUpload, getExistingJobForItem, runUploadChecks, fetchTrackersParaSubir, fetchReglasTracker, fetchElegibilidad,
+  type OpcionesTracker, type TrackerParaSubir, type ReglasDeTracker, type ElegibilidadSubida, type ReglasConNombre,
 } from '../../api/uploads'
 import { nuevoLoteId } from '../../utils/lote'
 import { getLibrary, getMediaInfoReport, suggestProvider } from '../../api/library'
@@ -38,6 +38,7 @@ import {
 } from '../../utils/idiomasPack'
 import { avisoSourceVisible } from '../../utils/avisoSource'
 import { segunDestinos } from '../../utils/comprobaciones'
+import { destinosDeEntrada } from '../../utils/elegibilidad'
 import { PROVIDER_SOURCES } from './constantes'
 import { mergeRemuxTracks } from './RemuxTable'
 import { useComprobaciones, useComprobacionesTanda } from './useComprobaciones'
@@ -177,6 +178,31 @@ export function useAsistente({ item, onClose: onCloseProp, onDone, onNavigate, p
   useEffect(() => {
     fetchTrackersParaSubir().then(setTrackersParaSubir).catch(() => { /* solo eMuwarez, como siempre */ })
   }, [])
+  // Con más de un tracker, qué admite cada uno (el pack, cada capítulo, la película): el paso «Contenido» deja elegir
+  // lo que admite alguno, no solo eMuwarez, y el Resumen marca de entrada los que lo admiten. Solo con eMuwarez no se
+  // pide: todo sigue con su regla, como siempre.
+  const [elegibilidad, setElegibilidad] = useState<ElegibilidadSubida | null>(null)
+  const variosTrackers = trackersParaSubir.length > 1
+  useEffect(() => {
+    // Una serie se sube en tanda de temporadas, que va a eMuwarez.
+    if (!variosTrackers || isSeries) return
+    let vigente = true
+    fetchElegibilidad(item.id)
+      .then(r => { if (vigente) setElegibilidad(r) })
+      .catch(() => { /* sin respuesta, la regla de eMuwarez, como siempre */ })
+    return () => { vigente = false }
+  }, [item.id, variosTrackers, isSeries])
+  // Las normas de cada tracker para un elemento de este asistente (el abierto o un capítulo suyo); undefined si no se
+  // sabe (un solo tracker, o aún sin respuesta).
+  const reglasDe = (id: number | null): ReglasConNombre[] | undefined => {
+    if (!elegibilidad || id == null) return undefined
+    if (id === item.id) return elegibilidad.trackers
+    return elegibilidad.capitulos.find(c => c.item_id === id)?.trackers
+  }
+  // Una película o un capítulo abierto solo: los destinos de entrada en cuanto se sabe qué trackers lo admiten.
+  useEffect(() => {
+    if (!needsSelection && elegibilidad) setTrackersElegidos(destinosDeEntrada(elegibilidad.trackers))
+  }, [needsSelection, elegibilidad])
   const elegirTracker = (id: string, si: boolean) =>
     setTrackersElegidos(t => si ? [...new Set([...t, id])] : t.filter(x => x !== id))
   // Los elegidos, en el orden de la lista (eMuwarez primero). Sin lista (no se pudo leer), eMuwarez, como siempre.
@@ -392,6 +418,9 @@ export function useAsistente({ item, onClose: onCloseProp, onDone, onNavigate, p
       setBatchPhase('idle'); setBatchResults([])
       camposDe.current = null
       cargadoPara.current = null
+      // Los destinos de entrada de lo elegido: si eMuwarez no lo admite, los que sí (una tanda va a eMuwarez).
+      const reglasNuevas = esTanda(nueva) ? undefined : reglasDe(nueva.objetivo)
+      if (reglasNuevas) setTrackersElegidos(destinosDeEntrada(reglasNuevas))
     }
     setStep(1)
   }
@@ -588,7 +617,10 @@ export function useAsistente({ item, onClose: onCloseProp, onDone, onNavigate, p
       'plan-temporada-progreso', a => a.season_id === targetId, pedirPlan, 400)
     try {
       const [plan, srcResp, prvResp] = await Promise.all([
-        previewSeasonPack(targetId, proveedorPedido, idiomasParaServidor(idiomasPedidos)), getEmuSources(), getEmuProviders(),
+        // Con las normas del primero de los destinos: un pack que solo admite otro tracker no se bloquea por las de eMuwarez.
+        previewSeasonPack(targetId, proveedorPedido, idiomasParaServidor(idiomasPedidos),
+          ...(trackerPrincipal === 'emu' ? [] : [trackerPrincipal])),
+        getEmuSources(), getEmuProviders(),
       ])
       if (pedido !== planPedido.current) return
       setSeasonPlan(plan)
@@ -642,7 +674,7 @@ export function useAsistente({ item, onClose: onCloseProp, onDone, onNavigate, p
         setSeasonPlanLoading(false)
       }
     }
-  }, [targetId, ajustesPorId, proveedorElegido, idiomasPorTemporada, sharedTitle])
+  }, [targetId, ajustesPorId, proveedorElegido, idiomasPorTemporada, sharedTitle, trackerPrincipal])
 
   // Closing the wizard while a season plan is being built has to stop the
   // server too: it runs one real nomenclature proposal per episode, so a 24
@@ -1206,7 +1238,7 @@ export function useAsistente({ item, onClose: onCloseProp, onDone, onNavigate, p
     // Paso 2
     checks, checksLoading, checksError, liveChecks, runChecks, elegirTipo, canUpload, uploading, uploadMsg, doUpload,
     anonimoMarcado, personalReleaseMarcado, elegirAnonimo, elegirPersonalRelease, opcionesTracker,
-    trackersParaSubir, trackersElegidos, elegirTracker, destinoSubida, reglas,
+    trackersParaSubir, trackersElegidos, elegirTracker, destinoSubida, reglas, reglasDe,
     batchQueue, batchIsEpisodes, batchItemTitle, batchPhase, batchIndex, batchResults,
     batchViewId, setBatchViewId, batchEnvChecks, batchContentChecks, batchChecksLoading, batchChecksIndex,
     batchChecksError, repetirComprobacionesTanda, uploadAllSeasons, uploadAllEpisodes, nombresTanda,

@@ -19,9 +19,11 @@ export function ResumenSubida({ a }: { a: Asistente }) {
     preview, seasonDisplayTitle, seasonPlan, fields, remuxPreview, remuxEdits, modoPistasAjuste,
     checks, batchContentChecks, nombresTanda, requestId, preselect,
     anonimoMarcado, personalReleaseMarcado, elegirAnonimo, elegirPersonalRelease, opcionesTracker, uploading,
-    sources, elegirTipo, trackersParaSubir, trackersElegidos, elegirTracker, reglas,
+    sources, elegirTipo, trackersParaSubir, trackersElegidos, elegirTracker, reglas, reglasDe,
   } = a
   const esTanda = batchQueue.length > 1
+  // Si eMuwarez no lo admite (sus normas de idioma), se dice junto a su casilla: sale desmarcada de entrada.
+  const emuNoLoAdmite = esTanda ? undefined : reglasDe(targetId)?.find(r => r.tracker === 'emu' && !r.permitido)
   const ids = esTanda ? batchQueue : targetId != null ? [targetId] : []
   const fila = (id: number) => [item, ...seasons, ...episodes].find(x => x.id === id)
   const filas = ids.map(fila)
@@ -112,6 +114,9 @@ export function ResumenSubida({ a }: { a: Asistente }) {
                     </label>
                   ))}
                 </span>
+                {emuNoLoAdmite && (
+                  <span className="asist-dato-nota asist-aviso-dato">eMuwarez: ✗ no lo admite. {emuNoLoAdmite.motivo}</span>
+                )}
                 {/* Las normas de idioma de cada otro tracker (las de eMuwarez van en las comprobaciones). */}
                 {trackersParaSubir.filter(t => t.id !== 'emu').map(t => {
                   const r = reglas.get(t.id)

@@ -80,8 +80,9 @@ descripción y el cliente.
        del tracker convierte en el id. VHS/Retro y Documentales no se eligen solas. La subida por tracker ya las usa:
        las comprobaciones van con las del primer tracker elegido, el Resumen dice las de cada otro, un pack las mira
        capítulo a capítulo, lo que un tracker no admite no se encola para él y su trabajo lanza con su `--variante`.
-       Falta que el paso del pack del asistente deje seguir con un pack que solo admite otro tracker (hoy su plan
-       usa las de eMuwarez).
+       Con más de un tracker con clave, el paso «Contenido» del asistente deja elegir el pack o los capítulos que
+       admite alguno (`/upload/elegibilidad`), dice cuáles, y el Resumen marca de entrada eMuwarez si lo admite y, si
+       no, los que lo admiten; el plan del pack usa las normas del primero de ellos.
      - Queda: subir a NOBS/Milnueve lo que ya está en eMuwarez (PR 4), la subida por lotes a otros trackers y probarlo
        en el NAS.
   3. Después, los internacionales que ya tienen código en `uploadrr-emu/`, solo para contenido con el audio en inglés y
