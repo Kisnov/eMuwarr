@@ -1658,8 +1658,15 @@ def _run_queued_job(job_id: int) -> None:
     # releases it immediately, so a job that never gets that far can't
     # deadlock the queue.
     # Antes que la plaza: la del mismo contenido a otro tracker va primero, y esperarla no ocupa plaza.
-    if not _esperar_a_la_anterior(job_id):
-        return  # cancelada mientras esperaba
+    try:
+        if not _esperar_a_la_anterior(job_id):
+            return  # cancelada mientras esperaba
+    except Exception as exc:
+        # Fuera del try de abajo: sin esto la fila se quedaba en 'queued' sin hilo y las siguientes del mismo
+        # contenido la esperaban para siempre. Aún no tiene plaza, así que no hay nada que liberar.
+        logger.exception("Job %s: excepción esperando a la subida anterior", job_id)
+        _fail(job_id, f"Error inesperado: {texto_de_error(exc)}")
+        return
     if not _upload_concurrency_gate.acquire(job_id):
         return  # cancelada mientras esperaba turno: no ocupa plaza
 
