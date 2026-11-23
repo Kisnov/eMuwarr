@@ -6,9 +6,10 @@
 [![CodeQL](https://github.com/Kisnov/eMuwarr/actions/workflows/github-code-scanning/codeql/badge.svg?branch=dev)](https://github.com/Kisnov/eMuwarr/security/code-scanning)
 [![Bundle](https://github.com/Kisnov/eMuwarr/actions/workflows/bundle.yml/badge.svg?branch=dev)](https://github.com/Kisnov/eMuwarr/actions/workflows/bundle.yml)
 [![Cobertura](https://codecov.io/gh/Kisnov/eMuwarr/branch/dev/graph/badge.svg)](https://app.codecov.io/gh/Kisnov/eMuwarr/tree/dev)
-[![Revisión: CodeRabbit](https://img.shields.io/badge/revisi%C3%B3n-CodeRabbit-FF570A)](https://coderabbit.ai)
+[![Revisión: CodeRabbit](https://img.shields.io/coderabbit/prs/github/Kisnov/eMuwarr?label=CodeRabbit&labelColor=171717&color=FF570A)](.coderabbit.yaml)
 [![Dependabot](https://img.shields.io/badge/dependabot-activo-025E8C?logo=dependabot&logoColor=white)](.github/dependabot.yml)
 [![Imagen](https://img.shields.io/github/v/release/Kisnov/eMuwarr?label=imagen&logo=docker&logoColor=white&color=2496ED)](https://github.com/users/Kisnov/packages/container/package/emuwarr)
+[![Descargas](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fipitio.github.io%2Fbackage%2FKisnov%2FeMuwarr%2Femuwarr.json&query=%24.downloads&label=descargas&logo=docker&logoColor=white&color=2496ED)](https://github.com/users/Kisnov/packages/container/package/emuwarr)
 [![Python](https://img.shields.io/python/required-version-toml?tomlFilePath=https%3A%2F%2Fraw.githubusercontent.com%2FKisnov%2FeMuwarr%2Fdev%2Fpyproject.toml&logo=python&logoColor=white&color=3776AB)](pyproject.toml)
 [![Node 26](https://img.shields.io/badge/node-26-5FA04E?logo=nodedotjs&logoColor=white)](frontend/package.json)
 
