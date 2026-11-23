@@ -39,6 +39,10 @@ or report their errors unless they break an eMuwarez upload.
 - `--aviso-baja-calidad` (`-avbc`, per item, `meta["aviso_baja_calidad"]`, in `overwrite_keys`): the app passes it
   when the video is below 720p, and `edit_desc` puts `AVISO_BAJA_CALIDAD` (`src/utils/descgen.py`) at the top of
   `[EMU]DESCRIPTION.txt`, also with `# USE: as-is`. The app keeps the threshold; this repo keeps the text.
+- `--variante anime|latino|anime_catalan` (per item, `meta["variante"]`, in `overwrite_keys`): the category variant the
+  app picks with `services/reglas_tracker.py` (only when it is not the plain one). `Unit3dConTabla.get_cat_id` looks up the
+  token `<CATEGORY>_<VARIANTE>` (`MOVIE_ANIME`, `TV_LATINO`…) in `data/trackers/<TRACKER>.json` and falls back to the plain
+  category when the table has none (EMU has no anime categories: its ids never change).
 - `--solo-cliente ID` (`-sc`, `meta["solo_cliente"]`, an int, in `overwrite_keys`): the app adds it (plus `--resume`) to
   the usual argv when the torrent is already on the `-tk` tracker (EMU, NOBS, MNV: any one UNIT3D tracker; more than one, or one
   without `descargar_subido`, is the `cliente` reason `sin_emu`) but not in qBittorrent. After prep (and the TMDb check) the item

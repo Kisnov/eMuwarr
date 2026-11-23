@@ -135,7 +135,9 @@ def _choices(parser: argparse.ArgumentParser, opcion: str) -> set[str]:
 
 
 def test_cada_resolucion_y_tipo_que_puede_mandar_la_app_existe_en_uploadrr(parser_uploadrr):
+    from emuwarez_uploadrr.services.reglas_tracker import VARIANTES
     assert _UPLOADRR_RES_CHOICES <= _choices(parser_uploadrr, "-res")
+    assert set(VARIANTES) == _choices(parser_uploadrr, "--variante")
     assert set(_UPLOADRR_TYPES.values()) <= _choices(parser_uploadrr, "-t")
     assert {"movie", "tv"} <= _choices(parser_uploadrr, "-c")
 
@@ -158,7 +160,7 @@ _BASE = {"manual_name": "Peli.2024.1080p.WEB-DL", "trackers": ["EMU"], "unattend
     "cambios, esperado, ausentes",
     [
         ({}, {**_BASE, "category": "MOVIE", "resolution": "1080p"},
-         ("anon", "resume", "aviso_baja_calidad", "solo_cliente", "base_desde")),
+         ("anon", "resume", "aviso_baja_calidad", "solo_cliente", "base_desde", "variante")),
         (dict(category="tv", season=1, episode=5),
          {**_BASE, "category": "TV", "manual_season": "S01", "manual_episode": "E05"}, ("anon", "resume")),
         (dict(category="tv", season=2, resolution="480p", anonimo=True, reanudar=True),
@@ -175,9 +177,11 @@ _BASE = {"manual_name": "Peli.2024.1080p.WEB-DL", "trackers": ["EMU"], "unattend
         (dict(tracker="NOBS", reanudar=True, base_desde="EMU:4242"),
          {**_BASE, "trackers": ["NOBS"], "category": "MOVIE", "resume": True, "base_desde": "EMU:4242"},
          ("aviso_baja_calidad", "solo_cliente")),
+        (dict(category="tv", season=1, variante="anime_catalan"),
+         {**_BASE, "category": "TV", "manual_season": "S01", "variante": "anime_catalan"}, ("anon",)),
     ],
     ids=["pelicula", "capitulo", "pack-480p-anonimo-resume", "solo-cliente", "nobs-480p-resume", "mnv-solo-cliente",
-         "nobs-base-desde"],
+         "nobs-base-desde", "pack-variante"],
 )
 def test_el_comando_de_la_app_llega_a_la_meta_con_el_tipo_y_valor_que_espera_uploadrr(
         args_uploadrr, parser_uploadrr, tmp_path, cambios, esperado, ausentes):

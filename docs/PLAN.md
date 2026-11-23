@@ -78,8 +78,15 @@ descripción y el cliente.
        fichero y mismo nombre; si el `tmp/<nombre>` ya no tiene el BASE.torrent, Uploadrr-EMU lo hace con el torrent de
        eMuwarez (`--base-desde EMU:<id>`): mismas piezas, sin hashear. Antes, qBittorrent tiene que tener ese torrent
        entero con el fichero como contenido.
-     - Queda: las reglas de idioma y categoría por tracker (PR 5), la subida por lotes del asistente a otros trackers y
-       probarlo en el NAS (una subida vieja a N.O.B.S: los dos torrents sembrando el mismo fichero sin comprobar datos).
+     - Ya están sus normas de idioma y categoría (`services/reglas_tracker.py::reglas_de`): eMuwarez como siempre;
+       N.O.B.S admite castellano, latino o VOSE, y Milnueve además el catalán. El anime (instancia marcada de anime o
+       con id de MyAnimeList) va a sus categorías de anime; en Milnueve, sin castellano, el anime con catalán va a
+       «Anime en Catalan» y lo que tiene latino a las Latino. Llega a Uploadrr-EMU como `--variante`, que la tabla
+       del tracker convierte en el id. VHS/Retro y Documentales no se eligen solas. Falta que la subida por tracker
+       la use (comprobaciones con `tracker=` y `variante=` en el argv) y la regla por capítulo de los packs
+       (`season_pack._spanish_errors`, que sigue siendo la de eMuwarez).
+     - Queda: la subida por lotes del asistente a otros trackers y probarlo en el NAS (una subida vieja a N.O.B.S:
+       los dos torrents sembrando el mismo fichero sin comprobar datos).
   3. Después, los internacionales que ya tienen código en `uploadrr-emu/`, solo para contenido con el audio en inglés y
      donde haya permiso.
 - **Por estudiar: nekoBT (nekobt.to; añadido y estudiado el 22/11).** Tracker público de anime centrado en fansubs y

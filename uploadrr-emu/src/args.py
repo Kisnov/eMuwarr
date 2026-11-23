@@ -351,6 +351,12 @@ def build_parser(config: Dict[str, Any]) -> argparse.ArgumentParser:
     # --- Choices ---
     parser.add_argument("-c", "--category", choices=["movie", "tv", "fanres", "sports", "music"], help="Content category")
     parser.add_argument(
+        "--variante",
+        dest="variante",
+        choices=["anime", "latino", "anime_catalan"],
+        help="Category variant (tracker table token <CATEGORY>_<VARIANTE>, e.g. MOVIE_ANIME); without it, plain -c",
+    )
+    parser.add_argument(
         "-t",
         "--type",
         dest="manual_type",

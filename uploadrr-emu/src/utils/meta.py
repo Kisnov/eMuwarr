@@ -102,7 +102,7 @@ async def load_existing_meta(base_dir: Path, path: str, new_meta: Dict) -> Dict:
         "manual_season", "manual_source", "manual_type", "mbid_manual", "no_aka", "no_dub", "no_seed", "no_season", "no_tag",  "no_year",
         "nohash", "path", "personalrelease", "ptp", "qbit_cat", "qbit_tag", "randomized", "rehash",
         "region", "resolution", "resume", "screens", "season", "skip_dupe_check", "skip_imghost_upload", "solo_cliente", "tag", "torrent_creation",
-        "trackers", "tmdb_manual", "unattended", "webdv",
+        "trackers", "tmdb_manual", "unattended", "variante", "webdv",
         # XXX keys
          "jav", "pack", "pdb_manual", "user_cover", "user_banner", "user_trailer", "xmovies", "xscene", "xxx"
     ]
