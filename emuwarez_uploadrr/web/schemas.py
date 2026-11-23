@@ -1507,10 +1507,13 @@ class UploadLoteElemento(BaseModel):
 
 class UploadLoteBody(BaseModel):
     elementos: list[UploadLoteElemento] = Field(min_length=1, max_length=MAX_ELEMENTOS_LOTE)
+    # A qué trackers, en orden (eMuwarez primero): una subida por elemento y tracker. Las `checks` son las del primero.
+    trackers: list[str] = Field(default=["emu"], min_length=1, max_length=8)
 
 
 class UploadLoteResultado(BaseModel):
     item_id: int
+    tracker: str
     status: str  # "queued" | "blocked"
     job_id: Optional[int] = None
     errors: list[str] = []

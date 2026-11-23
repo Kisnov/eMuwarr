@@ -26,7 +26,7 @@ export function PasoSeleccion({ a }: { a: Asistente }) {
   const eligibleEpisodes = episodes.filter(ep => !episodeNotReadyReason(ep, admitenCapitulo(ep)))
   const enDisco = episodes.filter(ep => ep.local_status === 'Disponible' || ep.local_status === 'Subido')
   const reglasCapitulos = enDisco.map(ep => reglasDe(ep.id)).filter(r => r !== undefined)
-  // Varios capítulos se suben en tanda, y una tanda va solo a eMuwarez: si no admite alguno de los elegidos, avisa.
+  // Varios capítulos se suben en tanda, con las comprobaciones del primer tracker: si eMuwarez no admite alguno, avisa.
   const tandaSinEmu = reglasPack !== undefined && episodeSelected.size > 1
     && [...episodeSelected].some(id => reglasDe(id)?.some(r => r.tracker === 'emu' && !r.permitido))
   const allEligibleSelected = eligibleEpisodes.length > 0
@@ -166,8 +166,8 @@ export function PasoSeleccion({ a }: { a: Asistente }) {
           </div>
           {tandaSinEmu && (
             <p className="text-muted asist-t12 asist-mt-10" role="status">
-              Varios capítulos se suben en tanda y una tanda va solo a eMuwarez, que no admite alguno de los elegidos.
-              Para subirlos a otro tracker, elige un capítulo cada vez.
+              eMuwarez no admite alguno de los elegidos: con eMuwarez marcado en el Resumen, esos se saltan. Para
+              subirlos a otro tracker, desmárcalo allí.
             </p>
           )}
         </div>

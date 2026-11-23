@@ -604,7 +604,7 @@ def test_doble_clic_salta_todos_la_segunda_vez(db_conn, tmp_path, sin_comprobaci
 def test_falta_una_clave_rechaza_el_lote_entero(db_conn, tmp_path, monkeypatch):
     from emuwarez_uploadrr.services import upload_queue
     monkeypatch.setattr(upload_queue, "_season_upload_preconditions",
-                        lambda conn: ["API key de TMDb no configurada."])
+                        lambda conn, *_tracker: ["API key de TMDb no configurada."])
     with pytest.raises(lotes.LoteRechazado) as e:
         lotes.encolar_lote(db_conn, [_el(_peli(db_conn, tmp_path))])
     assert e.value.motivos == ["API key de TMDb no configurada."]
@@ -733,3 +733,125 @@ def test_la_api_valida_el_lote(client, auth_headers, db_conn, tmp_path, monkeypa
     monkeypatch.setattr(upload_queue, "_season_upload_preconditions", lambda conn, *_tracker: ["Ruta de Uploadrr no existe: /x"])
     resp = client.post("/api/uploads/lote", json={"elementos": [_el(_peli(db_conn, tmp_path))]}, headers=auth_headers)
     assert (resp.status_code, resp.json()["detail"]) == (409, ["Ruta de Uploadrr no existe: /x"])
+
+
+# ---------------------------------------------------------------------------
+# Un lote a varios trackers: una subida por elemento y tracker
+# ---------------------------------------------------------------------------
+
+def _clave(conn, tracker_id: str) -> None:
+    from emuwarez_uploadrr.services.settings import set_setting
+    set_setting(conn, f"{tracker_id}.api_key", "clave")
+    conn.commit()
+
+
+def _con_castellano(conn, item_id: int) -> int:
+    conn.execute("UPDATE library_items SET audio_languages = 'spa' WHERE id = ?", (item_id,))
+    conn.commit()
+    return item_id
+
+
+def test_un_lote_a_varios_trackers_crea_una_subida_por_elemento_y_tracker(db_conn, tmp_path, sin_comprobaciones):
+    _clave(db_conn, "nobs")
+    a, b = (_con_castellano(db_conn, _peli(db_conn, tmp_path, t)) for t in "AB")
+
+    r = lotes.encolar_lote(db_conn, [_el(a), _el(b)], ["emu", "nobs"])
+
+    assert (r["encolados"], r["saltados"]) == (4, 0)
+    filas = db_conn.execute("SELECT library_item_id, tracker, lote_id FROM upload_jobs ORDER BY id").fetchall()
+    assert [tuple(f) for f in filas] == [(a, "emu", r["lote_id"]), (a, "nobs", r["lote_id"]),
+                                         (b, "emu", r["lote_id"]), (b, "nobs", r["lote_id"])]
+    assert [(x["item_id"], x["tracker"]) for x in r["resultados"]] == [(a, "emu"), (a, "nobs"), (b, "emu"), (b, "nobs")]
+    assert lotes.contar_por_lote(db_conn, [r["lote_id"]]) == {r["lote_id"]: 4}
+
+
+def test_lo_que_un_tracker_no_admite_se_salta_solo_para_ese(db_conn, tmp_path, sin_comprobaciones):
+    _clave(db_conn, "nobs")
+    admitida = _con_castellano(db_conn, _peli(db_conn, tmp_path, "A"))
+    sin_idiomas = _peli(db_conn, tmp_path, "B")
+
+    r = lotes.encolar_lote(db_conn, [_el(admitida), _el(sin_idiomas)], ["emu", "nobs"])
+
+    estados = [(x["item_id"], x["tracker"], x["status"]) for x in r["resultados"]]
+    assert estados == [(admitida, "emu", "queued"), (admitida, "nobs", "queued"),
+                       (sin_idiomas, "emu", "queued"), (sin_idiomas, "nobs", "blocked")]
+    assert r["resultados"][3]["errors"][0].startswith("N.O.B.S no lo admite")
+    assert (r["encolados"], r["saltados"]) == (3, 1)
+
+
+def test_lo_que_se_salta_por_el_elemento_se_salta_para_cada_tracker(db_conn, tmp_path, sin_comprobaciones):
+    _clave(db_conn, "nobs")
+    serie = _item(db_conn, "series", "Serie")
+
+    r = lotes.encolar_lote(db_conn, [_el(serie)], ["emu", "nobs"])
+
+    assert [(x["tracker"], x["errors"]) for x in r["resultados"]] == [
+        ("emu", ["Elige sus temporadas."]), ("nobs", ["Elige sus temporadas."])]
+
+
+def test_el_contenido_se_comprueba_con_las_normas_del_primer_tracker(db_conn, tmp_path, monkeypatch):
+    from emuwarez_uploadrr.services import upload_checks, upload_queue
+    monkeypatch.setattr(upload_queue, "_season_upload_preconditions", lambda conn, *_tracker: [])
+    trackers_mirados = []
+
+    def comprobar(conn, item_id, scope="all", tracker="emu", **kw):
+        trackers_mirados.append(tracker)
+        return LISTO
+    monkeypatch.setattr(upload_checks, "run_upload_checks", comprobar)
+    _clave(db_conn, "nobs")
+    peli = _con_castellano(db_conn, _peli(db_conn, tmp_path))
+
+    r = lotes.encolar_lote(db_conn, [_el(peli)], ["nobs"])
+
+    assert trackers_mirados == ["nobs"]
+    assert [(x["tracker"], x["status"]) for x in r["resultados"]] == [("nobs", "queued")]
+
+
+def test_un_tracker_sin_clave_rechaza_el_lote_entero(db_conn, tmp_path, sin_comprobaciones):
+    with pytest.raises(lotes.LoteRechazado) as e:
+        lotes.encolar_lote(db_conn, [_el(_peli(db_conn, tmp_path))], ["emu", "nobs"])
+    assert e.value.motivos == ["Falta la clave de API de N.O.B.S: ponla en Configuración → Otros trackers."]
+    assert db_conn.execute("SELECT COUNT(*) FROM upload_jobs").fetchone()[0] == 0
+
+
+def test_la_api_encola_un_lote_a_varios_trackers(client, auth_headers, db_conn, tmp_path, sin_comprobaciones):
+    _clave(db_conn, "mnv")
+    peli = _con_castellano(db_conn, _peli(db_conn, tmp_path))
+
+    resp = client.post("/api/uploads/lote", json={"elementos": [_el(peli)], "trackers": ["emu", "mnv"]},
+                       headers=auth_headers)
+
+    assert resp.status_code == 200, resp.text
+    assert [(x["tracker"], x["status"]) for x in resp.json()["resultados"]] == [("emu", "queued"), ("mnv", "queued")]
+    resp = client.post("/api/uploads/lote", json={"elementos": [_el(peli)], "trackers": ["otro"]}, headers=auth_headers)
+    assert (resp.status_code, resp.json()["detail"]) == (409, ["Tracker desconocido: 'otro'."])
+
+
+def test_eMuwarez_va_primero_aunque_llegue_despues(db_conn, tmp_path, sin_comprobaciones):
+    """Sus normas de idioma solo las miran las comprobaciones, que son las del primer tracker."""
+    _clave(db_conn, "nobs")
+    peli = _con_castellano(db_conn, _peli(db_conn, tmp_path))
+
+    r = lotes.encolar_lote(db_conn, [_el(peli)], ["nobs", "emu"])
+
+    assert [x["tracker"] for x in r["resultados"]] == ["emu", "nobs"]
+
+
+def test_si_falla_encolar_a_un_tracker_lo_de_los_anteriores_sigue_encolado(db_conn, tmp_path, sin_comprobaciones,
+                                                                          monkeypatch):
+    from emuwarez_uploadrr.services import upload_queue
+    _clave(db_conn, "nobs")
+    peli = _con_castellano(db_conn, _peli(db_conn, tmp_path))
+    original = upload_queue.queue_upload_for_item
+
+    def queue(item_id, **kw):
+        if kw.get("tracker") == "nobs":
+            raise RuntimeError("boom")
+        return original(item_id, **kw)
+    monkeypatch.setattr(upload_queue, "queue_upload_for_item", queue)
+
+    r = lotes.encolar_lote(db_conn, [_el(peli)], ["emu", "nobs"])
+
+    assert [(x["tracker"], x["status"]) for x in r["resultados"]] == [("emu", "queued"), ("nobs", "blocked")]
+    assert r["resultados"][1]["errors"] == ["Error inesperado al encolarlo; mira el registro."]
+    assert lotes.lote_id_valido(r["lote_id"])

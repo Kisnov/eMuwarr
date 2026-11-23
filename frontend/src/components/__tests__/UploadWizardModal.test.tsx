@@ -671,6 +671,30 @@ describe('varias temporadas de una serie', () => {
     mismoLote()
   })
 
+  it('a varios trackers: una subida por temporada y tracker en el mismo lote; la que uno no admite se salta para él', async () => {
+    m(subidas.fetchTrackersParaSubir).mockResolvedValue([{ id: 'emu', nombre: 'eMuwarez' }, { id: 'nobs', nombre: 'N.O.B.S' }])
+    m(subidas.queueUpload).mockImplementation(async (id, ...resto) => (id === 32 && resto[7] === 'nobs'
+      ? { status: 'blocked', errors: ['N.O.B.S no lo admite.'] }
+      : { status: 'queued', job: { id: 99 } }) as never)
+    await abrir(SERIE, { preselect: { season: 1 } })
+    await pulsar(await esperar(() => boton('Temporada 2')))
+    await pulsar(boton('Continuar'))
+    await esperar(() => texto().includes('✓ 2 capítulo(s) listos'))
+    await pulsar(boton('Continuar'))
+    await esperar(() => texto().includes('✓ Todo listo: 2 temporadas'))
+    const casilla = (nombre: string) => [...document.querySelectorAll<HTMLLabelElement>('.asist-marcas label')]
+      .find(l => l.textContent?.includes(nombre))!.querySelector('input')!
+    expect(casilla('eMuwarez').checked).toBe(true)
+
+    await pulsar(casilla('N.O.B.S'))
+    await pulsar(boton('Subir todas a eMuwarez y N.O.B.S'))
+    await esperar(() => texto().includes('3 de 4 subida(s) encolada(s)'))
+    expect(m(subidas.queueUpload).mock.calls.map(c => [c[0], c[8]])).toEqual(
+      [[31, undefined], [31, 'nobs'], [32, undefined], [32, 'nobs']])
+    expect(texto()).toContain('✗ Serie - Temporada 2 (N.O.B.S): N.O.B.S no lo admite.')
+    mismoLote()
+  })
+
   it('cambiar el Proveedor en el paso 1 vuelve a comprobar el contenido de esa temporada', async () => {
     await abrir(SERIE, { preselect: { season: 1 } })
     await pulsar(await esperar(() => boton('Temporada 2')))

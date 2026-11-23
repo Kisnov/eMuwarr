@@ -13,6 +13,7 @@ export function PasoSubidaTanda({ a }: { a: Asistente }) {
     batchViewId, setBatchViewId, batchEnvChecks, batchContentChecks, batchChecksLoading, batchChecksIndex,
     batchChecksError, repetirComprobacionesTanda,
     recalculandoIdioma, setStep, uploadAllEpisodes, uploadAllSeasons, onDone, onNavigate, onClose,
+    trackersParaSubir, trackersElegidos, destinoSubida,
   } = a
   // El pie, según la fase: antes de subir, Volver y «Subir todos»; al terminar, ir a Subidas; mientras sube, ninguno.
   const viewId = batchViewId ?? batchQueue[0]
@@ -34,10 +35,10 @@ export function PasoSubidaTanda({ a }: { a: Asistente }) {
       <button
         className="btn btn-primary"
         onClick={batchIsEpisodes ? uploadAllEpisodes : uploadAllSeasons}
-        disabled={batchChecksLoading || recalculandoIdioma || !!batchChecksError || !completas || !envReady || blocked.length === batchQueue.length}
+        disabled={batchChecksLoading || recalculandoIdioma || !!batchChecksError || !completas || !envReady || blocked.length === batchQueue.length || !destinoSubida}
         type="button"
       >
-        {batchIsEpisodes ? 'Subir todos' : 'Subir todas'}
+        {batchIsEpisodes ? 'Subir todos' : 'Subir todas'}{trackersParaSubir.length > 1 && destinoSubida ? ` a ${destinoSubida}` : ''}
       </button>
     </>
   ) : batchPhase === 'done' ? (
@@ -127,12 +128,12 @@ export function PasoSubidaTanda({ a }: { a: Asistente }) {
       {batchPhase === 'done' && (
         <>
           <div className="asist-resultado-titulo">
-            {batchResults.filter(r => r.status === 'queued').length} de {batchResults.length} {batchIsEpisodes ? 'capítulo(s) encolado(s)' : 'temporada(s) encolada(s)'}
+            {batchResults.filter(r => r.status === 'queued').length} de {batchResults.length} {trackersElegidos.length > 1 ? 'subida(s) encolada(s)' : batchIsEpisodes ? 'capítulo(s) encolado(s)' : 'temporada(s) encolada(s)'}
           </div>
           {batchResults.some(r => r.status === 'failed') && (
             <div className="detail-card asist-tarjeta asist-mb-14">
               {batchResults.filter(r => r.status === 'failed').map(r => (
-                <p key={r.seasonId} className="asist-bloqueo">
+                <p key={`${r.seasonId}:${r.title}`} className="asist-bloqueo">
                   ✗ {r.title}: {r.reason}
                 </p>
               ))}
