@@ -213,7 +213,12 @@ export function useAsistente({ item, onClose: onCloseProp, onDone, onNavigate, p
     const { [id]: _quitada, ...resto } = d
     return si ? { ...resto, [id]: descripcion } : resto
   })
-  const editarDescripcionDe = (id: string, texto: string) => setDescripcionPorTracker(d => ({ ...d, [id]: texto }))
+  // Escribirla cuenta como un cambio: cerrar el asistente pide confirmación antes de perderla.
+  const escribirDescripcion = (texto: string) => { editado.current = true; setDescripcion(texto) }
+  const editarDescripcionDe = (id: string, texto: string) => {
+    editado.current = true
+    setDescripcionPorTracker(d => ({ ...d, [id]: texto }))
+  }
   // La propia de un tracker solo cuenta mientras se ve: con un solo destino, el Resumen enseña solo la común.
   const descripcionDe = (id: string) => (destinos.length > 1 ? descripcionPorTracker[id] : undefined) ?? descripcion
   // Los elegidos, en el orden de la lista (eMuwarez primero). Sin lista (no se pudo leer), eMuwarez, como siempre.
@@ -1253,7 +1258,7 @@ export function useAsistente({ item, onClose: onCloseProp, onDone, onNavigate, p
     checks, checksLoading, checksError, liveChecks, runChecks, elegirTipo, canUpload, uploading, uploadMsg, doUpload,
     anonimoMarcado, personalReleaseMarcado, elegirAnonimo, elegirPersonalRelease, opcionesTracker,
     trackersParaSubir, trackersElegidos, elegirTracker, destinoSubida, reglas, reglasDe,
-    descripcion, setDescripcion, descripcionPorTracker, descripcionPropia, editarDescripcionDe,
+    descripcion, escribirDescripcion, descripcionPorTracker, descripcionPropia, editarDescripcionDe,
     batchQueue, batchIsEpisodes, batchItemTitle, batchPhase, batchIndex, batchResults,
     batchViewId, setBatchViewId, batchEnvChecks, batchContentChecks, batchChecksLoading, batchChecksIndex,
     batchChecksError, repetirComprobacionesTanda, uploadAllSeasons, uploadAllEpisodes, nombresTanda,

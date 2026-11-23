@@ -20,7 +20,7 @@ export function ResumenSubida({ a }: { a: Asistente }) {
     checks, batchContentChecks, nombresTanda, requestId, preselect,
     anonimoMarcado, personalReleaseMarcado, elegirAnonimo, elegirPersonalRelease, opcionesTracker, uploading,
     sources, elegirTipo, trackersParaSubir, trackersElegidos, elegirTracker, reglas, reglasDe,
-    descripcion, setDescripcion, descripcionPorTracker, descripcionPropia, editarDescripcionDe,
+    descripcion, escribirDescripcion, descripcionPorTracker, descripcionPropia, editarDescripcionDe,
   } = a
   const esTanda = batchQueue.length > 1
   const destinosElegidos = trackersParaSubir.filter(t => trackersElegidos.includes(t.id))
@@ -143,7 +143,7 @@ export function ResumenSubida({ a }: { a: Asistente }) {
               <dd>
                 <textarea className="form-input asist-descripcion" rows={4} value={descripcion} disabled={uploading}
                   maxLength={30000} aria-label="Descripción propia (BBCode)" placeholder="[b]Notas del encode[/b]…"
-                  onChange={e => setDescripcion(e.target.value)} />
+                  onChange={e => escribirDescripcion(e.target.value)} />
                 <span className="asist-dato-nota">
                   BBCode opcional: va tras el tráiler y antes de las capturas y la firma
                   {destinosElegidos.length > 1 ? ', la misma en todos los trackers.' : '.'}

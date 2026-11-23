@@ -502,6 +502,21 @@ describe('cerrar', () => {
     expect(onClose).toHaveBeenCalledTimes(1)
   })
 
+  it('con solo una descripción escrita también pregunta', async () => {
+    await abrir(PELICULA)
+    await esperar(() => texto().includes('Dune WEB-DL AMZN [GRP]'))
+    await pulsar(boton('Continuar'))
+    await esperar(() => texto().includes('✓ Todo listo para subir'))
+    const area = document.querySelector<HTMLTextAreaElement>('textarea[aria-label="Descripción propia (BBCode)"]')!
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(area, 'Notas')
+      area.dispatchEvent(new Event('input', { bubbles: true }))
+    })
+    await pulsar(document.querySelector('[aria-label="Cerrar"]') ?? undefined)
+    expect(onClose).not.toHaveBeenCalled()
+    expect(texto()).toContain('¿Descartar los cambios?')
+  })
+
   it('cerrar mientras se prepara el pack se lo dice al servidor', async () => {
     m(biblioteca.getLibrary).mockResolvedValue({ items: [E1, E2], total: 2 } as never)
     m(temporada.previewSeasonPack).mockReturnValue(new Promise(() => {}))
