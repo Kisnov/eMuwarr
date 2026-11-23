@@ -199,8 +199,26 @@ def test_un_pack_en_mp4_avisa_sin_bloquear(tmp_path, monkeypatch):
                 {"episode": {"episode_number": 2, "path": "/s/e02.mp4"}},
                 {"episode": {"episode_number": 3, "path": "/s/e03.iso"}}]
     assert season_pack._capitulos_con_audio_sin_idioma(entradas, None) == [1]
-    (aviso,) = season_pack._avisos_no_mkv(entradas)
-    assert aviso.startswith("Capítulo 2: Es un MP4")
+    entradas.append({"episode": {"episode_number": 4, "path": "/s/e04.mp4"}})
+    # Una línea por aviso, con todos sus capítulos.
+    assert season_pack._avisos_no_mkv(entradas) == [
+        "Capítulo(s) 2, 4: " + emu_format_aviso("/s/e02.mp4")]
+    # Y el selector del pack solo ofrece pistas de un MKV.
+    assert [p["capitulos"] for p in season_pack._pistas_sin_idioma_del_pack(entradas, None)] == [[1]]
+
+
+def emu_format_aviso(ruta):
+    from emuwarez_uploadrr.services.reglas_tracker import aviso_no_mkv
+    return aviso_no_mkv(ruta)
+
+
+def test_un_pack_custom_con_un_capitulo_sin_dialogo_no_lleva_zxx(monkeypatch):
+    from emuwarez_uploadrr.services import season_pack
+    por_capitulo = {1: {"ZXX": "DD 5.1"}, 2: {"ESP": "DD 5.1"}}
+    monkeypatch.setattr(season_pack, "_episode_audio_by_language",
+                        lambda ep, conn, idiomas=None: por_capitulo[ep["episode_number"]])
+    entradas = [{"episode": {"episode_number": n}} for n in (1, 2)]
+    assert season_pack._aggregate_pack_audio(entradas) == ("ESP DD 5.1", True)
 
 
 def test_antes_de_lanzar_un_mp4_no_se_para(tmp_path):

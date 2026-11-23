@@ -142,7 +142,7 @@ def aviso_no_mkv(ruta: str | None) -> Optional[str]:
     if ext in (".mkv", ".iso"):
         return None
     return (f"Es un {ext.lstrip('.').upper() or 'archivo sin extensión'}: la mayoría de trackers piden MKV. Conviértelo "
-            "a MKV (mkvmerge lo hace sin recodificar) y podrás poner el idioma de las pistas en Ver pistas.")
+            "a MKV (mkvmerge lo hace sin recodificar) y podrás ponerles el idioma a las pistas en el asistente.")
 
 
 def con_idiomas_elegidos(item: dict, *, overrides: dict | None = None, idiomas: dict | None = None) -> dict:

@@ -852,6 +852,13 @@ def _populate_ready(job_id: int, item_id: int, conn, season_overrides: dict | No
         return False
     tracker = _tracker_del_trabajo(job_id, conn)
     preparado = conn.execute("SELECT prepared_path FROM upload_jobs WHERE id = ?", (job_id,)).fetchone()[0]
+    from .emu_format import audio_sin_idioma
+    from .reglas_tracker import aviso_no_mkv
+    aviso = aviso_no_mkv(preparado) if preparado and os.path.isfile(preparado) else None
+    if aviso and audio_sin_idioma(item.get("audio_languages")):
+        from .upload_execution import append_upload_log
+        append_upload_log(job_id, "warning", f"Una pista de audio no tiene idioma (und). {aviso}", stream="system",
+                          conn=conn)
     sin_idioma = _sin_idioma_preparado(preparado)
     if sin_idioma:
         from .reglas_tracker import motivo_audio_sin_idioma

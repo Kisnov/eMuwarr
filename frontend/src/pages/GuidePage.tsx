@@ -425,7 +425,7 @@ const SPANISH_ROWS: SpanishRow[] = [
   },
   {
     kind: 'Película', audio: 'spa / und', subs: 'cualquiera', verdict: 'blocked', verdictLabel: 'Bloqueado',
-    why: 'Una pista sin idioma (und o vacía) es un dato que falta: hasta que le pongas el suyo en «Ver pistas» no se sube. Se escribe en la pista al preparar la subida.',
+    why: 'Una pista sin idioma (und o vacía) es un dato que falta: en un MKV, hasta que le pongas el suyo en «Ver pistas» no se sube, y se escribe en la pista al preparar la subida. Un MP4 (u otro que no sea MKV) solo avisa de convertirlo a MKV; un ISO se sube tal cual.',
   },
   {
     kind: 'Película', audio: 'zxx', subs: 'ninguno', verdict: 'ok',

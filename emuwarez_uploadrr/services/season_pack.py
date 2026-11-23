@@ -429,7 +429,7 @@ def _aggregate_pack_audio(episode_entries: list[dict], conn=None,
 
     Devuelve (cadena de audio, custom).
     """
-    from .emu_format import (build_audio_string, audio_track_quality,
+    from .emu_format import (SIN_DIALOGO, build_audio_string, audio_track_quality,
                              format_audio_codec, format_channels)
 
     por_capitulo = [_episode_audio_by_language(e["episode"], conn, idiomas_audio) for e in episode_entries]
@@ -476,7 +476,7 @@ def _aggregate_pack_audio(episode_entries: list[dict], conn=None,
             # En un pack CUSTOM un idioma puede salir en dos grupos, así que
             # no se colapsa a DUAL/MULTI: esos tokens dicen "este release trae
             # castellano e inglés" y aquí taparían de qué pista habla cada uno.
-            partes.append(" ".join(x for x in ("-".join(langs),
+            partes.append(" ".join(x for x in ("-".join(c for c in langs if c != SIN_DIALOGO),
                                                format_audio_codec(codec),
                                                format_channels(canales)) if x))
         else:
@@ -530,8 +530,12 @@ def _avisos_no_mkv(episode_entries: list[dict]) -> list[str]:
     """Los avisos de los capítulos que no son MKV con alguna pista de audio sin idioma: no bloquean, porque la app no
     puede etiquetarlas (reglas_tracker.aviso_no_mkv)."""
     from .reglas_tracker import aviso_no_mkv
-    return [f"Capítulo {e['episode'].get('episode_number')}: {aviso}" for e in _sin_idioma_en(episode_entries, None)
-            if (aviso := aviso_no_mkv(e["episode"]["path"]))]
+    por_aviso: dict[str, list] = {}
+    for e in _sin_idioma_en(episode_entries, None):
+        aviso = aviso_no_mkv(e["episode"]["path"])
+        if aviso:
+            por_aviso.setdefault(aviso, []).append(e["episode"].get("episode_number"))
+    return [f"Capítulo(s) {', '.join(str(n) for n in capitulos)}: {aviso}" for aviso, capitulos in por_aviso.items()]
 
 
 def _sin_idioma_en(episode_entries: list[dict], idiomas_audio: dict[int, str] | None) -> list[dict]:
@@ -561,7 +565,8 @@ def _pistas_sin_idioma_del_pack(episode_entries: list[dict], idiomas_audio: dict
     por_posicion: dict[int, dict] = {}
     for e in episode_entries:
         path = e["episode"].get("path")
-        if not path:
+        # Solo un MKV se etiqueta: en otro, elegirlo cambiaría el nombre y no el fichero.
+        if not path or not path.lower().endswith(".mkv"):
             continue
         informe = build_mediainfo_report(path)
         filas = {r.get("field"): r for r in informe.get("rows") or []}

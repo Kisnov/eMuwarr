@@ -164,6 +164,7 @@ describe('qué llega desmarcado o se salta', () => {
     m(nom.getNomenclatureFields).mockImplementation(async id => ({
       fields: { ...CAMPOS }, torrent_name: nombreDe(id), internal_mkv_title: '', blocked: false,
       audio_warning: id === 11 ? 'Una pista de audio no tiene idioma: el nombre no la incluye.' : null,
+      audio_sin_idioma: id === 11,
     }))
     await abrir([DUNE, ALIEN])
     await alResumen(2)
