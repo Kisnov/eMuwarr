@@ -11,6 +11,7 @@ from .ejecucion import start_upload_job
 from .estado import _update_job_status
 from .procesos import _PROCESOS, _PROCESOS_LOCK, _detener_proceso, _pid_es_de_este_job
 from .registro import append_upload_log
+from ..trackers import POR_DEFECTO
 from ...integrations.base import texto_de_error
 
 
@@ -113,9 +114,9 @@ def retry_upload_job(
                (library_item_id, request_item_id, request_title, request_url,
                 title, path,
                 source_path, prepared_path, uploadrr_command_json,
-                status, stage, retry_of_job_id, retry_count,
+                status, stage, retry_of_job_id, retry_count, tracker,
                 created_at, updated_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'ready', 'preflight', ?, ?, ?, ?)""",
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'ready', 'preflight', ?, ?, ?, ?, ?)""",
             (
                 original.get("library_item_id"),
                 original.get("request_item_id"),
@@ -128,6 +129,8 @@ def retry_upload_job(
                 original.get("uploadrr_command_json"),
                 job_id,
                 retry_count,
+                # El reintento va al mismo tracker que el original.
+                original.get("tracker") or POR_DEFECTO,
                 now,
                 now,
             ),

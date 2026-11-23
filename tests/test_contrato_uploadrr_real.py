@@ -167,10 +167,17 @@ _BASE = {"manual_name": "Peli.2024.1080p.WEB-DL", "trackers": ["EMU"], "unattend
          {**_BASE, "category": "TV", "resolution": "480p", "manual_season": "S02", "anon": True, "resume": True,
           "aviso_baja_calidad": True, "full_dir": True}, ("manual_episode", "solo_cliente")),
         (dict(solo_cliente="4242"), {**_BASE, "category": "MOVIE", "resume": True, "solo_cliente": 4242}, ("anon",)),
+        # Otro tracker: su -tk, y sin el aviso de baja calidad, que es una norma de eMuwarez.
+        (dict(tracker="NOBS", resolution="480p", reanudar=True),
+         {**_BASE, "trackers": ["NOBS"], "category": "MOVIE", "resolution": "480p", "resume": True},
+         ("aviso_baja_calidad", "solo_cliente")),
+        (dict(tracker="MNV", solo_cliente="77"),
+         {**_BASE, "trackers": ["MNV"], "category": "MOVIE", "resume": True, "solo_cliente": 77}, ("anon",)),
         (dict(category="tv", season=1, variante="anime_catalan"),
          {**_BASE, "category": "TV", "manual_season": "S01", "variante": "anime_catalan"}, ("anon",)),
     ],
-    ids=["pelicula", "capitulo", "pack-480p-anonimo-resume", "solo-cliente", "pack-variante"],
+    ids=["pelicula", "capitulo", "pack-480p-anonimo-resume", "solo-cliente", "nobs-480p-resume", "mnv-solo-cliente",
+         "pack-variante"],
 )
 def test_el_comando_de_la_app_llega_a_la_meta_con_el_tipo_y_valor_que_espera_uploadrr(
         args_uploadrr, parser_uploadrr, tmp_path, cambios, esperado, ausentes):
@@ -183,3 +190,11 @@ def test_el_comando_de_la_app_llega_a_la_meta_con_el_tipo_y_valor_que_espera_upl
         assert meta[clave] == valor and type(meta[clave]) is type(valor), (clave, meta.get(clave))
     for clave in ausentes:
         assert not meta.get(clave), (clave, meta.get(clave))
+
+
+def test_cada_tracker_de_la_app_tiene_su_adaptador_en_uploadrr():
+    """El `-tk` de cada tracker (services/trackers.py) es un fichero de uploadrr-emu/src/trackers/: si no, Uploadrr-EMU
+    sale con sin_trackers."""
+    from emuwarez_uploadrr.services.trackers import TRACKERS
+    for tracker in TRACKERS.values():
+        assert (CARPETA_UPLOADRR / "src" / "trackers" / f"{tracker.uploadrr}.py").is_file(), tracker.uploadrr

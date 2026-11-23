@@ -481,7 +481,7 @@ def test_si_los_primeros_fallan_mientras_se_encola_el_resto_se_salta(db_conn, tm
     """Los cinco primeros fallan nada más crearse (desde el mismo hilo que encola, así que el freno entra con el
     candado ya cogido): no hay nada en cola que parar, pero los dos últimos ya no se crean."""
     from emuwarez_uploadrr.services import upload_checks
-    monkeypatch.setattr(uq, "_season_upload_preconditions", lambda conn: [])
+    monkeypatch.setattr(uq, "_season_upload_preconditions", lambda conn, *_tracker: [])
     monkeypatch.setattr(upload_checks, "run_upload_checks", lambda conn, item_id, scope="all", **kw: LISTO)
     encolar = uq.queue_upload_for_item
 
@@ -504,7 +504,7 @@ def test_si_los_primeros_fallan_mientras_se_encola_el_resto_se_salta(db_conn, tm
 
 def test_sin_racha_encolar_lote_no_se_salta_nada(db_conn, tmp_path, monkeypatch):
     from emuwarez_uploadrr.services import upload_checks
-    monkeypatch.setattr(uq, "_season_upload_preconditions", lambda conn: [])
+    monkeypatch.setattr(uq, "_season_upload_preconditions", lambda conn, *_tracker: [])
     monkeypatch.setattr(upload_checks, "run_upload_checks", lambda conn, item_id, scope="all", **kw: LISTO)
     items = [_peli(db_conn, tmp_path, t) for t in "ABC"]
     r = lotes.encolar_lote(db_conn, [{"item_id": i, "checks": LISTO} for i in items])

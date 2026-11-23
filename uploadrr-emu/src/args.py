@@ -447,7 +447,7 @@ def build_parser(config: Dict[str, Any]) -> argparse.ArgumentParser:
     parser.add_argument("-hdb", "--hdb", nargs="*", help="HDB torrent ID or URL")
     parser.add_argument("-th", "--torrenthash", nargs="*", help="Reuse existing torrent hash")
     parser.add_argument(
-        "-sc", "--solo-cliente", dest="solo_cliente", type=int, help="EMU torrent id already uploaded: only re-add it to the client"
+        "-sc", "--solo-cliente", dest="solo_cliente", type=int, help="Torrent id already uploaded to the -tk tracker: only re-add it to the client"
     )
     parser.add_argument("--eventos", dest="eventos", help="Append JSON Lines events to this file (see contrato_eventos.json)")
     parser.add_argument("--config", dest="config", help="Read this config.yaml instead of data/config.yaml")

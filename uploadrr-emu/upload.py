@@ -371,19 +371,23 @@ class Uploadrr:
             sys.exit(1)
 
     async def _solo_cliente(self, meta: Dict[str, Any], tracker_registry: Dict[str, Any]) -> Optional[str]:
-        """--solo-cliente: baja de EMU el .torrent firmado de un torrent ya subido y lo añade al cliente.
-        Devuelve None si se añadió, o el motivo por el que no."""
-        if "EMU" not in tracker_registry:
-            console.print("[red]--solo-cliente solo funciona con -tk EMU")
-            eventos.cliente_fallo("sin_emu")
-            return "--solo-cliente necesita -tk EMU"
-        emu = tracker_registry["EMU"]["class"](config=self.config)
-        torrent, motivo = await emu.descargar_subido(meta, meta["solo_cliente"])
+        """--solo-cliente: baja del tracker de `-tk` (EMU, NOBS, MNV… cualquier UNIT3D) el .torrent firmado de un torrent
+        ya subido y lo añade al cliente. Devuelve None si se añadió, o el motivo por el que no."""
+        # Un solo tracker: el id del torrent es de ese tracker y de ningún otro.
+        tracker = None
+        if len(tracker_registry) == 1:
+            (nombre, datos), = tracker_registry.items()
+            tracker = datos["class"](config=self.config)
+        if not hasattr(tracker, "descargar_subido"):
+            console.print("[red]--solo-cliente necesita un solo tracker UNIT3D en -tk")
+            eventos.cliente_fallo("sin_emu")  # el código de siempre: el contrato no cambia
+            return "--solo-cliente necesita un solo tracker UNIT3D en -tk"
+        torrent, motivo = await tracker.descargar_subido(meta, meta["solo_cliente"])
         if torrent is None:
             eventos.cliente_fallo(motivo)
             if motivo == "no_visible":
-                return "EMU no da el torrent (¿pendiente de moderación o retirado?)"
-            return "No se pudo bajar el .torrent de EMU"
+                return f"{nombre} no da el torrent (¿pendiente de moderación o retirado?)"
+            return f"No se pudo bajar el .torrent de {nombre}"
         # La subida son hardlinks a la biblioteca: con otros ficheros, qBittorrent descargaría encima de los originales.
         distinto = fichero_distinto(torrent, Path(meta["path"]))
         if distinto:
@@ -391,7 +395,7 @@ class Uploadrr:
             torrent.unlink(missing_ok=True)
             eventos.cliente_fallo("no_coincide")
             return f"El torrent no coincide con la subida en {distinto}"
-        if not await anadir_al_cliente(self.client, meta, "EMU"):
+        if not await anadir_al_cliente(self.client, meta, nombre):
             console.print("[red]--solo-cliente: el torrent no se ha añadido al cliente")
             return "El torrent no se ha añadido al cliente"
         return None

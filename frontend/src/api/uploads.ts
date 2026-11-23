@@ -57,8 +57,11 @@ export async function queueUpload(
   // Anónimo / Personal release cambiados a mano en el Resumen. Sin ellos (null), lo que digan los grupos de
   // Configuración para el tag de la subida.
   opciones?: OpcionesTracker,
+  // El id del tracker (emu, nobs, mnv). Sin él, eMuwarez. Una subida por tracker: para varios, una llamada por cada uno.
+  tracker?: string,
 ): Promise<UploadQueueResult> {
   return api.post<UploadQueueResult>(`/library/${itemId}/upload/queue`, {
+    ...(tracker ? { tracker } : {}),
     request_item_id: requestItemId ?? null,
     ...(loteId ? { lote_id: loteId } : {}),
     anonimo: opciones?.anonimo ?? null,
@@ -72,6 +75,16 @@ export async function queueUpload(
     title: seasonOverrides?.title ?? null,
     idiomas: seasonOverrides?.idiomas ?? null,
   })
+}
+
+// Un tracker al que se puede subir ahora: eMuwarez y los que tienen su clave puesta (GET /upload/trackers).
+export interface TrackerParaSubir {
+  id: string
+  nombre: string
+}
+
+export async function fetchTrackersParaSubir(): Promise<TrackerParaSubir[]> {
+  return api.get<TrackerParaSubir[]>('/upload/trackers')
 }
 
 // Un elemento de «Subir por lotes» (web/schemas.py::UploadLoteElemento).

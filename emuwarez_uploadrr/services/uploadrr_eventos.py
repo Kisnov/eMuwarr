@@ -130,7 +130,7 @@ MOTIVOS_CLIENTE: dict[str, str] = {
     "sin_cliente": "Uploadrr-EMU no tiene cliente de torrents configurado",
     "solo_cliente_no_qbit": "el cliente de Uploadrr-EMU no es qBittorrent",
     "cliente_no_soportado": "el cliente de torrents no está soportado",
-    "sin_emu": "Uploadrr-EMU no tiene eMuwarez configurado",
+    "sin_emu": "Uploadrr-EMU no tiene ese tracker configurado",
     "no_coincide": "el .torrent de eMuwarez no coincide con los ficheros",
     "error": "error al hablar con qBittorrent",
 }

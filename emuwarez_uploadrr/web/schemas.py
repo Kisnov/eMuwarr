@@ -1107,6 +1107,9 @@ class UploadJobDetail(BaseModel):
     # Los grupos de release de lo que se sube (el de la copia, o los de todos los capítulos de una temporada).
     release_groups: list[str] = []
     id: Optional[int] = None
+    # El tracker al que va (services/trackers.py): su id y su nombre para enseñarlo.
+    tracker: str = "emu"
+    tracker_nombre: str = "eMuwarez"
     library_item_id: Optional[int] = None
     request_item_id: Optional[int] = None
     status: str
@@ -1390,6 +1393,14 @@ class UploadQueueBody(BaseModel):
     # de Configuración para el tag de esta subida (services/opciones_tracker.py).
     anonimo: Optional[bool] = None
     personal_release: Optional[bool] = None
+    # El id del tracker (services/trackers.py). None: eMuwarez. Para subir a varios, una petición por tracker.
+    tracker: Optional[str] = None
+
+
+class TrackerParaSubir(BaseModel):
+    """Un tracker al que se puede subir ahora (services/trackers.para_subir)."""
+    id: str
+    nombre: str
 
 
 class LoteResumen(BaseModel):

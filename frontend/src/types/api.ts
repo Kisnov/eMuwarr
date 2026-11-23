@@ -632,6 +632,9 @@ export interface UploadJob {
   result_url?: string | null
   result_torrent_id?: string | null
   result_tracker?: string | null
+  // El tracker al que va la subida (services/trackers.py): su id y su nombre.
+  tracker?: string
+  tracker_nombre?: string
   // Los grupos de release de lo que se sube (el de la copia, o los de todos los capítulos de una temporada).
   release_groups?: string[]
   result_category?: string | null

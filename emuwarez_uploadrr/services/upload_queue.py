@@ -23,12 +23,13 @@ import json
 import logging
 import os
 import threading
+import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any
 
-from ..database import connect, row_to_dict
+from ..database import connect, row_to_dict, rows_to_dicts
 from ..integrations.base import texto_de_error
 
 logger = logging.getLogger("emuwarez.upload")
@@ -38,10 +39,11 @@ logger = logging.getLogger("emuwarez.upload")
 # one of these is in flight, it has to wait or be told to view the existing
 # one instead.
 from .ajustes_registro import AJUSTES as _AJUSTES
-from .subida_pasos import reanudar_desde, subpasos_que_reutilizaria, uploadrr_puede_reanudar
+from .subida_pasos import (SUBPASOS_REUTILIZABLES, leer_subpasos, reanudar_desde, subpasos_que_reutilizaria,
+                           uploadrr_puede_reanudar)
 from .upload_states import ACTIVE_JOB_STATUSES, asignacion_etapa_parada, escribir_estado  # noqa: E402
 from .eventos import EVENTO_SUBIDA_ESTADO, publicar
-from .settings import ajuste_de_tracker
+from . import trackers
 
 # Remux overrides the user edited in the wizard's "Ver Pistas" card are
 # persisted on the job row itself (remux_overrides_json): a later retry has
@@ -65,31 +67,84 @@ def get_queue_positions() -> dict[int, tuple[int, int]]:
     return _upload_concurrency_gate.posiciones()
 
 
-def _find_latest_job_for_item(conn, item_id: int) -> dict | None:
+def _find_latest_job_for_item(conn, item_id: int, tracker: str = trackers.POR_DEFECTO) -> dict | None:
     """The tip of this item's retry chain: the job nobody else's
     retry_of_job_id points at. Every "Subir" click chains onto
     this instead of creating an unrelated row, so the item's full upload
-    activity (including past Completado attempts) stays in one place."""
+    activity (including past Completado attempts) stays in one place.
+
+    Una cadena por tracker: la subida a N.O.B.S de un elemento no reintenta la de eMuwarez."""
     row = conn.execute(
-        "SELECT * FROM upload_jobs WHERE library_item_id = ? "
+        "SELECT * FROM upload_jobs WHERE library_item_id = ? AND tracker = ? "
         "AND id NOT IN (SELECT retry_of_job_id FROM upload_jobs "
         "WHERE retry_of_job_id IS NOT NULL) ORDER BY id DESC LIMIT 1",
-        (item_id,),
+        (item_id, tracker),
     ).fetchone()
     return row_to_dict(row)
 
 
-def trabajo_activo(conn, item_id: int) -> dict | None:
+def _condicion_activa() -> tuple[str, tuple]:
+    """La condición SQL de un trabajo vivo: en un estado activo, o cancelado con su hilo aún en marcha."""
+    with _LOCK:
+        vivos = sorted(_EN_CURSO)
+    return (f"(status IN ({','.join('?' * len(ACTIVE_JOB_STATUSES))}) "
+            f"OR (status = 'cancelled' AND id IN ({','.join('?' * len(vivos))})))", (*ACTIVE_JOB_STATUSES, *vivos))
+
+
+def trabajo_activo(conn, item_id: int, tracker: str | None = None) -> dict | None:
     """El trabajo en marcha de este elemento, si hay alguno. Cuenta también
-    uno cancelado cuyo hilo aún no ha terminado."""
+    uno cancelado cuyo hilo aún no ha terminado. Con `tracker`, solo el de ese tracker."""
+    condicion, parametros = _condicion_activa()
+    filtro, extra = (" AND tracker = ?", (tracker,)) if tracker else ("", ())
+    return row_to_dict(conn.execute(
+        f"SELECT * FROM upload_jobs WHERE library_item_id = ?{filtro} AND {condicion} ORDER BY id DESC LIMIT 1",
+        (item_id, *extra, *parametros),
+    ).fetchone())
+
+
+# Cada cuánto mira una subida si ya terminó la del mismo contenido a otro tracker (_esperar_a_la_anterior).
+ESPERA_ENTRE_TRACKERS_S = 3.0
+
+
+def _anterior_en_curso(conn, job_id: int) -> dict | None:
+    """La subida del mismo contenido, creada antes que esta, que sigue viva (normalmente la de otro tracker).
+
+    Las dos comparten el fichero de la carpeta de subidas y el `tmp/<nombre>` de Uploadrr-EMU (capturas, BASE.torrent):
+    a la vez se pisarían. Por eso una espera a la otra; la más antigua va primero."""
+    # Con su hilo vivo cuenta en cualquier estado: entre 'ready' y 'running' (el arranque de Uploadrr) no es activa.
     with _LOCK:
         vivos = sorted(_EN_CURSO)
     return row_to_dict(conn.execute(
-        f"SELECT * FROM upload_jobs WHERE library_item_id = ? AND (status IN "
-        f"({','.join('?' * len(ACTIVE_JOB_STATUSES))}) OR (status = 'cancelled' AND id IN ({','.join('?' * len(vivos))}))) "
-        f"ORDER BY id DESC LIMIT 1",
-        (item_id, *ACTIVE_JOB_STATUSES, *vivos),
+        "SELECT o.* FROM upload_jobs o JOIN upload_jobs j ON j.id = ? "
+        "WHERE o.library_item_id = j.library_item_id AND o.id < j.id "
+        f"AND (o.status IN ({','.join('?' * len(ACTIVE_JOB_STATUSES))}) OR o.id IN ({','.join('?' * len(vivos))})) "
+        "ORDER BY o.id LIMIT 1",
+        (job_id, *ACTIVE_JOB_STATUSES, *vivos),
     ).fetchone())
+
+
+def _esperar_a_la_anterior(job_id: int) -> bool:
+    """Espera, sin ocupar plaza de «Subidas en paralelo», a que acabe la subida anterior del mismo contenido.
+    Devuelve False si a esta la cancelaron (o ya no está en cola) mientras esperaba."""
+    from .upload_execution import append_upload_log
+    avisada = False
+    while True:
+        conn = connect()
+        try:
+            fila = conn.execute("SELECT status FROM upload_jobs WHERE id = ?", (job_id,)).fetchone()
+            if not fila or fila["status"] != "queued":
+                return False
+            anterior = _anterior_en_curso(conn, job_id)
+            if anterior is None:
+                return True
+            if not avisada:
+                nombre = trackers.obtener(anterior.get("tracker") or trackers.POR_DEFECTO).nombre
+                append_upload_log(job_id, "info", f"Espera a que termine la subida #{anterior['id']} ({nombre}): "
+                                  "las dos usan el mismo fichero preparado.", stream="system", conn=conn)
+                avisada = True
+        finally:
+            conn.close()
+        time.sleep(ESPERA_ENTRE_TRACKERS_S)
 
 
 def _insert_and_start_queued_job(
@@ -109,6 +164,7 @@ def _insert_and_start_queued_job(
     lote_id: str | None = None,
     anonimo: bool | None = None,
     personal_release: bool | None = None,
+    tracker: str = trackers.POR_DEFECTO,
 ) -> dict:
     """Shared by queue_upload_for_item() and queue_retry_for_job(): insert a
     fresh 'queued' row for `item` and start its pipeline right away.
@@ -150,7 +206,13 @@ def _insert_and_start_queued_job(
 
     `anonimo`/`personal_release` — lo elegido a mano en el Resumen del asistente; None deja que lo decidan los
     grupos de Configuración cuando el trabajo quede listo (_marcar_lista).
+
+    `tracker` — el id del tracker (services/trackers.py) al que va: un trabajo por tracker. Uno en marcha del mismo
+    contenido a OTRO tracker no lo impide: este espera a que acabe (_esperar_a_la_anterior) y reutiliza su preparación.
     """
+    motivo = trackers.motivo_para_no_subir(conn, tracker)
+    if motivo:
+        return {"status": "blocked", "errors": [motivo], "job": None}
     now_iso = _now_iso()
 
     # Comprobar y crear en la misma transacción: con dos clics en "Reintentar"
@@ -169,7 +231,7 @@ def _insert_and_start_queued_job(
                 conn.execute("ROLLBACK")
                 return {"status": "blocked", "job": None, "errors": [
                     f"Ya se reintentó (subida #{hijo[0]}): reintenta el último intento de la cadena."]}
-        activa = trabajo_activo(conn, item["id"])
+        activa = trabajo_activo(conn, item["id"], tracker)
         if activa:
             conn.execute("ROLLBACK")
             cancelada = activa.get("status") == "cancelled"
@@ -187,8 +249,8 @@ def _insert_and_start_queued_job(
                 retry_of_job_id, retry_count, checks_snapshot_json,
                 nomenclature_proposal_id, nomenclature_snapshot_json,
                 remux_overrides_json, remux_snapshot_json, season_overrides_json,
-                reutiliza_preparacion, lote_id, anonimo, personal_release, created_at, updated_at
-            ) VALUES (?, ?, ?, ?, 'queued', 'queued', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                reutiliza_preparacion, lote_id, anonimo, personal_release, tracker, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, 'queued', 'queued', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 item["id"], request_item_id, request_title, request_url,
@@ -206,6 +268,7 @@ def _insert_and_start_queued_job(
                 lote_id,
                 None if anonimo is None else int(bool(anonimo)),
                 None if personal_release is None else int(bool(personal_release)),
+                tracker,
                 now_iso, now_iso,
             ),
         )
@@ -288,10 +351,12 @@ def queue_upload_for_item(
     lote_id: str | None = None,
     anonimo: bool | None = None,
     personal_release: bool | None = None,
+    tracker: str = trackers.POR_DEFECTO,
     conn=None,
 ) -> dict:
     """Encola la subida de un elemento. `lote_id`: la etiqueta de la tanda o lote al que pertenece (no se hereda
-    del trabajo anterior del elemento: solo el reintento de un trabajo la conserva)."""
+    del trabajo anterior del elemento: solo el reintento de un trabajo la conserva). `tracker`: a cuál (eMuwarez si
+    no se dice); para subir a varios, una llamada por tracker."""
     own = conn is None
     conn = conn or connect()
     try:
@@ -300,7 +365,7 @@ def queue_upload_for_item(
         if not item:
             return {"status": "blocked", "errors": ["Item no encontrado."], "job": None}
 
-        latest = _find_latest_job_for_item(conn, item_id)
+        latest = _find_latest_job_for_item(conn, item_id, tracker)
         retry_of_job_id = latest["id"] if latest else None
         retry_count = (latest.get("retry_count") or 0) + 1 if latest else 0
 
@@ -339,6 +404,7 @@ def queue_upload_for_item(
             season_overrides=season_overrides,
             lote_id=lote_id,
             anonimo=anonimo, personal_release=personal_release,
+            tracker=tracker,
         )
     finally:
         if own:
@@ -416,6 +482,7 @@ def queue_retry_for_job(original_job_id: int, conn=None, *, desde_el_principio: 
             # Lo elegido a mano para la subida original sigue valiendo para su reintento.
             anonimo=None if original.get("anonimo") is None else bool(original.get("anonimo")),
             personal_release=None if original.get("personal_release") is None else bool(original.get("personal_release")),
+            tracker=original.get("tracker") or trackers.POR_DEFECTO,
         )
     finally:
         if own:
@@ -609,10 +676,10 @@ def _propuesta_del_reintento(original: dict, item_id: int, conn, cargar) -> dict
     return {"nomenclature_proposal_id": propuesta["id"], "nomenclature_snapshot": propuesta}
 
 
-def _season_upload_preconditions(conn) -> list[str]:
+def _season_upload_preconditions(conn, tracker: str = trackers.POR_DEFECTO) -> list[str]:
     """The generic (not season-specific) preconditions
     upload_preflight.validate_upload_preconditions() checks for a single
-    file — uploadrr path/script + eMuwarez/TMDb API keys. Season-specific
+    file — uploadrr path/script + the job's tracker's and TMDb API keys. Season-specific
     concerns (episodes consistent, complete, all in the same folder) are
     already covered by build_season_pack_plan() before this ever runs."""
     from ..database import get_setting_canonical
@@ -624,11 +691,8 @@ def _season_upload_preconditions(conn) -> list[str]:
         errors.append("Ruta de Uploadrr no configurada (uploadrr.path).")
     elif not os.path.exists(uploadrr_path):
         errors.append(f"Ruta de Uploadrr no existe: {uploadrr_path}")
-    if not ajuste_de_tracker(conn, "api_key"):
-        errors.append("API key de eMuwarez no configurada.")
-    if not get_setting_canonical(conn, "tmdb.api_key"):
-        errors.append("API key de TMDb no configurada.")
-    return errors
+    from .upload_preflight import errores_de_claves
+    return errors + errores_de_claves(conn, tracker)
 
 
 def _check_generic_upload_preconditions(job_id: int, item_id: int, is_season: bool, conn) -> bool:
@@ -643,7 +707,7 @@ def _check_generic_upload_preconditions(job_id: int, item_id: int, is_season: bo
     fails immediately instead of after spending time on nomenclature/remux.
     The remaining, path-dependent checks (file existence, prepared_path,
     command preview) still run later, unchanged, in _populate_ready()."""
-    errors = _season_upload_preconditions(conn)
+    errors = _season_upload_preconditions(conn, _tracker_del_trabajo(job_id, conn))
     if not is_season:
         # La vigente, no la última guardada: una automática bloqueada con reglas
         # viejas (p. ej. UND, que antes bloqueaba) haría fallar cada intento.
@@ -672,6 +736,12 @@ def _check_generic_upload_preconditions(job_id: int, item_id: int, is_season: bo
         _fail(job_id, "; ".join(errors))
         return False
     return True
+
+
+def _tracker_del_trabajo(job_id: int, conn) -> str:
+    """El id del tracker al que va el trabajo."""
+    fila = conn.execute("SELECT tracker FROM upload_jobs WHERE id = ?", (job_id,)).fetchone()
+    return (fila["tracker"] if fila else None) or trackers.POR_DEFECTO
 
 
 def _ajustes_de_pack(season_overrides: dict | None) -> dict:
@@ -706,6 +776,7 @@ def _populate_ready(job_id: int, item_id: int, conn, season_overrides: dict | No
     if not item:
         _fail(job_id, "El elemento ya no existe en la biblioteca.")
         return False
+    tracker = _tracker_del_trabajo(job_id, conn)
 
     if item.get("item_type") == "season":
         # validate_upload_preconditions() hard-blocks on `if not path`, and a
@@ -718,7 +789,7 @@ def _populate_ready(job_id: int, item_id: int, conn, season_overrides: dict | No
             _fail(job_id, "; ".join(plan.get("errors") or ["No se pudo preparar el pack de temporada."]))
             return False
 
-        errors = _season_upload_preconditions(conn)
+        errors = _season_upload_preconditions(conn, tracker)
         if errors:
             _fail(job_id, "; ".join(errors))
             return False
@@ -739,7 +810,7 @@ def _populate_ready(job_id: int, item_id: int, conn, season_overrides: dict | No
             "episode": None,
             "release_format": plan.get("source"),
         }
-        command_preview = build_uploadrr_command_preview(synthetic_item, None, None, conn=conn)
+        command_preview = build_uploadrr_command_preview(synthetic_item, None, None, conn=conn, tracker=tracker)
         return _marcar_lista(job_id, command_preview, conn, grupo=plan.get("release_tag"))
 
     proposal_row = conn.execute(
@@ -749,12 +820,12 @@ def _populate_ready(job_id: int, item_id: int, conn, season_overrides: dict | No
     ).fetchone()
     proposal = row_to_dict(proposal_row)
 
-    preconditions = validate_upload_preconditions(item, proposal=proposal, conn=conn)
+    preconditions = validate_upload_preconditions(item, proposal=proposal, conn=conn, tracker=tracker)
     if not preconditions["ok"]:
         _fail(job_id, "; ".join(preconditions["errors"]))
         return False
 
-    command_preview = build_uploadrr_command_preview(item, proposal, None, conn=conn)
+    command_preview = build_uploadrr_command_preview(item, proposal, None, conn=conn, tracker=tracker)
     return _marcar_lista(job_id, command_preview, conn, grupo=(proposal or {}).get("release_tag"))
 
 
@@ -1054,27 +1125,79 @@ def _motivo_no_reutilizable(job: dict, destino: str, ficheros: list, is_season: 
         return None, "la subida anterior ya no existe"
     if reanudar_desde(anterior.get("status"), anterior.get("etapa_parada")) is None:
         return None, "la subida anterior no llegó a terminar la preparación de los ficheros"
+    motivo = _motivo_preparacion_cambiada(anterior, destino, ficheros, is_season)
+    return (None, motivo) if motivo else (anterior, None)
+
+
+def _motivo_preparacion_cambiada(anterior: dict, destino: str, ficheros: list, is_season: bool) -> str | None:
+    """None si lo que `anterior` dejó preparado en `destino` sigue siendo lo que hay que subir; si no, por qué no."""
     if anterior.get("prepared_path") != destino:
-        return None, "el nombre o el sitio en la carpeta de subidas ha cambiado"
+        return "el nombre o el sitio en la carpeta de subidas ha cambiado"
     if not anterior.get("remux_snapshot_json"):
-        return None, "no quedó apuntado qué pistas se prepararon"
+        return "no quedó apuntado qué pistas se prepararon"
     # El nombre no basta: si la biblioteca sustituyó el original, lo preparado es del anterior.
     try:
         huellas = json.loads(anterior.get("huellas_preparacion_json") or "null")
     except ValueError:
         huellas = None
     if not isinstance(huellas, dict):
-        return None, "no quedó apuntada la huella de los originales con que se preparó"
+        return "no quedó apuntada la huella de los originales con que se preparó"
     for _i, origen, nombre in ficheros:
         if huellas.get(nombre) is None or huellas.get(nombre) != _huella_de(origen):
-            return None, f"el original de «{nombre}» ha cambiado desde que se preparó"
+            return f"el original de «{nombre}» ha cambiado desde que se preparó"
     if is_season:
         faltan = [n for _i, _f, n in ficheros if not os.path.isfile(os.path.join(destino, n))]
         if not os.path.isdir(destino) or faltan:
-            return None, "faltan ficheros en la carpeta del pack"
+            return "faltan ficheros en la carpeta del pack"
     elif not os.path.isfile(destino):
-        return None, "el fichero ya no está en la carpeta de subidas"
-    return anterior, None
+        return "el fichero ya no está en la carpeta de subidas"
+    return None
+
+
+def _preparada_para_otro_tracker(conn, ruta: str, t: "_Trabajo") -> dict | None:
+    """La subida del mismo contenido a otro tracker que ya dejó `ruta` preparada y la siembra, si todas las que usan
+    `ruta` son de esas. Es la que esta reutiliza: mismo fichero, mismas piezas, y nadie lo rehace (le rompería el
+    torrent). Una del mismo tracker, de otro elemento o aún en marcha no vale: entonces manda la regla de siempre
+    (_subida_que_lo_usa)."""
+    condicion, parametros = _condicion_activa()
+    filas = rows_to_dicts(conn.execute(
+        f"SELECT *, {condicion} AS viva FROM upload_jobs WHERE prepared_path = ? AND id != ? "
+        "AND (status NOT IN ('cancelled', 'failed') OR torrent_subido = 1) ORDER BY id DESC",
+        (*parametros, ruta, t.job_id)).fetchall())
+    mio = t.job.get("tracker") or trackers.POR_DEFECTO
+    if not filas or any(f["library_item_id"] != t.item_id or (f.get("tracker") or trackers.POR_DEFECTO) == mio
+                        or f["viva"] or not (f["status"] == "completed" or f["torrent_subido"]) for f in filas):
+        return None
+    return filas[0]
+
+
+def _reutilizar_de_otro_tracker(t: "_Trabajo", otra: dict) -> bool:
+    """Reutiliza lo que dejó preparado la subida a otro tracker (`otra`) y lanza Uploadrr-EMU con `--resume`: las
+    capturas y el BASE.torrent de su `tmp/<nombre>` valen para este tracker también. Si lo preparado ya no vale, falla:
+    rehacerlo rompería el torrent que siembra la otra."""
+    from .upload_execution import append_upload_log, update_phase_progress
+    job_id, conn = t.job_id, t.conn
+    nombre_otro = trackers.obtener(otra.get("tracker") or trackers.POR_DEFECTO).nombre
+    motivo = _motivo_preparacion_cambiada(otra, t.destino_uploadrr, t.ficheros, t.is_season)
+    if motivo:
+        _fail(job_id, f"«{os.path.basename(t.destino_uploadrr)}» ya está preparado para la subida #{otra['id']} "
+                      f"({nombre_otro}), pero {motivo}: no se rehace para no romper ese torrent.")
+        return False
+    # El tracker de la otra no se hereda: aquí se sube a este. Capturas y torrent, sí.
+    pasos = json.dumps([p for p in leer_subpasos(otra.get("pasos_uploadrr_json")) if p in SUBPASOS_REUTILIZABLES])
+    conn.execute("UPDATE upload_jobs SET remux_snapshot_json = ?, huellas_preparacion_json = ?, "
+                 "reanuda_uploadrr = 1, pasos_uploadrr_json = ? WHERE id = ?",
+                 (otra["remux_snapshot_json"], otra["huellas_preparacion_json"], pasos, job_id))
+    conn.commit()
+    update_phase_progress(job_id, "remux", 100)
+    append_upload_log(job_id, "info",
+                      f"Se reutiliza la preparación de la subida #{otra['id']} ({nombre_otro}): "
+                      f"«{os.path.basename(t.destino_uploadrr)}» es el mismo fichero, así que el torrent tendrá las "
+                      "mismas piezas. Uploadrr reutilizará sus capturas y su torrent si siguen ahí.",
+                      stream="system", conn=conn)
+    t.preparada = {"status": "ready", "metodos": ["reutilizada"]}
+    t.que = f"{len(t.ficheros)} capítulo(s)" if t.is_season else "el archivo"
+    return True
 
 
 @dataclass
@@ -1269,10 +1392,14 @@ def _paso_preparar(t: _Trabajo) -> bool:
     # La ruta se apunta ANTES de crearla: así un borrado de otra subida la ve en uso.
     with ENLACES:
         otra = _subida_que_lo_usa(conn, t.destino_uploadrr, job_id)
-        if otra is None:
+        # La misma subida a otro tracker: se comparte su fichero en vez de rehacerlo.
+        de_otro_tracker = _preparada_para_otro_tracker(conn, t.destino_uploadrr, t) if otra is not None else None
+        if otra is None or de_otro_tracker is not None:
             conn.execute("UPDATE upload_jobs SET prepared_path = ?, updated_at = ? WHERE id = ?",
                          (t.destino_uploadrr, _now_iso(), job_id))
             conn.commit()
+    if de_otro_tracker is not None:
+        return _reutilizar_de_otro_tracker(t, de_otro_tracker)
     if otra is not None:
         _fail(job_id, f"«{os.path.basename(t.destino_uploadrr)}» es de la subida #{otra}, que lo siembra "
                       "o lo tiene en qBittorrent: no se rehace para no romper ese torrent. "
@@ -1470,6 +1597,16 @@ def _run_queued_job(job_id: int) -> None:
     # path before that point falls through to the `finally` below and
     # releases it immediately, so a job that never gets that far can't
     # deadlock the queue.
+    # Antes que la plaza: la del mismo contenido a otro tracker va primero, y esperarla no ocupa plaza.
+    try:
+        if not _esperar_a_la_anterior(job_id):
+            return  # cancelada mientras esperaba
+    except Exception as exc:
+        # Fuera del try de abajo: sin esto la fila se quedaba en 'queued' sin hilo y las siguientes del mismo
+        # contenido la esperaban para siempre. Aún no tiene plaza, así que no hay nada que liberar.
+        logger.exception("Job %s: excepción esperando a la subida anterior", job_id)
+        _fail(job_id, f"Error inesperado: {texto_de_error(exc)}")
+        return
     if not _upload_concurrency_gate.acquire(job_id):
         return  # cancelada mientras esperaba turno: no ocupa plaza
 

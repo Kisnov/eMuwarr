@@ -139,7 +139,7 @@ def test_comprobacion_previa_no_falla_por_una_propuesta_bloqueada_de_reglas_viej
     f.write_bytes(b"x" * 100)
     iid = _movie_with_path(db_conn, str(f))
     _insert_proposal(db_conn, iid, status="blocked", huella=False)
-    monkeypatch.setattr(uq, "_season_upload_preconditions", lambda conn: [])
+    monkeypatch.setattr(uq, "_season_upload_preconditions", lambda conn, *_tracker: [])
     fallos = []
     monkeypatch.setattr(uq, "_fail", lambda job_id, msg: fallos.append(msg))
     nueva = {"id": 999, "status": "valid"}
@@ -155,7 +155,7 @@ def test_comprobacion_previa_falla_si_la_vigente_esta_bloqueada(db_conn, tmp_pat
     f.write_bytes(b"x" * 100)
     iid = _movie_with_path(db_conn, str(f))
     _insert_proposal(db_conn, iid, status="blocked")
-    monkeypatch.setattr(uq, "_season_upload_preconditions", lambda conn: [])
+    monkeypatch.setattr(uq, "_season_upload_preconditions", lambda conn, *_tracker: [])
     fallos = []
     monkeypatch.setattr(uq, "_fail", lambda job_id, msg: fallos.append(msg))
     assert uq._check_generic_upload_preconditions(1, iid, False, db_conn) is False
@@ -420,7 +420,7 @@ def test_comprobacion_previa_de_un_reintento_conserva_la_propuesta_manual(db_con
     db_conn.commit()
     result = uq.queue_retry_for_job(original_id, conn=db_conn)
     job_id = result["job"]["id"]
-    monkeypatch.setattr(uq, "_season_upload_preconditions", lambda conn: [])
+    monkeypatch.setattr(uq, "_season_upload_preconditions", lambda conn, *_tracker: [])
     assert uq._check_generic_upload_preconditions(job_id, iid, False, db_conn) is True
     row = db_conn.execute("SELECT nomenclature_proposal_id FROM upload_jobs WHERE id=?", (job_id,)).fetchone()
     assert row["nomenclature_proposal_id"] == manual
@@ -430,7 +430,7 @@ def test_comprobacion_previa_sin_propuesta_guardada_no_crea_ninguna(db_conn, tmp
     f = tmp_path / "movie.mkv"
     f.write_bytes(b"x" * 100)
     iid = _movie_with_path(db_conn, str(f))
-    monkeypatch.setattr(uq, "_season_upload_preconditions", lambda conn: [])
+    monkeypatch.setattr(uq, "_season_upload_preconditions", lambda conn, *_tracker: [])
     with patch("emuwarez_uploadrr.services.nomenclature.build_nomenclature_proposal") as build:
         assert uq._check_generic_upload_preconditions(1, iid, False, db_conn) is True
     build.assert_not_called()
@@ -444,7 +444,7 @@ def test_comprobacion_previa_fija_la_propuesta_rehecha_en_el_trabajo(db_conn, tm
     job_id = _failed_job_row(db_conn, iid, status="queued")
     db_conn.execute("UPDATE upload_jobs SET nomenclature_proposal_id = ? WHERE id = ?", (vieja, job_id))
     db_conn.commit()
-    monkeypatch.setattr(uq, "_season_upload_preconditions", lambda conn: [])
+    monkeypatch.setattr(uq, "_season_upload_preconditions", lambda conn, *_tracker: [])
     nueva = {"id": vieja + 100, "status": "valid", "proposed_filename": "Nuevo"}
     with patch("emuwarez_uploadrr.services.nomenclature.build_nomenclature_proposal", return_value=nueva):
         assert uq._check_generic_upload_preconditions(job_id, iid, False, db_conn) is True
@@ -719,8 +719,8 @@ def test_dos_peticiones_a_la_vez_dejan_una_sola_subida(db_conn, tmp_path, monkey
     barrera = threading.Barrier(2)
     original = uq._find_latest_job_for_item
 
-    def leer_y_esperar(conn, item_id):
-        fila = original(conn, item_id)
+    def leer_y_esperar(conn, item_id, *tracker):
+        fila = original(conn, item_id, *tracker)
         barrera.wait(timeout=5)
         return fila
 

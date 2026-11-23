@@ -201,9 +201,13 @@ def build_uploadrr_emu_command(
     solo_cliente: Optional[int | str] = None,
     eventos: Optional[str] = None,
     config: Optional[str] = None,
+    tracker: str = "EMU",
     variante: Optional[str] = None,
 ) -> list[str]:
     """Build the real Uploadrr-EMU argv. Always a list[str], never a shell string.
+
+    `tracker` es su nombre en Uploadrr-EMU (`services.trackers.Tracker.uploadrr`: EMU, NOBS, MNV), el `-tk`. Una
+    subida va a un solo tracker: cada uno es su propio trabajo.
 
     `solo_cliente` (el id del torrent en eMuwarez) añade `--resume --solo-cliente <id>`: Uploadrr-EMU no sube nada,
     solo baja el .torrent firmado de ese id y lo vuelve a añadir a qBittorrent, que lo comprueba.
@@ -221,7 +225,8 @@ def build_uploadrr_emu_command(
     `config` añade `--config <ruta absoluta>`: Uploadrr-EMU lee ese config.yaml (el de esta subida) en vez del suyo.
     También es global.
 
-    Una `resolution` de menos de 720p añade `-avbc` (ver pide_aviso_baja_calidad).
+    Una `resolution` de menos de 720p añade `-avbc` (ver pide_aviso_baja_calidad), solo para eMuwarez: el aviso es
+    una norma suya.
 
     `variante` (la de services/reglas_tracker.py: anime, latino, anime_catalan) añade `--variante <v>`: Uploadrr-EMU
     elige con ella la categoría del tracker (MOVIE_ANIME…). Sin ella, la de siempre.
@@ -234,13 +239,13 @@ def build_uploadrr_emu_command(
         python_path,
         uploadrr_script_path,
         prepared_path,
-        "-tk", "EMU",
+        "-tk", tracker,
         "-mt", torrent_name,
     ]
     if tmdb_id:
         cmd += ["-tmdb", str(tmdb_id)]
     cmd += ["-ua", "-c", "tv" if category == "tv" else "movie"]
-    aviso = pide_aviso_baja_calidad(resolution)
+    aviso = tracker == "EMU" and pide_aviso_baja_calidad(resolution)
     resolution = _normalize_resolution(resolution)
     if resolution:
         cmd += ["-res", resolution]
