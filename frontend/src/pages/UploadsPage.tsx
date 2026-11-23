@@ -277,7 +277,8 @@ const JobRow = memo(function JobRow({ job, instances, seeding, onOpen, indent, e
           <div className="sub-titulo-texto">
             {indent && <span className="sub-muted sub-no-encoge">↳</span>}
             <HoverTitle as="span" className={otra ? 'lib-title-link sub-titulo sub-tracker-chip' : 'lib-title-link sub-titulo'}
-              href={`/uploads/${job.id}`} onClick={abrir} tip="Ver progreso / detalle">
+              href={`/uploads/${job.id}`} onClick={abrir} tip="Ver progreso / detalle"
+              aria-label={otra ? `${job.title} en ${job.tracker_nombre}` : undefined}>
               {otra ? job.tracker_nombre : job.title || '—'}
             </HoverTitle>
             {!otra && job.year ? <span className="sub-muted sub-t11 sub-no-encoge sub-anio">({job.year})</span> : null}
@@ -326,7 +327,7 @@ const JobRow = memo(function JobRow({ job, instances, seeding, onOpen, indent, e
           </div>
         </div>
       </td>
-      {otra ? <><td className="sub-sec" /><td className="sub-sec" /><td className="col-prioridad-baja" /></> : <>
+      {otra ? <><td className="sub-sec" /><td className="sub-sec" /></> : <>
       <td className="sub-nowrap sub-sec sub-meta sub-col-tipo">
         {job.media_type
           ? <PlainValue icon={<TypeValueIcon />}>{UPLOAD_TYPE_LABEL[job.media_type] ?? job.media_type}</PlainValue>
@@ -341,10 +342,10 @@ const JobRow = memo(function JobRow({ job, instances, seeding, onOpen, indent, e
           )
           : <span className="sub-muted">—</span>}
       </td>
+      </>}
       <td className="col-prioridad-baja sub-nowrap">
         <GruposDeRelease grupos={job.release_groups ?? []} junto />
       </td>
-      </>}
       <td className="col-prioridad-baja sub-nowrap sub-celda-peticion">
         <PeticionDeSubida job={job} />
       </td>
@@ -760,13 +761,15 @@ export function UploadsPage({ onNavigate }: { onNavigate?: (page: string) => voi
       }
     }
     // Hay una cadena por elemento y tracker: las puntas del mismo elemento son sus subidas a cada tracker y van juntas,
-    // la más reciente arriba; el grupo se ordena por ella.
+    // en el orden elegido; el grupo va donde va la primera. Dos del mismo tracker (un filtro de estado deja ver un
+    // intento anterior como punta) no se juntan.
     const porElemento = new Map<number, UploadJob[]>()
-    for (const j of out.sort((a, b) => dt(b.created_at) - dt(a.created_at))) {
-      const clave = j.library_item_id ?? -j.id!
-      porElemento.set(clave, [...porElemento.get(clave) ?? [], j])
+    for (const j of out.sort(comparar)) {
+      const grupo = j.library_item_id != null ? porElemento.get(j.library_item_id) : undefined
+      if (grupo && !grupo.some(o => o.tracker === j.tracker)) grupo.push(j)
+      else porElemento.set(grupo || j.library_item_id == null ? -j.id! : j.library_item_id, [j])
     }
-    return [...porElemento.values()].sort((a, b) => comparar(a[0], b[0]))
+    return [...porElemento.values()]
   }, [jobs, search, sortBy, typeFilter, hasNewerRetry])
   const subidasVisibles = grupos.reduce((n, g) => n + g.length, 0)
 

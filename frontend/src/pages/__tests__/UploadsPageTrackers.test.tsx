@@ -112,7 +112,7 @@ describe('el mismo elemento en varios trackers', () => {
     expect(subtitulo()).toBe('2 subidas de 1 elemento')
   })
 
-  it('un grupo se ordena por su subida más reciente', async () => {
+  it('un grupo va donde va la primera de sus subidas en el orden elegido', async () => {
     await pagina([
       trabajo({ id: 4, ...IMITATION, ...NOBS, created_at: '2026-11-20T12:00:00' }),
       trabajo({ id: 3, ...SHUTTER, created_at: '2026-11-20T11:00:00' }),
@@ -121,9 +121,29 @@ describe('el mismo elemento en varios trackers', () => {
     ])
     expect(filas()).toEqual(['The Imitation Game', '  eMuwarez', 'Shutter Island', '  N.O.B.S'])
     await elegir(document.querySelector<HTMLSelectElement>('select[aria-label="Ordenar subidas"]')!, 'created_asc')
-    expect(filas()).toEqual(['Shutter Island', '  N.O.B.S', 'The Imitation Game', '  eMuwarez'])
+    expect(filas()).toEqual(['The Imitation Game', '  N.O.B.S', 'Shutter Island', '  eMuwarez'])
     await elegir(document.querySelector<HTMLSelectElement>('select[aria-label="Ordenar subidas"]')!, 'title')
     expect(filas()).toEqual(['Shutter Island', '  N.O.B.S', 'The Imitation Game', '  eMuwarez'])
+  })
+
+  it('por estado, la que espera en cola sube su grupo con las de la cola', async () => {
+    await pagina([
+      trabajo({ id: 3, ...SHUTTER, created_at: '2026-11-20T11:00:00' }),
+      trabajo({ id: 2, ...IMITATION, created_at: '2026-11-20T10:00:00' }),
+      trabajo({ id: 1, ...IMITATION, ...NOBS, status: 'queued', created_at: '2026-11-20T09:00:00' }),
+    ])
+    await elegir(document.querySelector<HTMLSelectElement>('select[aria-label="Ordenar subidas"]')!, 'status')
+    expect(filas()).toEqual(['The Imitation Game', '  eMuwarez', 'Shutter Island'])
+    await elegir(document.querySelector<HTMLSelectElement>('select[aria-label="Ordenar subidas"]')!, 'created_desc')
+    expect(filas()).toEqual(['Shutter Island', 'The Imitation Game', '  N.O.B.S'])
+  })
+
+  it('dos puntas del mismo tracker (un intento anterior con el filtro de estado) no se juntan', async () => {
+    await pagina([
+      trabajo({ id: 3, ...IMITATION, retry_of_job_id: 2, retry_count: 2, created_at: '2026-11-20T11:00:00' }),
+      trabajo({ id: 1, ...IMITATION, created_at: '2026-11-20T09:00:00' }),
+    ])
+    expect(filas()).toEqual(['The Imitation Game', 'The Imitation Game'])
   })
 
   it('la búsqueda deja el grupo entero', async () => {

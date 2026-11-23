@@ -144,7 +144,7 @@
   padding-left: 38px;
 }
 
-.data-table tr:has(+ tr.sub-fila-tracker) > td {
+.data-table tr:not(.sub-fila-antigua):has(+ tr.sub-fila-tracker) > td {
   border-bottom-color: transparent;
 }
 
@@ -717,7 +717,7 @@ input.sub-confirmar.sub-confirmar-ok:not([type="checkbox"]):not([type="radio"]):
     padding-left: 28px;
   }
 
-  .sub-scroll .data-table tr.sub-tarjeta:has(+ tr.sub-fila-tracker) {
+  .sub-scroll .data-table tr.sub-tarjeta:not(.sub-fila-antigua):has(+ tr.sub-fila-tracker) {
     border-bottom-color: transparent;
   }
 
