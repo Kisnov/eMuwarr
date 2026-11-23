@@ -11,7 +11,9 @@ vi.mock('../../api/library', () => ({
   getLibraryItem: vi.fn(), getLibrary: vi.fn(), getEmuComparison: vi.fn(), suggestProvider: vi.fn(),
 }))
 vi.mock('../../api/instances', () => ({ getInstances: vi.fn() }))
-vi.mock('../../api/uploads', () => ({ queueLote: vi.fn(), runUploadChecks: vi.fn(), getUploadChecksProgress: vi.fn() }))
+vi.mock('../../api/uploads', () => ({
+  queueLote: vi.fn(), runUploadChecks: vi.fn(), getUploadChecksProgress: vi.fn(), fetchTrackersParaSubir: vi.fn(async () => []), fetchReglasTracker: vi.fn(),
+}))
 vi.mock('../../api/nomenclature', () => ({ getNomenclatureFields: vi.fn(), previewNomenclatureFields: vi.fn() }))
 vi.mock('../../api/settings', () => ({ fetchSettings: vi.fn() }))
 vi.mock('../../api/eventos', () => ({ seguirProgreso: vi.fn(() => () => {}) }))
@@ -361,7 +363,7 @@ describe('«Subir seleccionadas» en Peticiones', () => {
     vi.mocked(getEmuComparison).mockResolvedValue({ available: true, message: null, matches: [] })
     vi.mocked(queueLote).mockImplementation(async elementos => ({
       lote_id: '0123456789ab', encolados: elementos.length, saltados: 0,
-      resultados: elementos.map((e, i) => ({ item_id: e.item_id, status: 'queued' as const, job_id: 100 + i, errors: [] })),
+      resultados: elementos.map((e, i) => ({ item_id: e.item_id, tracker: 'emu', status: 'queued' as const, job_id: 100 + i, errors: [] })),
     }))
   })
 

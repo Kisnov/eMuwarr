@@ -1,9 +1,10 @@
 // Paso 2 de «Subir por lotes»: por película o temporada, el nombre del torrent, sus avisos, su comprobación y lo
 // que ya hay en eMuwarez, con la casilla «Incluir»; debajo, las comprobaciones comunes (una sola vez) y «Subir N».
-import type { UploadCheck, UploadChecksResult } from '../../api/uploads'
+// Con otro tracker con clave, arriba se eligen a cuáles.
+import type { TrackerParaSubir, UploadCheck, UploadChecksResult } from '../../api/uploads'
 import type { LibraryItemResponse } from '../../types/api'
 import { motivoDelBloqueo } from '../../utils/comprobaciones'
-import { CheckRow } from '../asistente/piezas'
+import { CasillasTrackers, CheckRow } from '../asistente/piezas'
 import type { AnalisisElemento } from './useLote'
 
 export interface FilaResumenLote {
@@ -18,6 +19,8 @@ export interface FilaResumenLote {
   // Falta su comprobación o su análisis.
   pendiente: boolean
   incluida: boolean
+  // «N.O.B.S: motivo» por cada otro tracker elegido que no lo admite: para ese se salta.
+  noLoAdmiten: string[]
 }
 
 // Qué falló y dónde: la etiqueta dice qué («Contenido no accesible») y el mensaje, el detalle (la ruta, los errores
@@ -36,7 +39,7 @@ const CLASE_NIVEL: Record<string, string> = {
 
 export function PasoResumenLote({
   filas, entorno, comprobando, comprobandoIndice, errorComprobando, analizando, paralelo, enviando, rechazo,
-  falloEnvio, onIncluir, onRepetir, onVolver, onSubir,
+  falloEnvio, trackersParaSubir, trackersElegidos, onElegirTracker, destinoSubida, onIncluir, onRepetir, onVolver, onSubir,
 }: {
   filas: readonly FilaResumenLote[]
   entorno: UploadChecksResult | null
@@ -50,6 +53,11 @@ export function PasoResumenLote({
   // Los motivos de un 409: falta algo que haría fallar a todas.
   rechazo: string[] | null
   falloEnvio: string | null
+  trackersParaSubir: readonly TrackerParaSubir[]
+  trackersElegidos: readonly string[]
+  onElegirTracker: (id: string, si: boolean) => void
+  // «eMuwarez y N.O.B.S»; vacío si no hay ninguno elegido.
+  destinoSubida: string
   onIncluir: (id: number, incluir: boolean) => void
   onRepetir: () => void
   onVolver: () => void
@@ -62,6 +70,7 @@ export function PasoResumenLote({
   const resumen = !comprobando && (completas || !!errorComprobando)
   const fallidas = filas.filter(f => f.contenido?.ready === false || f.analisis?.bloqueo).length
   const puedeSubir = !comprobando && !errorComprobando && completas && envReady && !analizando && incluidas > 0 && !enviando
+    && !!destinoSubida
   const salta = filas.filter(f => f.salto).length
   const porComprobar = filas.filter(f => !f.salto && f.pendiente).length
   return (
@@ -72,6 +81,19 @@ export function PasoResumenLote({
         {salta > 0 && <span className="lote-cifra lote-cifra-mal"><strong>{salta}</strong> {salta === 1 ? 'se saltará' : 'se saltarán'}</span>}
         {porComprobar > 0 && <span className="lote-cifra"><strong>{porComprobar}</strong> por comprobar</span>}
       </div>
+      {/* Cambiar el primero rehace las comprobaciones (son sus normas): no mientras se hacen. */}
+      {trackersParaSubir.length > 1 && (
+        <div className="lote-trackers">
+          <span className="asist-etiqueta">Trackers</span>
+          <CasillasTrackers trackers={trackersParaSubir} elegidos={trackersElegidos} onElegir={onElegirTracker}
+            disabled={comprobando || enviando} />
+          <span className="asist-dato-nota">
+            {!destinoSubida
+              ? 'Elige al menos uno.'
+              : 'Una subida por elemento y tracker, una detrás de otra, con el mismo fichero y el mismo nombre. Las comprobaciones son las del primero.'}
+          </span>
+        </div>
+      )}
       <div className="lote-tabla-caja">
         <table className="data-table lote-tabla">
           <thead>
@@ -90,6 +112,7 @@ export function PasoResumenLote({
                       {f.nombre === undefined ? 'Calculando el nombre…' : f.nombre ?? '—'}
                     </div>
                     {a?.avisos.map(aviso => <div key={aviso} className="lote-aviso">⚠ {aviso}</div>)}
+                    {!f.salto && f.noLoAdmiten.map(m => <div key={m} className="lote-aviso">⚠ No va a {m}</div>)}
                     {f.salto && f.contenido?.ready !== false && <div className="lote-error">✗ {f.salto}</div>}
                   </td>
                   <td>
@@ -176,7 +199,7 @@ export function PasoResumenLote({
       <div className="asist-pie">
         <button className="btn btn-secondary" onClick={onVolver} type="button" disabled={enviando}>← Volver</button>
         <button className="btn btn-primary" onClick={onSubir} type="button" disabled={!puedeSubir}>
-          {enviando ? 'Encolando…' : `Subir (${incluidas})`}
+          {enviando ? 'Encolando…' : `Subir (${incluidas})${trackersParaSubir.length > 1 && destinoSubida ? ` a ${destinoSubida}` : ''}`}
         </button>
       </div>
     </div>
