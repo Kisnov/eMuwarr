@@ -349,6 +349,11 @@ def run_upload_checks(conn: sqlite3.Connection, item_id: int, *, scope: str = "a
     # automático) queued within the same minute would always make the second
     # one's "eMuwarez disponible" check fail with "Espera Ns…" even though
     # eMuwarez itself was never actually asked twice in a way it would mind.
+    # Solo si la subida va a eMuwarez: con eMuwarez caído o sin clave, una subida solo a N.O.B.S o Milnueve no se para.
+    from .trackers import EMU, obtener
+    if tracker != EMU.id:
+        add_skip("emuwarez", "eMuwarez no se comprueba", f"La subida va a {obtener(tracker).nombre}.")
+        return done(complete=True)
     r = test_emuwarez_connection(conn=conn, enforce_rate_limit=False)
     add("emuwarez", "eMuwarez disponible", "eMuwarez no disponible", bool(r.get("ok")), r.get("message", ""))
     return done(complete=True)
