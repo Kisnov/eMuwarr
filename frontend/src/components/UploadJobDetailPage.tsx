@@ -612,6 +612,11 @@ export function UploadJobDetailPage({ job, onBack, onStart, onRetry, onCancel, o
         <StatsTrackerBloque key={job.id} job={job} />
       </div>
       {completada && <SubirTambienBloque job={job} onEncolado={onReenviado} />}
+      {job.descripcion && (
+        <Panel title="Descripción propia" collapsible>
+          <pre className="dsub-descripcion">{job.descripcion}</pre>
+        </Panel>
+      )}
 
       {completada ? (
         // Terminada, las fases ya no son la noticia: quedan a un clic.

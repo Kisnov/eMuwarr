@@ -91,6 +91,19 @@ def test_la_carpeta_de_descripciones_gana_al_txt_del_video(tmp_path):
     assert "De la carpeta" in texto and "Junto al vídeo" not in texto
 
 
+def test_la_descripcion_de_la_app_va_entre_el_trailer_y_las_capturas(tmp_path):
+    # La app pasa la descripción propia de la subida con -df: va con todo lo que se genera, no en su lugar.
+    fichero = tmp_path / "7-descripcion.txt"
+    fichero.write_text("[b]Notas del encode[/b]", encoding="utf-8")
+
+    meta, base = _gen_desc(tmp_path, descfile=str(fichero))
+    texto = _edit_desc(tmp_path, base)
+
+    assert meta["description"] == "CUSTOM"
+    assert texto.index("[youtube]") < texto.index("[b]Notas del encode[/b]") < texto.index(CAPTURA["raw_url"])
+    assert texto.endswith("\n[FIRMA]")
+
+
 def test_el_nfo_va_en_un_bloque_de_codigo(tmp_path):
     nfo = tmp_path / "Peli.nfo"
     nfo.write_text("ASCII ART", encoding="utf-8")

@@ -205,6 +205,16 @@ export function useAsistente({ item, onClose: onCloseProp, onDone, onNavigate, p
   }, [needsSelection, elegibilidad])
   const elegirTracker = (id: string, si: boolean) =>
     setTrackersElegidos(t => si ? [...new Set([...t, id])] : t.filter(x => x !== id))
+  // La descripción propia (BBCode) del Resumen: la misma para todos los trackers, salvo los que tengan la suya.
+  const [descripcion, setDescripcion] = useState('')
+  const [descripcionPorTracker, setDescripcionPorTracker] = useState<Record<string, string>>({})
+  // Marcar «otra para X» la empieza con la común; desmarcarla vuelve a la común.
+  const descripcionPropia = (id: string, si: boolean) => setDescripcionPorTracker(d => {
+    const { [id]: _quitada, ...resto } = d
+    return si ? { ...resto, [id]: descripcion } : resto
+  })
+  const editarDescripcionDe = (id: string, texto: string) => setDescripcionPorTracker(d => ({ ...d, [id]: texto }))
+  const descripcionDe = (id: string) => descripcionPorTracker[id] ?? descripcion
   // Los elegidos, en el orden de la lista (eMuwarez primero). Sin lista (no se pudo leer), eMuwarez, como siempre.
   const destinos = trackersParaSubir.length
     ? trackersParaSubir.filter(t => trackersElegidos.includes(t.id))
@@ -1072,7 +1082,8 @@ export function useAsistente({ item, onClose: onCloseProp, onDone, onNavigate, p
           undefined,
           opcionesTracker,
           // eMuwarez no lo manda: es lo de siempre.
-          ...(tracker === 'emu' ? [] : [tracker]),
+          tracker === 'emu' ? undefined : tracker,
+          descripcionDe(tracker),
         )
         if (r.status !== 'queued' || !r.job?.id) {
           setUploadMsg(`✗ No se pudo encolar la subida a ${nombre} (estado: ${r.status}). ${(r.errors || []).join(' ')}${yaEnCola()}`)
@@ -1239,6 +1250,7 @@ export function useAsistente({ item, onClose: onCloseProp, onDone, onNavigate, p
     checks, checksLoading, checksError, liveChecks, runChecks, elegirTipo, canUpload, uploading, uploadMsg, doUpload,
     anonimoMarcado, personalReleaseMarcado, elegirAnonimo, elegirPersonalRelease, opcionesTracker,
     trackersParaSubir, trackersElegidos, elegirTracker, destinoSubida, reglas, reglasDe,
+    descripcion, setDescripcion, descripcionPorTracker, descripcionPropia, editarDescripcionDe,
     batchQueue, batchIsEpisodes, batchItemTitle, batchPhase, batchIndex, batchResults,
     batchViewId, setBatchViewId, batchEnvChecks, batchContentChecks, batchChecksLoading, batchChecksIndex,
     batchChecksError, repetirComprobacionesTanda, uploadAllSeasons, uploadAllEpisodes, nombresTanda,

@@ -45,6 +45,7 @@ from .config import (
     ConfigNoPreparada,
     borrar_config_de_la_subida,
     preparar_config_de_la_subida,
+    preparar_descripcion_de_la_subida,
     sin_config_por_subida,
 )
 from .consultas import build_uploadrr_execution_command, get_upload_job, validate_upload_job_start
@@ -119,6 +120,7 @@ def _run_uploadrr_subprocess_body(job_id: int, cmd: dict, secrets: list[str]) ->
     proc: subprocess.Popen | None = None
     eventos_ruta = cmd.get("eventos")
     config_ruta = cmd.get("config")
+    descripcion_ruta = cmd.get("descripcion")
     try:
         def _cancelado() -> None:
             append_upload_log(job_id, "info", "Subida cancelada antes de lanzar Uploadrr; no se lanza.", stream="system")
@@ -160,6 +162,8 @@ def _run_uploadrr_subprocess_body(job_id: int, cmd: dict, secrets: list[str]) ->
             if not config_ruta:
                 raise sin_config_por_subida(cwd)
             preparar_config_de_la_subida(job_id, cwd, config_ruta)
+        if descripcion_ruta:
+            preparar_descripcion_de_la_subida(descripcion_ruta, cmd["descripcion_texto"])
         if not _avanzar_job(job_id, "running", stage="running"):
             _cancelado()
             return
@@ -470,6 +474,7 @@ def _run_uploadrr_subprocess_body(job_id: int, cmd: dict, secrets: list[str]) ->
     finally:
         _soltar_proceso(job_id, proc)
         borrar_config_de_la_subida(config_ruta)
+        borrar_config_de_la_subida(descripcion_ruta)
         borrar_fichero(eventos_ruta)
 
 

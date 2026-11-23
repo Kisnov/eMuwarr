@@ -212,7 +212,7 @@ describe('película', () => {
     await esperar(() => onClose.mock.calls.length > 0)
     expect(subidas.queueUpload).toHaveBeenCalledWith(
       10, {}, LISTO, { ordered_tracks: PISTAS.ordered_tracks }, undefined, undefined, undefined,
-      { anonimo: null, personalRelease: null })
+      { anonimo: null, personalRelease: null }, undefined, '')
     expect(onDone).toHaveBeenCalled()
     expect(onNavigate).toHaveBeenCalledWith('uploads')
   })
@@ -235,7 +235,7 @@ describe('película', () => {
     await esperar(() => onClose.mock.calls.length > 0)
     expect(subidas.queueUpload).toHaveBeenCalledWith(
       10, {}, LISTO, { ordered_tracks: PISTAS.ordered_tracks }, undefined, undefined, undefined,
-      { anonimo: true, personalRelease: null })
+      { anonimo: true, personalRelease: null }, undefined, '')
   })
 
   it('con otro tracker con clave, se elige en el Resumen y sale una subida por tracker, eMuwarez primero', async () => {
@@ -345,6 +345,35 @@ describe('película', () => {
     await pulsar(boton('Subir a N.O.B.S'))
     await esperar(() => onClose.mock.calls.length > 0)
     expect(m(subidas.queueUpload).mock.calls.map(c => c[8])).toEqual([undefined, 'nobs', 'nobs'])
+  })
+
+  it('la descripción del Resumen va a todos los trackers, salvo al que tenga la suya', async () => {
+    m(subidas.fetchTrackersParaSubir).mockResolvedValue([
+      { id: 'emu', nombre: 'eMuwarez' }, { id: 'nobs', nombre: 'N.O.B.S' }, { id: 'mnv', nombre: 'Milnueve' }])
+    await abrir(PELICULA)
+    await esperar(() => texto().includes('Dune WEB-DL AMZN [GRP]'))
+    await pulsar(boton('Continuar'))
+    await esperar(() => texto().includes('✓ Todo listo para subir'))
+    const casilla = (nombre: string) => [...document.querySelectorAll<HTMLLabelElement>('label.asist-casilla')]
+      .find(l => l.textContent?.trim() === nombre)!.querySelector('input')!
+    const area = (nombre: string) => document.querySelector<HTMLTextAreaElement>(`textarea[aria-label="${nombre}"]`)!
+    const escribirEn = async (el: HTMLTextAreaElement, valor: string) => {
+      await act(async () => {
+        Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(el, valor)
+        el.dispatchEvent(new Event('input', { bubbles: true }))
+      })
+    }
+    await pulsar(casilla('N.O.B.S'))
+    await pulsar(casilla('Milnueve'))
+    await escribirEn(area('Descripción propia (BBCode)'), '[b]Común[/b]')
+    await pulsar(casilla('Otra para Milnueve'))
+    expect(area('Descripción para Milnueve').value).toBe('[b]Común[/b]')  // empieza con la común
+    await escribirEn(area('Descripción para Milnueve'), '[b]Solo Milnueve[/b]')
+
+    await pulsar(boton('Subir a eMuwarez, N.O.B.S y Milnueve'))
+    await esperar(() => onClose.mock.calls.length > 0)
+    expect(m(subidas.queueUpload).mock.calls.map(c => [c[8], c[9]])).toEqual([
+      [undefined, '[b]Común[/b]'], ['nobs', '[b]Común[/b]'], ['mnv', '[b]Solo Milnueve[/b]']])
   })
 
   it('sin tipo conocido, el Resumen deja elegirlo con el Source, lo guarda y vuelve a comprobar', async () => {
@@ -497,7 +526,7 @@ describe('pack de temporada', () => {
     expect(subidas.queueUpload).toHaveBeenCalledWith(
       20, {}, LISTO, null,
       { source: 'WEB-DL', tag: 'GRP', title: 'Serie', provider: undefined, idiomas: { 1: 'spa' } },
-      undefined, undefined, { anonimo: null, personalRelease: null })
+      undefined, undefined, { anonimo: null, personalRelease: null }, undefined, '')
   })
 
   it('«Ver nombre de todos los capítulos» pide los nombres con lo elegido', async () => {

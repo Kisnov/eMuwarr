@@ -1203,6 +1203,8 @@ class UploadJobDetail(BaseModel):
     subir_tambien_a: list[TrackerParaSubir] = []
     # La subida completada a otro tracker cuyo fichero y torrent reutiliza esta («Subir también a…»).
     copia_de_job_id: Optional[int] = None
+    # La descripción propia que lleva (BBCode), o None.
+    descripcion: Optional[str] = None
     # En eMuwarez, pendiente de que un moderador la apruebe (services/mis_torrents.py, pendiente_de_moderacion).
     pendiente_moderacion: bool = False
     # Read-only snapshots taken at apply time — the nomenclature field
@@ -1403,6 +1405,8 @@ class UploadQueueBody(BaseModel):
     personal_release: Optional[bool] = None
     # El id del tracker (services/trackers.py). None: eMuwarez. Para subir a varios, una petición por tracker.
     tracker: Optional[str] = None
+    # Descripción propia (BBCode) del Resumen: Uploadrr-EMU la añade a la que genera. None o vacía: solo la generada.
+    descripcion: Optional[str] = Field(None, max_length=30000)
 
 
 class TrackerParaSubir(BaseModel):

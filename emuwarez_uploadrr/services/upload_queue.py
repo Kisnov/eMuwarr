@@ -166,6 +166,7 @@ def _insert_and_start_queued_job(
     personal_release: bool | None = None,
     tracker: str = trackers.POR_DEFECTO,
     copia_de_job_id: int | None = None,
+    descripcion: str | None = None,
 ) -> dict:
     """Shared by queue_upload_for_item() and queue_retry_for_job(): insert a
     fresh 'queued' row for `item` and start its pipeline right away.
@@ -213,6 +214,8 @@ def _insert_and_start_queued_job(
 
     `copia_de_job_id` — «Subir también a…» (services/subir_tambien.py): la subida completada a otro tracker cuyo fichero
     y torrent reutiliza esta. Con él, la preparación no rehace nada: o es el mismo fichero, o falla (_paso_preparar).
+
+    `descripcion` — la descripción propia (BBCode) escrita en el Resumen; Uploadrr-EMU la añade a la que genera.
     """
     motivo = trackers.motivo_para_no_subir(conn, tracker)
     if motivo:
@@ -260,9 +263,9 @@ def _insert_and_start_queued_job(
                 retry_of_job_id, retry_count, checks_snapshot_json,
                 nomenclature_proposal_id, nomenclature_snapshot_json,
                 remux_overrides_json, remux_snapshot_json, season_overrides_json,
-                reutiliza_preparacion, lote_id, anonimo, personal_release, tracker, copia_de_job_id,
+                reutiliza_preparacion, lote_id, anonimo, personal_release, tracker, copia_de_job_id, descripcion,
                 created_at, updated_at
-            ) VALUES (?, ?, ?, ?, 'queued', 'queued', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, 'queued', 'queued', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 item["id"], request_item_id, request_title, request_url,
@@ -282,6 +285,7 @@ def _insert_and_start_queued_job(
                 None if personal_release is None else int(bool(personal_release)),
                 tracker,
                 copia_de_job_id,
+                (descripcion or "").strip() or None,
                 now_iso, now_iso,
             ),
         )
@@ -365,11 +369,12 @@ def queue_upload_for_item(
     anonimo: bool | None = None,
     personal_release: bool | None = None,
     tracker: str = trackers.POR_DEFECTO,
+    descripcion: str | None = None,
     conn=None,
 ) -> dict:
     """Encola la subida de un elemento. `lote_id`: la etiqueta de la tanda o lote al que pertenece (no se hereda
     del trabajo anterior del elemento: solo el reintento de un trabajo la conserva). `tracker`: a cuál (eMuwarez si
-    no se dice); para subir a varios, una llamada por tracker."""
+    no se dice); para subir a varios, una llamada por tracker, cada una con su `descripcion`."""
     own = conn is None
     conn = conn or connect()
     try:
@@ -418,6 +423,7 @@ def queue_upload_for_item(
             lote_id=lote_id,
             anonimo=anonimo, personal_release=personal_release,
             tracker=tracker,
+            descripcion=descripcion,
         )
     finally:
         if own:
@@ -497,6 +503,7 @@ def queue_retry_for_job(original_job_id: int, conn=None, *, desde_el_principio: 
             personal_release=None if original.get("personal_release") is None else bool(original.get("personal_release")),
             tracker=original.get("tracker") or trackers.POR_DEFECTO,
             copia_de_job_id=original.get("copia_de_job_id"),
+            descripcion=original.get("descripcion"),
         )
     finally:
         if own:
@@ -531,6 +538,8 @@ def queue_copia_a_otro_tracker(conn, fuente: dict, tracker: str, *, lote_id: str
         lote_id=lote_id,
         tracker=tracker,
         copia_de_job_id=fuente["id"],
+        # La misma descripción propia que llevó en el otro tracker.
+        descripcion=fuente.get("descripcion"),
     )
 
 

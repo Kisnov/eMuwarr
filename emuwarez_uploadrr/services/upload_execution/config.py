@@ -148,6 +148,23 @@ def ruta_config(job_id: int, *, reenvio: bool = False) -> Path:
     return db_path().parent / CARPETA_CONFIGS / f"{job_id}{'-reenvio' if reenvio else ''}.yaml"
 
 
+def ruta_descripcion(job_id: int) -> Path:
+    """La descripción propia de este trabajo (`-df`), junto a su config: se borra igual al acabar y al arrancar."""
+    return db_path().parent / CARPETA_CONFIGS / f"{job_id}-descripcion.txt"
+
+
+def preparar_descripcion_de_la_subida(ruta: str | os.PathLike, texto: str) -> None:
+    """Escribe la descripción propia en `ruta`. Si no se puede, la subida no se lanza: saldría sin ella."""
+    ruta = Path(ruta)
+    try:
+        ruta.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+        ruta.write_text(texto, encoding="utf-8", newline="")
+    except OSError as exc:
+        raise ConfigNoPreparada(
+            f"No se pudo preparar la descripción de la subida ({texto_de_error(exc)}). No se lanza: saldría sin ella."
+        ) from exc
+
+
 def sin_config_por_subida(cwd: str) -> ConfigNoPreparada:
     """Un Uploadrr-EMU que no anuncia `--config` (otro `uploadrr.path`, más viejo): ya no se escribe en su config.yaml."""
     return ConfigNoPreparada(
