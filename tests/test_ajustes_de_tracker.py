@@ -50,3 +50,13 @@ def test_lee_el_ajuste_del_tracker_y_su_alias_antiguo():
         set_setting(conn, "nobs.api_key", "de-nobs")
         assert ajuste_de_tracker(conn, "api_key", trackers.NOBS.id) == "de-nobs"
         assert ajuste_de_tracker(conn, "api_key", trackers.MNV.id) is None
+
+
+def test_la_url_de_un_tracker_es_la_de_sus_ajustes_o_la_de_siempre():
+    with db() as conn:
+        assert trackers.url_de(conn, trackers.NOBS) == "https://nobs.rawsmoke.net"
+        set_setting(conn, "nobs.url", "https://nobs.example")
+        assert trackers.url_de(conn, trackers.NOBS) == "https://nobs.example"
+        set_setting(conn, "nobs.url", "")
+        assert trackers.url_de(conn, trackers.NOBS) == "https://nobs.rawsmoke.net"
+        assert trackers.url_de(conn, trackers.EMU) == trackers.EMU.url

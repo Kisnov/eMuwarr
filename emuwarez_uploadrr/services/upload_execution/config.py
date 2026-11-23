@@ -30,7 +30,7 @@ from ..uploadrr_config import (
     stage_tracker_config,
     staged_config_text,
 )
-from ..trackers import EMU, TRACKERS
+from ..trackers import EMU, TRACKERS, url_de
 from ..uploadrr_contract import get_runtime_settings
 from .comun import _get_db_conn, logger
 from .registro import append_upload_log
@@ -62,7 +62,7 @@ def _lineas_preparadas(job_id: int, cwd: str) -> list[str] | None:
         emu_key = ajuste_de_tracker(conn, "api_key")
         # Los otros trackers (fase B) con clave puesta: su bloque TRACKERS.<X> (clave y URL) va en el config de la subida.
         claves_otros = {
-            t.uploadrr: (clave, ajuste_de_tracker(conn, "url", t.id, t.url)) for t in TRACKERS.values() if t is not EMU
+            t.uploadrr: (clave, url_de(conn, t)) for t in TRACKERS.values() if t is not EMU
             if (clave := (ajuste_de_tracker(conn, "api_key", t.id) or "").strip())
         }
         img_hosts = fallback_order(conn)
