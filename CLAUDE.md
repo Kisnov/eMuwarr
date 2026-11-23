@@ -63,8 +63,9 @@ came in from `Kisnov/Uploadrr-EMU` with `git subtree add`, history kept; that re
 - `imagen-pr.yml` builds `ghcr.io/kisnov/emuwarr:pr-<n>` (amd64) for PRs from this repo's branches; `etiquetas.yml` labels
   each PR by its branch prefix (`.github/labeler.yml`) and `.github/release.yml` groups the release notes by those labels.
 - `descargas.yml` (daily) writes the README's downloads badge, `descargas.json`, to the orphan branch `insignias` (never
-  merge or delete it): `scripts/descargas_latest.py` reads the downloads of the version tagged `latest` from the
-  package's versions page, since GHCR counts per version and has no API for it.
+  merge or delete it): `scripts/descargas_imagen.py` adds up the downloads of every published version (`X.Y.Z`
+  tag) from the package's versions page, since GHCR counts per version and has no API for it; the package's own total
+  also counts `:dev`/`:pr-<n>` and can drop when `limpieza-ghcr.yml` deletes them.
 - `zizmor.yml` audits the workflows and `dependabot.yml` when `.github/` changes; run `zizmor --gh-token "$(gh auth token)" .` locally (without a token it skips online audits) before pushing a workflow edit.
 
 ## Not obvious

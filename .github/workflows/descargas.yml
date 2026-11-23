@@ -1,6 +1,6 @@
-# Cada día cuenta las descargas de la versión que lleva :latest en ghcr.io/kisnov/emuwarr y las deja en
+# Cada día suma las descargas de las versiones publicadas (X.Y.Z) de ghcr.io/kisnov/emuwarr y las deja en
 # descargas.json de la rama insignias, de donde lee la insignia del README. GHCR no da esa cifra por API: la saca
-# scripts/descargas_latest.py de la página de versiones del paquete. En un PR que toca esto solo la lee y la enseña.
+# scripts/descargas_imagen.py de la página de versiones del paquete. En un PR que toca esto solo la lee y la enseña.
 name: Descargas
 
 on:
@@ -8,7 +8,7 @@ on:
     - cron: "47 5 * * *"
   workflow_dispatch:
   pull_request:
-    paths: ['.github/workflows/descargas.yml', 'scripts/descargas_latest.py']
+    paths: ['.github/workflows/descargas.yml', 'scripts/descargas_imagen.py']
 
 permissions: {}
 
@@ -23,7 +23,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - run: python3 scripts/descargas_latest.py
+      - run: python3 scripts/descargas_imagen.py
 
   publicar:
     if: github.event_name != 'pull_request'
@@ -37,7 +37,7 @@ jobs:
     steps:
       # Las credenciales se quedan para el push a insignias; no se ejecuta nada que venga de fuera del repo.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1  # zizmor: ignore[artipacked]
-      - run: python3 scripts/descargas_latest.py --salida "$RUNNER_TEMP/descargas.json"
+      - run: python3 scripts/descargas_imagen.py --salida "$RUNNER_TEMP/descargas.json"
       # La rama insignias solo tiene descargas.json: un commit cuando cambia la cifra, ninguno si no.
       - run: |
           if git ls-remote --exit-code --heads origin insignias >/dev/null; then
@@ -53,5 +53,5 @@ jobs:
             exit 0
           fi
           git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
-            commit -q -m "Descargas de :latest: $(jq -r .message descargas.json)"
+            commit -q -m "Descargas: $(jq -r .message descargas.json)"
           git push -q origin HEAD:insignias
