@@ -36,6 +36,7 @@ import {
   SIN_IDIOMAS, conIdioma, idiomasDelServidor, idiomasParaServidor, type IdiomasPorPosicion,
 } from '../../utils/idiomasPack'
 import { avisoSourceVisible } from '../../utils/avisoSource'
+import { segunDestinos } from '../../utils/comprobaciones'
 import { PROVIDER_SOURCES } from './constantes'
 import { mergeRemuxTracks } from './RemuxTable'
 import { useComprobaciones, useComprobacionesTanda } from './useComprobaciones'
@@ -279,7 +280,11 @@ export function useAsistente({ item, onClose: onCloseProp, onDone, onNavigate, p
   const [preparing, setPreparing] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [uploadMsg, setUploadMsg] = useState<string | null>(null)
-  const { checks, checksLoading, checksError, liveChecks, runChecks: comprobar } = useComprobaciones(targetId, proveedorElegido)
+  const {
+    checks: checksDelServidor, checksLoading, checksError, liveChecks, runChecks: comprobar,
+  } = useComprobaciones(targetId, proveedorElegido)
+  // Sin eMuwarez entre los destinos, que no responda no bloquea la subida a los demás.
+  const checks = segunDestinos(checksDelServidor, destinos.some(d => d.id === 'emu'))
 
   // --- Step 0: load seasons (series) or episodes (season) ---
   useEffect(() => {
