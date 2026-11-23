@@ -90,6 +90,13 @@ def _con_descripcion(crear):
     return _crear
 
 
+def test_si_no_se_puede_escribir_no_se_lanza(tmp_path):
+    bloqueo = tmp_path / "no-es-carpeta"
+    bloqueo.write_text("x", encoding="utf-8")
+    with pytest.raises(ue.ConfigNoPreparada, match="saldría sin ella"):
+        ue.preparar_descripcion_de_la_subida(bloqueo / "7-descripcion.txt", TEXTO)
+
+
 def test_al_arrancar_se_barre_la_que_quedo(isolated_db):
     ruta = ue.ruta_descripcion(7)
     ue.preparar_descripcion_de_la_subida(ruta, TEXTO)
