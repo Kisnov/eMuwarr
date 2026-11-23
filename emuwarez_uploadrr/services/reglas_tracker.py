@@ -151,9 +151,10 @@ def con_idiomas_elegidos(item: dict, *, overrides: dict | None = None, idiomas: 
     from .mkv_remux import idiomas_de_las_pistas, idiomas_elegidos, idiomas_por_posicion
     if not (idiomas_elegidos(overrides) or idiomas_por_posicion(idiomas)):
         return item
-    from .path_mapping import resolve_local_path
-    pistas = idiomas_de_las_pistas(resolve_local_path(item.get("path")) or item.get("path"),
-                                   overrides=overrides, idiomas=idiomas)
+    from .path_mapping import resolve_local_path, ruta_de_lectura
+    # El mismo fichero que lee «Ver pistas».
+    ruta = ruta_de_lectura(item)
+    pistas = idiomas_de_las_pistas(resolve_local_path(ruta) or ruta, overrides=overrides, idiomas=idiomas)
     return {**item, "audio_languages": " / ".join(dict.fromkeys(pistas))} if pistas else item
 
 

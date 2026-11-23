@@ -353,3 +353,18 @@ def test_antes_de_lanzar_manda_el_fichero_preparado(db_conn, tmp_path, monkeypat
     assert not uq._populate_ready(job_id, iid, db_conn)
     error = db_conn.execute("SELECT error_message FROM upload_jobs WHERE id = ?", (job_id,)).fetchone()[0]
     assert error.startswith("«Peli.mkv»: La pista de audio 1 no tiene idioma")
+
+
+def test_antes_de_lanzar_un_mkv_que_no_se_lee_falla(db_conn, tmp_path, monkeypatch):
+    from emuwarez_uploadrr.services import mkv_remux, upload_preflight
+    monkeypatch.setattr(mkv_remux, "read_tracks_json", lambda ruta: {"ok": False, "error": "x"})
+    monkeypatch.setattr(upload_preflight, "validate_upload_preconditions", lambda *a, **k: {"ok": True, "errors": []})
+    iid = _peli(db_conn, tmp_path, "spa")
+    preparado = tmp_path / "uploads" / "Peli.mkv"
+    preparado.write_bytes(b"x")
+    job_id = _trabajo(db_conn, iid, "emu")
+    db_conn.execute("UPDATE upload_jobs SET prepared_path = ? WHERE id = ?", (str(preparado), job_id))
+    db_conn.commit()
+    assert not uq._populate_ready(job_id, iid, db_conn)
+    error = db_conn.execute("SELECT error_message FROM upload_jobs WHERE id = ?", (job_id,)).fetchone()[0]
+    assert error == "«Peli.mkv»: no se pudo comprobar el idioma de las pistas (x)."

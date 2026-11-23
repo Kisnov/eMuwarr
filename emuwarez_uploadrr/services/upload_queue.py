@@ -518,6 +518,8 @@ def queue_copia_a_otro_tracker(conn, fuente: dict, tracker: str, *, lote_id: str
     sin_idioma = _sin_idioma_preparado(fuente.get("prepared_path"))
     if sin_idioma:
         return {"status": "blocked", "job": None, "errors": [
+            f"{_no_se_lee(sin_idioma[0])} Es el archivo que siembra la subida #{fuente['id']}: no se sube a otro "
+            "tracker." if sin_idioma[1] is None else
             f"«{os.path.basename(sin_idioma[0])}»: la pista de audio {', '.join(map(str, sin_idioma[1]))} no tiene "
             f"idioma (und) en el archivo que siembra la subida #{fuente['id']}, y retocarlo rompería ese torrent: no "
             "se sube a otro tracker."]}
@@ -823,19 +825,32 @@ def _overrides_de_pack(origen: str | None, season_overrides: dict | None) -> dic
     return {tid: {"language": codigo} for tid, codigo in idiomas.items()} or None
 
 
-def _sin_idioma_preparado(ruta: str | None) -> tuple[str, list[int]] | None:
+def _sin_idioma_preparado(ruta: str | None) -> tuple[str, list[int] | None] | None:
     """El primer fichero preparado (el fichero, o uno de la carpeta de un pack) con alguna pista de audio sin idioma
-    (und), y sus posiciones; None si no hay. El elegido en «Ver pistas» no llega con las pistas en «Ninguno» ni
-    cuando el archivo no se puede editar."""
-    from .mkv_remux import idiomas_de_las_pistas
-    if not ruta:
+    (und), y sus posiciones; None si no hay. Un MKV cuyas pistas no se leen va con None: no se sabe. El elegido en
+    «Ver pistas» no llega con las pistas en «Ninguno» ni cuando el archivo no se puede editar. Lo que no es MKV no se
+    mira: la app no lo etiqueta. Sin mkvmerge no se puede mirar nada, como en la integridad."""
+    from .mkv_remux import check_mkvmerge_available, idiomas_de_las_pistas
+    if not ruta or not check_mkvmerge_available()["available"]:
         return None
     ficheros = [os.path.join(ruta, n) for n in sorted(os.listdir(ruta))] if os.path.isdir(ruta) else [ruta]
     for fichero in ficheros:
-        sin = [i for i, c in enumerate(idiomas_de_las_pistas(fichero) or [], 1) if c == "UND"]
+        if not (fichero.lower().endswith(".mkv") and os.path.isfile(fichero)):
+            continue
+        pistas = idiomas_de_las_pistas(fichero)
+        if pistas is None:
+            return fichero, None
+        sin = [i for i, c in enumerate(pistas, 1) if c == "UND"]
         if sin:
             return fichero, sin
     return None
+
+
+def _no_se_lee(fichero: str) -> str:
+    """Por qué no se sube un MKV cuyas pistas no se leen, con lo que dice mkvmerge."""
+    from .mkv_remux import read_tracks_json
+    return (f"«{os.path.basename(fichero)}»: no se pudo comprobar el idioma de las pistas "
+            f"({read_tracks_json(fichero).get('error')}).")
 
 
 def _populate_ready(job_id: int, item_id: int, conn, season_overrides: dict | None = None) -> bool:
@@ -862,8 +877,9 @@ def _populate_ready(job_id: int, item_id: int, conn, season_overrides: dict | No
     sin_idioma = _sin_idioma_preparado(preparado)
     if sin_idioma:
         from .reglas_tracker import motivo_audio_sin_idioma
-        _fail(job_id, f"«{os.path.basename(sin_idioma[0])}»: {motivo_audio_sin_idioma(sin_idioma[1])} Si ya lo "
-                      "elegiste, no se pudo escribir en el archivo preparado: mira el registro de la preparación.")
+        _fail(job_id, _no_se_lee(sin_idioma[0]) if sin_idioma[1] is None else (
+            f"«{os.path.basename(sin_idioma[0])}»: {motivo_audio_sin_idioma(sin_idioma[1])} Si ya lo elegiste, no se "
+            "pudo escribir en el archivo preparado: mira el registro de la preparación."))
         return False
 
     if item.get("item_type") == "season":

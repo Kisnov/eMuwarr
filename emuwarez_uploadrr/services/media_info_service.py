@@ -146,6 +146,9 @@ def build_mediainfo_report(path: str, radarr_source: str | None = None,
     if not mediainfo_available():
         return {"available": False, "message": "El binario `mediainfo` no está instalado en este entorno.", "rows": []}
     p = Path(path)
+    # Como build_track_plan: el idioma elegido solo se escribe en un MKV, así que en otro no cuenta para el nombre.
+    if p.suffix.lower() != ".mkv":
+        idiomas_audio = None
     if not p.is_file():
         return {"available": False, "message": f"Archivo no accesible desde la app: {path}", "rows": []}
 
