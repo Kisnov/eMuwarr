@@ -37,6 +37,7 @@ import {
   SIN_IDIOMAS, conIdioma, idiomasDelServidor, idiomasParaServidor, type IdiomasPorPosicion,
 } from '../../utils/idiomasPack'
 import { avisoSourceVisible } from '../../utils/avisoSource'
+import { segunDestinos } from '../../utils/comprobaciones'
 import { PROVIDER_SOURCES } from './constantes'
 import { mergeRemuxTracks } from './RemuxTable'
 import { useComprobaciones, useComprobacionesTanda } from './useComprobaciones'
@@ -282,8 +283,11 @@ export function useAsistente({ item, onClose: onCloseProp, onDone, onNavigate, p
   const [uploadMsg, setUploadMsg] = useState<string | null>(null)
   // Las comprobaciones van con las normas del primero de los elegidos (eMuwarez si está); las de los demás, en `reglas`.
   const trackerPrincipal = destinos[0]?.id ?? 'emu'
-  const { checks, checksLoading, checksError, liveChecks, runChecks: comprobar } =
-    useComprobaciones(targetId, proveedorElegido, trackerPrincipal)
+  const {
+    checks: checksDelServidor, checksLoading, checksError, liveChecks, runChecks: comprobar,
+  } = useComprobaciones(targetId, proveedorElegido, trackerPrincipal)
+  // Sin eMuwarez entre los destinos, que no responda no bloquea la subida a los demás.
+  const checks = segunDestinos(checksDelServidor, destinos.some(d => d.id === 'emu'))
   // Las normas de idioma de cada otro tracker para este elemento (sin red, en el Resumen junto a su casilla).
   const [reglas, setReglas] = useState<Map<string, ReglasDeTracker>>(new Map())
 
@@ -1009,6 +1013,14 @@ export function useAsistente({ item, onClose: onCloseProp, onDone, onNavigate, p
   const doUpload = async () => {
     if (targetId == null || !canUpload) return
     setUploading(true); setUploadMsg(null)
+    // Los ya encolados, si uno posterior falla, salen de la elección: reintentar sube solo a los que faltan (volver
+    // a eMuwarez lo bloquearía la subida que ya tiene en cola, y el que faltaba no se intentaría).
+    const encolados: { id: string; nombre: string }[] = []
+    const yaEnCola = () => {
+      if (!encolados.length) return ''
+      setTrackersElegidos(t => t.filter(x => !encolados.some(e => e.id === x)))
+      return ` Ya en cola: ${encolados.map(e => e.nombre).join(', ')}; «Subir» reintenta solo lo que falta.`
+    }
     try {
       await saveNomenclatureFields(targetId, fields)
       const remuxSnapshot = remuxPreview
@@ -1031,15 +1043,16 @@ export function useAsistente({ item, onClose: onCloseProp, onDone, onNavigate, p
           ...(tracker === 'emu' ? [] : [tracker]),
         )
         if (r.status !== 'queued' || !r.job?.id) {
-          setUploadMsg(`✗ No se pudo encolar la subida a ${nombre} (estado: ${r.status}). ${(r.errors || []).join(' ')}`)
+          setUploadMsg(`✗ No se pudo encolar la subida a ${nombre} (estado: ${r.status}). ${(r.errors || []).join(' ')}${yaEnCola()}`)
           return
         }
+        encolados.push({ id: tracker, nombre })
       }
       onDone?.()
       onNavigate?.('uploads')
       onClose()
     } catch (e: unknown) {
-      setUploadMsg(`✗ ${e instanceof Error ? e.message : 'Error encolando la subida'}`)
+      setUploadMsg(`✗ ${e instanceof Error ? e.message : 'Error encolando la subida'}${yaEnCola()}`)
     } finally {
       setUploading(false)
     }

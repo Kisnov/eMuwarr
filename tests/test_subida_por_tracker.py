@@ -233,6 +233,30 @@ def test_otro_contenido_no_espera(db_conn, tmp_path):
     assert uq._esperar_a_la_anterior(otra) is True
 
 
+def test_si_la_espera_falla_la_subida_queda_fallida_sin_tocar_la_plaza(db_conn, tmp_path, monkeypatch):
+    """Un fallo de la base durante la espera no puede dejar la fila en 'queued' sin hilo que la lleve."""
+    import sqlite3
+
+    from emuwarez_uploadrr.services import upload_execution
+    jid = _trabajo(db_conn, _peli(db_conn, str(tmp_path / "a.mkv")), tracker="nobs")
+
+    def _revienta(_job_id):
+        raise sqlite3.OperationalError("database is locked")
+
+    class _PuertaQueNoSeToca:
+        def acquire(self, _job_id):
+            raise AssertionError("no debe pedir plaza")
+
+        def release(self):
+            raise AssertionError("no debe liberar una plaza que no tiene")
+
+    monkeypatch.setattr(uq, "_esperar_a_la_anterior", _revienta)
+    monkeypatch.setattr(upload_execution, "_upload_concurrency_gate", _PuertaQueNoSeToca())
+    uq._run_queued_job(jid)
+    fila = _fila(db_conn, jid)
+    assert fila["status"] == "failed" and "database is locked" in fila["error_message"]
+
+
 # ---------------------------------------------------------------------------
 # La segunda reutiliza el fichero de la primera y reanuda Uploadrr-EMU
 # ---------------------------------------------------------------------------
