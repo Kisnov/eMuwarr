@@ -185,7 +185,7 @@ def error_de_url_tracker(nombre: str, valor: Optional[str]) -> Optional[str]:
     texto = (valor or "").strip()
     if not texto:
         return None
-    if error_de_url_publica(texto) or urlsplit(texto).scheme != "https" or urlsplit(texto).query or "#" in texto:
+    if error_de_url_publica(texto) or urlsplit(texto).scheme != "https" or "?" in texto or "#" in texto:
         return f"La URL de {nombre} debe empezar por https://, incluir un host válido y no llevar usuario ni «?»"
     return None
 

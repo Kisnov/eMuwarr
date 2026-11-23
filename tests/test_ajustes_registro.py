@@ -261,3 +261,14 @@ def test_ningun_si_no_del_registro_se_lee_a_mano():
     assert not sueltas, (
         "\nLectura de sí/no a mano de un ajuste del registro; usa "
         "services.settings.leer_ajuste(conn, <campo>):\n  " + "\n  ".join(sueltas))
+
+
+@pytest.mark.parametrize("url", ["https://nobs.example/?", "https://nobs.example/?a=1", "https://nobs.example/#",
+                                 "http://nobs.example", "https://u@nobs.example"])
+def test_la_url_de_un_tracker_no_admite_consulta_vacia_ni_http(url):
+    assert reg.error_de_url_tracker("N.O.B.S", url)
+
+
+def test_la_url_de_un_tracker_vacia_o_https_limpia_vale():
+    assert reg.error_de_url_tracker("N.O.B.S", "") is None
+    assert reg.error_de_url_tracker("N.O.B.S", " https://nobs.example/ ") is None
