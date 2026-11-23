@@ -25,6 +25,7 @@ from ..uploadrr_config import (
     stage_oxipng_on,
     stage_per_episode_screens,
     stage_qbittorrent_config,
+    stage_sin_firma,
     stage_tmdb_key,
     stage_tracker_config,
     staged_config_text,
@@ -78,6 +79,8 @@ def _lineas_preparadas(job_id: int, cwd: str) -> list[str] | None:
         qbit_username = get_setting_canonical(conn, "qbit.username")
         qbit_password = get_setting_canonical(conn, "qbit.password")
         qbit_qui = get_setting_canonical(conn, "qbit.qui_proxy_url")
+        fila = conn.execute("SELECT tracker FROM upload_jobs WHERE id = ?", (job_id,)).fetchone()
+        otro_tracker = bool(fila and fila[0] and fila[0] != EMU.id)
     finally:
         conn.close()
 
@@ -106,6 +109,8 @@ def _lineas_preparadas(job_id: int, cwd: str) -> list[str] | None:
         lines, _msg = stage_oxipng_on(lines)
         lines, _msg = stage_anon_off(lines)
         lines, _msg = stage_firma_actual(lines)
+        if otro_tracker:
+            lines, _msg = stage_sin_firma(lines)
         changed = True
         # Siempre hay al menos uno (ver arriba): esto es lo que hace que la
         # preferencia del usuario (p. ej. Pixhost) llegue de verdad a Uploadrr-EMU
