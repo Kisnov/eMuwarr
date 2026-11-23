@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from ..dependencies import require_auth
 from ..runtime import _db_path
 from emuwarez_uploadrr.services.settings import ajuste_de_tracker
+from emuwarez_uploadrr.services.trackers import POR_DEFECTO, obtener
 from ..schemas import (
     OkResponse,
     RequestDetailResponse,
@@ -33,8 +34,11 @@ def _row_to_item(r: dict, my_username: str | None = None) -> RequestItemResponse
         my_username and author
         and author.strip().lower() == my_username.strip().lower()
     )
+    tracker = obtener(r.get("tracker") or POR_DEFECTO)
     return RequestItemResponse(
         id=r["id"],
+        tracker=tracker.id,
+        tracker_nombre=tracker.nombre,
         emu_id=r["emu_id"],
         title=r["title"],
         category=r.get("category"),

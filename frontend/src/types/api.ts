@@ -326,6 +326,8 @@ export interface RequestMatchResponse {
 
 export interface RequestItemResponse {
   id: number
+  tracker?: string
+  tracker_nombre?: string
   emu_id: string
   title: string
   category: string | null

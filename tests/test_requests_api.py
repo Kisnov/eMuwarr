@@ -546,3 +546,22 @@ def test_mixed_season_values_against_a_request(pide_res, pide_src, tengo_res, te
     item = {"title": "X", "resolution": tengo_res, "source": tengo_src,
             "tmdb_id": "1", "local_status": "Disponible"}
     assert classify_request_match(req, item)["status"] == esperado, por_que
+
+
+def test_requests_dicen_de_que_tracker_son(client, auth_headers, isolated_db):
+    from emuwarez_uploadrr.database import connect, init_db
+    from emuwarez_uploadrr.services.requests import upsert_request
+    from emuwarez_uploadrr.models import RequestItem
+    import os
+    os.environ["CONFIG_DIR"] = str(isolated_db)
+    conn = connect()
+    init_db(conn)
+    upsert_request(conn, RequestItem(id=None, emu_id="emu-tracker-1", title="Con tracker", category="Movies"))
+    conn.execute("UPDATE request_items SET tracker = 'nobs' WHERE emu_id = 'emu-tracker-1'")
+    upsert_request(conn, RequestItem(id=None, emu_id="emu-tracker-2", title="Sin tocar", category="Movies"))
+    conn.commit()
+    conn.close()
+
+    items = {i["title"]: i for i in client.get("/api/requests", headers=auth_headers).json()["items"]}
+    assert (items["Con tracker"]["tracker"], items["Con tracker"]["tracker_nombre"]) == ("nobs", "N.O.B.S")
+    assert (items["Sin tocar"]["tracker"], items["Sin tocar"]["tracker_nombre"]) == ("emu", "eMuwarez")

@@ -846,6 +846,9 @@ class RequestMatchResponse(BaseModel):
 
 class RequestItemResponse(BaseModel):
     id: int
+    # El tracker de la petición (services/trackers.py): su id y su nombre para enseñarlo.
+    tracker: str = "emu"
+    tracker_nombre: str = "eMuwarez"
     emu_id: str
     title: str
     category: Optional[str] = None
