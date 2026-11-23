@@ -220,13 +220,26 @@ def base_torrent_de(uploadrr_path: str, prepared_path: str) -> Path:
     return Path(uploadrr_path) / "tmp" / Path(prepared_path).name / "BASE.torrent"
 
 
+def base_reutilizable(uploadrr_path: str, prepared_path: str) -> bool:
+    """Si Uploadrr-EMU reutilizará con --resume el BASE.torrent de `tmp/<nombre>` (torrentman.handle_torrent_creation):
+    solo si su meta.json tiene marcado el paso `torrent`, que se marca después de comprobar que el fichero es un .torrent
+    válido. Uno sin la marca (un `--base-desde` cortado entre escribirlo y marcarlo, un hash a medias) lo rehace."""
+    base = base_torrent_de(uploadrr_path, prepared_path)
+    try:
+        pasos = json.loads((base.parent / "meta.json").read_text(encoding="utf-8")).get("pasos_hechos")
+    except (OSError, ValueError, AttributeError):
+        return False
+    return isinstance(pasos, list) and "torrent" in pasos and base.is_file()
+
+
 def base_desde_para(job: dict, conn, uploadrr_path: str) -> str | None:
-    """`--base-desde` («EMU:<id>») para una subida que reutiliza la preparación de otra a otro tracker cuando ya no
-    queda su BASE.torrent (el mantenimiento borra `tmp/<nombre>` a los pocos días): sin él, Uploadrr-EMU lo volvería a
-    hashear, y otro tamaño de pieza haría un torrent que no se siembra junto al otro. None si no hace falta."""
+    """`--base-desde` («EMU:<id>») para una subida que reutiliza la preparación de otra a otro tracker cuando su
+    BASE.torrent ya no vale (el mantenimiento borra `tmp/<nombre>` a los pocos días, o quedó sin la marca `torrent`):
+    sin él, Uploadrr-EMU lo volvería a hashear, y otro tamaño de pieza haría un torrent que no se siembra junto al otro.
+    None si no hace falta."""
     if not job.get("reanuda_uploadrr") or not uploadrr_path or not job.get("prepared_path"):
         return None
-    if base_torrent_de(uploadrr_path, job["prepared_path"]).is_file():
+    if base_reutilizable(uploadrr_path, job["prepared_path"]):
         return None
     otra = subida_con_el_mismo_fichero(job, conn)
     if otra is None:

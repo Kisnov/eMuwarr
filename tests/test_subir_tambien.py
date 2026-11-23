@@ -54,7 +54,7 @@ def _emu_completada(conn, tmp_path, nombre="Peli.mkv", **extra):
 
 
 # ---------------------------------------------------------------------------
-# El argv: --base-desde solo cuando falta el BASE.torrent
+# El argv: --base-desde solo cuando no queda un BASE.torrent reutilizable
 # ---------------------------------------------------------------------------
 
 def test_el_argv_lleva_base_desde_y_resume():
@@ -91,12 +91,38 @@ def test_base_desde_solo_cuando_el_base_torrent_ya_no_esta(db_conn, tmp_path):
     base = uploadrr / "tmp" / "Peli.mkv" / "BASE.torrent"
     base.parent.mkdir(parents=True)
     base.write_bytes(b"d4:infod4:name1:xee")
+    meta = base.parent / "meta.json"
+    meta.write_text(json.dumps({"pasos_hechos": ["screens", "torrent"]}), encoding="utf-8")
     assert "--base-desde" not in _comando(db_conn, nobs)  # el de eMuwarez sigue ahí: --resume lo reutiliza
 
     base.unlink()
     db_conn.execute("UPDATE upload_jobs SET reanuda_uploadrr = 0 WHERE id = ?", (nobs,))
     db_conn.commit()
     assert "--base-desde" not in _comando(db_conn, nobs)  # sin reutilizar la preparación no hay de dónde
+
+
+@pytest.mark.parametrize("meta", [
+    {"pasos_hechos": ["screens"]},  # escrito pero sin marcar: un --base-desde cortado antes de marcar `torrent`
+    None,                           # sin meta.json
+    "no es json",
+])
+def test_base_desde_tambien_con_un_base_torrent_sin_la_marca(db_conn, tmp_path, meta):
+    """Uploadrr-EMU no reutiliza un BASE.torrent sin el paso `torrent` en su meta.json: lo borra y, sin --base-desde,
+    lo volvería a hashear (otras piezas que las del torrent de eMuwarez)."""
+    from emuwarez_uploadrr.services.settings import set_setting
+    uploadrr = tmp_path / "Uploadrr"
+    base = uploadrr / "tmp" / "Peli.mkv" / "BASE.torrent"
+    base.parent.mkdir(parents=True)
+    base.write_bytes(b"d4:infod4:name1:xee")
+    if meta is not None:
+        (base.parent / "meta.json").write_text(meta if isinstance(meta, str) else json.dumps(meta), encoding="utf-8")
+    set_setting(db_conn, "uploadrr.path", str(uploadrr))
+    db_conn.commit()
+    iid, _emu, ruta = _emu_completada(db_conn, tmp_path)
+    nobs = _trabajo(db_conn, iid, tracker="nobs", prepared_path=str(ruta), reanuda_uploadrr=1)
+
+    args = _comando(db_conn, nobs)
+    assert args[args.index("--base-desde") + 1] == "EMU:42"
 
 
 def test_sin_subida_completada_con_id_no_hay_base_desde(db_conn, tmp_path):

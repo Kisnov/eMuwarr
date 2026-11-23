@@ -214,7 +214,7 @@ def build_uploadrr_emu_command(
     solo baja el .torrent firmado de ese id y lo vuelve a añadir a qBittorrent, que lo comprueba.
 
     `base_desde` («EMU:<id>», el tracker en Uploadrr-EMU y el id del torrent en él) añade `--resume --base-desde <valor>`:
-    el mismo contenido ya está en ese tracker y en su `tmp/<nombre>` ya no queda el BASE.torrent, así que Uploadrr-EMU
+    el mismo contenido ya está en ese tracker y en su `tmp/<nombre>` ya no queda un BASE.torrent reutilizable, así que Uploadrr-EMU
     lo hace con el torrent de allí (mismas piezas, sin hashear) en vez de crear otro que no se podría sembrar junto.
 
     `release_format` is the nomenclature's source code (WEB-DL, BDRemux…), sent as `-t`.

@@ -3,7 +3,7 @@ con el mismo fichero de la carpeta de subidas, el mismo nombre y las mismas piez
 el mismo fichero sin volver a preparar ni a hashear nada.
 
 Cada destino es un trabajo normal de la cola (upload_queue.queue_copia_a_otro_tracker) que apunta en
-`copia_de_job_id` la subida de eMuwarez: reutiliza su preparación y, si su `tmp/<nombre>` ya no tiene el BASE.torrent,
+`copia_de_job_id` la subida de eMuwarez: reutiliza su preparación y, si su `tmp/<nombre>` ya no tiene un BASE.torrent que valga,
 Uploadrr-EMU lo hace con el torrent de eMuwarez (`--base-desde EMU:<id>`, upload_execution.consultas.base_desde_para).
 Varias a la vez van como un lote (services/lotes.py) y respetan «Subidas en paralelo» como cualquier subida: solo las
 que elige el usuario, nada en bloque por su cuenta.
