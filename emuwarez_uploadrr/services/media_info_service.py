@@ -340,10 +340,9 @@ def build_mediainfo_report(path: str, radarr_source: str | None = None,
         add(f"Audio {i}", mi, f"{lang} {codec} {ch or '?'}")
 
     groups: dict[tuple[str, str], list[str]] = {}
-    # Sin diálogo (zxx) no lleva idioma en el nombre: solo su códec y canales, y solo si no hay otro idioma.
-    if not langs and emu_format.SIN_DIALOGO in best_by_lang:
-        groups[best_by_lang[emu_format.SIN_DIALOGO][1:]] = []
-    for lang in langs:
+    # Sin diálogo (zxx) solo se nombra si es todo el audio, y sin idioma: su códec y canales.
+    nombrados = langs or [c for c in (emu_format.SIN_DIALOGO,) if c in best_by_lang]
+    for lang in nombrados:
         chosen = best_by_lang.get(lang)
         if not chosen:
             continue
@@ -354,7 +353,7 @@ def build_mediainfo_report(path: str, radarr_source: str | None = None,
     # parsear "ENG DD+ Atmos 5.1 ESP-JPN DD+ 5.1" sería frágil, y esto ya está
     # calculado aquí arriba.
     audio_by_language = {lang: {"codec": best_by_lang[lang][1], "channels": best_by_lang[lang][2]}
-                         for lang in langs if lang in best_by_lang}
+                         for lang in nombrados if lang in best_by_lang}
 
     audio_summary = None
     if audio_tracks:
@@ -364,7 +363,8 @@ def build_mediainfo_report(path: str, radarr_source: str | None = None,
         # on the entries that do.
         entries = []
         for (codec, ch), group_langs in groups.items():
-            ordered = sorted(group_langs, key=lambda c: (0 if c == "ESP" else 1))
+            ordered = sorted((c for c in group_langs if c != emu_format.SIN_DIALOGO),
+                             key=lambda c: (0 if c == "ESP" else 1))
             if len(ordered) == 2 and "ESP" in ordered and "ENG" in ordered:
                 token = "DUAL"
             elif len(ordered) >= 4:

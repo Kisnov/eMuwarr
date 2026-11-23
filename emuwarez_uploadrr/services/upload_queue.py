@@ -513,6 +513,13 @@ def queue_copia_a_otro_tracker(conn, fuente: dict, tracker: str, *, lote_id: str
                                     (fuente.get("library_item_id"),)).fetchone())
     if not item:
         return {"status": "blocked", "errors": ["El elemento ya no existe en la biblioteca."], "job": None}
+    # Una subida de antes de exigir idioma en cada pista: su archivo siembra, y retocarlo rompería ese torrent.
+    sin_idioma = _sin_idioma_preparado(fuente.get("prepared_path"))
+    if sin_idioma:
+        return {"status": "blocked", "job": None, "errors": [
+            f"«{os.path.basename(sin_idioma[0])}»: la pista de audio {', '.join(map(str, sin_idioma[1]))} no tiene "
+            f"idioma (und) en el archivo que siembra la subida #{fuente['id']}, y retocarlo rompería ese torrent: no "
+            "se sube a otro tracker."]}
 
     def _json(columna: str):
         try:
@@ -815,19 +822,18 @@ def _overrides_de_pack(origen: str | None, season_overrides: dict | None) -> dic
     return {tid: {"language": codigo} for tid, codigo in idiomas.items()} or None
 
 
-def _audio_sin_idioma_preparado(ruta: str | None) -> str | None:
-    """Por qué no se sube si el fichero preparado (o uno de la carpeta de un pack) aún tiene una pista de audio sin
-    idioma: el elegido en «Ver pistas» no se escribe con las pistas en «Ninguno» ni cuando no se puede editar."""
+def _sin_idioma_preparado(ruta: str | None) -> tuple[str, list[int]] | None:
+    """El primer fichero preparado (el fichero, o uno de la carpeta de un pack) con alguna pista de audio sin idioma
+    (und), y sus posiciones; None si no hay. El elegido en «Ver pistas» no llega con las pistas en «Ninguno» ni
+    cuando el archivo no se puede editar."""
     from .mkv_remux import idiomas_de_las_pistas
-    from .reglas_tracker import motivo_audio_sin_idioma
     if not ruta:
         return None
     ficheros = [os.path.join(ruta, n) for n in sorted(os.listdir(ruta))] if os.path.isdir(ruta) else [ruta]
     for fichero in ficheros:
         sin = [i for i, c in enumerate(idiomas_de_las_pistas(fichero) or [], 1) if c == "UND"]
         if sin:
-            return (f"«{os.path.basename(fichero)}»: {motivo_audio_sin_idioma(sin)} Si ya lo elegiste, no se pudo "
-                    "escribir en el archivo preparado: mira el registro de la preparación.")
+            return fichero, sin
     return None
 
 
@@ -845,9 +851,11 @@ def _populate_ready(job_id: int, item_id: int, conn, season_overrides: dict | No
         return False
     tracker = _tracker_del_trabajo(job_id, conn)
     preparado = conn.execute("SELECT prepared_path FROM upload_jobs WHERE id = ?", (job_id,)).fetchone()[0]
-    sin_idioma = _audio_sin_idioma_preparado(preparado)
+    sin_idioma = _sin_idioma_preparado(preparado)
     if sin_idioma:
-        _fail(job_id, sin_idioma)
+        from .reglas_tracker import motivo_audio_sin_idioma
+        _fail(job_id, f"«{os.path.basename(sin_idioma[0])}»: {motivo_audio_sin_idioma(sin_idioma[1])} Si ya lo "
+                      "elegiste, no se pudo escribir en el archivo preparado: mira el registro de la preparación.")
         return False
 
     if item.get("item_type") == "season":

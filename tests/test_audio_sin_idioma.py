@@ -68,9 +68,10 @@ def test_con_otro_idioma_zxx_no_cuenta():
     assert not reglas_de("emu", {"audio_languages": "ZXX / ENG", "subtitle_languages": None}).permitido
 
 
-def test_sin_dialogo_cuenta_como_castellano_en_la_biblioteca():
-    from emuwarez_uploadrr.services.library.castellano import _leaf_ok
+def test_sin_dialogo_cuenta_como_doblada_en_la_biblioteca():
+    from emuwarez_uploadrr.services.library.castellano import _leaf_audio, _leaf_ok
     fila = {"audio_languages": "ZXX", "subtitle_languages": None}
+    assert _leaf_audio(fila, emu_format.has_castellano) == 1
     assert _leaf_ok(fila, emu_format.has_castellano) == 1
 
 
@@ -155,6 +156,25 @@ def test_sin_leer_las_pistas_manda_la_biblioteca(db_conn, tmp_path, monkeypatch)
     assert _check(r, "idioma_audio")["status"] == "fail"
 
 
+def test_un_mp4_sin_idioma_dice_que_la_app_no_lo_escribe(db_conn, tmp_path):
+    iid = _pelicula(db_conn, tmp_path, "eng/und")
+    db_conn.execute("UPDATE library_items SET path = ? WHERE id = ?", (str(tmp_path / "movie.mp4"), iid))
+    (tmp_path / "movie.mp4").write_bytes(b"x" * 2048)
+    db_conn.commit()
+    c = _check(uc.run_upload_checks(db_conn, iid, scope="content"), "idioma_audio")
+    assert c["status"] == "fail" and "solo lo escribe en un MKV" in c["message"]
+
+
+def test_con_las_pistas_en_ninguno_lo_elegido_no_cuenta(db_conn, tmp_path, pistas):
+    from emuwarez_uploadrr.services.settings import set_setting
+    set_setting(db_conn, "remux.track_mode", "ninguno")
+    db_conn.commit()
+    pistas({"language": "und"})
+    iid = _pelicula(db_conn, tmp_path, "UND")
+    c = _check(uc.run_upload_checks(db_conn, iid, scope="content", ajustes={"idiomas": {"1": "spa"}}), "idioma_audio")
+    assert c["status"] == "fail" and "«Ninguno»" in c["message"]
+
+
 def test_una_pelicula_sin_dialogo_se_puede_subir(db_conn, tmp_path, pistas):
     pistas({"language": "zxx"})
     r = uc.run_upload_checks(db_conn, _pelicula(db_conn, tmp_path, "ZXX"), scope="content")
@@ -180,6 +200,12 @@ def test_sin_dialogo_lleva_codec_y_canales_sin_idioma(tmp_path):
     assert r["pistas_sin_idioma"] == []
 
 
+def test_sin_dialogo_va_al_audio_del_pack(tmp_path):
+    r = _informe(tmp_path, {"Format": "AC-3", "Language": "zxx", "Channels": "6"})
+    assert r["audio_by_language"] == {"ZXX": {"codec": "DD", "channels": "5.1"}}
+    assert emu_format.build_audio_string("DD", "ZXX", "5.1") == "DD 5.1"
+
+
 def test_con_otro_idioma_zxx_no_entra_en_el_nombre(tmp_path):
     r = _informe(tmp_path, {"Format": "E-AC-3", "Language": "zxx", "Channels": "6"},
                  {"Format": "AC-3", "Language": "es", "Channels": "2"})
@@ -189,15 +215,14 @@ def test_con_otro_idioma_zxx_no_entra_en_el_nombre(tmp_path):
 # --- Antes de lanzar Uploadrr: el fichero preparado ------------------------------------------------------------
 
 def test_el_fichero_preparado_sin_idioma_no_se_sube(tmp_path, pistas):
-    from emuwarez_uploadrr.services.upload_queue import _audio_sin_idioma_preparado
+    from emuwarez_uploadrr.services.upload_queue import _sin_idioma_preparado
     pack = tmp_path / "Pack S01"
     pack.mkdir()
     (pack / "e01.mkv").write_text("x")
     (pack / "e02.mkv").write_text("x")
     pistas({"language": "spa"})
-    assert _audio_sin_idioma_preparado(str(pack)) is None
-    assert _audio_sin_idioma_preparado(None) is None
+    assert _sin_idioma_preparado(str(pack)) is None
+    assert _sin_idioma_preparado(None) is None
     pistas({"language": "spa"}, {"language": "und"})
-    motivo = _audio_sin_idioma_preparado(str(pack / "e02.mkv"))
-    assert motivo.startswith("«e02.mkv»: La pista de audio 2 no tiene idioma")
-    assert _audio_sin_idioma_preparado(str(pack)).startswith("«e01.mkv»")
+    assert _sin_idioma_preparado(str(pack / "e02.mkv")) == (str(pack / "e02.mkv"), [2])
+    assert _sin_idioma_preparado(str(pack)) == (str(pack / "e01.mkv"), [2])

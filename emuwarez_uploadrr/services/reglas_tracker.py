@@ -130,8 +130,8 @@ def reglas_de(tracker_id: str, item: dict, *, anime: bool = False) -> Reglas:
 def motivo_audio_sin_idioma(posiciones: list[int]) -> str:
     """Por qué no se sube con una pista de audio sin idioma (`posiciones`, desde 1; vacío si no se sabe cuál)."""
     cual = f" {', '.join(str(p) for p in posiciones)}" if posiciones else ""
-    return (f"La pista de audio{cual} no tiene idioma (und): falta el dato, ponlo en «Ver pistas» subiéndolo solo "
-            "desde el asistente («Sin diálogo (zxx)» si de verdad no tiene diálogo).")
+    return (f"La pista de audio{cual} no tiene idioma (und): falta el dato, ponlo en el asistente de subida («Ver "
+            "pistas»; en un pack, junto al campo Audio), o «Sin diálogo (zxx)» si de verdad no tiene diálogo.")
 
 
 def con_idiomas_elegidos(item: dict, *, overrides: dict | None = None, idiomas: dict | None = None) -> dict:

@@ -22,7 +22,9 @@ _HELD_STATUSES = (LocalStatus.AVAILABLE.value, LocalStatus.UPLOADED.value, Local
 # on, and is an OR: Castilian in the audio makes subtitles unnecessary, since
 # a dubbed release doesn't need them (see services/season_pack.py).
 def _leaf_audio(row, has_castellano):
-    return has_castellano(row["audio_languages"])
+    # Sin diálogo (todo el audio en zxx) cuenta como doblada: no hay nada que doblar.
+    from ..emu_format import solo_sin_dialogo
+    return 1 if solo_sin_dialogo(row["audio_languages"]) else has_castellano(row["audio_languages"])
 
 
 def _leaf_subs(row, has_castellano):
@@ -31,12 +33,8 @@ def _leaf_subs(row, has_castellano):
 
 def _leaf_ok(row, has_castellano):
     """1 = Castilian present one way or the other, 0 = confirmed absent from
-    both, None = can't tell yet (nothing read for at least one of them).
-    Sin diálogo (todo el audio en zxx) también es 1: no hay nada que doblar."""
-    from ..emu_format import solo_sin_dialogo
-    if solo_sin_dialogo(row["audio_languages"]):
-        return 1
-    audio = has_castellano(row["audio_languages"])
+    both, None = can't tell yet (nothing read for at least one of them)."""
+    audio = _leaf_audio(row, has_castellano)
     subs = has_castellano(row["subtitle_languages"])
     if audio == 1 or subs == 1:
         return 1

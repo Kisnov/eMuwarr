@@ -69,6 +69,15 @@ def _se_puede_leer(ruta: str | None) -> bool:
         return False
 
 
+def _no_se_escribe(es_mkv: bool, escribe: bool) -> str:
+    """Por qué el idioma elegido para una pista sin idioma no llegaría al archivo, tras el motivo; "" si llega."""
+    if not es_mkv:
+        return " La app solo lo escribe en un MKV: etiquétalo fuera de ella."
+    if not escribe:
+        return " Con «Renombrar/Ordenar pistas» en «Ninguno» (Configuración) no se escribe."
+    return ""
+
+
 def run_upload_checks(conn: sqlite3.Connection, item_id: int, *, scope: str = "all",
                       provider_override: str | None = None, ajustes: dict | None = None,
                       tracker: str = POR_DEFECTO) -> dict:
@@ -150,6 +159,10 @@ def run_upload_checks(conn: sqlite3.Connection, item_id: int, *, scope: str = "a
     #
     # Es barata: existe y se puede abrir, sin leer el contenido.
 
+    from .mkv_remux import modo_pistas, toca_el_fichero
+    # Con las pistas en «Ninguno» el idioma elegido en «Ver pistas» no se escribe en el archivo: no cuenta.
+    escribe = toca_el_fichero(modo_pistas(conn))
+
     if scope == "environment":
         pass                                     # solo entorno: nada del elemento
     elif item.get("item_type") == "season":
@@ -167,7 +180,7 @@ def run_upload_checks(conn: sqlite3.Connection, item_id: int, *, scope: str = "a
         plan = build_season_pack_plan(
             item_id, conn=conn, provider_override=provider_override,
             source_override=aj.get("source") or None, tag_override=aj.get("tag") or None,
-            title_override=aj.get("title") or None, idiomas_audio=aj.get("idiomas") or None,
+            title_override=aj.get("title") or None, idiomas_audio=(aj.get("idiomas") if escribe else None) or None,
             **({} if tracker == POR_DEFECTO else {"tracker": tracker}))
         ok = plan["status"] == "valid"
         if ok:
@@ -184,7 +197,7 @@ def run_upload_checks(conn: sqlite3.Connection, item_id: int, *, scope: str = "a
                    "No se puede preparar el pack de temporada", ok, msg):
             return done()
         if not add("idioma_audio", "Todas las pistas de audio tienen idioma", "Hay pistas de audio sin idioma",
-                   not sin_idioma, audio or ""):
+                   not sin_idioma, (audio + _no_se_escribe(True, escribe)) if audio else ""):
             return done()
 
         # Y TODOS sus capítulos, uno a uno. Un pack se nombra leyendo cada
@@ -273,12 +286,14 @@ def run_upload_checks(conn: sqlite3.Connection, item_id: int, *, scope: str = "a
         from .emu_format import audio_sin_idioma
         from .mkv_remux import idiomas_de_las_pistas
         from .reglas_tracker import motivo_audio_sin_idioma
-        elegidos = (ajustes or {}).get("idiomas")
+        elegidos = (ajustes or {}).get("idiomas") if escribe else None
         pistas = idiomas_de_las_pistas(local_path, idiomas=elegidos)
         sin_lengua = [i for i, c in enumerate(pistas or [], 1) if c == "UND"]
         falta = bool(sin_lengua) or (pistas is None and audio_sin_idioma(item.get("audio_languages")))
+        motivo = motivo_audio_sin_idioma(sin_lengua) + _no_se_escribe(
+            (local_path or "").lower().endswith(".mkv"), escribe) if falta else ""
         if not add("idioma_audio", "Todas las pistas de audio tienen idioma", "Hay pistas de audio sin idioma",
-                   not falta, motivo_audio_sin_idioma(sin_lengua) if falta else ""):
+                   not falta, motivo):
             return done()
         if elegidos and pistas:
             item = {**item, "audio_languages": " / ".join(dict.fromkeys(pistas))}

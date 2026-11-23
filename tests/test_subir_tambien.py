@@ -196,6 +196,21 @@ def test_la_copia_lleva_los_idiomas_elegidos_en_la_fuente(db_conn, monkeypatch, 
     assert json.loads(_fila(db_conn, res["nuevo_job_id"])["remux_overrides_json"]) == elegidos
 
 
+def test_un_archivo_que_siembra_con_audio_sin_idioma_no_se_copia(db_conn, monkeypatch, tmp_path, sin_hilos):
+    """Una subida de antes de exigir idioma en cada pista: retocar su archivo rompería el torrent que siembra."""
+    from emuwarez_uploadrr.services import mkv_remux
+    monkeypatch.setattr(mkv_remux, "read_tracks_json", lambda ruta: {"ok": True, "data": {"tracks": [
+        {"id": 0, "type": "audio", "properties": {"language": "spa"}},
+        {"id": 1, "type": "audio", "properties": {"language": "und"}}]}})
+    _clave(db_conn, "nobs")
+    _iid, emu, ruta = _emu_completada(db_conn, tmp_path)
+    _qbit(monkeypatch, db_conn, [_entero(ruta)])
+
+    r = st.subir_tambien(db_conn, [emu], ["nobs"])
+    assert r["encolados"] == 0
+    assert "la pista de audio 2 no tiene idioma (und)" in str(r["resultados"])
+
+
 def test_ya_subida_a_ese_tracker_no_se_vuelve_a_ofrecer(db_conn, monkeypatch, tmp_path, sin_hilos):
     _clave(db_conn, "nobs")
     _clave(db_conn, "mnv")

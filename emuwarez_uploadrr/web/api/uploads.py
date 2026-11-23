@@ -294,7 +294,8 @@ def reglas_para_subir(
 ):
     """Si las normas de idioma de `tracker` admiten el elemento, por qué, y la categoría que le toca allí
     (services/reglas_tracker.py; una temporada, capítulo a capítulo). Barato, sin red: el Resumen lo pide para cada
-    tracker que ofrece. `idiomas` ({"2": "spa"}): los elegidos en «Ver pistas» para las pistas sin idioma."""
+    tracker que ofrece. `idiomas` ({"2": "spa"}): los elegidos en «Ver pistas» para las pistas sin idioma; con ellos se
+    leen las pistas de cada fichero (mkvmerge -J)."""
     from ...services.library import get_library_item
     from ...services.reglas_tracker import reglas_para_subir as reglas
     tracker = _tracker_valido(tracker)
