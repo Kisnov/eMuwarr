@@ -306,6 +306,38 @@ def test_probar_carpeta(conn, carpeta_dir, tmp_path):
     assert "está fuera de las rutas permitidas" in resultado["warning"]   # tmp_path no cuelga de /data
 
 
+def test_probar_carpeta_con_una_subcarpeta_que_no_se_puede_leer(conn, carpeta_dir, monkeypatch):
+    def a_medias(raiz, onerror=None):
+        onerror(PermissionError(13, "Permission denied", str(raiz) + "/privada"))
+        yield from ()
+    monkeypatch.setattr(carpeta.os, "walk", a_medias)
+    resultado = carpeta.probar_carpeta(str(carpeta_dir), conn)
+    assert resultado["ok"] is False and "/privada" in resultado["error"]
+
+
+def test_el_escaneo_no_ve_enlaces_rotos_ficheros_de_mac_ni_la_carpeta_de_subidas(
+        conn, instancia, carpeta_dir, monkeypatch, lecturas, busquedas):
+    from emuwarez_uploadrr.services import carpeta_subida
+    (carpeta_dir / f"._{PELI}").write_bytes(b"x")
+    (carpeta_dir / "Roto.2020.1080p.WEB-DL.H.264-GRUPO.mkv").symlink_to(carpeta_dir / "no-existe.mkv")
+    subidas = carpeta_dir / "subidas"
+    subidas.mkdir()
+    (subidas / "Oppenheimer.2023.1080p.WEB-DL.H.264-GRUPO.mkv").write_bytes(b"x")
+    monkeypatch.setattr(carpeta_subida, "RAIZ_SUBIDAS", str(subidas))
+    _escanear(conn, instancia)
+    assert set(_filas(conn, instancia)) == {f"peli:{PELI}", "serie:shogun:2024:1080p", "season:shogun:2024:1080p:1",
+                                            *(f"episode:{c}" for c in CAPITULOS)}
+    assert carpeta.probar_carpeta(str(carpeta_dir))["message"] == "3 vídeos en la carpeta"
+
+
+def test_sin_anio_el_mismo_titulo_no_se_identifica_a_la_vez(conn, instancia, carpeta_dir, lecturas, busquedas, fichas):
+    for res in ("1080p", "2160p"):
+        (carpeta_dir / f"Dune.{res}.WEB-DL.DDP5.1.H.264-GRUPO.mkv").write_bytes(b"x")
+    _escanear(conn, instancia)
+    carpeta.identificar(conn, _filas(conn, instancia)["peli:Dune.1080p.WEB-DL.DDP5.1.H.264-GRUPO.mkv"]["id"], "438631")
+    assert _filas(conn, instancia)["peli:Dune.2160p.WEB-DL.DDP5.1.H.264-GRUPO.mkv"]["tmdb_id"] is None
+
+
 def test_la_migracion_admite_carpeta(isolated_db):
     c = connect(isolated_db / "emuwarez_uploadrr.db")
     init_db(c)

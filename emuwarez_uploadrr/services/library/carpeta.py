@@ -45,12 +45,19 @@ def _no_se_puede_leer(exc: OSError) -> None:
 
 
 def _videos(raiz: str) -> list[str]:
+    from ..carpeta_subida import RAIZ_SUBIDAS
+    subidas = os.path.realpath(RAIZ_SUBIDAS)
     encontrados = []
     for carpeta, subcarpetas, ficheros in os.walk(raiz, onerror=_no_se_puede_leer):
-        subcarpetas[:] = sorted(d for d in subcarpetas if not d.startswith(".") and not _RE_MUESTRA.search(d))
+        # La carpeta de subidas no: sus enlaces son copias de lo que ya está en la biblioteca.
+        subcarpetas[:] = sorted(d for d in subcarpetas if not d.startswith(".") and not _RE_MUESTRA.search(d)
+                                and os.path.realpath(os.path.join(carpeta, d)) != subidas)
         for nombre in ficheros:
-            if os.path.splitext(nombre)[1].lower() in EXTENSIONES_VIDEO and not _RE_MUESTRA.search(nombre):
-                encontrados.append(os.path.join(carpeta, nombre))
+            ruta = os.path.join(carpeta, nombre)
+            # «._x.mkv» es lo que deja un Mac al copiar; isfile descarta un enlace roto.
+            if (os.path.splitext(nombre)[1].lower() in EXTENSIONES_VIDEO and not nombre.startswith(".")
+                    and not _RE_MUESTRA.search(nombre) and os.path.isfile(ruta)):
+                encontrados.append(ruta)
     return sorted(encontrados)
 
 
@@ -69,7 +76,10 @@ def probar_carpeta(ruta: str, conn: sqlite3.Connection | None = None) -> dict:
         from ..uploadrr_contract import get_allowed_roots, path_within_allowed_roots
         if not path_within_allowed_roots(ruta, get_allowed_roots(conn)):
             avisos.append("está fuera de las rutas permitidas para subir (Ajustes)")
-    n = len(_videos(ruta))
+    try:
+        n = len(_videos(ruta))
+    except IntegrationError as exc:
+        return {"ok": False, "error": texto_de_error(exc)}
     return {"ok": True, "message": f"{n} vídeo{'s' if n != 1 else ''} en la carpeta",
             "warning": ("La carpeta " + " y ".join(avisos)) if avisos else None}
 
@@ -367,15 +377,17 @@ def candidatos(conn, item_id: int, *, consulta: str | None = None, anio: int | N
 
 def _iguales(conn, fila: dict) -> list[dict]:
     """La fila y las de su carpeta por identificar con el mismo título y año de guessit (la misma película o serie en
-    otra resolución): se identifican juntas."""
+    otra resolución): se identifican juntas. Solo con año: sin él, la Dune de 1984 y la de 2021 serían la misma."""
     guessit = _raw(fila).get("guessit") or {}
     filas = [fila]
+    if not guessit.get("anio"):
+        return filas
     for otra in conn.execute(
         "SELECT * FROM library_items WHERE instance_id = ? AND item_type = ? AND tmdb_id IS NULL AND id != ?",
         (fila["instance_id"], fila["item_type"], fila["id"]),
     ).fetchall():
         suya = _raw(dict(otra)).get("guessit") or {}
-        if guessit and _clave(suya.get("titulo")) == _clave(guessit.get("titulo")) and suya.get("anio") == guessit.get("anio"):
+        if _clave(suya.get("titulo")) == _clave(guessit.get("titulo")) and suya.get("anio") == guessit["anio"]:
             filas.append(dict(otra))
     return filas
 
