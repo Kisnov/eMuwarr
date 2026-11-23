@@ -3,6 +3,7 @@ import { getSubirTambien, subirTambien, type SubirTambienCandidatas, type SubirT
 import type { UploadJob } from '../types/api'
 import { Modal } from './Modal'
 import { formatDate } from '../utils/format'
+import { MAX_ELEMENTOS_LOTE } from '../utils/lote'
 
 // «Subir también a…» (services/subir_tambien.py): lo que ya está en eMuwarez se sube a N.O.B.S o Milnueve con el mismo
 // fichero de la carpeta de subidas, el mismo nombre y las mismas piezas. Antes de encolar, el servidor mira en
@@ -92,6 +93,8 @@ export function SubirTambienModal({ onClose, onEncolado }: {
     return nuevo
   }
   const nombres = Object.fromEntries((datos?.trackers ?? []).map(t => [t.id, t.nombre]))
+  // El servidor rechaza entera (422) una petición con más subidas que un lote: al llegar al tope no se marcan más.
+  const lleno = elegidas.size >= MAX_ELEMENTOS_LOTE
   const puede = elegidas.size > 0 && trackers.size > 0 && !enviando
   const enviar = async () => {
     if (!puede) return
@@ -131,7 +134,8 @@ export function SubirTambienModal({ onClose, onEncolado }: {
               {datos.subidas.map(s => (
                 <li key={s.job_id}>
                   <label>
-                    <input type="checkbox" checked={elegidas.has(s.job_id)} onChange={() => setElegidas(c => alternar(c, s.job_id))} />
+                    <input type="checkbox" checked={elegidas.has(s.job_id)} disabled={lleno && !elegidas.has(s.job_id)}
+                      onChange={() => setElegidas(c => alternar(c, s.job_id))} />
                     {' '}<span>{s.title || s.nombre}</span>
                     <span className="sub-muted sub-t11"> · #{s.job_id}{s.finished_at ? ` · ${formatDate(s.finished_at)}` : ''}
                       {' '}· falta en {s.trackers.map(t => t.nombre).join(', ')}</span>
@@ -139,6 +143,9 @@ export function SubirTambienModal({ onClose, onEncolado }: {
                 </li>
               ))}
             </ul>
+            <p className="sub-muted sub-t12" role="status">
+              {elegidas.size} de {datos.subidas.length} · máximo {MAX_ELEMENTOS_LOTE} a la vez
+            </p>
           </>
         )}
       <div aria-live="polite" data-testid="subir-tambien-resultado">

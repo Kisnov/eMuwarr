@@ -5,6 +5,7 @@ vi.mock('../../api/uploads', () => ({ getSubirTambien: vi.fn(), subirTambien: vi
 
 import { getSubirTambien, subirTambien } from '../../api/uploads'
 import type { UploadJob } from '../../types/api'
+import { MAX_ELEMENTOS_LOTE } from '../../utils/lote'
 import { SubirTambienBloque, SubirTambienModal } from '../SubirTambien'
 import { boton, desmontar, esperar, montar, pulsar, texto } from './dom'
 
@@ -76,6 +77,24 @@ describe('SubirTambienModal', () => {
     expect(subirTambien).toHaveBeenCalledWith([1, 2], ['nobs', 'mnv'])
     await esperar(() => encolado.mock.calls.length > 0)
     expect(encolado).toHaveBeenCalledWith('0123456789ab')
+  })
+
+  it('no deja marcar más subidas que un lote, enseña el tope y deja desmarcar', async () => {
+    const subidas = Array.from({ length: MAX_ELEMENTOS_LOTE + 1 }, (_, i) => (
+      { job_id: i + 1, title: `Peli ${i + 1}.`, nombre: `${i + 1}.mkv`, result_url: null, finished_at: null, trackers: [NOBS] }))
+    vi.mocked(getSubirTambien).mockResolvedValue({ trackers: [NOBS], subidas })
+    await montar(<SubirTambienModal onClose={() => {}} onEncolado={() => {}} />)
+    await esperar(() => texto().includes('Peli 1.'))
+    expect(texto()).toContain(`máximo ${MAX_ELEMENTOS_LOTE} a la vez`)
+    for (let i = 1; i <= MAX_ELEMENTOS_LOTE; i++) await pulsar(casilla(`Peli ${i}.`))
+    const ultima = casilla(`Peli ${MAX_ELEMENTOS_LOTE + 1}.`)!
+    expect(ultima.disabled).toBe(true)
+    expect(casilla('Peli 1.')!.disabled).toBe(false)  // las marcadas se pueden desmarcar
+    await pulsar(casilla('Peli 1.'))
+    expect(ultima.disabled).toBe(false)
+    await pulsar(ultima)
+    await pulsar(boton(`Subir ${MAX_ELEMENTOS_LOTE} subidas`))
+    expect(vi.mocked(subirTambien).mock.lastCall?.[0]).toHaveLength(MAX_ELEMENTOS_LOTE)
   })
 
   it('sin la clave de otro tracker lo dice', async () => {
