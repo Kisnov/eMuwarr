@@ -6,7 +6,6 @@
 [![Revisión: CodeRabbit](https://img.shields.io/coderabbit/prs/github/Kisnov/eMuwarr?label=CodeRabbit&labelColor=171717&color=FF570A)](.coderabbit.yaml)
 [![Último commit](https://img.shields.io/github/last-commit/Kisnov/eMuwarr/dev?label=%C3%BAltimo%20commit)](https://github.com/Kisnov/eMuwarr/commits/dev)
 [![Imagen](https://img.shields.io/github/v/release/Kisnov/eMuwarr?label=imagen&logo=docker&logoColor=white&color=2496ED)](https://github.com/users/Kisnov/packages/container/package/emuwarr)
-[![Plataformas: amd64 y arm64](https://img.shields.io/badge/plataformas-amd64%20%7C%20arm64-2496ED?logo=docker&logoColor=white)](#arranque-rápido-docker-compose)
 [![Descargas](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2FKisnov%2FeMuwarr%2Finsignias%2Fdescargas.json)](https://github.com/Kisnov/eMuwarr/pkgs/container/emuwarr/versions?filters%5Bversion_type%5D=tagged)
 [![Python](https://img.shields.io/python/required-version-toml?tomlFilePath=https%3A%2F%2Fraw.githubusercontent.com%2FKisnov%2FeMuwarr%2Fdev%2Fpyproject.toml&logo=python&logoColor=white&color=3776AB)](pyproject.toml)
 [![Node 26](https://img.shields.io/badge/node-26-5FA04E?logo=nodedotjs&logoColor=white)](frontend/package.json)
