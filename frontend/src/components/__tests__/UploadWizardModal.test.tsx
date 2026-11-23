@@ -1689,6 +1689,36 @@ describe('varios trackers con clave: el paso «Contenido» mira las normas de ca
     expect(texto()).not.toContain('eMuwarez lo exige')
   })
 
+  it('una tanda de temporadas: la que solo admite Milnueve entra, se comprueba con sus normas y solo va a él', async () => {
+    const T2_CAT = elemento({ ...T2, ...SIN_CASTELLANO })
+    const TODOS = reglas({ emu: true, nobs: true, mnv: true })
+    m(biblioteca.getLibrary).mockResolvedValue({ items: [T1, T2_CAT], total: 2 } as never)
+    m(subidas.fetchElegibilidad).mockImplementation(async id => ({ trackers: id === 32 ? SOLO_MNV : TODOS, capitulos: [] }))
+    await abrir(SERIE)
+    await esperar(() => !boton('Temporada 2')!.disabled)
+    expect(texto()).toContain('Milnueve ✓ (Anime en Catalan) · eMuwarez ✗ sin castellano · N.O.B.S ✗')
+    expect(subidas.fetchElegibilidad).not.toHaveBeenCalledWith(30)
+    await pulsar(boton('Temporada 1'))
+    await pulsar(boton('Temporada 2'))
+    await pulsar(boton('Continuar'))
+    await esperar(() => texto().includes('✓ 2 capítulo(s) listos'))
+    await pulsar(boton('Continuar'))
+    await esperar(() => texto().includes('✓ Todo listo: 2 temporadas'))
+    // De entrada, eMuwarez para la 1 y Milnueve para la 2; cada una con las normas del primero que la admite.
+    const casilla = (nombre: string) => [...document.querySelectorAll<HTMLLabelElement>('.asist-marcas label')]
+      .find(l => l.textContent?.includes(nombre))!.querySelector('input')!
+    expect([casilla('eMuwarez').checked, casilla('N.O.B.S').checked, casilla('Milnueve').checked]).toEqual([true, false, true])
+    expect(m(subidas.runUploadChecks).mock.calls.filter(c => c[1] === 'content').map(c => [c[0], c[4]]))
+      .toEqual([[31, undefined], [32, 'mnv']])
+    expect(document.querySelectorAll('.asist-lista-subida li')[1].textContent).toContain('Solo a Milnueve')
+    expect(document.querySelectorAll('.asist-lista-subida li')[0].textContent).not.toContain('Solo a')
+
+    await pulsar(boton('Subir todas a eMuwarez y Milnueve'))
+    await esperar(() => texto().includes('3 de 4 subida(s) encolada(s)'))
+    expect(m(subidas.queueUpload).mock.calls.map(c => [c[0], c[8]])).toEqual([[31, undefined], [31, 'mnv'], [32, 'mnv']])
+    expect(texto()).toContain('✗ Serie - Temporada 2 (eMuwarez): eMuwarez no lo admite.')
+  })
+
   it('solo con eMuwarez no se pide la elegibilidad y sale el mensaje de siempre', async () => {
     m(subidas.fetchTrackersParaSubir).mockResolvedValue([{ id: 'emu', nombre: 'eMuwarez' }])
     await abrir(TEMPORADA_CAT)

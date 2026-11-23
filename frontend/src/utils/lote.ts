@@ -88,11 +88,12 @@ export function seleccionableEnLote(item: LibraryItemResponse): boolean {
  * Por qué un elemento no puede entrar en un lote, o null si puede. Una temporada, si no se puede subir como pack
  * (la regla de `seasonNotReadyReason`). Una película o un capítulo, la regla de `episodeNotReadyReason`
  * (utils/libraryItem.ts: en disco y con castellano), pero con su propio texto, que aquel habla de «el capítulo».
- * Una serie no entra tal cual: se cambia por sus temporadas.
+ * Una serie no entra tal cual: se cambia por sus temporadas. `admiten`: como en aquellos, los trackers con clave que lo
+ * admiten (/upload/elegibilidad); sin él, la regla de eMuwarez.
  */
-export function razonNoSubible(item: LibraryItemResponse): string | null {
+export function razonNoSubible(item: LibraryItemResponse, admiten?: readonly string[]): string | null {
   if (item.item_type === 'series') return 'Una serie se sube por temporadas.'
-  if (item.item_type === 'season') return seasonNotReadyReason(item)
+  if (item.item_type === 'season') return seasonNotReadyReason(item, admiten)
   const esCapitulo = item.item_type === 'episode'
   if (item.item_type !== 'movie' && !esCapitulo) return 'Esto no se sube por lotes.'
   if (item.local_status !== 'Disponible' && item.local_status !== 'Subido') {
@@ -105,6 +106,7 @@ export function razonNoSubible(item: LibraryItemResponse): string | null {
       ? `El capítulo está «${estado}»: ahora no se puede subir.`
       : `La película está «${estado}»: ahora no se puede subir.`
   }
+  if (admiten) return admiten.length ? null : 'Ningún tracker con clave admite sus idiomas.'
   if (item.has_spanish_ok !== 1) {
     return item.has_spanish_ok === 0
       ? 'No tiene castellano ni en el audio ni en los subtítulos.'
@@ -113,12 +115,16 @@ export function razonNoSubible(item: LibraryItemResponse): string | null {
   return null
 }
 
+// Para no mirar los idiomas: «lo admite alguno».
+const ALGUNO = ['alguno']
+
 /**
  * Por qué una casilla de Biblioteca no se puede marcar, o null si se puede: lo que `razonNoSubible` ya dice, salvo la
  * serie, que sí se marca (se cambia por sus temporadas, y las que no se pueden subir las dice el primer paso del lote).
+ * Con `variosTrackers` (más de uno con clave) tampoco mira los idiomas: lo que admite cada uno lo dice el primer paso.
  */
-export function razonNoMarcable(item: LibraryItemResponse): string | null {
-  return item.item_type === 'series' ? null : razonNoSubible(item)
+export function razonNoMarcable(item: LibraryItemResponse, variosTrackers = false): string | null {
+  return item.item_type === 'series' ? null : razonNoSubible(item, variosTrackers ? ALGUNO : undefined)
 }
 
 /**

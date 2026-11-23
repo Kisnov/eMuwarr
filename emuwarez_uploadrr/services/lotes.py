@@ -573,8 +573,11 @@ def _encolar_uno(conn: sqlite3.Connection, el: dict, lote_id: str, vistos: set[i
                  tracker_ids: list[str], parados: dict[str, str]) -> list[dict]:
     """Un elemento del lote, un trabajo por tracker. Todo lo que puede saltarlo va antes de escribir nada: guardar
     `campos` caduca la propuesta vigente del elemento, y hacerlo para uno que luego se salta cambiaría el nombre de su
-    subida en marcha. Las normas de idioma de cada tracker que no es el primero las mira queue_upload_for_item.
+    subida en marcha. Las comprobaciones van con las normas del primer tracker que lo admite (sin ninguno, del primero,
+    y dicen por qué); a los que no lo admiten no va.
     `parados` (tracker → texto de su parada) es del lote entero: un tracker que se para aquí ya no vuelve."""
+    from .library import get_library_item
+    from .reglas_tracker import reglas_para_subir
     from .source_assistant import update_nomenclature_fields_preview
     from .nomenclature import save_manual_nomenclature_fields
     from .upload_checks import run_upload_checks
@@ -596,11 +599,14 @@ def _encolar_uno(conn: sqlite3.Connection, el: dict, lote_id: str, vistos: set[i
     checks = el.get("checks") or {}
     if not checks.get("ready"):
         return _bloqueado(item_id, tracker_ids, _primer_fallo(checks))
+    item = get_library_item(conn, item_id)
+    reglas = {t: reglas_para_subir(conn, item, t) for t in tracker_ids}
+    admiten = [t for t in tracker_ids if reglas[t].permitido] or tracker_ids[:1]
     if tipo != "season":
         # El castellano de una película o un capítulo no se vuelve a mirar al correr el trabajo (solo los packs):
         # no basta con lo que dice el navegador. Es barato: abrir el fichero y leer columnas. Con las normas del
-        # primer tracker, como las comprobaciones del navegador.
-        contenido = run_upload_checks(conn, item_id, scope="content", tracker=tracker_ids[0])
+        # primero que lo admite, como las comprobaciones del navegador.
+        contenido = run_upload_checks(conn, item_id, scope="content", tracker=admiten[0])
         if not contenido.get("ready"):
             return _bloqueado(item_id, tracker_ids, _primer_fallo(contenido))
     if trabajo_activo(conn, item_id):
@@ -629,6 +635,9 @@ def _encolar_uno(conn: sqlite3.Connection, el: dict, lote_id: str, vistos: set[i
             if tracker in parados:
                 resultados += _bloqueado(item_id, [tracker], parados[tracker])
                 continue
+            if tracker not in admiten:
+                resultados += _bloqueado(item_id, [tracker], reglas[tracker].motivo)
+                continue
             try:
                 resultado = queue_upload_for_item(
                     item_id, request_item_id=request_item_id, checks=checks,
@@ -653,19 +662,19 @@ def encolar_lote(conn: sqlite3.Connection, elementos: list[dict],
                  tracker_ids: Iterable[str] = (trackers.POR_DEFECTO,)) -> dict:
     """Encola varias subidas como un lote, en el orden dado (el de la cola), una por elemento y tracker de
     `tracker_ids` (eMuwarez primero y los demás en su orden; `checks` son las comprobaciones con las normas del
-    primero). Cada elemento es `{item_id, request_item_id?, checks, campos?, provider?}`: `request_item_id` la petición
+    primero que admite el elemento). Cada elemento es `{item_id, request_item_id?, checks, campos?, provider?}`: `request_item_id` la petición
     que cubre (la que eligió el Panel; sin ella, la abierta del elemento si hay una sola, ver
     requests.peticion_que_enlazar), `checks` el resultado de las comprobaciones que vio el usuario, `campos` el juego
     completo de campos de nomenclatura (película o capítulo, solo si la interfaz sugirió un proveedor), `provider` el
     proveedor elegido para un pack. Un elemento que no se puede subir se salta con su motivo y el resto sigue; uno que
-    no admite otro tracker que el primero se salta solo para ese. Si mientras se encola el freno de un tracker ya ve una
+    un tracker no admite por sus idiomas se salta solo para ese. Si mientras se encola el freno de un tracker ya ve una
     racha de fallos (los primeros fallaron seguidos por el mismo motivo), ese elemento y los que quedan se saltan para
     él con «Lote parado: …». Si no se encola ninguno, no queda lote (`lote_id` None)."""
     from .upload_queue import _season_upload_preconditions
 
     if not 1 <= len(elementos) <= MAX_ELEMENTOS_LOTE:
         raise ValueError(f"Un lote lleva entre 1 y {MAX_ELEMENTOS_LOTE} elementos.")
-    # eMuwarez primero: sus normas de idioma solo las miran las comprobaciones, que son las del primero.
+    # eMuwarez primero, como en el Resumen.
     tracker_ids = sorted(dict.fromkeys(tracker_ids), key=lambda t: t != trackers.POR_DEFECTO)
     # Lo que haría fallar a todos en segundos, mirado una vez por tracker antes de crear nada.
     motivos: list[str] = []

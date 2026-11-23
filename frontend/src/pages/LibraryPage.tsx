@@ -34,6 +34,7 @@ import { CasillaLote } from '../components/lote/CasillaLote'
 import { SubidaPorLotesModal } from '../components/lote/SubidaPorLotesModal'
 import { useSeleccionLote } from '../hooks/useSeleccionLote'
 import { razonNoMarcable, seleccionableEnLote, type EntradaLote } from '../utils/lote'
+import { useDestinos } from '../components/asistente/useDestinos'
 import {
   cargarVistas, conVista, persistirVistas, sinVista, ORDEN_POR_DEFECTO, type FiltrosDeVista, type VistaGuardada,
 } from '../utils/vistasBiblioteca'
@@ -80,13 +81,14 @@ const tituloDeTarjeta = (it: LibraryItemResponse) => (it.year ? `${it.title} (${
 // stable onSelect (openDetail, itself wrapping setSelected) and calls it with `item` internally.
 // «Subir por lotes»: con `onToggle`, una película, una serie o una temporada lleva su casilla arriba a la izquierda
 // (arriba a la derecha va el estado), fuera del layout: la tarjeta no puede cambiar de alto (RejillaVirtual la mide).
-const PosterCard = memo(function PosterCard({ item, onSelect, priority, seleccionado = false, loteLleno = false, onToggle }: {
+const PosterCard = memo(function PosterCard({ item, onSelect, priority, seleccionado = false, loteLleno = false, onToggle, variosTrackers = false }: {
   item: LibraryItemResponse
   onSelect: (item: LibraryItemResponse) => void
   priority?: boolean
   seleccionado?: boolean
   loteLleno?: boolean
   onToggle?: (item: LibraryItemResponse) => void
+  variosTrackers?: boolean
 }) {
   const nombre = tituloDeTarjeta(item)
   return (
@@ -123,7 +125,7 @@ const PosterCard = memo(function PosterCard({ item, onSelect, priority, seleccio
           </span>
         </button>
         {onToggle && seleccionableEnLote(item) && (
-          <CasillaLote item={item} seleccionado={seleccionado} bloqueada={loteLleno} motivo={razonNoMarcable(item)} onAlternar={onToggle} className="lote-casilla-poster" />
+          <CasillaLote item={item} seleccionado={seleccionado} bloqueada={loteLleno} motivo={razonNoMarcable(item, variosTrackers)} onAlternar={onToggle} className="lote-casilla-poster" />
         )}
         <div className="bib-tarjeta-estado">
           <PosterStatusIcon status={item.local_status} />
@@ -227,6 +229,8 @@ export function LibraryPage({ onNavigate }: { onNavigate?: (page: string) => voi
   // Biblioteca o al encolar el lote. Una serie marcada se cambia por sus temporadas en el modal.
   const [modoSeleccion, setModoSeleccion] = useState(false)
   const { seleccion, total: totalSeleccion, lleno: loteLleno, alternar: alternarLote, limpiar: limpiarLote } = useSeleccionLote()
+  // Con más de un tracker con clave, lo que no tiene castellano también se marca: el lote dice quién lo admite.
+  const variosTrackers = useDestinos().trackersParaSubir.length > 1
   // Lo que se abrió en el modal: una copia, que salir de Biblioteca limpia la selección.
   const [loteAbierto, setLoteAbierto] = useState<EntradaLote[] | null>(null)
   const alternarModoSeleccion = () => {
@@ -607,9 +611,10 @@ export function LibraryPage({ onNavigate }: { onNavigate?: (page: string) => voi
       seleccionado={seleccion.has(item.id)}
       loteLleno={loteLleno}
       onAlternar={onToggleLote}
+      variosTrackers={variosTrackers}
       temporadasMarcadas={temporadasMarcadas.get(item.id) ?? ''}
     />
-  ), [instances, openDetail, handleTreeAction, load, alDesplegar, seleccion, loteLleno, onToggleLote, temporadasMarcadas])
+  ), [instances, openDetail, handleTreeAction, load, alDesplegar, seleccion, loteLleno, onToggleLote, variosTrackers, temporadasMarcadas])
 
   // Modals/overlays, shared by the list view and the detail page so an action
   // triggered from the detail page (Subir/Petición) shows its window without
@@ -837,10 +842,12 @@ export function LibraryPage({ onNavigate }: { onNavigate?: (page: string) => voi
               ? <LargePosterCard
                   item={item} onSelect={openDetail} priority={i < GRID_PRIORITY_COUNT}
                   seleccionado={seleccion.has(item.id)} loteLleno={loteLleno} onToggle={onToggleLote}
+                  variosTrackers={variosTrackers}
                 />
               : <PosterCard
                   item={item} onSelect={openDetail} priority={i < GRID_PRIORITY_COUNT}
                   seleccionado={seleccion.has(item.id)} loteLleno={loteLleno} onToggle={onToggleLote}
+                  variosTrackers={variosTrackers}
                 />}
           />
         </div>

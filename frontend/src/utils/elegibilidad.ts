@@ -1,4 +1,4 @@
-import type { ReglasConNombre } from '../api/uploads'
+import type { ReglasConNombre, TrackerParaSubir } from '../api/uploads'
 
 // Lo que el asistente hace con /upload/elegibilidad (services/reglas_tracker.py::elegibilidad): qué trackers con clave
 // admiten un pack o un capítulo por sus normas de idioma, y cómo decirlo en una línea.
@@ -16,6 +16,24 @@ export function admiten(reglas: readonly ReglasConNombre[]): string[] {
 export function destinosDeEntrada(reglas: readonly ReglasConNombre[]): string[] {
   const si = reglas.filter(r => r.permitido).map(r => r.tracker)
   return si.length === 0 || si.includes('emu') ? ['emu'] : si
+}
+
+// Los de entrada de varios (una tanda, un lote): los de cada uno, juntos. Sin saber de uno, eMuwarez.
+export function destinosDeEntradaDeVarios(reglas: readonly (readonly ReglasConNombre[] | undefined)[]): string[] {
+  return [...new Set(reglas.flatMap(r => r ? destinosDeEntrada(r) : ['emu']))]
+}
+
+// De los destinos elegidos, los que lo admiten. Sin sus normas (un solo tracker, o sin respuesta), todos.
+export function destinosQueAdmiten<T extends TrackerParaSubir>(
+  destinos: readonly T[], reglas: readonly ReglasConNombre[] | undefined,
+): T[] {
+  return reglas ? destinos.filter(d => reglas.some(r => r.tracker === d.id && r.permitido)) : [...destinos]
+}
+
+// «Milnueve, N.O.B.S»: a cuáles de los elegidos va, si alguno no lo admite y otro sí; si no, null.
+export function soloA(destinos: readonly TrackerParaSubir[], reglas: readonly ReglasConNombre[] | undefined): string | null {
+  const van = destinosQueAdmiten(destinos, reglas)
+  return van.length && van.length < destinos.length ? van.map(d => d.nombre).join(', ') : null
 }
 
 // «Milnueve ✓ (Anime en Catalan) · eMuwarez ✗ sin castellano · N.O.B.S ✗»: primero los que lo admiten. El «sin

@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { admiten, destinosDeEntrada, resumenDeCapitulos, resumenPorTracker } from '../elegibilidad'
+import {
+  admiten, destinosDeEntrada, destinosDeEntradaDeVarios, destinosQueAdmiten, resumenDeCapitulos, resumenPorTracker, soloA,
+} from '../elegibilidad'
 
 const r = (tracker: string, nombre: string, permitido: boolean, variante: string | null = null) =>
   ({ tracker, nombre, permitido, motivo: '', variante })
@@ -24,5 +26,25 @@ describe('elegibilidad por tracker', () => {
   it('los capítulos: cuántos admite cada tracker', () => {
     expect(resumenDeCapitulos([[EMU_NO, MNV_SI], [EMU_NO, r('mnv', 'Milnueve', false)]]))
       .toBe('Milnueve ✓ 1 de 2 · eMuwarez ✗ sin castellano')
+  })
+})
+
+describe('varios elementos (un lote, una tanda)', () => {
+  const EMU_SI = r('emu', 'eMuwarez', true)
+  const DESTINOS = [{ id: 'emu', nombre: 'eMuwarez' }, { id: 'mnv', nombre: 'Milnueve' }]
+
+  it('de entrada, eMuwarez y los que admiten lo que eMuwarez no; sin saber de uno, eMuwarez', () => {
+    expect(destinosDeEntradaDeVarios([[EMU_SI, MNV_SI], [EMU_NO, MNV_SI]])).toEqual(['emu', 'mnv'])
+    expect(destinosDeEntradaDeVarios([[EMU_NO, MNV_SI]])).toEqual(['mnv'])
+    expect(destinosDeEntradaDeVarios([undefined])).toEqual(['emu'])
+  })
+
+  it('va solo a los elegidos que lo admiten, y lo dice si no son todos', () => {
+    expect(destinosQueAdmiten(DESTINOS, [EMU_NO, MNV_SI])).toEqual([DESTINOS[1]])
+    expect(destinosQueAdmiten(DESTINOS, undefined)).toEqual(DESTINOS)
+    expect(soloA(DESTINOS, [EMU_NO, MNV_SI])).toBe('Milnueve')
+    expect(soloA(DESTINOS, [EMU_SI, MNV_SI])).toBeNull()
+    // Si no lo admite ninguno, no va a ninguno: lo dicen sus comprobaciones.
+    expect(soloA(DESTINOS, [EMU_NO, r('mnv', 'Milnueve', false)])).toBeNull()
   })
 })

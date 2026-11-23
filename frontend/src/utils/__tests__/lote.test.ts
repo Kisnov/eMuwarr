@@ -7,7 +7,7 @@ import type { LibraryItemResponse } from '../../types/api'
 import type { DashboardRecommendationItem } from '../../api/dashboard'
 import {
   MAX_ELEMENTOS_LOTE, PATRON_LOTE_ID, claveDelPanel, entradaDePeticion, entradaDelPanel, expandirEntradas,
-  marcadaPorDefecto, nombresRepetidos, nuevoLoteId, peticionSeleccionableEnLote, razonNoSubible,
+  marcadaPorDefecto, nombresRepetidos, nuevoLoteId, peticionSeleccionableEnLote, razonNoMarcable, razonNoSubible,
   seleccionableEnLote, conAvisoDeLote, loteDeNotificacion,
 } from '../lote'
 
@@ -89,6 +89,21 @@ describe('razonNoSubible', () => {
 
   it('una serie no entra tal cual: se cambia por sus temporadas', () => {
     expect(razonNoSubible(pelicula({ item_type: 'series' }))).toBe('Una serie se sube por temporadas.')
+  })
+
+  it('con más de un tracker, en vez del castellano decide si lo admite alguno', () => {
+    expect(razonNoSubible(pelicula({ has_spanish_ok: 0 }), ['Milnueve'])).toBeNull()
+    expect(razonNoSubible(pelicula({ has_spanish_ok: 0 }), [])).toBe('Ningún tracker con clave admite sus idiomas.')
+    expect(razonNoSubible(pelicula({ local_status: 'Faltante' }), ['Milnueve'])).toContain('Faltante')
+    expect(razonNoSubible(pelicula({ item_type: 'season', video_codec: 'x264', has_spanish_ok: 0 }), ['Milnueve'])).toBeNull()
+  })
+})
+
+describe('razonNoMarcable', () => {
+  it('con más de un tracker no mira los idiomas: los mira el lote', () => {
+    expect(razonNoMarcable(pelicula({ has_spanish_ok: 0 }))).toBe('No tiene castellano ni en el audio ni en los subtítulos.')
+    expect(razonNoMarcable(pelicula({ has_spanish_ok: 0 }), true)).toBeNull()
+    expect(razonNoMarcable(pelicula({ local_status: 'Faltante' }), true)).toContain('Faltante')
   })
 })
 

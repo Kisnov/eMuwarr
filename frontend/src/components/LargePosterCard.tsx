@@ -16,13 +16,15 @@ import { razonNoMarcable, seleccionableEnLote } from '../utils/lote'
 // «Subir por lotes»: con `onToggle`, una película, una serie o una temporada (estas solo salen con un filtro) lleva
 // su casilla arriba a la izquierda, encima del póster (arriba a la derecha va el estado). Fuera del layout: la
 // tarjeta no puede cambiar de alto (RejillaVirtual la mide).
-export const LargePosterCard = memo(function LargePosterCard({ item, onSelect, priority, seleccionado = false, loteLleno = false, onToggle }: {
+export const LargePosterCard = memo(function LargePosterCard({ item, onSelect, priority, seleccionado = false, loteLleno = false, onToggle, variosTrackers = false }: {
   item: LibraryItemResponse
   onSelect: (item: LibraryItemResponse) => void
   priority?: boolean
   seleccionado?: boolean
   loteLleno?: boolean
   onToggle?: (item: LibraryItemResponse) => void
+  // Más de un tracker con clave: los idiomas los mira el lote (razonNoMarcable).
+  variosTrackers?: boolean
 }) {
   return (
     <div
@@ -49,7 +51,7 @@ export const LargePosterCard = memo(function LargePosterCard({ item, onSelect, p
         {/* El botón de verdad que abre la ficha: se llega con el teclado y el lector dice qué es. */}
         <button type="button" className="poster-grande-abrir" aria-label={`Abrir la ficha de ${item.year ? `${item.title} (${item.year})` : item.title}`} />
         {onToggle && seleccionableEnLote(item) && (
-          <CasillaLote item={item} seleccionado={seleccionado} bloqueada={loteLleno} motivo={razonNoMarcable(item)} onAlternar={onToggle} className="lote-casilla-poster" />
+          <CasillaLote item={item} seleccionado={seleccionado} bloqueada={loteLleno} motivo={razonNoMarcable(item, variosTrackers)} onAlternar={onToggle} className="lote-casilla-poster" />
         )}
         <div className="poster-grande-estado">
           <PosterStatusIcon status={item.local_status} />

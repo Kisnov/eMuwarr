@@ -14,8 +14,13 @@ vi.mock('../../api/library', () => ({
 }))
 vi.mock('../../api/instances', () => ({ getInstances: vi.fn(async () => []) }))
 vi.mock('../../api/settings', () => ({ fetchSettings: vi.fn(async () => ({ upload_max_concurrent: 1 })) }))
+vi.mock('../../api/uploads', async original => ({
+  ...await original<typeof import('../../api/uploads')>(),
+  fetchTrackersParaSubir: vi.fn(async () => [{ id: 'emu', nombre: 'eMuwarez' }]),
+}))
 
 import { getLibrary } from '../../api/library'
+import { fetchTrackersParaSubir } from '../../api/uploads'
 import { SeccionVisible } from '../../context/SeccionVisible'
 import { SyncContext } from '../../context/SyncContext'
 import type { LibraryItemResponse } from '../../types/api'
@@ -71,6 +76,20 @@ afterEach(async () => {
 })
 
 describe('Seleccionar en Biblioteca', () => {
+  it('lo que no tiene castellano no se marca; con otro tracker con clave sí: los idiomas los mira el lote', async () => {
+    vi.mocked(getLibrary).mockResolvedValue({ items: [DUNE, ALIEN, item(4, 'Catalana', { has_spanish_ok: 0 })], total: 3 } as never)
+    await pagina()
+    await pulsar(boton('Seleccionar'))
+    expect(casilla('Catalana')!.disabled).toBe(true)
+    await desmontar()
+
+    vi.mocked(fetchTrackersParaSubir).mockResolvedValueOnce([{ id: 'emu', nombre: 'eMuwarez' }, { id: 'mnv', nombre: 'Milnueve' }])
+    await pagina()
+    await pulsar(boton('Seleccionar'))
+    await esperar(() => casilla('Catalana') && !casilla('Catalana')!.disabled)
+    expect(casilla('Dune')!.disabled).toBe(false)
+  })
+
   it('sin el modo selección no hay casillas ni barra; con él, en películas y series', async () => {
     await pagina()
     expect(casilla('Dune')).toBeNull()

@@ -19,8 +19,10 @@ export interface FilaResumenLote {
   // Falta su comprobación o su análisis.
   pendiente: boolean
   incluida: boolean
-  // «N.O.B.S: motivo» por cada otro tracker elegido que no lo admite: para ese se salta.
+  // «N.O.B.S: motivo» por cada tracker elegido que no lo admite: para ese se salta.
   noLoAdmiten: string[]
+  // «Milnueve»: a cuáles va, si alguno de los elegidos no lo admite; null si va a todos.
+  soloA: string | null
 }
 
 // Qué falló y dónde: la etiqueta dice qué («Contenido no accesible») y el mensaje, el detalle (la ruta, los errores
@@ -90,7 +92,7 @@ export function PasoResumenLote({
           <span className="asist-dato-nota">
             {!destinoSubida
               ? 'Elige al menos uno.'
-              : 'Una subida por elemento y tracker, una detrás de otra, con el mismo fichero y el mismo nombre. Las comprobaciones son las del primero.'}
+              : 'Una subida por elemento y tracker, una detrás de otra, con el mismo fichero y el mismo nombre. Las comprobaciones de cada uno son las del primero que lo admite.'}
           </span>
         </div>
       )}
@@ -112,6 +114,7 @@ export function PasoResumenLote({
                       {f.nombre === undefined ? 'Calculando el nombre…' : f.nombre ?? '—'}
                     </div>
                     {a?.avisos.map(aviso => <div key={aviso} className="lote-aviso">⚠ {aviso}</div>)}
+                    {!f.salto && f.soloA && <div className="lote-aviso">⚠ Solo a {f.soloA}</div>}
                     {!f.salto && f.noLoAdmiten.map(m => <div key={m} className="lote-aviso">⚠ No va a {m}</div>)}
                     {f.salto && f.contenido?.ready !== false && <div className="lote-error">✗ {f.salto}</div>}
                   </td>

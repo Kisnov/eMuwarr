@@ -6,9 +6,9 @@ import { useEffect, useState } from 'react'
 import { getEmuComparison, getLibrary, suggestProvider } from '../../api/library'
 import { getNomenclatureFields, previewNomenclatureFields, type NomenclatureFields } from '../../api/nomenclature'
 import { fetchSettings } from '../../api/settings'
-import { fetchReglasTracker, type ReglasDeTracker } from '../../api/uploads'
+import { fetchElegibilidad, type ReglasConNombre } from '../../api/uploads'
 import type { LibraryItemResponse } from '../../types/api'
-import { expandirEntradas, razonNoSubible, type EntradaLote } from '../../utils/lote'
+import { expandirEntradas, type EntradaLote } from '../../utils/lote'
 import { conclusionDuplicados, resumirComparaciones, type NivelDuplicado } from '../../utils/resumenSubida'
 import { PROVIDER_SOURCES } from '../asistente/constantes'
 
@@ -137,24 +137,20 @@ export function useAnalisisLote({ activo, elementos }: { activo: boolean; elemen
 }
 
 /**
- * Las normas de idioma de cada tracker de `trackers` (los elegidos menos el primero, cuyas normas van en las
- * comprobaciones) para cada elemento, por `tracker:id`, mientras `activo`. Sin red; lo ya pedido se guarda.
+ * Qué trackers con clave admiten cada elemento por sus normas de idioma (/upload/elegibilidad), por id, mientras
+ * `activo` (más de un tracker). Sin red; lo ya pedido se guarda. Uno por elemento: son 50 como mucho.
  */
-export function useReglasLote({ activo, ids, trackers }: {
-  activo: boolean; ids: readonly number[]; trackers: readonly string[]
-}) {
-  const [reglas, setReglas] = useState<ReadonlyMap<string, ReglasDeTracker>>(() => new Map())
-  const clave = `${ids.join(',')}|${trackers.join(',')}`
+export function useElegibilidadLote({ activo, ids }: { activo: boolean; ids: readonly number[] }) {
+  const [reglas, setReglas] = useState<ReadonlyMap<number, ReglasConNombre[]>>(() => new Map())
+  const clave = ids.join(',')
   useEffect(() => {
     if (!activo) return
     let vivo = true
-    for (const tracker of trackers) {
-      for (const id of ids) {
-        if (reglas.has(`${tracker}:${id}`)) continue
-        fetchReglasTracker(id, tracker)
-          .then(r => { if (vivo) setReglas(m => new Map(m).set(`${tracker}:${id}`, r)) })
-          .catch(() => { /* sin respuesta no se dice nada: el servidor las mira al encolar */ })
-      }
+    for (const id of ids) {
+      if (reglas.has(id)) continue
+      fetchElegibilidad(id)
+        .then(r => { if (vivo) setReglas(m => new Map(m).set(id, r.trackers)) })
+        .catch(() => { /* sin respuesta, la regla de eMuwarez: el servidor las mira al encolar */ })
     }
     return () => { vivo = false }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- se pide al cambiar lo que se mira, no con cada resultado
@@ -176,8 +172,6 @@ export function useSubidasEnParalelo() {
 export interface ExpansionLote {
   // Lo que entra en el paso 1, con cada serie cambiada por sus temporadas; null mientras se cargan.
   elementos: LibraryItemResponse[] | null
-  // Las que llegan marcadas: las que se pueden subir, hasta el tope del lote (cuenta después de expandir).
-  iniciales: ReadonlySet<number>
   // Desde el Panel: las peticiones que cubre cada elemento (la primera es la que se enlaza si no se elige otra).
   peticiones: ReadonlyMap<number, readonly number[]>
   // Cuántas series hay que expandir y cuántas van.
@@ -187,22 +181,22 @@ export interface ExpansionLote {
   avisos: string[]
 }
 
-type Expandido = Pick<ExpansionLote, 'elementos' | 'iniciales' | 'peticiones' | 'avisos'>
+type Expandido = Pick<ExpansionLote, 'elementos' | 'peticiones' | 'avisos'>
 
 /**
  * El paso 1: cada serie marcada, cambiada por sus temporadas (como el asistente, `getLibrary` con `parent_id`), de
  * una en una para poder decir cuántas van. `entradas` es la copia tomada al abrir: no cambia. Una serie que llega
  * dos veces (dos peticiones de temporadas distintas) se carga una vez.
  */
-export function useExpansionLote(entradas: readonly EntradaLote[], maximo: number): ExpansionLote {
+export function useExpansionLote(entradas: readonly EntradaLote[]): ExpansionLote {
   const series = [...new Map(
     entradas.filter(e => e.item.item_type === 'series').map(e => [e.item.id, e.item] as const),
   ).values()]
   const [hechas, setHechas] = useState(0)
   const [resultado, setResultado] = useState<Expandido>(() => (
     series.length === 0
-      ? listo(entradas, new Map(), [], maximo)
-      : { elementos: null, iniciales: new Set(), peticiones: new Map(), avisos: [] }
+      ? listo(entradas, new Map(), [])
+      : { elementos: null, peticiones: new Map(), avisos: [] }
   ))
 
   useEffect(() => {
@@ -224,7 +218,7 @@ export function useExpansionLote(entradas: readonly EntradaLote[], maximo: numbe
         }
         setHechas(n => n + 1)
       }
-      if (vivo) setResultado(listo(entradas, temporadas, avisos, maximo))
+      if (vivo) setResultado(listo(entradas, temporadas, avisos))
     }
     run()
     return () => { vivo = false }
@@ -235,13 +229,8 @@ export function useExpansionLote(entradas: readonly EntradaLote[], maximo: numbe
 }
 
 function listo(
-  entradas: readonly EntradaLote[], temporadas: ReadonlyMap<number, readonly LibraryItemResponse[]>,
-  avisos: string[], maximo: number,
+  entradas: readonly EntradaLote[], temporadas: ReadonlyMap<number, readonly LibraryItemResponse[]>, avisos: string[],
 ): Expandido {
   const expandido = expandirEntradas(entradas, temporadas)
-  const iniciales = new Set(expandido.elementos.filter(e => !razonNoSubible(e)).slice(0, maximo).map(e => e.id))
-  return {
-    elementos: expandido.elementos, iniciales, peticiones: expandido.peticiones,
-    avisos: [...avisos, ...expandido.avisos],
-  }
+  return { elementos: expandido.elementos, peticiones: expandido.peticiones, avisos: [...avisos, ...expandido.avisos] }
 }

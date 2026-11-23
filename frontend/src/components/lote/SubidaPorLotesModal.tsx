@@ -3,11 +3,13 @@
 // el nombre que genere la nomenclatura para cada una (sin editar: para eso está el asistente). Una serie marcada
 // entra como sus temporadas. Paso 1, qué entra; paso 2, el resumen de cada una y las comprobaciones (las del entorno una sola
 // vez); «Subir N» manda el lote al servidor (POST /uploads/lote), que encola cada una en este orden, una por tracker
-// elegido, y salta la que no pueda (o la que un tracker no admite, solo para ese) con su motivo.
+// elegido, y salta la que no pueda (o la que un tracker no admite, solo para ese) con su motivo. Con más de un tracker
+// con clave entra lo que admita alguno, no solo eMuwarez (/upload/elegibilidad).
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { ApiClientError } from '../../api/client'
 import { queueLote, type LoteEncolado } from '../../api/uploads'
 import type { LibraryItemResponse } from '../../types/api'
+import { admiten, destinosDeEntradaDeVarios, destinosQueAdmiten, soloA } from '../../utils/elegibilidad'
 import {
   CLAVE_ABRIR_LOTE, MAX_ELEMENTOS_LOTE, marcadaPorDefecto, nombresRepetidos, razonNoSubible, type EntradaLote,
 } from '../../utils/lote'
@@ -17,7 +19,7 @@ import { useDestinos } from '../asistente/useDestinos'
 import { Modal } from '../Modal'
 import { PasoContenidoLote } from './PasoContenidoLote'
 import { PasoResumenLote, primerFallo, type FilaResumenLote } from './PasoResumenLote'
-import { useAnalisisLote, useExpansionLote, useReglasLote, useSubidasEnParalelo } from './useLote'
+import { useAnalisisLote, useElegibilidadLote, useExpansionLote, useSubidasEnParalelo } from './useLote'
 
 // Nadie elige proveedor en un lote: el de una película va en `campos`, y el de un pack lo decide su plan como en
 // el asistente sin tocar Proveedor (el nombre de los capítulos o TMDb). Con proveedores distintos el pack se salta.
@@ -45,20 +47,26 @@ export function SubidaPorLotesModal({ entradas, onClose, onDone, onNavigate }: {
   onNavigate?: (page: string) => void
 }) {
   const [copia] = useState(() => [...entradas])
-  const expansion = useExpansionLote(copia, MAX_ELEMENTOS_LOTE)
+  const expansion = useExpansionLote(copia)
   const elementos = useMemo(() => expansion.elementos ?? [], [expansion.elementos])
   const [paso, setPaso] = useState<Paso>('contenido')
-  // Lo cambiado a mano en el paso 1; hasta entonces, las que llegan marcadas al expandir.
+  const { trackersParaSubir, trackersElegidos, setTrackersElegidos, elegirTracker, destinos, destinoSubida } = useDestinos()
+  // Con más de un tracker, qué admite cada uno: entra lo que admita alguno.
+  const elegibilidad = useElegibilidadLote({ activo: trackersParaSubir.length > 1, ids: elementos.map(e => e.id) })
+  const razon = (e: LibraryItemResponse) => {
+    const r = elegibilidad.get(e.id)
+    return razonNoSubible(e, r && admiten(r))
+  }
+  // Las que llegan marcadas: las que se pueden subir, hasta el tope del lote (cuenta después de expandir).
+  const iniciales = new Set(elementos.filter(e => !razon(e)).slice(0, MAX_ELEMENTOS_LOTE).map(e => e.id))
+  // Lo cambiado a mano en el paso 1; hasta entonces, las que llegan marcadas.
   const [marcadasAMano, setMarcadasAMano] = useState<ReadonlySet<number> | null>(null)
-  const marcadas = marcadasAMano ?? expansion.iniciales
+  const marcadas = marcadasAMano ?? iniciales
   // Dos peticiones sobre el mismo elemento: la elegida a mano; si no, la primera.
   const [peticionElegida, setPeticionElegida] = useState<ReadonlyMap<number, number>>(() => new Map())
   const peticionDe = (id: number): number | undefined => peticionElegida.get(id) ?? expansion.peticiones.get(id)?.[0]
-  const enCola = useMemo(
-    () => elementos.filter(e => marcadas.has(e.id) && !razonNoSubible(e)),
-    [elementos, marcadas],
-  )
-  const cola = useMemo(() => enCola.map(e => e.id), [enCola])
+  const enCola = elementos.filter(e => marcadas.has(e.id) && !razon(e))
+  const cola = enCola.map(e => e.id)
   const [fase, setFase] = useState<'idle' | 'processing' | 'done'>('idle')
   // Lo que se cambió a mano en «Incluir»; lo demás va según lo que diga cada fila.
   const [elegidas, setElegidas] = useState<ReadonlyMap<number, boolean>>(() => new Map())
@@ -66,24 +74,22 @@ export function SubidaPorLotesModal({ entradas, onClose, onDone, onNavigate }: {
   const [rechazo, setRechazo] = useState<string[] | null>(null)
   const [falloEnvio, setFalloEnvio] = useState<string | null>(null)
 
-  const { trackersParaSubir, trackersElegidos, elegirTracker, destinos, destinoSubida } = useDestinos()
-  // Las comprobaciones van con las normas del primero de los elegidos, como en el asistente; las de los demás, aparte.
+  // Las comprobaciones de cada uno van con las normas del primero de los elegidos que lo admite (sin ninguno, del
+  // primero, que dicen por qué), como el servidor; las del entorno, con las del primero.
   const principal = destinos[0]?.id ?? 'emu'
+  const trackerDe = (id: number) => (destinosQueAdmiten(destinos, elegibilidad.get(id))[0] ?? destinos[0])?.id ?? 'emu'
   const comprobaciones = useComprobacionesTanda({
     step: paso === 'resumen' ? 2 : 1, batchQueue: cola, batchPhase: fase, proveedorElegido: SIN_ELECCION, minimo: 1,
-    tracker: principal,
+    tracker: principal, trackerDe,
   })
   const analisis = useAnalisisLote({ activo: paso === 'resumen' && fase === 'idle', elementos: enCola })
-  const reglas = useReglasLote({
-    activo: paso === 'resumen' && fase === 'idle', ids: cola, trackers: destinos.slice(1).map(t => t.id),
-  })
   const nombreTracker = (id: string) => trackersParaSubir.find(t => t.id === id)?.nombre ?? id
   const paralelo = useSubidasEnParalelo()
 
   // Otra selección en el paso 1: lo comprobado y lo elegido para la anterior ya no vale.
   const alternar = (id: number) => {
     setMarcadasAMano(prev => {
-      const sig = new Set(prev ?? expansion.iniciales)
+      const sig = new Set(prev ?? iniciales)
       if (sig.has(id)) sig.delete(id); else sig.add(id)
       return sig
     })
@@ -117,14 +123,15 @@ export function SubidaPorLotesModal({ entradas, onClose, onDone, onNavigate }: {
       : a?.bloqueo ?? (repetidos.has(id) ? 'Otro elemento del lote saldría con el mismo nombre.' : null)
     const pendiente = !contenido || !a
     // Lo que ya hay en eMuwarez solo desmarca si se sube a eMuwarez.
-    const porDefecto = !!a && !a.sinIdioma && (principal !== 'emu' || marcadaPorDefecto(a.nivel))
-    // Los otros trackers que no lo admiten: se salta solo para ellos.
-    const noLoAdmiten = destinos.slice(1).flatMap(t => {
-      const r = reglas.get(`${t.id}:${id}`)
+    const porDefecto = !!a && !a.sinIdioma && (trackerDe(id) !== 'emu' || marcadaPorDefecto(a.nivel))
+    // Los elegidos que no lo admiten: se salta solo para ellos.
+    const reglas = elegibilidad.get(id)
+    const noLoAdmiten = destinos.flatMap(t => {
+      const r = reglas?.find(x => x.tracker === t.id)
       return r && !r.permitido ? [`${t.nombre}: ${r.motivo}`] : []
     })
     return {
-      item, contenido, analisis: a, nombre: nombreDe(item), salto, pendiente, noLoAdmiten,
+      item, contenido, analisis: a, nombre: nombreDe(item), salto, pendiente, noLoAdmiten, soloA: soloA(destinos, reglas),
       incluida: !pendiente && !salto && (elegidas.get(id) ?? porDefecto),
     }
   })
@@ -199,7 +206,12 @@ export function SubidaPorLotesModal({ entradas, onClose, onDone, onNavigate }: {
 
       {paso === 'contenido' && (
         <PasoContenidoLote
-          elementos={elementos} marcadas={marcadas} onAlternar={alternar} onContinuar={() => setPaso('resumen')}
+          elementos={elementos} marcadas={marcadas} onAlternar={alternar} elegibilidad={elegibilidad}
+          onContinuar={() => {
+            // Como el asistente: eMuwarez si admite todo; si no, también los que admiten lo demás.
+            setTrackersElegidos(destinosDeEntradaDeVarios(enCola.map(e => elegibilidad.get(e.id))))
+            setPaso('resumen')
+          }}
           expandiendo={expansion.elementos ? null : { hechas: expansion.hechas, series: expansion.series }}
           avisos={expansion.avisos}
           peticiones={expansion.peticiones} peticionDe={peticionDe}
