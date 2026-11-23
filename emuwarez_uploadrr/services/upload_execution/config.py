@@ -154,11 +154,14 @@ def ruta_descripcion(job_id: int) -> Path:
 
 
 def preparar_descripcion_de_la_subida(ruta: str | os.PathLike, texto: str) -> None:
-    """Escribe la descripción propia en `ruta`. Si no se puede, la subida no se lanza: saldría sin ella."""
+    """Escribe la descripción propia en `ruta`, como el config (0600, O_EXCL). Si no se puede, la subida no se lanza:
+    saldría sin ella."""
     ruta = Path(ruta)
     try:
         ruta.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-        ruta.write_text(texto, encoding="utf-8", newline="")
+        ruta.unlink(missing_ok=True)  # la de un intento que no se borró
+        with os.fdopen(os.open(ruta, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600), "wb") as destino:
+            destino.write(texto.encode("utf-8"))
     except OSError as exc:
         raise ConfigNoPreparada(
             f"No se pudo preparar la descripción de la subida ({texto_de_error(exc)}). No se lanza: saldría sin ella."

@@ -474,7 +474,7 @@ def _run_uploadrr_subprocess_body(job_id: int, cmd: dict, secrets: list[str]) ->
     finally:
         _soltar_proceso(job_id, proc)
         borrar_config_de_la_subida(config_ruta)
-        borrar_config_de_la_subida(descripcion_ruta)
+        borrar_fichero(descripcion_ruta)
         borrar_fichero(eventos_ruta)
 
 

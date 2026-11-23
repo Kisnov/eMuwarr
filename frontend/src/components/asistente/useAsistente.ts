@@ -214,7 +214,8 @@ export function useAsistente({ item, onClose: onCloseProp, onDone, onNavigate, p
     return si ? { ...resto, [id]: descripcion } : resto
   })
   const editarDescripcionDe = (id: string, texto: string) => setDescripcionPorTracker(d => ({ ...d, [id]: texto }))
-  const descripcionDe = (id: string) => descripcionPorTracker[id] ?? descripcion
+  // La propia de un tracker solo cuenta mientras se ve: con un solo destino, el Resumen enseña solo la común.
+  const descripcionDe = (id: string) => (destinos.length > 1 ? descripcionPorTracker[id] : undefined) ?? descripcion
   // Los elegidos, en el orden de la lista (eMuwarez primero). Sin lista (no se pudo leer), eMuwarez, como siempre.
   const destinos = trackersParaSubir.length
     ? trackersParaSubir.filter(t => trackersElegidos.includes(t.id))
@@ -724,6 +725,8 @@ export function useAsistente({ item, onClose: onCloseProp, onDone, onNavigate, p
     // anterior sin decírtelo.
     setRemuxPreview(null); setRemuxError(null); setRemuxEdits({}); setRemuxLoading(false)
     setSeasonPlan(null); setSeasonPlanError(null)
+    // Ni la descripción: las notas de un capítulo no son las del siguiente.
+    setDescripcion(''); setDescripcionPorTracker({})
   }, [targetId])
 
   const detalles = useDetallesTemporada({

@@ -376,6 +376,29 @@ describe('película', () => {
       [undefined, '[b]Común[/b]'], ['nobs', '[b]Común[/b]'], ['mnv', '[b]Solo Milnueve[/b]']])
   })
 
+  it('con un solo tracker se sube la común, aunque antes tuviera la suya', async () => {
+    m(subidas.fetchTrackersParaSubir).mockResolvedValue([{ id: 'emu', nombre: 'eMuwarez' }, { id: 'nobs', nombre: 'N.O.B.S' }])
+    await abrir(PELICULA)
+    await esperar(() => texto().includes('Dune WEB-DL AMZN [GRP]'))
+    await pulsar(boton('Continuar'))
+    await esperar(() => texto().includes('✓ Todo listo para subir'))
+    const casilla = (nombre: string) => [...document.querySelectorAll<HTMLLabelElement>('label.asist-casilla')]
+      .find(l => l.textContent?.trim() === nombre)!.querySelector('input')!
+    await pulsar(casilla('N.O.B.S'))
+    await pulsar(casilla('Otra para N.O.B.S'))
+    const propia = document.querySelector<HTMLTextAreaElement>('textarea[aria-label="Descripción para N.O.B.S"]')!
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(propia, 'Solo N.O.B.S')
+      propia.dispatchEvent(new Event('input', { bubbles: true }))
+    })
+    await pulsar(casilla('eMuwarez'))
+    expect(document.querySelector('textarea[aria-label="Descripción para N.O.B.S"]')).toBeNull()
+
+    await pulsar(boton('Subir a N.O.B.S'))
+    await esperar(() => onClose.mock.calls.length > 0)
+    expect(m(subidas.queueUpload).mock.calls.map(c => [c[8], c[9]])).toEqual([['nobs', '']])
+  })
+
   it('sin tipo conocido, el Resumen deja elegirlo con el Source, lo guarda y vuelve a comprobar', async () => {
     m(subidas.runUploadChecks).mockResolvedValueOnce(SIN_TIPO as never)
     await abrir(PELICULA)
