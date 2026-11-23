@@ -127,9 +127,10 @@ came in from `Kisnov/Uploadrr-EMU` with `git subtree add`, history kept; that re
   running; `--resume` and `--solo-cliente` then start from nothing and regenerate it, except that a job reusing another
   tracker's preparation whose `BASE.torrent` is gone or not reusable (no `torrent` step in its meta.json) launches with `--base-desde <TK>:<id>` (`consultas.base_desde_para`):
   Uploadrr-EMU builds it from that tracker's torrent (same pieces; `base_no_coincide` / `base_sin_torrent` otherwise).
-  «Subir también a…» (`services/subir_tambien.py`) creates those jobs for completed eMuwarez uploads (`copia_de_job_id`:
-  same file and name or fail, no fingerprints needed for old uploads) after checking qBittorrent has that torrent at 100 %
-  with the uploads-folder file as `content_path` (`seeding_qbit.completo_en_qbit`).
+  «Subir también a…» (`services/subir_tambien.py`) creates those jobs for a completed upload to any tracker, to any other
+  with a key, never its own (`copia_de_job_id`: same file and name or fail, no fingerprints needed for old uploads; a copy
+  to eMuwarez gets its language rule at enqueue, since it skips the wizard) after checking qBittorrent has that torrent
+  at 100 % with the uploads-folder file as `content_path` (`seeding_qbit.completo_en_qbit`).
   «Reenviar a qBittorrent» (`upload_execution/reenvio_qbit.py`) launches the same argv plus `--resume --solo-cliente <id>`:
   Uploadrr-EMU only re-adds that torrent of the `-tk` tracker to qBittorrent, exits 0 only if it was added and never prints `Torrent URL:`.
   eMuwarez hides every new upload until a moderator approves it (up to a day): `/api/torrents/<id>` is a 404 and the
