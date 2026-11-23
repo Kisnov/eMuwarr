@@ -8,6 +8,7 @@ import { LoadingState } from '../components/LoadingState'
 import { GruposDeRelease } from '../components/GruposDeRelease'
 import { ErrorState } from '../components/ErrorState'
 import { HeaderFilter } from '../components/HeaderFilter'
+import { ChipTracker } from '../components/ChipTracker'
 import { UploadJobDetailPage } from '../components/UploadJobDetailPage'
 import { DeleteUploadModal } from '../components/DeleteUploadModal'
 import { PeticionDeSubida } from '../components/PeticionDeSubida'
@@ -279,7 +280,7 @@ const JobRow = memo(function JobRow({ job, instances, seeding, onOpen, indent, i
           </div>
           {/* Aparte del título: en la tarjeta de móvil bajan a la última línea. */}
           <div className="sub-chips">
-            {job.tracker && job.tracker !== 'emu' && <span className="sub-tracker-chip">{job.tracker_nombre}</span>}
+            <ChipTracker tracker={job.tracker} nombre={job.tracker_nombre} />
             {loteId && onFiltrarLote && (
               <button
                 type="button"

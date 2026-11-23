@@ -118,7 +118,7 @@ export function avisosDeAtencion(
   for (const j of fallidas.slice(0, FALLIDAS_MAX)) {
     avisos.push({
       tipo: 'subida', clave: `subida-${j.id}`, jobId: j.id!,
-      titulo: `Subida fallida · ${j.title ?? `#${j.id}`}`,
+      titulo: `Subida fallida${j.tracker && j.tracker !== 'emu' ? ` a ${j.tracker_nombre}` : ''} · ${j.title ?? `#${j.id}`}`,
       detalle: primeraLinea(j.error_message ?? '') || 'Sin motivo guardado',
     })
   }

@@ -12,6 +12,7 @@ import { SyncInfo } from '../components/SyncInfo'
 import { StatusBadge } from '../components/StatusBadge'
 import { getReadinessActionLabel, getReadinessLabel, getReclamadaInfo, getRequestStatusInfo } from '../utils/status'
 import { HoverTitle, Tooltip, useTooltip } from '../components/Tooltip'
+import { ChipTracker } from '../components/ChipTracker'
 import { useSync } from '../context/SyncContext'
 import { UploadWizardModal } from '../components/UploadWizardModal'
 import { getLibraryItem } from '../api/library'
@@ -1061,6 +1062,7 @@ export function RequestsPage({ onNavigate }: { onNavigate?: (page: string) => vo
               <DetailTitleText title={requestDisplayTitle(item)} />
             </HoverTitle>
           </div>
+          <ChipTracker tracker={item.tracker} nombre={item.tracker_nombre} />
         </div>
       </td>
       <td className="pet-nowrap pet-tipo pet-meta">
