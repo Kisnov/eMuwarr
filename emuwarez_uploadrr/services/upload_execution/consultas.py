@@ -17,7 +17,7 @@ from ..uploadrr_contract import (
 )
 from .. import trackers
 from .comun import _get_db_conn
-from .config import ruta_config
+from .config import ruta_config, ruta_descripcion
 
 
 VIDEO_EXTENSIONS = {
@@ -297,6 +297,11 @@ def build_uploadrr_execution_command(job: dict, conn=None, *, solo_cliente: str 
         config = None
         if runtime["runtime_type"] == RUNTIME_EMU and job.get("id") and admite_config(uploadrr_path):
             config = str(ruta_config(job["id"], reenvio=bool(solo_cliente)))
+        # La descripción propia: el reenvío a qBittorrent no sube nada, no la necesita.
+        descripcion_texto = None if solo_cliente else (job.get("descripcion") or "").strip() or None
+        descripcion = None
+        if runtime["runtime_type"] == RUNTIME_EMU and job.get("id") and descripcion_texto:
+            descripcion = str(ruta_descripcion(job["id"]))
 
         if runtime["runtime_type"] == RUNTIME_EMU:
             python_path = runtime["python_path"] or sys.executable
@@ -322,6 +327,7 @@ def build_uploadrr_execution_command(job: dict, conn=None, *, solo_cliente: str 
                 tracker=tracker_del_trabajo(job).uploadrr,
                 # La guardó upload_queue._populate_ready con sus normas (reglas_tracker); eMuwarez nunca la lleva.
                 variante=None if tracker_del_trabajo(job).id == trackers.EMU.id else cmd_data.get("variante"),
+                descripcion=descripcion,
             )
             executable = full_argv[0]
             args = full_argv[1:]
@@ -347,6 +353,8 @@ def build_uploadrr_execution_command(job: dict, conn=None, *, solo_cliente: str 
             "runtime_type": runtime["runtime_type"],
             "eventos": eventos,
             "config": config,
+            "descripcion": descripcion,
+            "descripcion_texto": descripcion_texto if descripcion else None,
         }
     finally:
         if own:

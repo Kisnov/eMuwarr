@@ -4,18 +4,26 @@ Cada test trabaja bajo tmp_path: nada toca una instalación real de Uploadrr/.
 """
 from __future__ import annotations
 
+import pathlib
+
 import pytest
 
 from emuwarez_uploadrr.services.uploadrr_yaml import get_block_key, get_child_inline_mapping
 from emuwarez_uploadrr.services.uploadrr_config import (
+    FIRMA_ACTUAL,
+    FIRMA_ANONIMA,
+    FIRMAS_ANTERIORES,
     QBIT_CLIENT_KEY,
     SCREENS_API_KEY_HOSTS,
     read_config_lines,
     stage_emu_config,
+    stage_firma_actual,
     stage_image_hosts,
     stage_qbittorrent_config,
     stage_tmdb_key,
 )
+
+REPO_ROOT = pathlib.Path(__file__).resolve().parents[1]
 
 
 def test_read_config_lines_missing_file_returns_empty(tmp_path):
@@ -489,22 +497,34 @@ def test_la_subida_fuerza_keep_quiet_off(tmp_path, monkeypatch):
     assert get_block_key(read_config_lines(ruta), "AUTO", "keep_quiet") == "false"
 
 
-def test_la_firma_de_serie_anterior_pasa_a_la_actual_y_una_propia_no_se_toca():
-    from emuwarez_uploadrr.services.uploadrr_config import FIRMA_ACTUAL, FIRMA_ANTERIOR, stage_firma_actual
-    propia = '  anon_signature: "[img]https://ejemplo.test/mia.png[/img]"'
+@pytest.mark.parametrize("anterior", list(FIRMAS_ANTERIORES))
+def test_cada_firma_de_serie_anterior_pasa_a_la_actual_y_una_propia_no_se_toca(anterior):
+    actual = FIRMAS_ANTERIORES[anterior]
+    propia = '  anon_pr_signature: "[img]https://ejemplo.test/mia.png[/img]"'
     staged, _ = stage_firma_actual([
-        "SIGNATURES:", f'  signature: "[img=400]{FIRMA_ANTERIOR}[/img]"',
-        f'  pr_signature: "[b]Personal Release[/b][img=400]{FIRMA_ANTERIOR}[/img]"', propia])
-    assert staged[1] == f'  signature: "[img=400]{FIRMA_ACTUAL}[/img]"'
-    assert FIRMA_ACTUAL in staged[2] and FIRMA_ANTERIOR not in staged[2]
+        "SIGNATURES:", f'  signature: "[img=400]{anterior}[/img]"',
+        f'  pr_signature: "[b]Personal Release[/b][img=400]{anterior}[/img]"', propia])
+    assert staged[1] == f'  signature: "[img=400]{actual}[/img]"'
+    assert actual in staged[2] and anterior not in staged[2]
     assert staged[3] == propia
 
 
+def test_las_firmas_de_serie_ya_no_estan_en_imgbb():
+    # imgbb va detrás de Cloudflare: en España los bloqueos de LaLiga lo tiran en días de partido.
+    for url in (FIRMA_ACTUAL, FIRMA_ANONIMA):
+        assert url.startswith("https://raw.githubusercontent.com/Kisnov/eMuwarr/")
+        ruta = REPO_ROOT / url.split("/", 6)[6]
+        assert ruta.is_file(), ruta
+    ejemplo = (REPO_ROOT / "uploadrr-emu" / "data" / "backup" / "example_config.yaml").read_text(encoding="utf-8")
+    assert "i.ibb.co" not in ejemplo.split("SIGNATURES:", 1)[1].split("\n\n", 1)[0]
+    assert FIRMA_ACTUAL in ejemplo and FIRMA_ANONIMA in ejemplo
+
+
 def test_al_preparar_la_subida_la_firma_de_serie_queda_al_dia(tmp_path, monkeypatch):
-    from emuwarez_uploadrr.services.uploadrr_config import FIRMA_ACTUAL, FIRMA_ANTERIOR
-    ruta = _preparar(tmp_path, monkeypatch, f'SIGNATURES:\n  signature: "[img=400]{FIRMA_ANTERIOR}[/img]"\n')
+    anterior = next(iter(FIRMAS_ANTERIORES))
+    ruta = _preparar(tmp_path, monkeypatch, f'SIGNATURES:\n  signature: "[img=400]{anterior}[/img]"\n')
     texto = ruta.read_text(encoding="utf-8")
-    assert FIRMA_ACTUAL in texto and FIRMA_ANTERIOR not in texto
+    assert FIRMA_ACTUAL in texto and anterior not in texto
 
 
 @pytest.mark.parametrize(("tracker", "modo"), [("emu", "default"), ("nobs", "null"), ("mnv", "null")])

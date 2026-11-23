@@ -14,7 +14,7 @@ import re
 
 logger = logging.getLogger("emuwarez.settings")
 
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, Field, field_validator
 
 from ..dependencies import require_auth
 from ..runtime import _db_path
@@ -136,6 +136,8 @@ class SettingsResponse(BaseModel):
     emu_add_logo: bool = True
     # Capturas de todos los capítulos de un pack. Por defecto, solo del primero.
     emu_per_episode_screens: bool = False
+    # La descripción propia con la que empieza el Resumen de cada subida.
+    descripcion_plantilla: Optional[str] = None
     # Qué se le hace a las pistas: uno de mkv_remux.MODOS_PISTAS. De fábrica
     # solo se renombran, que es lo barato (ver mkv_remux.MODO_PISTAS_POR_DEFECTO).
     remux_track_mode: str = AJUSTES["remux_track_mode"].defecto
@@ -204,6 +206,7 @@ class SettingsUpdateRequest(BaseModel):
     source_engine_enabled: Optional[bool] = None
     emu_add_logo: Optional[bool] = None
     emu_per_episode_screens: Optional[bool] = None
+    descripcion_plantilla: Optional[str] = Field(None, max_length=30000)
     remux_track_mode: Optional[str] = None
     remux_no_reflink_copies: Optional[bool] = None
     recent_activity_limit: Optional[int] = None

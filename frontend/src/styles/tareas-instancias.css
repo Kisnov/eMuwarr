@@ -304,6 +304,8 @@
 }
 .inst-rejilla-200 .aj-campo,
 .inst-rejilla-180 .aj-campo { margin-bottom: 0; }
+/* La ruta de una carpeta manual, como las rutas en todas partes. */
+.form-input.inst-ruta { font-family: var(--font-mono); }
 .inst-checks {
   display: flex;
   flex-wrap: wrap;

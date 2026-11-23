@@ -7,7 +7,7 @@ import type { LibraryItemResponse } from '../../types/api'
 import type { DashboardRecommendationItem } from '../../api/dashboard'
 import {
   MAX_ELEMENTOS_LOTE, PATRON_LOTE_ID, claveDelPanel, entradaDePeticion, entradaDelPanel, expandirEntradas,
-  marcadaPorDefecto, nombresRepetidos, nuevoLoteId, peticionSeleccionableEnLote, razonNoSubible,
+  marcadaPorDefecto, nombresRepetidos, nuevoLoteId, peticionSeleccionableEnLote, razonNoMarcable, razonNoSubible,
   seleccionableEnLote, conAvisoDeLote, loteDeNotificacion,
 } from '../lote'
 
@@ -89,6 +89,23 @@ describe('razonNoSubible', () => {
 
   it('una serie no entra tal cual: se cambia por sus temporadas', () => {
     expect(razonNoSubible(pelicula({ item_type: 'series' }))).toBe('Una serie se sube por temporadas.')
+  })
+
+  it('lo de una carpeta manual sin ficha de TMDb no entra, a ningún nivel, aunque lo demás esté bien', () => {
+    for (const item_type of ['movie', 'series', 'season', 'episode']) {
+      expect(razonNoSubible(pelicula({ item_type, por_identificar: true })))
+        .toBe('Identifica la ficha en TMDb antes de subirla.')
+    }
+  })
+})
+
+describe('razonNoMarcable', () => {
+  it('una serie se marca (se cambia por sus temporadas) salvo que esté por identificar', () => {
+    expect(razonNoMarcable(pelicula({ item_type: 'series' }))).toBeNull()
+    expect(razonNoMarcable(pelicula({ item_type: 'series', por_identificar: true })))
+      .toBe('Identifica la ficha en TMDb antes de subirla.')
+    expect(razonNoMarcable(pelicula({ por_identificar: true }))).toBe('Identifica la ficha en TMDb antes de subirla.')
+    expect(razonNoMarcable(pelicula({ por_identificar: false }))).toBeNull()
   })
 })
 

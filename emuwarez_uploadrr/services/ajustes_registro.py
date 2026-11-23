@@ -89,6 +89,7 @@ _REGISTRO: tuple[Ajuste, ...] = (
     Ajuste("emu_username", "emu.username", STR),
     Ajuste("emu_add_logo", "emu.add_logo", BOOL, True),
     Ajuste("emu_per_episode_screens", "emu.per_episode_screens", BOOL, False),
+    Ajuste("descripcion_plantilla", "subida.descripcion_plantilla", STR),
     Ajuste("upload_max_concurrent", UPLOAD_MAX_CONCURRENT_SETTING_KEY, INT, UPLOAD_MAX_CONCURRENT_DEFAULT,
            opciones=UPLOAD_MAX_CONCURRENT_CHOICES),
     # Integraciones obligatorias. Sus PUT validan la clave contra el servicio

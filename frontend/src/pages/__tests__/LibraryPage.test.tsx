@@ -10,12 +10,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('../../api/library', () => ({
   getLibrary: vi.fn(), getLibraryFilterOptions: vi.fn(async () => ({})), getLibraryItem: vi.fn(async () => ({})),
-  TOP_LEVEL_PARENT_FILTER: 0,
+  TOP_LEVEL_PARENT_FILTER: 0, identificarSugeridas: vi.fn(), getTmdbCandidatos: vi.fn(), identificarTmdb: vi.fn(),
 }))
 vi.mock('../../api/instances', () => ({ getInstances: vi.fn(async () => []) }))
 vi.mock('../../api/settings', () => ({ fetchSettings: vi.fn(async () => ({ upload_max_concurrent: 1 })) }))
 
-import { getLibrary } from '../../api/library'
+import { getLibrary, getLibraryFilterOptions, getTmdbCandidatos, identificarSugeridas, identificarTmdb } from '../../api/library'
 import { SeccionVisible } from '../../context/SeccionVisible'
 import { SyncContext } from '../../context/SyncContext'
 import type { LibraryItemResponse } from '../../types/api'
@@ -210,5 +210,67 @@ describe('Pósters sin imagen', () => {
     expect(de('Alien').querySelector('.bib-tarjeta-sin-nombre')?.textContent).toBe('Alien')
     expect(de('Dune').classList.contains('bib-tarjeta-sin-poster')).toBe(false)
     expect(de('Dune').querySelector('.bib-tarjeta-sin-nombre')).toBeNull()
+  })
+})
+
+describe('Carpeta manual', () => {
+  const SUGERIDA = item(4, 'dune part two', {
+    instance_type: 'carpeta', instance_name: 'Manual', instance_id: 5, por_identificar: true,
+    sugerencia_tmdb: { tmdb_id: '693134', tipo: 'movie', titulo: 'Dune: Parte dos', anio: 2024, poster_url: null },
+  })
+  const filtroPorIdentificar = () => [...document.querySelectorAll('button[aria-pressed]')]
+    .find(b => b.textContent?.startsWith('Por identificar'))
+
+  beforeEach(() => {
+    // jsdom no mide el texto, y el tooltip del menú de Origen ajusta su ancho con esto.
+    Range.prototype.getClientRects = () => [] as unknown as DOMRectList
+    vi.mocked(getLibraryFilterOptions).mockResolvedValue({ instances: [{ id: 5, type: 'carpeta', name: 'Manual' }] } as never)
+    vi.mocked(getLibrary).mockImplementation(async q => (q?.por_identificar
+      ? { items: [SUGERIDA], total: 3, archivos: 2 }
+      : { items: [DUNE, ALIEN, SUGERIDA], total: 3, archivos: 2 }) as never)
+  })
+
+  it('«Por identificar» dice cuántas faltan, deja solo esas y confirma las sugeridas', async () => {
+    vi.mocked(identificarSugeridas).mockResolvedValue({ ok: true, confirmadas: 1, message: '1 ficha confirmada' })
+    await pagina()
+    const filtro = await esperar(filtroPorIdentificar)
+    expect(getLibrary).toHaveBeenCalledWith({ por_identificar: true, parent_id: 0, limit: 1 })
+    expect(filtro.textContent).toBe('Por identificar 3')
+    expect(boton('Confirmar las sugeridas')).toBeUndefined()
+
+    await pulsar(filtro)
+    await esperar(() => !texto().includes('Alien'))
+    expect(getLibrary).toHaveBeenCalledWith(expect.objectContaining({ por_identificar: true, parent_id: 0, limit: 20000 }))
+    expect(filtro.getAttribute('aria-pressed')).toBe('true')
+
+    await pulsar(boton('Confirmar las sugeridas'))
+    expect(identificarSugeridas).toHaveBeenCalledWith(undefined)
+    await esperar(() => texto().includes('1 ficha confirmada'))
+  })
+
+  it('el filtro Origen nombra la carpeta como carpeta, no como Sonarr', async () => {
+    await pagina()
+    await esperar(filtroPorIdentificar)
+    const origen = [...document.querySelectorAll('thead th')].find(th => th.textContent?.includes('Origen'))!
+    await pulsar(origen.querySelector('.hf-trigger')!)
+    expect(texto()).toContain('Carpeta: Manual')
+    expect(texto()).not.toContain('Sonarr: Manual')
+  })
+
+  it('la chapa de la fila abre el diálogo de TMDb, y al confirmar se cierra y la lista se recarga', async () => {
+    vi.mocked(getTmdbCandidatos).mockResolvedValue({ tipo: 'movie', consulta: 'dune part two', anio: 2024, candidatos: [] })
+    vi.mocked(identificarTmdb).mockResolvedValue({ ok: true, message: 'Ficha confirmada', item_id: 4 })
+    await pagina()
+    const chapa = await esperar(() => document.querySelector<HTMLButtonElement>('tr.bib-fila button.bib-chip-identificar'))
+    await pulsar(chapa)
+    const dialogo = await esperar(() => document.querySelector('[role="dialog"]'))
+    expect(dialogo.textContent).toContain('Identificar en TMDb')
+    expect(getTmdbCandidatos).toHaveBeenCalledWith(4, undefined)
+    const cargas = vi.mocked(getLibrary).mock.calls.length
+    await pulsar(boton('Sí, es esta'))
+    await esperar(() => !document.querySelector('[role="dialog"]'))
+    expect(identificarTmdb).toHaveBeenCalledWith(4, '693134', 'movie')
+    expect(vi.mocked(getLibrary).mock.calls.length).toBeGreaterThan(cargas)
+    expect(texto()).toContain('Ficha confirmada')
   })
 })

@@ -91,6 +91,7 @@ def _build_library_filter(
     parent_id: Optional[int] = None,
     search: Optional[str] = None,
     spanish: Filtro = None,
+    por_identificar: bool = False,
     ignore_specials: bool = True,
 ) -> tuple[list[str], list]:
     """Shared WHERE-clause builder for list_library()/count_library() — used
@@ -119,6 +120,9 @@ def _build_library_filter(
     casos = [_CASTELLANO_SQL[v] for v in _valores(spanish) if v in _CASTELLANO_SQL]
     if casos:
         where.append("(" + " OR ".join(f"({c})" for c in casos) + ")")
+    if por_identificar:
+        # Carpeta manual sin ficha de TMDb confirmada (services/library/carpeta.py).
+        where.append("instance_type = 'carpeta' AND tmdb_id IS NULL")
     if parent_id is not None:
         if parent_id == TOP_LEVEL_PARENT_FILTER:
             where.append("parent_id IS NULL")
@@ -228,6 +232,7 @@ def list_library(
     parent_id: Optional[int] = None,
     search: Optional[str] = None,
     spanish: Filtro = None,
+    por_identificar: bool = False,
     sort: Optional[str] = None,
     limit: int = 50,
     offset: int = 0,
@@ -242,6 +247,7 @@ def list_library(
         status=status, request=request, nomenclature=nomenclature,
         item_type=item_type, origin=origin, instance_id=instance_id,
         parent_id=parent_id, search=search, spanish=spanish, ignore_specials=ignore_specials,
+        por_identificar=por_identificar,
     )
     # Recorte previo para filtrar_por_lo_que_se_ve: en películas y capítulos la
     # columna es su propio valor, así que los que no cumplen ni se leen. Series
@@ -308,6 +314,7 @@ def list_library_agrupada(
     instance_id: Filtro = None,
     search: Optional[str] = None,
     spanish: Filtro = None,
+    por_identificar: bool = False,
     sort: Optional[str] = None,
     limit: int = 50,
     offset: int = 0,
@@ -319,6 +326,7 @@ def list_library_agrupada(
     where, params = _build_library_filter(
         status=status, request=request, nomenclature=nomenclature, origin=origin,
         instance_id=instance_id, search=search, spanish=spanish, ignore_specials=ignore_specials,
+        por_identificar=por_identificar,
     )
     # Ignorando especiales, la fila de la serie no los cuenta: no la traen.
     if ignore_specials:
@@ -404,12 +412,14 @@ def count_library(
     parent_id: Optional[int] = None,
     search: Optional[str] = None,
     spanish: Filtro = None,
+    por_identificar: bool = False,
     ignore_specials: bool = True,
 ) -> int:
     where, params = _build_library_filter(
         status=status, request=request, nomenclature=nomenclature,
         item_type=item_type, origin=origin, instance_id=instance_id,
         parent_id=parent_id, search=search, spanish=spanish, ignore_specials=ignore_specials,
+        por_identificar=por_identificar,
     )
     sql = "SELECT COUNT(*) FROM library_items"
     if where:

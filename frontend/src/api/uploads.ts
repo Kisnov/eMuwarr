@@ -59,9 +59,12 @@ export async function queueUpload(
   opciones?: OpcionesTracker,
   // El id del tracker (emu, nobs, mnv). Sin él, eMuwarez. Una subida por tracker: para varios, una llamada por cada uno.
   tracker?: string,
+  // La descripción propia (BBCode) de esta subida; vacía, solo la que genera Uploadrr-EMU.
+  descripcion?: string,
 ): Promise<UploadQueueResult> {
   return api.post<UploadQueueResult>(`/library/${itemId}/upload/queue`, {
     ...(tracker ? { tracker } : {}),
+    ...(descripcion?.trim() ? { descripcion } : {}),
     request_item_id: requestItemId ?? null,
     ...(loteId ? { lote_id: loteId } : {}),
     anonimo: opciones?.anonimo ?? null,
