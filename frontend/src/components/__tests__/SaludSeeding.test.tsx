@@ -192,6 +192,14 @@ describe('SaludSeeding', () => {
       expect(boton(REENVIAR)!.getAttribute('aria-describedby')).toBe('reenvio-qbit-7')
     })
 
+    it('la ayuda nombra el tracker de la subida, no eMuwarez', async () => {
+      m.mockResolvedValue(noEncontrado())
+      await montar(<Pagina job={subida({ puede_reenviar_qbit: true, tracker: 'nobs', tracker_nombre: 'N.O.B.S' })} />)
+      await esperar(() => boton(REENVIAR))
+      expect(texto()).toContain('Ya está en N.O.B.S, pero qBittorrent no lo tiene. Vuelve a añadir el torrent de N.O.B.S sin')
+      expect(texto()).not.toContain('eMuwarez')
+    })
+
     it('sale también en la que falló con el torrent ya en eMuwarez', async () => {
       m.mockResolvedValue(noEncontrado())
       await montar(<Pagina job={subida({ status: 'failed', puede_reenviar_qbit: true })} />)

@@ -11,6 +11,12 @@ ruta de guardado, así que el torrent acaba con `content_path` igual a esa ruta.
    sin etiqueta, su `save_path` cuelga de la carpeta de subidas. Un torrent bajado con el mismo nombre de release
    desde otro sitio no cuenta.
 
+Con varios trackers el mismo fichero lo siembran varios torrents (eMuwarez, N.O.B.S, Milnueve: misma ruta, otro
+info-hash). Cada subida se queda con el de su tracker (`upload_jobs.tracker`): el que anuncia a su dominio o lleva su
+URL en el comentario que le pone Uploadrr-EMU («Torrent descargado de …» + la URL del torrent), y entre esos el que
+lleva la URL de esa subida (`result_url`). Un torrent que se sabe de otro tracker no cuenta; uno del que qBittorrent
+no dice nada (sin anuncio que funcione ni comentario) sí, como antes.
+
 En cada paso, si hay varios candidatos se estrecha por la etiqueta (la de Ajustes) y, si siguen siendo varios, el
 casamiento es ambiguo: NO se adivina ni se baja al paso siguiente, la subida queda en «No se encuentra».
 
@@ -25,11 +31,13 @@ from __future__ import annotations
 import logging
 import math
 import posixpath
+import re
 import sqlite3
 import threading
 import time
 from datetime import datetime, timezone
 from typing import Any, Optional
+from urllib.parse import urlsplit
 
 from ..integrations import http_cliente
 from ..integrations.base import texto_de_error
@@ -37,6 +45,7 @@ from ..integrations.qbittorrent import ErrorQbit, qbit_listar_torrents
 from .ajustes_registro import error_de_url_publica
 from .carpeta_subida import RAIZ_SUBIDAS
 from .settings import get_setting_canonical
+from .trackers import EMU, POR_DEFECTO, TRACKERS
 
 logger = logging.getLogger(__name__)
 
@@ -102,9 +111,47 @@ def _numero(valor: Any, por_defecto: Optional[float] = None) -> Optional[float]:
     return numero if math.isfinite(numero) else por_defecto  # inf y nan no caben en el JSON de la respuesta
 
 
+_URL_RE = re.compile(r"https?://\S+", re.I)
+# Los dominios de cada tracker; el de antes de eMuwarez (esquema 39) sigue en los comentarios de sus torrents viejos.
+_DOMINIOS_VIEJOS = {EMU.id: ("emuwarez.com",)}
+
+
+def _host(url: Any) -> str:
+    try:
+        host = (urlsplit(str(url or "")).hostname or "").lower()
+    except ValueError:
+        return ""
+    return host[4:] if host.startswith("www.") else host
+
+
+def _urls_del_comentario(t: dict[str, Any]) -> list[str]:
+    return [u.rstrip("/") for u in _URL_RE.findall(str(t.get("comment") or ""))]
+
+
+def _hosts_de(t: dict[str, Any]) -> list[str]:
+    """Los dominios que dicen de qué tracker es un torrent: el de su anuncio (`tracker`, el que funciona; sin la clave
+    de paso, que no se guarda) y los de las URL de su comentario."""
+    hosts = {_host(t.get("tracker"))} | {_host(u) for u in _urls_del_comentario(t)}
+    return sorted(h for h in hosts if h)
+
+
+def _es_de(hosts: list[str], dominios: set[str]) -> bool:
+    return any(h == d or h.endswith("." + d) for h in hosts for d in dominios)
+
+
+def _dominios(tracker_id: str, result_url: Optional[str] = None) -> set[str]:
+    tracker = TRACKERS.get(tracker_id)
+    dominios = {_host(tracker.url)} if tracker else set()
+    dominios |= set(_DOMINIOS_VIEJOS.get(tracker_id, ()))
+    if result_url:
+        dominios.add(_host(result_url))  # el origen que usó de verdad, aunque se haya cambiado en sus ajustes
+    return {d for d in dominios if d}
+
+
 def _resumir(t: dict[str, Any]) -> dict[str, Any]:
     """Lo único que se guarda de cada torrent de qBittorrent."""
     return {
+        "hosts": _hosts_de(t), "urls": _urls_del_comentario(t),
         "hash": str(t.get("hash") or ""), "name": str(t.get("name") or ""),
         "save_path": _norm(t.get("save_path")), "content_path": _norm(t.get("content_path")),
         "state": str(t.get("state") or ""), "tags": str(t.get("tags") or ""),
@@ -180,6 +227,20 @@ def estado_de(t: dict[str, Any]) -> tuple[str, str]:
     return "desconocido", ETIQUETAS["desconocido"]
 
 
+def _del_tracker(candidatos: list[dict[str, Any]], tracker_id: str, result_url: Optional[str]) -> list[dict[str, Any]]:
+    """Los candidatos que pueden ser del torrent de esa subida: fuera los que se sabe que son de otro tracker y, si
+    quedan varios, los que se sabe que son del suyo (y de ellos, el que lleva su URL en el comentario)."""
+    mios = _dominios(tracker_id, result_url)
+    otros = set().union(*(_dominios(t) for t in TRACKERS if t != tracker_id)) - mios
+    suyos = [t for t in candidatos if _es_de(t["hosts"], mios)]
+    candidatos = [t for t in candidatos if t in suyos or not _es_de(t["hosts"], otros)]
+    if len(candidatos) > 1 and suyos:
+        candidatos = suyos
+    if len(candidatos) > 1 and result_url:
+        candidatos = [t for t in candidatos if result_url.rstrip("/") in t["urls"]] or candidatos
+    return candidatos
+
+
 def _unico(candidatos: list[dict[str, Any]], etiqueta: str) -> Optional[dict[str, Any]]:
     """El torrent si solo hay uno (estrechando por la etiqueta si hace falta); None si no hay o es ambiguo."""
     if len(candidatos) > 1 and etiqueta:
@@ -202,19 +263,21 @@ def _indices(torrents: list[dict[str, Any]]) -> dict[str, dict[str, list[dict[st
 
 
 def casar(ruta: Optional[str], indices: dict[str, dict[str, list[dict[str, Any]]]], etiqueta: str,
-          raiz: str = RAIZ_SUBIDAS) -> tuple[Optional[dict[str, Any]], str]:
-    """(torrent, cómo se casó: 'ruta' | 'nombre' | ''). Sin torrent si no hay ninguno o el casamiento es ambiguo."""
+          raiz: str = RAIZ_SUBIDAS, *, tracker: str = POR_DEFECTO,
+          result_url: Optional[str] = None) -> tuple[Optional[dict[str, Any]], str]:
+    """(torrent, cómo se casó: 'ruta' | 'nombre' | ''). Sin torrent si no hay ninguno o el casamiento es ambiguo.
+    `tracker` y `result_url` son los de la subida: escogen su torrent entre los de otros trackers (ver arriba)."""
     ruta = _norm(ruta)
     if not ruta:
         return None, ""
     for indice in (indices["contenido"], indices["guardado"]):
-        candidatos = indice.get(ruta)
+        candidatos = _del_tracker(indice.get(ruta) or [], tracker, result_url)
         if candidatos:
             elegido = _unico(candidatos, etiqueta)
             return elegido, "ruta" if elegido else ""
     raiz = _norm(raiz)
     propios = [
-        t for t in indices["nombre"].get(posixpath.basename(ruta), [])
+        t for t in _del_tracker(indices["nombre"].get(posixpath.basename(ruta), []), tracker, result_url)
         if (etiqueta in _etiquetas(t) if etiqueta else t["save_path"] == raiz or t["save_path"].startswith(raiz + "/"))
     ]
     elegido = _unico(propios, etiqueta)
@@ -263,11 +326,13 @@ def salud_del_seeding(conn: sqlite3.Connection, *, refrescar: bool = False) -> d
                 "actualizado": actualizado, "items": [], "url_publica": publica}
     indices = _indices(torrents)
     filas = conn.execute(
-        "SELECT id, prepared_path FROM upload_jobs WHERE status = 'completed' OR torrent_subido = 1 ORDER BY id"
+        "SELECT id, prepared_path, tracker, result_url FROM upload_jobs"
+        " WHERE status = 'completed' OR torrent_subido = 1 ORDER BY id"
     ).fetchall()
     items = []
     for fila in filas:
-        t, como = casar(fila["prepared_path"], indices, etiqueta)
+        t, como = casar(fila["prepared_path"], indices, etiqueta, tracker=fila["tracker"] or POR_DEFECTO,
+                        result_url=fila["result_url"])
         items.append(_entrada(fila["id"], t, como))
     return {"configurado": True, "disponible": True, "mensaje": None, "actualizado": actualizado,
             "items": items, "url_publica": publica}

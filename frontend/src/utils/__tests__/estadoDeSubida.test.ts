@@ -20,6 +20,13 @@ describe('estadoVisible', () => {
     expect(e.seeding?.clase).toContain('status-available')
   })
 
+  it('una subida a otro tracker dice el suyo, no eMuwarez', () => {
+    const otro = { tracker: 'mnv', tracker_nombre: 'Milnueve' }
+    expect(estadoVisible(subida({ result_url: 'https://mnv/t/1', ...otro }), null).titulo).toBe('Subido a Milnueve')
+    expect(estadoVisible(subida({ status: 'failed', puede_reenviar_qbit: true, ...otro }), null).motivo)
+      .toBe('El torrent ya está en Milnueve: usa «Reenviar a qBittorrent» para sembrarlo.')
+  })
+
   it('pendiente_moderacion se marca solo en una completada que lo trae', () => {
     expect(estadoVisible(subida({ result_url: 'x', pendiente_moderacion: true }), null).pendienteModeracion).toBe(true)
     expect(estadoVisible(subida({ result_url: 'x' }), null).pendienteModeracion).toBeUndefined()
