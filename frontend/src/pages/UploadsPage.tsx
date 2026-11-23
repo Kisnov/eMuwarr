@@ -400,11 +400,15 @@ export function UploadsPage({ onNavigate }: { onNavigate?: (page: string) => voi
   const [subirTambienAbierto, setSubirTambien] = useState(false)
   // Solo se ofrece con la clave de otro tracker puesta: quien solo usa eMuwarez no ve nada nuevo.
   const [hayOtrosTrackers, setHayOtrosTrackers] = useState(false)
+  // Si la sección se ve: la sección sigue montada al ir a Configuración, así que se pregunta otra vez al volver (una
+  // clave puesta allí entretanto enseña el botón sin recargar la página).
+  const subidasALaVista = useSeccionVisible()
   useEffect(() => {
+    if (!subidasALaVista) return
     let vigente = true
     fetchTrackersParaSubir().then(t => { if (vigente) setHayOtrosTrackers(t.some(x => x.id !== 'emu')) }, () => {})
     return () => { vigente = false }
-  }, [])
+  }, [subidasALaVista])
   // Cuántas se piden (las más recientes), cuántas hay en total con el filtro de estado, y si ya llegó la primera
   // respuesta (hasta entonces «no está en la lista» no quiere decir nada).
   const [limite, setLimite] = useState(PAGINA)
@@ -518,7 +522,6 @@ export function UploadsPage({ onNavigate }: { onNavigate?: (page: string) => voi
   // cada visita, así que sin eso solo se recogía el salto si los datos
   // llegaban justo después (ver context/SeccionVisible). Se abre aunque no esté
   // en la lista (una antigua): la ficha la pide por su id.
-  const subidasALaVista = useSeccionVisible()
   //
   // También el lote recién encolado desde «Subir por lotes» (Biblioteca): la tabla, filtrada por él.
   useEffect(() => {
@@ -791,15 +794,20 @@ export function UploadsPage({ onNavigate }: { onNavigate?: (page: string) => voi
   // parent-walk query per list row — so fetch it once per selection and
   // merge just that field into the (still live-polled) list-derived job,
   // instead of replacing it outright and losing further progress updates.
-  const [selectedTitle, setSelectedTitle] = useState<{ id: number; display_title: string | null } | null>(null)
+  // Lo mismo con `subir_tambien_a` (los trackers a los que se puede subir también): solo lo trae el GET de una.
+  const [selectedTitle, setSelectedTitle] = useState<{
+    id: number; display_title: string | null; subir_tambien_a: UploadJob['subir_tambien_a']
+  } | null>(null)
   useEffect(() => {
     if (selectedJobId == null) { setSelectedTitle(null); return }
     let alive = true
-    getUploadJob(selectedJobId).then(j => { if (alive) setSelectedTitle({ id: selectedJobId, display_title: j.display_title ?? null }) }).catch(() => {})
+    getUploadJob(selectedJobId).then(j => {
+      if (alive) setSelectedTitle({ id: selectedJobId, display_title: j.display_title ?? null, subir_tambien_a: j.subir_tambien_a })
+    }).catch(() => {})
     return () => { alive = false }
   }, [selectedJobId])
   const selectedJobWithTitle = selectedJob && selectedTitle && selectedTitle.id === selectedJob.id
-    ? { ...selectedJob, display_title: selectedTitle.display_title }
+    ? { ...selectedJob, display_title: selectedTitle.display_title, subir_tambien_a: selectedTitle.subir_tambien_a }
     : selectedJob
 
   // La fila del último intento de una cadena y, si está desplegada, sus intentos anteriores.
