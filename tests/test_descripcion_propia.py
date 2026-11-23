@@ -33,6 +33,16 @@ def test_la_api_rechaza_una_descripcion_enorme(client, auth_headers, db_conn, tm
     assert r.status_code == 422
 
 
+def test_la_plantilla_se_guarda_en_ajustes(client, auth_headers):
+    r = client.put("/api/settings", json={"descripcion_plantilla": f"  {TEXTO}\n"}, headers=auth_headers)
+    assert r.status_code == 200, r.text
+    assert client.get("/api/settings", headers=auth_headers).json()["descripcion_plantilla"] == TEXTO
+    client.put("/api/settings", json={"descripcion_plantilla": ""}, headers=auth_headers)
+    assert client.get("/api/settings", headers=auth_headers).json()["descripcion_plantilla"] is None
+    r = client.put("/api/settings", json={"descripcion_plantilla": "x" * 30001}, headers=auth_headers)
+    assert r.status_code == 422
+
+
 def test_el_reintento_lleva_la_misma(db_conn, tmp_path):
     iid = _peli(db_conn, str(tmp_path / "a.mkv"))
     fallida = _trabajo(db_conn, iid, status="failed", stage="failed", descripcion=TEXTO)

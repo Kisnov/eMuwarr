@@ -376,6 +376,26 @@ describe('película', () => {
       [undefined, '[b]Común[/b]'], ['nobs', '[b]Común[/b]'], ['mnv', '[b]Solo Milnueve[/b]']])
   })
 
+  it('la plantilla de Configuración llena la descripción y se sube con lo que se le añada', async () => {
+    m(fetchSettings).mockResolvedValue({
+      upload_tags: ['GRP'], descripcion_plantilla: '[i]firma[/i]',
+    } as unknown as Awaited<ReturnType<typeof fetchSettings>>)
+    await abrir(PELICULA)
+    await esperar(() => texto().includes('Dune WEB-DL AMZN [GRP]'))
+    await pulsar(boton('Continuar'))
+    await esperar(() => texto().includes('✓ Todo listo para subir'))
+    const area = document.querySelector<HTMLTextAreaElement>('textarea[aria-label="Descripción propia (BBCode)"]')!
+    expect(area.value).toBe('[i]firma[/i]')
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(area, 'Notas\n[i]firma[/i]')
+      area.dispatchEvent(new Event('input', { bubbles: true }))
+    })
+
+    await pulsar(boton('Subir a eMuwarez'))
+    await esperar(() => onClose.mock.calls.length > 0)
+    expect(m(subidas.queueUpload).mock.calls.map(c => c[9])).toEqual(['Notas\n[i]firma[/i]'])
+  })
+
   it('con un solo tracker se sube la común, aunque antes tuviera la suya', async () => {
     m(subidas.fetchTrackersParaSubir).mockResolvedValue([{ id: 'emu', nombre: 'eMuwarez' }, { id: 'nobs', nombre: 'N.O.B.S' }])
     await abrir(PELICULA)

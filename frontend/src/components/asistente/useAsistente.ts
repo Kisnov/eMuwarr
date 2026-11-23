@@ -170,6 +170,8 @@ export function useAsistente({ item, onClose: onCloseProp, onDone, onNavigate, p
       setModoPistasAjuste(s.remux_track_mode)
       setGruposPersonalRelease(s.upload_tags_personal_release ?? [])
       setGruposAnonimos(s.upload_tags_anonimos ?? [])
+      plantilla.current = s.descripcion_plantilla ?? ''
+      setDescripcion(d => d || plantilla.current)
     }).catch(() => { /* quedan los de siempre */ })
   }, [])
   // Los trackers a los que se puede subir (eMuwarez y los que tienen clave) y los elegidos: eMuwarez de entrada.
@@ -207,6 +209,8 @@ export function useAsistente({ item, onClose: onCloseProp, onDone, onNavigate, p
     setTrackersElegidos(t => si ? [...new Set([...t, id])] : t.filter(x => x !== id))
   // La descripción propia (BBCode) del Resumen: la misma para todos los trackers, salvo los que tengan la suya.
   const [descripcion, setDescripcion] = useState('')
+  // La plantilla de Configuración: con ella empieza la de cada contenido.
+  const plantilla = useRef('')
   const [descripcionPorTracker, setDescripcionPorTracker] = useState<Record<string, string>>({})
   // Marcar «otra para X» la empieza con la común; desmarcarla vuelve a la común.
   const descripcionPropia = (id: string, si: boolean) => setDescripcionPorTracker(d => {
@@ -731,7 +735,7 @@ export function useAsistente({ item, onClose: onCloseProp, onDone, onNavigate, p
     setRemuxPreview(null); setRemuxError(null); setRemuxEdits({}); setRemuxLoading(false)
     setSeasonPlan(null); setSeasonPlanError(null)
     // Ni la descripción: las notas de un capítulo no son las del siguiente.
-    setDescripcion(''); setDescripcionPorTracker({})
+    setDescripcion(plantilla.current); setDescripcionPorTracker({})
   }, [targetId])
 
   const detalles = useDetallesTemporada({
