@@ -24,6 +24,9 @@ web = [
     # Las peticiones salientes (Radarr, Sonarr, eMuwarez, TMDb, qBittorrent...) salen por
     # integrations/http_cliente.py; también la usa el TestClient de los tests (extra dev).
     "httpx>=0.27.0",
+    # Lee título, año y SxxEyy del nombre de los ficheros de la carpeta manual; la misma versión que fija
+    # uploadrr-emu/requirements.txt, que se instala en la misma imagen.
+    "guessit>=4.5.1",
 ]
 dev = [
     "pytest>=8.0.0",

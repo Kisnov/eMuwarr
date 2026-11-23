@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { getInstances, addInstance, updateInstance, testInstance, syncInstance, deleteInstance } from '../api/instances'
 import { getDashboardSummary } from '../api/dashboard'
 import { testArrConnection, type IntegrationTestResult } from '../api/integrationTests'
-import type { InstanceSafeResponse } from '../types/api'
+import type { InstanceSafeResponse, TipoDeInstancia } from '../types/api'
 import { ServiceIcon } from '../components/ServiceIcon'
 import { LoadingState } from '../components/LoadingState'
 import { ErrorState } from '../components/ErrorState'
@@ -15,7 +15,7 @@ import { useRefrescoPorAvisos } from '../hooks/useRefrescoPorAvisos'
 import { IconoEnchufe } from '../components/Iconos'
 import { Campo, ResultadoPrueba, enfocarPrimerError } from './ajustes/Campo'
 
-type InstanceKind = 'radarr' | 'sonarr'
+type InstanceKind = TipoDeInstancia
 
 interface AddForm {
   type: InstanceKind
@@ -45,6 +45,8 @@ function editFormFrom(inst: InstanceSafeResponse): EditForm {
 
 // Lo que se enseña bajo una instancia tras probarla o sincronizarla.
 interface Resultado { tono: 'ok' | 'error' | 'aviso' | 'neutro'; texto: string }
+
+const NOTA_RUTA = 'En el mismo disco que la carpeta de subidas (enlaces duros) y dentro de las rutas permitidas de Configuración.'
 
 // Pregunta antes de borrar: es lo único de esta pantalla que no se deshace.
 function ConfirmarEliminar({ instancia, onCancelar, onConfirmar }: {
@@ -159,6 +161,14 @@ export function InstancesPage() {
     requestAnimationFrame(() => (origen?.isConnected ? origen : botonAnadir.current)?.focus())
   }
 
+  // La ruta de una carpeta no vale como URL de Radarr/Sonarr ni al revés: al cruzar ese lado se vacía.
+  function cambiarTipo(type: InstanceKind) {
+    setForm(p => ({ ...p, type, url: (type === 'carpeta') === (p.type === 'carpeta') ? p.url : '' }))
+    setAddErrores({})
+    setAddTestResult(null)
+  }
+  const altaCarpeta = form.type === 'carpeta'
+
   async function handleAdd(e: React.FormEvent) {
     e.preventDefault()
     setAddError(null)
@@ -168,9 +178,9 @@ export function InstancesPage() {
     setAdding(true)
     try {
       await addInstance({
-        type: form.type, name: form.name.trim(), url: form.url.trim(), api_key: form.api_key.trim(),
-        is_4k: form.is_4k,
-        is_anime: form.is_anime,
+        type: form.type, name: form.name.trim(), url: form.url.trim(), api_key: altaCarpeta ? '' : form.api_key.trim(),
+        is_4k: !altaCarpeta && form.is_4k,
+        is_anime: !altaCarpeta && form.is_anime,
       })
       setForm(defaultForm())
       cerrarAlta(true)
@@ -206,11 +216,14 @@ export function InstancesPage() {
     try {
       const res = await testInstance(inst.id)
       const extra = res.username ? ` (${res.username})` : ''
+      const carpeta = inst.type === 'carpeta'
       setTestResults(p => ({
         ...p,
-        [inst.id]: res.ok
-          ? { tono: 'ok', texto: `Responde: v${res.version ?? '?'}${extra}` }
-          : { tono: 'error', texto: `No responde: ${res.error ?? 'error desconocido'}` },
+        [inst.id]: res.ok && carpeta && res.warning
+          ? { tono: 'aviso', texto: `${res.message || 'Se puede leer'}. ${res.warning}.` }
+          : res.ok
+          ? { tono: 'ok', texto: carpeta ? res.message || 'Se puede leer' : `Responde: v${res.version ?? '?'}${extra}` }
+          : { tono: 'error', texto: carpeta ? res.error ?? 'No se puede leer' : `No responde: ${res.error ?? 'error desconocido'}` },
       }))
       void load(true)
     } catch {
@@ -220,12 +233,18 @@ export function InstancesPage() {
     }
   }
 
-  async function handleSync(id: number) {
+  async function handleSync(inst: InstanceSafeResponse) {
+    const id = inst.id
+    const carpeta = inst.type === 'carpeta'
     setSyncingId(id)
-    setSyncResults(p => ({ ...p, [id]: { tono: 'neutro', texto: 'Sincronizando…' } }))
+    setSyncResults(p => ({ ...p, [id]: { tono: 'neutro', texto: carpeta ? 'Escaneando…' : 'Sincronizando…' } }))
     try {
       const res = await syncInstance(id)
-      setSyncResults(p => ({ ...p, [id]: { tono: 'ok', texto: `Sincronizada: ${res.imported} elementos, ${res.missing} faltantes` } }))
+      // El servidor dice también cuántas quedan por identificar en TMDb.
+      const texto = carpeta
+        ? res.message || `Escaneada: ${res.imported} elementos`
+        : `Sincronizada: ${res.imported} elementos, ${res.missing} faltantes`
+      setSyncResults(p => ({ ...p, [id]: { tono: 'ok', texto } }))
     } catch (e: unknown) {
       setSyncResults(p => ({ ...p, [id]: { tono: 'error', texto: e instanceof Error && e.message ? e.message : 'Error de sincronización' } }))
     } finally {
@@ -269,7 +288,7 @@ export function InstancesPage() {
   async function handleUpdate(inst: InstanceSafeResponse) {
     if (!editForm) return
     setEditError(null)
-    const errores = validar(editForm, false)
+    const errores = validar({ ...editForm, type: inst.type }, false)
     setEditErrores(errores)
     if (Object.keys(errores).length > 0) { enfocarPrimerError('.inst-edicion'); return }
     setEditSaving(true)
@@ -325,7 +344,7 @@ export function InstancesPage() {
       <div className="page-header">
         <div>
           <h1 className="page-title">Instancias</h1>
-          <div className="page-subtitle">Gestiona tus instancias Radarr y Sonarr</div>
+          <div className="page-subtitle">Gestiona tus instancias Radarr y Sonarr y tus carpetas manuales</div>
         </div>
         <div className="inst-cabecera-acciones">
           {sinResponder > 0 && (
@@ -357,34 +376,48 @@ export function InstancesPage() {
             <div className="inst-rejilla-200">
               <Campo etiqueta="Tipo">
                 {c => (
-                  <select {...c} className="form-input form-select" value={form.type} onChange={e => setForm(p => ({ ...p, type: e.target.value as InstanceKind }))}>
+                  <select {...c} className="form-input form-select" value={form.type} onChange={e => cambiarTipo(e.target.value as InstanceKind)}>
                     <option value="radarr">Radarr</option>
                     <option value="sonarr">Sonarr</option>
+                    <option value="carpeta">Carpeta manual</option>
                   </select>
                 )}
               </Campo>
               <Campo etiqueta="Nombre" nota="máx. 15" error={addErrores.name}>
-                {c => <input {...c} className="form-input" placeholder={form.type === 'sonarr' ? 'Sonarr principal' : 'Radarr principal'} value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))} maxLength={15} autoComplete="off" />}
+                {c => <input {...c} className="form-input" placeholder={form.type === 'sonarr' ? 'Sonarr principal' : altaCarpeta ? 'Manual' : 'Radarr principal'} value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))} maxLength={15} autoComplete="off" />}
               </Campo>
-              <Campo etiqueta="URL" error={addErrores.url}>
-                {c => <input {...c} className="form-input" inputMode="url" placeholder={form.type === 'sonarr' ? 'http://192.168.1.100:8989' : 'http://192.168.1.100:7878'} value={form.url} onChange={e => setForm(p => ({ ...p, url: e.target.value }))} autoComplete="off" spellCheck={false} />}
-              </Campo>
-              <Campo etiqueta="API key" error={addErrores.api_key}>
-                {c => <input {...c} className="form-input" type="password" placeholder="API key" value={form.api_key} onChange={e => setForm(p => ({ ...p, api_key: e.target.value }))} autoComplete="new-password" />}
-              </Campo>
+              {altaCarpeta ? (
+                <Campo etiqueta="Ruta de la carpeta" error={addErrores.url} ayuda={NOTA_RUTA}>
+                  {c => <input {...c} className="form-input inst-ruta" placeholder="/data/torrents/manual" value={form.url} onChange={e => setForm(p => ({ ...p, url: e.target.value }))} autoComplete="off" spellCheck={false} translate="no" />}
+                </Campo>
+              ) : (
+                <>
+                  <Campo etiqueta="URL" error={addErrores.url}>
+                    {c => <input {...c} className="form-input" inputMode="url" placeholder={form.type === 'sonarr' ? 'http://192.168.1.100:8989' : 'http://192.168.1.100:7878'} value={form.url} onChange={e => setForm(p => ({ ...p, url: e.target.value }))} autoComplete="off" spellCheck={false} />}
+                  </Campo>
+                  <Campo etiqueta="API key" error={addErrores.api_key}>
+                    {c => <input {...c} className="form-input" type="password" placeholder="API key" value={form.api_key} onChange={e => setForm(p => ({ ...p, api_key: e.target.value }))} autoComplete="new-password" />}
+                  </Campo>
+                </>
+              )}
             </div>
-            <div className="inst-checks">
-              <label className="checkbox-label"><input type="checkbox" checked={form.is_4k} onChange={e => setForm(p => ({ ...p, is_4k: e.target.checked }))} /> 4K</label>
-              <label className="checkbox-label"><input type="checkbox" checked={form.is_anime} onChange={e => setForm(p => ({ ...p, is_anime: e.target.checked }))} /> Anime</label>
-            </div>
+            {!altaCarpeta && (
+              <div className="inst-checks">
+                <label className="checkbox-label"><input type="checkbox" checked={form.is_4k} onChange={e => setForm(p => ({ ...p, is_4k: e.target.checked }))} /> 4K</label>
+                <label className="checkbox-label"><input type="checkbox" checked={form.is_anime} onChange={e => setForm(p => ({ ...p, is_anime: e.target.checked }))} /> Anime</label>
+              </div>
+            )}
             {addError && <div className="alert alert-error inst-error" role="alert">{addError}</div>}
             <div className="inst-botones">
               <button type="submit" className="btn btn-primary btn-sm" disabled={adding}>
-                {adding ? 'Probando conexión…' : 'Añadir'}
+                {adding ? (altaCarpeta ? 'Comprobando carpeta…' : 'Probando conexión…') : 'Añadir'}
               </button>
-              <button type="button" className="btn btn-secondary btn-sm" onClick={handleAddTest} disabled={addTesting}>
-                {addTesting ? 'Probando…' : 'Probar conexión'}
-              </button>
+              {/* Una carpeta se comprueba al añadirla: no hay prueba de una ruta sin guardar. */}
+              {!altaCarpeta && (
+                <button type="button" className="btn btn-secondary btn-sm" onClick={handleAddTest} disabled={addTesting}>
+                  {addTesting ? 'Probando…' : 'Probar conexión'}
+                </button>
+              )}
               <button type="button" className="btn btn-secondary btn-sm" onClick={() => cerrarAlta()} disabled={adding}>Cancelar</button>
               <ResultadoPrueba resultado={addTestResult} />
             </div>
@@ -401,7 +434,7 @@ export function InstancesPage() {
         <EmptyState
           icon={<IconoEnchufe />}
           title="Sin instancias configuradas"
-          body="Añade una instancia Radarr o Sonarr para empezar."
+          body="Añade una instancia Radarr o Sonarr, o una carpeta manual, para empezar."
           action={<button className="btn btn-primary btn-sm" onClick={abrirAlta}>+ Añadir instancia</button>}
         />
       ) : (
@@ -410,29 +443,42 @@ export function InstancesPage() {
             const estado = estadoDeInstancia(inst, caidas)
             const prueba = testResults[inst.id]
             const sync = syncResults[inst.id]
+            const esCarpeta = inst.type === 'carpeta'
             return (
               <li key={inst.id} className={`instance-card inst-tarjeta inst-tarjeta--${estado.tono}`}>
                 {editingId === inst.id && editForm ? (
                   <div className="inst-edicion" id={`inst-edicion-${inst.id}`}>
                     {/* Qué instancia se edita: los campos solos no lo decían. */}
                     <h2 className="inst-titulo inst-titulo-edicion">
-                      <ServiceIcon type={inst.type as 'radarr' | 'sonarr'} size={20} />
+                      <ServiceIcon type={inst.type as InstanceKind} size={20} />
                       Editar «{inst.name}»
                     </h2>
                     <div className="inst-rejilla-180">
                       <Campo etiqueta="Nombre" nota="máx. 15" error={editErrores.name}>
                         {c => <input {...c} className="form-input" value={editForm.name} onChange={e => setEditForm(p => p && ({ ...p, name: e.target.value }))} maxLength={15} autoComplete="off" />}
                       </Campo>
-                      <Campo etiqueta="URL" error={editErrores.url}>
-                        {c => <input {...c} className="form-input" inputMode="url" value={editForm.url} onChange={e => setEditForm(p => p && ({ ...p, url: e.target.value }))} autoComplete="off" spellCheck={false} />}
-                      </Campo>
-                      <Campo etiqueta="API key" nota="vacío = mantener">
-                        {c => <input {...c} type="password" className="form-input" placeholder={inst.api_key_masked} value={editForm.api_key} onChange={e => setEditForm(p => p && ({ ...p, api_key: e.target.value }))} autoComplete="new-password" />}
-                      </Campo>
+                      {esCarpeta ? (
+                        <Campo etiqueta="Ruta de la carpeta" error={editErrores.url} ayuda={NOTA_RUTA}>
+                          {c => <input {...c} className="form-input inst-ruta" value={editForm.url} onChange={e => setEditForm(p => p && ({ ...p, url: e.target.value }))} autoComplete="off" spellCheck={false} translate="no" />}
+                        </Campo>
+                      ) : (
+                        <>
+                          <Campo etiqueta="URL" error={editErrores.url}>
+                            {c => <input {...c} className="form-input" inputMode="url" value={editForm.url} onChange={e => setEditForm(p => p && ({ ...p, url: e.target.value }))} autoComplete="off" spellCheck={false} />}
+                          </Campo>
+                          <Campo etiqueta="API key" nota="vacío = mantener">
+                            {c => <input {...c} type="password" className="form-input" placeholder={inst.api_key_masked} value={editForm.api_key} onChange={e => setEditForm(p => p && ({ ...p, api_key: e.target.value }))} autoComplete="new-password" />}
+                          </Campo>
+                        </>
+                      )}
                     </div>
                     <div className="inst-checks inst-checks-edicion">
-                      <label className="checkbox-label"><input type="checkbox" checked={editForm.is_4k} onChange={e => setEditForm(p => p && ({ ...p, is_4k: e.target.checked }))} /> 4K</label>
-                      <label className="checkbox-label"><input type="checkbox" checked={editForm.is_anime} onChange={e => setEditForm(p => p && ({ ...p, is_anime: e.target.checked }))} /> Anime</label>
+                      {!esCarpeta && (
+                        <>
+                          <label className="checkbox-label"><input type="checkbox" checked={editForm.is_4k} onChange={e => setEditForm(p => p && ({ ...p, is_4k: e.target.checked }))} /> 4K</label>
+                          <label className="checkbox-label"><input type="checkbox" checked={editForm.is_anime} onChange={e => setEditForm(p => p && ({ ...p, is_anime: e.target.checked }))} /> Anime</label>
+                        </>
+                      )}
                       <label className="checkbox-label"><input type="checkbox" checked={editForm.enabled} onChange={e => setEditForm(p => p && ({ ...p, enabled: e.target.checked }))} /> Activada</label>
                     </div>
                     {editError && <div className="alert alert-error inst-error inst-error-edicion" role="alert">{editError}</div>}
@@ -440,9 +486,12 @@ export function InstancesPage() {
                       <button className="btn btn-primary btn-sm" onClick={() => handleUpdate(inst)} disabled={editSaving}>
                         {editSaving ? 'Guardando…' : 'Guardar cambios'}
                       </button>
-                      <button className="btn btn-secondary btn-sm" onClick={() => handleEditTest(inst)} disabled={editTesting}>
-                        {editTesting ? 'Probando…' : 'Probar conexión'}
-                      </button>
+                      {/* La ruta se comprueba al guardar, y luego con «Comprobar carpeta» en la tarjeta. */}
+                      {!esCarpeta && (
+                        <button className="btn btn-secondary btn-sm" onClick={() => handleEditTest(inst)} disabled={editTesting}>
+                          {editTesting ? 'Probando…' : 'Probar conexión'}
+                        </button>
+                      )}
                       <button className="btn btn-secondary btn-sm" onClick={cancelEdit}>Cancelar</button>
                       <ResultadoPrueba resultado={editTestResult} />
                     </div>
@@ -450,7 +499,7 @@ export function InstancesPage() {
                 ) : (
                   <>
                     <div className="instance-card-info">
-                      <ServiceIcon type={inst.type as 'radarr' | 'sonarr'} size={30} />
+                      <ServiceIcon type={inst.type as InstanceKind} size={30} />
                       <div className="instance-card-meta">
                         <div className="inst-nombre">
                           <h2 className="inst-titulo">{inst.name}</h2>
@@ -464,7 +513,7 @@ export function InstancesPage() {
                         <div className="instance-card-url" title={inst.url}>{inst.url}</div>
                         {/* Tres datos sueltos: cada uno en su hueco, no cosidos con puntos. */}
                         <dl className="inst-datos">
-                          <div><dt>API key</dt><dd>{inst.api_key_masked}</dd></div>
+                          {!esCarpeta && <div><dt>API key</dt><dd>{inst.api_key_masked}</dd></div>}
                           <div><dt>Añadida</dt><dd>{formatDate(inst.created_at)}</dd></div>
                           {estado.detalle && <div><dt>{estado.detalle.titulo}</dt><dd>{estado.detalle.valor}</dd></div>}
                         </dl>
@@ -482,14 +531,18 @@ export function InstancesPage() {
                         disabled={testingId === inst.id}
                         onClick={() => handleTest(inst)}
                       >
-                        {testingId === inst.id ? 'Probando…' : 'Probar conexión'}
+                        {testingId === inst.id
+                          ? (esCarpeta ? 'Comprobando…' : 'Probando…')
+                          : (esCarpeta ? 'Comprobar carpeta' : 'Probar conexión')}
                       </button>
                       <button
                         className="btn btn-secondary btn-sm"
                         disabled={syncingId === inst.id}
-                        onClick={() => handleSync(inst.id)}
+                        onClick={() => handleSync(inst)}
                       >
-                        {syncingId === inst.id ? 'Sincronizando…' : 'Sincronizar'}
+                        {syncingId === inst.id
+                          ? (esCarpeta ? 'Escaneando…' : 'Sincronizando…')
+                          : (esCarpeta ? 'Escanear' : 'Sincronizar')}
                       </button>
                       <button className="btn btn-secondary btn-sm" onClick={() => startEdit(inst)} aria-label={`Editar ${inst.name}`} data-editar={inst.id}>
                         Editar

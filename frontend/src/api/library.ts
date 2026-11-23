@@ -1,5 +1,5 @@
 import { api } from './client'
-import type { LibraryListResponse, LibraryItemResponse } from '../types/api'
+import type { LibraryListResponse, LibraryItemResponse, OkResponse, TipoDeInstancia } from '../types/api'
 import type { EstadoCastellano } from '../utils/castellano'
 
 // Los filtros de columna admiten varios valores: viajan como parámetro repetido.
@@ -24,6 +24,8 @@ export interface LibraryQueryParams {
   release_group?: string[]
   emu?: string[]
   aporte?: string
+  // Solo las películas y series de una carpeta manual sin ficha de TMDb confirmada.
+  por_identificar?: boolean
   sort?: string
   limit?: number
   offset?: number
@@ -49,6 +51,7 @@ export async function getLibrary(params: LibraryQueryParams = {}): Promise<Libra
   poner('release_group', params.release_group)
   poner('emu', params.emu)
   poner('aporte', params.aporte)
+  if (params.por_identificar) qs.set('por_identificar', 'true')
   if (params.sort) qs.set('sort', params.sort)
   if (params.limit !== undefined) qs.set('limit', String(params.limit))
   if (params.offset !== undefined) qs.set('offset', String(params.offset))
@@ -100,7 +103,7 @@ export interface LibraryFilterOptions {
   statuses: string[]
   request_statuses: string[]
   nomenclature_statuses: string[]
-  instances: { id: number; type: 'radarr' | 'sonarr'; name: string }[]
+  instances: { id: number; type: TipoDeInstancia; name: string }[]
   emu_states: ('candidate' | 'present')[]
   aporte_states: ('yes' | 'no')[]
   spanish_states: EstadoCastellano[]
@@ -108,6 +111,55 @@ export interface LibraryFilterOptions {
 
 export async function getLibraryFilterOptions(): Promise<LibraryFilterOptions> {
   return api.get<LibraryFilterOptions>('/library/filter-options')
+}
+
+// ── Carpeta manual: confirmar la ficha de TMDb ──────────────────────────────────────────────────────────────────
+
+export type TipoTmdb = 'movie' | 'tv'
+
+export interface CandidatoTmdb {
+  tmdb_id: string
+  titulo: string
+  titulo_original: string | null
+  anio: number | null
+  poster_url: string | null
+  resumen: string | null
+}
+
+// La búsqueda que hizo el servidor (sin `q`, la del nombre del fichero) y lo que encontró.
+export interface CandidatosTmdb {
+  tipo: TipoTmdb
+  consulta: string
+  anio: number | null
+  candidatos: CandidatoTmdb[]
+}
+
+// En una temporada o un capítulo el servidor busca la serie.
+export async function getTmdbCandidatos(
+  id: number, busqueda?: { q: string; anio?: number | null; tipo: TipoTmdb },
+): Promise<CandidatosTmdb> {
+  const qs = new URLSearchParams()
+  if (busqueda) {
+    qs.set('q', busqueda.q)
+    if (busqueda.anio) qs.set('anio', String(busqueda.anio))
+    qs.set('tipo', busqueda.tipo)
+  }
+  const query = qs.toString()
+  return api.get<CandidatosTmdb>(`/library/${id}/tmdb-candidatos${query ? `?${query}` : ''}`)
+}
+
+// `item_id` es la película o la serie a la que se aplicó la ficha.
+export async function identificarTmdb(id: number, tmdb_id: string, tipo: TipoTmdb): Promise<OkResponse & { item_id: number }> {
+  return api.post<OkResponse & { item_id: number }>(`/library/${id}/identificar`, { tmdb_id, tipo })
+}
+
+export interface SugeridasConfirmadas extends OkResponse {
+  confirmadas: number
+}
+
+// Sin `instance_id`, las sugerencias de todas las carpetas.
+export async function identificarSugeridas(instance_id?: number): Promise<SugeridasConfirmadas> {
+  return api.post<SugeridasConfirmadas>('/library/identificar-sugeridas', instance_id === undefined ? {} : { instance_id })
 }
 
 export async function startLibrarySync(include_episodes = true): Promise<{ status: string }> {

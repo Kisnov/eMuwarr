@@ -12,8 +12,8 @@ AUTO:
 
 SIGNATURES:
   use_global_sigs: default
-  movie: "[img]https://i.ibb.co/3yXzn45j/emuwarr-firma-animada.webp[/img]"
-  tv: "[img]https://i.ibb.co/3yXzn45j/emuwarr-firma-animada.webp[/img]"
+  movie: "[img]https://raw.githubusercontent.com/Kisnov/eMuwarr/59ea09279dad6e04523e1cd7c8de6fa03e681c22/docs/firma/emuwarr-firma-animada.webp[/img]"
+  tv: "[img]https://raw.githubusercontent.com/Kisnov/eMuwarr/59ea09279dad6e04523e1cd7c8de6fa03e681c22/docs/firma/emuwarr-firma-animada.webp[/img]"
 
 SCREENS:
   oxipng_level: 2

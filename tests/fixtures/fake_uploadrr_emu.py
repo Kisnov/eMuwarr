@@ -23,6 +23,7 @@ Failure/slowness simulation (for exercising cancel/timeout/failed paths):
   --config F                  (como el Uploadrr-EMU real) lee ese config en vez de data/config.yaml; si no existe sale con 1
                               y `resultado` sin_config
   FAKE_UPLOADRR_CONFIG_COPIA=F  escribe en F un JSON con el contenido y los permisos del config de --config, para el test
+  FAKE_UPLOADRR_DESCRIPCION_COPIA=F  copia en F el fichero de -df (la descripción propia), para el test
   FAKE_UPLOADRR_GRANDCHILD=F  start a child that keeps stdout/stderr open for 60 s
                               (like mkbrr/ffmpeg) and write its pid to file F
 
@@ -112,6 +113,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--resume", "-rs", dest="resume", action="store_true")
     parser.add_argument("--eventos", dest="eventos", default=None)
     parser.add_argument("--config", dest="config", default=None)
+    parser.add_argument("-df", "--descfile", dest="descfile", default=None)
     parser.add_argument("--fake-fail", dest="fake_fail", action="store_true")
     parser.add_argument("--fake-sleep", dest="fake_sleep", type=float, default=None)
     args, _unknown = parser.parse_known_args(argv)
@@ -134,6 +136,12 @@ def main(argv: list[str] | None = None) -> int:
             with open(args.config, encoding="utf-8") as f, open(copia, "w", encoding="utf-8") as destino:
                 json.dump({"contenido": f.read(), "modo": os.stat(args.config).st_mode & 0o777,
                            "modo_carpeta": os.stat(os.path.dirname(args.config)).st_mode & 0o777}, destino)
+
+    copia_descripcion = os.environ.get("FAKE_UPLOADRR_DESCRIPCION_COPIA")
+    if copia_descripcion and args.descfile:
+        with open(args.descfile, encoding="utf-8", newline="") as f, \
+                open(copia_descripcion, "w", encoding="utf-8", newline="") as destino:
+            destino.write(f.read())
 
     pidfile = os.environ.get("FAKE_UPLOADRR_GRANDCHILD")
     if pidfile:
