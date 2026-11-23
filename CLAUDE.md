@@ -92,7 +92,8 @@ came in from `Kisnov/Uploadrr-EMU` with `git subtree add`, history kept; that re
   Uploadrr-EMU subprocess. Uploadrr hands that same folder to qBittorrent as the save path, so qBittorrent
   must see it at the same path. `_enlazar` hardlinks and falls back to a symlink across filesystems; keep the
   folder on the media's filesystem (e.g. under `/data`): a symlink only seeds if qBittorrent resolves its target.
-- Contract with Uploadrr-EMU, change both sides in the same PR: argv in `services/uploadrr_contract.py` (below 720p it
+- Contract with Uploadrr-EMU, change both sides in the same PR: argv in `services/uploadrr_contract.py` (`--variante` only for a non-plain category of
+  `services/reglas_tracker.py`, never for eMuwarez; below 720p it
   adds `-avbc`, and Uploadrr-EMU puts its `AVISO_BAJA_CALIDAD` notice at the top of the description;
   `test_contrato_uploadrr_real.py` parses the app's argv with the real `uploadrr-emu/src/args.py`);
   `config.yaml` keys set by `upload_execution/config.py` with `uploadrr_config.py` / `uploadrr_yaml.py` (among them the stock signature image, replaced by the current one, `AUTO.keep_quiet`, `SCREENS.use_oxipng`/`oxipng_level`, `DEFAULT.always_anon`

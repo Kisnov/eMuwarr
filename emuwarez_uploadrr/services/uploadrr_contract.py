@@ -202,6 +202,7 @@ def build_uploadrr_emu_command(
     eventos: Optional[str] = None,
     config: Optional[str] = None,
     tracker: str = "EMU",
+    variante: Optional[str] = None,
 ) -> list[str]:
     """Build the real Uploadrr-EMU argv. Always a list[str], never a shell string.
 
@@ -226,6 +227,9 @@ def build_uploadrr_emu_command(
 
     Una `resolution` de menos de 720p añade `-avbc` (ver pide_aviso_baja_calidad), solo para eMuwarez: el aviso es
     una norma suya.
+
+    `variante` (la de services/reglas_tracker.py: anime, latino, anime_catalan) añade `--variante <v>`: Uploadrr-EMU
+    elige con ella la categoría del tracker (MOVIE_ANIME…). Sin ella, la de siempre.
 
     Only accepts prepared_path (or applied_path passed as prepared_path by
     the caller) — there is intentionally no source_path parameter, so the
@@ -263,6 +267,7 @@ def build_uploadrr_emu_command(
         cmd.append("-a")
     if personal_release:
         cmd.append("-pr")
+    cmd += argv_variante(variante)
     if reanudar or solo_cliente:
         cmd.append("--resume")
     if solo_cliente:
@@ -272,6 +277,11 @@ def build_uploadrr_emu_command(
     if config:
         cmd += ["--config", os.path.abspath(config)]
     return cmd
+
+
+def argv_variante(variante: Optional[str]) -> list[str]:
+    """`--variante <v>` para Uploadrr-EMU, o nada si es la categoría normal. Va con las banderas del ítem, como `-c`."""
+    return ["--variante", variante] if variante else []
 
 
 def render_command_preview(command: list[str]) -> str:
@@ -357,6 +367,7 @@ __all__ = [
     "get_allowed_roots",
     "path_within_allowed_roots",
     "build_uploadrr_emu_command",
+    "argv_variante",
     "render_command_preview",
     "redact_uploadrr_command",
     "validate_uploadrr_emu_contract",

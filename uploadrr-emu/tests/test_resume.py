@@ -810,3 +810,17 @@ def test_solo_cliente_deja_el_motivo_en_el_resumen(solo_cliente, monkeypatch, de
         lanzar()
 
     assert [m for _ruta, m in resumenes[0]] == [motivo]
+
+
+def test_una_variante_guardada_no_se_hereda_al_reanudar(tmp_path):
+    item = tmp_path / "Peli"
+    guardado = tmp_path / "tmp" / "Peli"
+    guardado.mkdir(parents=True)
+    (guardado / "meta.json").write_text(json.dumps({"variante": "anime", "tmdb": "1"}))
+
+    parser = build_parser({})
+    sin = apply_special_logic({"base_dir": str(tmp_path), **normalize_args(parser.parse_args(["-rs"]))})
+    assert _run(load_existing_meta(tmp_path, str(item), sin))["variante"] is None
+
+    con = apply_special_logic({"base_dir": str(tmp_path), **normalize_args(parser.parse_args(["-rs", "--variante", "latino"]))})
+    assert _run(load_existing_meta(tmp_path, str(item), con))["variante"] == "latino"
