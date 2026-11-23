@@ -97,7 +97,7 @@ def test_all_green_when_everything_passes(db_conn, tmp_path, monkeypatch):
     iid = _movie_with_path(db_conn, str(f))
     r = uc.run_upload_checks(db_conn, iid)
     ids = [c["id"] for c in r["checks"]]
-    assert ids == ["accesible", "carpeta_subida", "renameable", "spanish", "tipo",
+    assert ids == ["accesible", "carpeta_subida", "renameable", "idioma_audio", "spanish", "tipo",
                    "output", "qbittorrent", "imghosts", "emuwarez"]
     # Un archivo de la biblioteca no se renombra: esa no bloquea.
     assert {c["id"]: c["status"] for c in r["checks"]}["renameable"] == "skip"

@@ -37,8 +37,9 @@ _CAMPOS_HUELLA = ("size_bytes", "resolution", "quality", "source", "release_grou
 # guardadas con la regla vieja se rehagan. 2: el proveedor ya no sale de una
 # carpeta de la ruta, solo del nombre del archivo. 3: una pista sin idioma (UND)
 # avisa en vez de bloquear y el nombre sale sin ella. 4: un capítulo lleva el
-# año de estreno de su temporada, no el de la serie (anio_de_temporada).
-_VERSION_REGLAS = 4
+# año de estreno de su temporada, no el de la serie (anio_de_temporada). 5: una pista zxx (sin diálogo) tiene idioma:
+# no avisa y, si es todo el audio, su códec entra en el nombre sin idioma.
+_VERSION_REGLAS = 5
 
 
 def _huella(item: dict) -> list:
@@ -48,10 +49,10 @@ def _huella(item: dict) -> list:
 def aviso_pistas_sin_idioma(posiciones: list[int]) -> str:
     """El aviso de una o varias pistas de audio sin idioma."""
     cuales = ", ".join(str(p) for p in posiciones)
-    return (f"La pista de audio {cuales} no tiene idioma y el nombre no la incluye: "
-            "elige su idioma en Ver Pistas.") if len(posiciones) == 1 else (
-            f"Las pistas de audio {cuales} no tienen idioma y el nombre no las incluye: "
-            "elige su idioma en Ver Pistas.")
+    return (f"La pista de audio {cuales} no tiene idioma (und) y el nombre no la incluye: "
+            "elige su idioma en Ver Pistas, que sin él no se puede subir.") if len(posiciones) == 1 else (
+            f"Las pistas de audio {cuales} no tienen idioma (und) y el nombre no las incluye: "
+            "elige su idioma en Ver Pistas, que sin él no se puede subir.")
 
 
 def _huella_guardada(proposal: dict):
@@ -550,7 +551,7 @@ def build_nomenclature_proposal(
                                  else mi_report.get("audio_summary") or audio_summary)
                 subtitle_summary = emu_by_field.get("Subtítulos") or subtitle_summary
                 dynamic_range = emu_by_field.get("HDR/DV") or dynamic_range
-                # Sin idioma no bloquea: avisa y el nombre sale sin esa pista.
+                # El nombre no bloquea: avisa y sale sin esa pista (la subida sí, en upload_checks).
                 if mi_report.get("pistas_sin_idioma"):
                     warnings.append(aviso_pistas_sin_idioma(mi_report["pistas_sin_idioma"]))
             else:

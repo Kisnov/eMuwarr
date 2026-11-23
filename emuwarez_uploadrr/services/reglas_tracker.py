@@ -12,14 +12,15 @@ siempre, Películas o Series.
   no se eligen solas.
 
 El castellano se pide en las dos guías cuando existe el doblaje, pero la app no puede saber si existe: no bloquea por
-eso. Pura: no lee la base de datos; si es anime lo dice quien llama, con `es_anime`.
+eso. Lo que no tiene diálogo (todo el audio en `zxx`, como Flow) no tiene nada que doblar y pasa en todos. Pura: no lee
+la base de datos; si es anime lo dice quien llama, con `es_anime`.
 """
 from __future__ import annotations
 
 import sqlite3
 from typing import NamedTuple, Optional
 
-from .emu_format import _split_languages, has_castellano
+from .emu_format import _split_languages, has_castellano, solo_sin_dialogo
 from .trackers import EMU, MNV, obtener
 
 # Las que entiende `--variante` de Uploadrr-EMU (uploadrr-emu/src/args.py).
@@ -119,9 +120,30 @@ def reglas_de(tracker_id: str, item: dict, *, anime: bool = False) -> Reglas:
     """Si `item` (una fila de library_items, con sus `audio_languages` / `subtitle_languages`) se puede subir a ese
     tracker, por qué, y su variante de categoría. Un tracker desconocido es un ValueError (trackers.obtener)."""
     tracker = obtener(tracker_id)
+    if solo_sin_dialogo(item.get("audio_languages")):
+        return Reglas(True, "Sin diálogo (zxx): no hay nada que doblar.", "anime" if anime else None)
     if tracker.id == EMU.id:
         return _reglas_emu(item)
     return _reglas_otro(tracker, item, anime)
+
+
+def motivo_audio_sin_idioma(posiciones: list[int]) -> str:
+    """Por qué no se sube con una pista de audio sin idioma (`posiciones`, desde 1; vacío si no se sabe cuál)."""
+    cual = f" {', '.join(str(p) for p in posiciones)}" if posiciones else ""
+    return (f"La pista de audio{cual} no tiene idioma (und): falta el dato, ponlo en «Ver pistas» subiéndolo solo "
+            "desde el asistente («Sin diálogo (zxx)» si de verdad no tiene diálogo).")
+
+
+def con_idiomas_elegidos(item: dict, *, overrides: dict | None = None, idiomas: dict | None = None) -> dict:
+    """`item` con el audio que tendrá su fichero con los idiomas elegidos en «Ver pistas» (`overrides` por id de pista
+    o `idiomas` por posición), que es lo que miran las normas. Sin nada elegido, o sin leer sus pistas, tal cual."""
+    from .mkv_remux import idiomas_de_las_pistas, idiomas_elegidos, idiomas_por_posicion
+    if not (idiomas_elegidos(overrides) or idiomas_por_posicion(idiomas)):
+        return item
+    from .path_mapping import resolve_local_path
+    pistas = idiomas_de_las_pistas(resolve_local_path(item.get("path")) or item.get("path"),
+                                   overrides=overrides, idiomas=idiomas)
+    return {**item, "audio_languages": " / ".join(dict.fromkeys(pistas))} if pistas else item
 
 
 def es_anime(conn: sqlite3.Connection, item: dict) -> bool:
@@ -133,12 +155,15 @@ def es_anime(conn: sqlite3.Connection, item: dict) -> bool:
     return bool(fila and fila[0])
 
 
-def reglas_para_subir(conn: sqlite3.Connection, item: dict, tracker_id: str) -> Reglas:
+def reglas_para_subir(conn: sqlite3.Connection, item: dict, tracker_id: str, *, overrides: dict | None = None,
+                      idiomas: dict | None = None) -> Reglas:
     """`reglas_de` para una subida de verdad: dice si es anime, y una temporada se mira capítulo a capítulo
-    (season_pack.reglas_del_pack), con la variante del pack entero."""
+    (season_pack.reglas_del_pack), con la variante del pack entero. Con los idiomas elegidos en «Ver pistas»
+    (con_idiomas_elegidos; un pack, por posición en `idiomas`)."""
     if item.get("item_type") == "season":
         from .season_pack import reglas_del_pack
-        return reglas_del_pack(item, tracker_id, conn)
+        return reglas_del_pack(item, tracker_id, conn, idiomas=idiomas)
+    item = con_idiomas_elegidos(item, overrides=overrides, idiomas=idiomas)
     return reglas_de(tracker_id, item, anime=obtener(tracker_id).id != EMU.id and es_anime(conn, item))
 
 
@@ -163,4 +188,5 @@ def elegibilidad(conn: sqlite3.Connection, item: dict) -> dict:
     return {"trackers": de(item), "capitulos": capitulos}
 
 
-__all__ = ["VARIANTES", "Reglas", "reglas_de", "es_anime", "reglas_para_subir", "elegibilidad"]
+__all__ = ["VARIANTES", "Reglas", "reglas_de", "motivo_audio_sin_idioma", "con_idiomas_elegidos", "es_anime",
+           "reglas_para_subir", "elegibilidad"]

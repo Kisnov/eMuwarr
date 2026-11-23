@@ -221,7 +221,8 @@ def _insert_and_start_queued_job(
         # Las normas de idioma de otro tracker (services/reglas_tracker.py), antes de crear nada: lo que no admite no
         # llega a lanzarse. Las de eMuwarez siguen donde siempre (comprobaciones del asistente y plan del pack).
         from .reglas_tracker import reglas_para_subir
-        reglas = reglas_para_subir(conn, item, tracker)
+        reglas = reglas_para_subir(conn, item, tracker, overrides=remux_overrides,
+                                   idiomas=(season_overrides or {}).get("idiomas"))
         if not reglas.permitido:
             return {"status": "blocked", "errors": [reglas.motivo], "job": None}
     now_iso = _now_iso()
@@ -526,6 +527,8 @@ def queue_copia_a_otro_tracker(conn, fuente: dict, tracker: str, *, lote_id: str
         retry_count=(latest.get("retry_count") or 0) + 1 if latest else 0,
         nomenclature_proposal_id=fuente.get("nomenclature_proposal_id"),
         nomenclature_snapshot=_json("nomenclature_snapshot_json"),
+        # Los idiomas elegidos en «Ver pistas» de la fuente: el mismo fichero preparado los lleva.
+        remux_overrides=_json("remux_overrides_json"),
         remux_snapshot=_json("remux_snapshot_json"),
         season_overrides=_json("season_overrides_json"),
         lote_id=lote_id,
@@ -812,6 +815,22 @@ def _overrides_de_pack(origen: str | None, season_overrides: dict | None) -> dic
     return {tid: {"language": codigo} for tid, codigo in idiomas.items()} or None
 
 
+def _audio_sin_idioma_preparado(ruta: str | None) -> str | None:
+    """Por qué no se sube si el fichero preparado (o uno de la carpeta de un pack) aún tiene una pista de audio sin
+    idioma: el elegido en «Ver pistas» no se escribe con las pistas en «Ninguno» ni cuando no se puede editar."""
+    from .mkv_remux import idiomas_de_las_pistas
+    from .reglas_tracker import motivo_audio_sin_idioma
+    if not ruta:
+        return None
+    ficheros = [os.path.join(ruta, n) for n in sorted(os.listdir(ruta))] if os.path.isdir(ruta) else [ruta]
+    for fichero in ficheros:
+        sin = [i for i, c in enumerate(idiomas_de_las_pistas(fichero) or [], 1) if c == "UND"]
+        if sin:
+            return (f"«{os.path.basename(fichero)}»: {motivo_audio_sin_idioma(sin)} Si ya lo elegiste, no se pudo "
+                    "escribir en el archivo preparado: mira el registro de la preparación.")
+    return None
+
+
 def _populate_ready(job_id: int, item_id: int, conn, season_overrides: dict | None = None) -> bool:
     """Recompute preconditions + command preview NOW (after rename/remux, so
     prepared_path reflects the final file) and, if ok, flip the SAME job row
@@ -825,6 +844,11 @@ def _populate_ready(job_id: int, item_id: int, conn, season_overrides: dict | No
         _fail(job_id, "El elemento ya no existe en la biblioteca.")
         return False
     tracker = _tracker_del_trabajo(job_id, conn)
+    preparado = conn.execute("SELECT prepared_path FROM upload_jobs WHERE id = ?", (job_id,)).fetchone()[0]
+    sin_idioma = _audio_sin_idioma_preparado(preparado)
+    if sin_idioma:
+        _fail(job_id, sin_idioma)
+        return False
 
     if item.get("item_type") == "season":
         # validate_upload_preconditions() hard-blocks on `if not path`, and a
@@ -878,7 +902,12 @@ def _populate_ready(job_id: int, item_id: int, conn, season_overrides: dict | No
     # (los idiomas pueden haber cambiado desde que se encoló). eMuwarez no lleva nunca.
     variante = None
     if tracker != trackers.POR_DEFECTO:
+        from .mkv_remux import idiomas_de_las_pistas
         from .reglas_tracker import reglas_para_subir
+        # Con los idiomas del fichero preparado, que ya lleva los elegidos en «Ver pistas».
+        pistas = idiomas_de_las_pistas(preparado)
+        if pistas:
+            item = {**item, "audio_languages": " / ".join(dict.fromkeys(pistas))}
         reglas = reglas_para_subir(conn, item, tracker)
         if not reglas.permitido:
             _fail(job_id, reglas.motivo)

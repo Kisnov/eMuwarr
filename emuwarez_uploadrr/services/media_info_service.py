@@ -327,7 +327,7 @@ def build_mediainfo_report(path: str, radarr_source: str | None = None,
         if lang == "UND":
             # Sin idioma no se escribe "UND" en el nombre: la pista se queda fuera.
             sin_idioma.append(i)
-        elif lang not in langs:
+        elif lang != emu_format.SIN_DIALOGO and lang not in langs:
             langs.append(lang)
         quality = emu_format.audio_track_quality(codec, ch)
         previous = best_by_lang.get(lang)
@@ -340,6 +340,9 @@ def build_mediainfo_report(path: str, radarr_source: str | None = None,
         add(f"Audio {i}", mi, f"{lang} {codec} {ch or '?'}")
 
     groups: dict[tuple[str, str], list[str]] = {}
+    # Sin diálogo (zxx) no lleva idioma en el nombre: solo su códec y canales, y solo si no hay otro idioma.
+    if not langs and emu_format.SIN_DIALOGO in best_by_lang:
+        groups[best_by_lang[emu_format.SIN_DIALOGO][1:]] = []
     for lang in langs:
         chosen = best_by_lang.get(lang)
         if not chosen:

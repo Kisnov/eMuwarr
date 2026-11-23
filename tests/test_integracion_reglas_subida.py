@@ -303,3 +303,53 @@ def test_solo_con_emuwarez_la_elegibilidad_es_la_de_siempre(db_conn, tmp_path):
     assert all([t["tracker"] for t in c["trackers"]] == ["emu"] for c in r["capitulos"])
     espanol = _temporada(db_conn, tmp_path / "otra", ["spa", "spa"])
     assert elegibilidad(db_conn, get_library_item(db_conn, espanol))["trackers"][0]["permitido"] is True
+
+
+# ---------------------------------------------------------------------------
+# El idioma elegido en «Ver pistas» para una pista sin idioma cuenta para las normas
+# ---------------------------------------------------------------------------
+
+@pytest.fixture
+def pistas_und(monkeypatch):
+    """Todo fichero, a ojos de `mkvmerge -J`, con una sola pista de audio sin idioma (id 1)."""
+    from emuwarez_uploadrr.services import mkv_remux
+    monkeypatch.setattr(mkv_remux, "read_tracks_json", lambda ruta: {"ok": True, "data": {"tracks": [
+        {"id": 0, "type": "video", "properties": {}},
+        {"id": 1, "type": "audio", "properties": {"language": "und"}}]}})
+
+
+def test_se_encola_para_nobs_con_el_idioma_elegido(db_conn, tmp_path, pistas_und):
+    iid = _peli(db_conn, tmp_path, "und")
+    assert uq.queue_upload_for_item(iid, tracker="nobs", conn=db_conn)["status"] == "blocked"
+    r = uq.queue_upload_for_item(iid, tracker="nobs", remux_overrides={1: {"language": "spa"}}, conn=db_conn)
+    assert r["status"] == "queued", r["errors"]
+
+
+def test_la_api_de_reglas_cuenta_el_idioma_elegido(db_conn, tmp_path, client, auth_headers, pistas_und):
+    iid = _peli(db_conn, tmp_path, "und")
+    url = f"/api/library/{iid}/upload/reglas"
+    assert client.get(url, params={"tracker": "nobs"}, headers=auth_headers).json()["permitido"] is False
+    r = client.get(url, params={"tracker": "nobs", "idiomas": '{"1": "es-419"}'}, headers=auth_headers).json()
+    assert r["permitido"] is True and r["variante"] is None
+
+
+def test_un_pack_cuenta_el_idioma_elegido_en_cada_capitulo(db_conn, tmp_path, pistas_und):
+    temporada = _temporada(db_conn, tmp_path, ["und", "und"])
+    assert build_season_pack_plan(temporada, conn=db_conn, tracker="nobs")["status"] == "blocked"
+    plan = build_season_pack_plan(temporada, conn=db_conn, tracker="nobs", idiomas_audio={"1": "spa"})
+    assert plan["status"] == "valid", plan["errors"]
+
+
+def test_antes_de_lanzar_manda_el_fichero_preparado(db_conn, tmp_path, monkeypatch, pistas_und):
+    """Con la pista aún sin idioma en el fichero preparado (no se pudo escribir el elegido), no se lanza."""
+    iid = _peli(db_conn, tmp_path, "spa")
+    preparado = tmp_path / "uploads" / "Peli.mkv"
+    preparado.write_bytes(b"x")
+    from emuwarez_uploadrr.services import upload_preflight
+    monkeypatch.setattr(upload_preflight, "validate_upload_preconditions", lambda *a, **k: {"ok": True, "errors": []})
+    job_id = _trabajo(db_conn, iid, "emu")
+    db_conn.execute("UPDATE upload_jobs SET prepared_path = ? WHERE id = ?", (str(preparado), job_id))
+    db_conn.commit()
+    assert not uq._populate_ready(job_id, iid, db_conn)
+    error = db_conn.execute("SELECT error_message FROM upload_jobs WHERE id = ?", (job_id,)).fetchone()[0]
+    assert error.startswith("«Peli.mkv»: La pista de audio 1 no tiene idioma")

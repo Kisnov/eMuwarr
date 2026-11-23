@@ -108,7 +108,7 @@ export function PasoTemporada({ a }: { a: Asistente }) {
                 value={idiomasPackActuales[p.posicion] ?? ''}
                 onChange={e => elegirIdiomaPack(p.posicion, e.target.value)}
               >
-                <option value="">— Sin idioma (no entra en el nombre) —</option>
+                <option value="">— Sin idioma (und): falta el dato —</option>
                 {(seasonPlan?.idiomas_elegibles ?? []).map(o => <option key={o.code} value={o.code}>{o.label}</option>)}
               </select>
             </label>

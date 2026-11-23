@@ -46,7 +46,7 @@ def _set_checks_progress(item_id: int, *, checks: list[dict], done: bool = False
 # salida, qBittorrent, hosts de imágenes, eMuwarez) y dan lo mismo para todos:
 # con 30 capítulos elegidos, preguntarle 30 veces a eMuwarez si está vivo no
 # aporta nada y multiplica por 30 la espera.
-CONTENT_CHECK_IDS = ("accesible", "season_pack", "capitulos_accesibles",
+CONTENT_CHECK_IDS = ("accesible", "season_pack", "idioma_audio", "capitulos_accesibles",
                      "carpeta_subida", "renameable", "spanish", "tipo")
 ENVIRONMENT_CHECK_IDS = ("output", "qbittorrent", "imghosts", "emuwarez")
 
@@ -72,9 +72,9 @@ def _se_puede_leer(ruta: str | None) -> bool:
 def run_upload_checks(conn: sqlite3.Connection, item_id: int, *, scope: str = "all",
                       provider_override: str | None = None, ajustes: dict | None = None,
                       tracker: str = POR_DEFECTO) -> dict:
-    """`ajustes` (solo una temporada): lo que el asistente editó a mano para el pack, con las claves de la cola
-    (`source`, `tag`, `title`, `idiomas`), para que el plan y su `nombre` sean los que saldrán de verdad. El
-    Proveedor va aparte, en `provider_override`.
+    """`ajustes`: lo que el asistente editó a mano para el pack, con las claves de la cola (`source`, `tag`, `title`,
+    `idiomas`), para que el plan y su `nombre` sean los que saldrán de verdad. El Proveedor va aparte, en
+    `provider_override`. De un fichero suelto solo cuenta `idiomas`: los elegidos en «Ver pistas», por posición.
 
     `tracker`: el de la subida (services/trackers.py). Sus normas de idioma (services/reglas_tracker.py) deciden la
     comprobación «spanish» de un fichero y la de cada capítulo de un pack; eMuwarez, el de por defecto, las de siempre.
@@ -183,6 +183,9 @@ def run_upload_checks(conn: sqlite3.Connection, item_id: int, *, scope: str = "a
         if not add("season_pack", "Se puede preparar el pack de temporada",
                    "No se puede preparar el pack de temporada", ok, msg):
             return done()
+        if not add("idioma_audio", "Todas las pistas de audio tienen idioma", "Hay pistas de audio sin idioma",
+                   not sin_idioma, audio or ""):
+            return done()
 
         # Y TODOS sus capítulos, uno a uno. Un pack se nombra leyendo cada
         # fichero: basta que uno no se pueda abrir para que su nombre se
@@ -265,7 +268,22 @@ def run_upload_checks(conn: sqlite3.Connection, item_id: int, *, scope: str = "a
                      bool(parent) and os.access(parent, os.W_OK), parent):
             return done()
 
-        # 1b. Idiomas — las normas del tracker (services/reglas_tracker.py). eMuwarez: castellano en el audio o, si
+        # 1b. Cada pista de audio con su idioma, contando los elegidos en «Ver pistas». Sin leer las pistas (no es un
+        # MKV), lo que diga la biblioteca.
+        from .emu_format import audio_sin_idioma
+        from .mkv_remux import idiomas_de_las_pistas
+        from .reglas_tracker import motivo_audio_sin_idioma
+        elegidos = (ajustes or {}).get("idiomas")
+        pistas = idiomas_de_las_pistas(local_path, idiomas=elegidos)
+        sin_lengua = [i for i, c in enumerate(pistas or [], 1) if c == "UND"]
+        falta = bool(sin_lengua) or (pistas is None and audio_sin_idioma(item.get("audio_languages")))
+        if not add("idioma_audio", "Todas las pistas de audio tienen idioma", "Hay pistas de audio sin idioma",
+                   not falta, motivo_audio_sin_idioma(sin_lengua) if falta else ""):
+            return done()
+        if elegidos and pistas:
+            item = {**item, "audio_languages": " / ".join(dict.fromkeys(pistas))}
+
+        # 1c. Idiomas — las normas del tracker (services/reglas_tracker.py). eMuwarez: castellano en el audio o, si
         # no, en los subtítulos; sin MediaInfo leído no se puede confirmar y bloquea.
         from .reglas_tracker import es_anime, reglas_de
         from .trackers import EMU, obtener

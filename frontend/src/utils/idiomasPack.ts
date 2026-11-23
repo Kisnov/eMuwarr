@@ -19,6 +19,17 @@ export function idiomasParaServidor(idiomas: IdiomasPorPosicion | undefined): Re
   return idiomas && Object.keys(idiomas).length ? { ...idiomas } : undefined
 }
 
+/** Lo elegido en «Ver pistas» de un fichero suelto, por posición entre sus pistas de audio (en el orden del fichero). */
+export function idiomasDePistas(
+  pistas: readonly { id: number; type: string }[] | undefined,
+  ediciones: Readonly<Record<number, { language?: string }>>,
+): Record<number, string> | undefined {
+  const idiomas: Record<number, string> = {}
+  const audio = (pistas ?? []).filter(t => t.type === 'audio')
+  audio.forEach((t, i) => { const c = ediciones[t.id]?.language; if (c) idiomas[i + 1] = c })
+  return idiomasParaServidor(idiomas)
+}
+
 /**
  * Los idiomas que el servidor dice haber aplicado ({"1": "spa"} en el JSON),
  * con la clave en número. Lo que no sea un texto se ignora.

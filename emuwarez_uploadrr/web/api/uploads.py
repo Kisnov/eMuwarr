@@ -249,18 +249,16 @@ def upload_checks(
     "all" (por defecto) las hace todas, que es lo que usa un solo elemento.
 
     Una temporada acepta además lo que el asistente editó a mano para el pack (`source`, `tag`, `title` e
-    `idiomas`, un JSON {"2": "spa"}): así el `nombre` que devuelve es el que saldrá. Sin ellos, todo igual.
+    `idiomas`, un JSON {"2": "spa"}): así el `nombre` que devuelve es el que saldrá. Sin ellos, todo igual. Un fichero
+    suelto, solo `idiomas`: los elegidos en «Ver pistas», que cuentan para sus pistas sin idioma y sus normas.
 
     `tracker` (emu, nobs, mnv): de quién son las normas de idioma (la comprobación «spanish» y la de cada capítulo de
     un pack). Sin él, eMuwarez; uno desconocido es un 422."""
     from emuwarez_uploadrr.services.upload_checks import run_upload_checks
     tracker = _tracker_valido(tracker)
-    try:
-        elegidos = json.loads(idiomas) if idiomas else None
-    except ValueError:
-        elegidos = None
+    elegidos = _idiomas(idiomas)
     ajustes = {k: v.strip() for k, v in (("source", source), ("tag", tag), ("title", title)) if v and v.strip()}
-    if isinstance(elegidos, dict) and elegidos:
+    if elegidos:
         ajustes["idiomas"] = elegidos
     with _get_conn() as conn:
         # `provider` de una temporada: el elegido en el asistente ("" = Sin proveedor).
@@ -268,6 +266,15 @@ def upload_checks(
                                  provider_override=None if provider is None else provider.strip(),
                                  **({"ajustes": ajustes} if ajustes else {}),
                                  **({} if tracker == trackers.POR_DEFECTO else {"tracker": tracker}))
+
+
+def _idiomas(crudo: str | None) -> dict | None:
+    """Los idiomas elegidos en «Ver pistas» ({"2": "spa"}, por posición) de la query; None si no viene uno válido."""
+    try:
+        elegidos = json.loads(crudo) if crudo else None
+    except ValueError:
+        return None
+    return elegidos if isinstance(elegidos, dict) else None
 
 
 def _tracker_valido(tracker: str | None) -> str:
@@ -282,11 +289,12 @@ def _tracker_valido(tracker: str | None) -> str:
 def reglas_para_subir(
     item_id: int,
     tracker: str = Query(...),
+    idiomas: str | None = Query(default=None),
     current_user: dict = Depends(require_auth),
 ):
     """Si las normas de idioma de `tracker` admiten el elemento, por qué, y la categoría que le toca allí
     (services/reglas_tracker.py; una temporada, capítulo a capítulo). Barato, sin red: el Resumen lo pide para cada
-    tracker que ofrece."""
+    tracker que ofrece. `idiomas` ({"2": "spa"}): los elegidos en «Ver pistas» para las pistas sin idioma."""
     from ...services.library import get_library_item
     from ...services.reglas_tracker import reglas_para_subir as reglas
     tracker = _tracker_valido(tracker)
@@ -294,7 +302,7 @@ def reglas_para_subir(
         item = get_library_item(conn, item_id)
         if not item:
             raise HTTPException(status_code=404, detail="Elemento no encontrado.")
-        r = reglas(conn, item, tracker)
+        r = reglas(conn, item, tracker, idiomas=_idiomas(idiomas))
     return ReglasDeTracker(tracker=tracker, permitido=r.permitido, motivo=r.motivo, variante=r.variante)
 
 

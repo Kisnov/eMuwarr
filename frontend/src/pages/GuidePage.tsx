@@ -424,6 +424,14 @@ const SPANISH_ROWS: SpanishRow[] = [
     why: 'Ni doblada ni subtitulada al castellano: no cumple por ninguna de las dos vías. Necesita que le añadas una pista de subtítulos en castellano, o una de audio.',
   },
   {
+    kind: 'Película', audio: 'spa / und', subs: 'cualquiera', verdict: 'blocked', verdictLabel: 'Bloqueado',
+    why: 'Una pista sin idioma (und o vacía) es un dato que falta: hasta que le pongas el suyo en «Ver pistas» no se sube. Se escribe en la pista al preparar la subida.',
+  },
+  {
+    kind: 'Película', audio: 'zxx', subs: 'ninguno', verdict: 'ok',
+    why: 'zxx no es «sin idioma»: es una pista etiquetada a propósito sin diálogo (Flow, 2024). No hay nada que doblar, así que vale en todos los trackers, y el nombre lleva su códec sin idioma.',
+  },
+  {
     kind: 'Película o capítulo', audio: 'sin detectar', subs: 'cualquiera', verdict: 'blocked',
     verdictLabel: 'Bloqueado',
     why: (

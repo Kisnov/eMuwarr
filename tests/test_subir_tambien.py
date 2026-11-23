@@ -185,6 +185,17 @@ def test_una_subida_a_nobs_con_el_fichero_de_la_de_emuwarez(db_conn, monkeypatch
     assert json.loads(fila["nomenclature_snapshot_json"]) == {"proposed_title": "P"}  # el mismo nombre
 
 
+def test_la_copia_lleva_los_idiomas_elegidos_en_la_fuente(db_conn, monkeypatch, tmp_path, sin_hilos):
+    """El fichero preparado ya lleva el idioma elegido en «Ver pistas»: las normas de la copia lo cuentan."""
+    _clave(db_conn, "nobs")
+    elegidos = {"1": {"new_name": None, "default_after": None, "language": "spa"}}
+    _iid, emu, ruta = _emu_completada(db_conn, tmp_path, remux_overrides_json=json.dumps(elegidos))
+    _qbit(monkeypatch, db_conn, [_entero(ruta)])
+
+    (res,) = st.subir_tambien(db_conn, [emu], ["nobs"])["resultados"]
+    assert json.loads(_fila(db_conn, res["nuevo_job_id"])["remux_overrides_json"]) == elegidos
+
+
 def test_ya_subida_a_ese_tracker_no_se_vuelve_a_ofrecer(db_conn, monkeypatch, tmp_path, sin_hilos):
     _clave(db_conn, "nobs")
     _clave(db_conn, "mnv")

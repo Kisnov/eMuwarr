@@ -1,7 +1,18 @@
 import { describe, expect, it } from 'vitest'
-import { conIdioma, etiquetaPistaSinIdioma, idiomasDelServidor, idiomasParaServidor, SIN_IDIOMAS } from '../idiomasPack'
+import {
+  conIdioma, etiquetaPistaSinIdioma, idiomasDePistas, idiomasDelServidor, idiomasParaServidor, SIN_IDIOMAS,
+} from '../idiomasPack'
 import { avisoSourceVisible } from '../avisoSource'
 import { ajustesDeTemporada } from '../origenProveedor'
+
+describe('idiomasDePistas', () => {
+  it('da la posición entre las pistas de audio, en el orden del fichero', () => {
+    const pistas = [{ id: 0, type: 'video' }, { id: 1, type: 'audio' }, { id: 2, type: 'subtitles' }, { id: 3, type: 'audio' }]
+    expect(idiomasDePistas(pistas, { 3: { language: 'zxx' }, 2: { language: 'spa' } })).toEqual({ 2: 'zxx' })
+    expect(idiomasDePistas(pistas, { 1: {} })).toBeUndefined()
+    expect(idiomasDePistas(undefined, {})).toBeUndefined()
+  })
+})
 
 describe('conIdioma', () => {
   it('elige, cambia y quita sin tocar el original', () => {

@@ -267,7 +267,7 @@ describe('película', () => {
     await pulsar(boton('Continuar'))
     await esperar(() => texto().includes('✓ Todo listo para subir'))
     await esperar(() => texto().includes('N.O.B.S: ✗ N.O.B.S no lo admite'))
-    expect(subidas.fetchReglasTracker).toHaveBeenCalledWith(10, 'nobs')
+    expect(subidas.fetchReglasTracker).toHaveBeenCalledWith(10, 'nobs', undefined)
     const casilla = [...document.querySelectorAll<HTMLLabelElement>('.asist-marcas label')]
       .find(l => l.textContent?.includes('N.O.B.S'))!.querySelector('input')!
     await pulsar(casilla)
@@ -489,7 +489,8 @@ describe('pack de temporada', () => {
     await pulsar(boton('Continuar'))
     await esperar(() => texto().includes('✓ Todo listo para subir'))
     expect(nom.saveNomenclatureFields).not.toHaveBeenCalled()
-    expect(subidas.runUploadChecks).toHaveBeenCalledWith(20, undefined, undefined)
+    // Las comprobaciones cuentan el idioma elegido: sin él, la pista sin idioma bloquearía.
+    expect(subidas.runUploadChecks).toHaveBeenCalledWith(20, undefined, undefined, { idiomas: { 1: 'spa' } })
     expect(texto()).toContain('2 capítulos en una carpeta')
 
     await pulsar(boton('Subir a eMuwarez'))

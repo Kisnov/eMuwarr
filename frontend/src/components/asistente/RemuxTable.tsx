@@ -113,7 +113,7 @@ export function RemuxTable({ plan, editable, nameEditable, edits, onEdit, onIdio
                           value={edits?.[t.id]?.language ?? t.language_after ?? ''}
                           onChange={e => onIdioma(t.id, e.target.value)}
                         >
-                          <option value="">— Sin idioma —</option>
+                          <option value="">— Sin idioma (und): falta el dato —</option>
                           {plan.idiomas_elegibles.map(o => <option key={o.code} value={o.code}>{o.label}</option>)}
                         </select>
                       ) : (t.language_ietf || t.language || '—')}
