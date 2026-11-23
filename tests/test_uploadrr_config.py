@@ -507,6 +507,18 @@ def test_al_preparar_la_subida_la_firma_de_serie_queda_al_dia(tmp_path, monkeypa
     assert FIRMA_ACTUAL in texto and FIRMA_ANTERIOR not in texto
 
 
+@pytest.mark.parametrize(("tracker", "modo"), [("emu", "default"), ("nobs", "null"), ("mnv", "null")])
+def test_la_firma_solo_va_en_las_subidas_a_emuwarez(tmp_path, monkeypatch, tracker, modo):
+    from emuwarez_uploadrr.database import connect, init_db
+    from tests.test_subida_por_tracker import _peli, _trabajo
+    conn = connect()
+    init_db(conn)
+    job_id = _trabajo(conn, _peli(conn, str(tmp_path / "a.mkv")), tracker=tracker)
+    conn.close()
+    ruta = _preparar(tmp_path, monkeypatch, "SIGNATURES:\n  use_global_sigs: default\n", job_id=job_id)
+    assert get_block_key(read_config_lines(ruta), "SIGNATURES", "use_global_sigs") == modo
+
+
 def test_stage_anon_off_neutralises_the_config_so_only_the_flag_decides():
     from emuwarez_uploadrr.services.uploadrr_config import stage_anon_off
     lines = ["DEFAULT:", "  always_anon: true", "TRACKERS:", "  EMU:", "    api_key: k", "    anon: true"]

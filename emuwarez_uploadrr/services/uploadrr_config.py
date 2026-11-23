@@ -113,6 +113,12 @@ def stage_firma_actual(lines: list[str]) -> tuple[list[str], str]:
     return staged, "firma actualizada" if staged != lines else "firma sin cambios"
 
 
+def stage_sin_firma(lines: list[str]) -> tuple[list[str], str]:
+    """Stage SIGNATURES.use_global_sigs a null (ninguna firma): la de serie nombra a eMuwarez y no va a otros trackers."""
+    staged = list(lines)
+    return staged, set_block_key(staged, "SIGNATURES", "use_global_sigs", "null")
+
+
 def stage_anon_off(lines: list[str]) -> tuple[list[str], str]:
     """Stage TRACKERS.EMU.anon y DEFAULT.always_anon a false: Uploadrr-EMU los une con `-a` en un OR,
     así que solo el flag de la subida decide si es anónima."""
