@@ -40,16 +40,17 @@ function pasoDe(job: UploadJob, estado: string): string | undefined {
 }
 
 export function estadoVisible(job: UploadJob, seeding: SeedingResponse | null): EstadoVisible {
+  const tracker = job.tracker_nombre || 'eMuwarez'  // el de la subida (N.O.B.S, Milnueve…)
   switch (job.status) {
     case 'completed': {
       const i = seedingDe(seeding, job.id)
       const enQbit = i ? { texto: `${i.etiqueta} en qBittorrent`, clase: claseSeeding(i.estado) } : undefined
       const sinQbit = noLlegoAQbit(job)
-      const titulo = job.result_url ? 'Subido a eMuwarez' : 'Subida completada'
+      const titulo = job.result_url ? `Subido a ${tracker}` : 'Subida completada'
       const pendienteModeracion = job.pendiente_moderacion || undefined
       if (sinQbit) {
         return { tono: 'aviso', simbolo: '!', titulo, seeding: enQbit, pendienteModeracion,
-          motivo: 'El torrent está en eMuwarez, pero no se pudo añadir a qBittorrent: '
+          motivo: `El torrent está en ${tracker}, pero no se pudo añadir a qBittorrent: `
             + (job.puede_reenviar_qbit ? 'usa «Reenviar a qBittorrent» o añádelo a mano.' : 'añádelo a mano para sembrarlo.') }
       }
       return { tono: 'ok', simbolo: '✓', titulo, seeding: enQbit, pendienteModeracion }
@@ -58,7 +59,7 @@ export function estadoVisible(job: UploadJob, seeding: SeedingResponse | null): 
       const paso = pasoDe(job, 'fallido')
       return { tono: 'error', simbolo: '✕', titulo: paso ? `Falló en «${paso}»` : 'La subida falló',
         motivo: job.puede_reenviar_qbit
-          ? 'El torrent ya está en eMuwarez: usa «Reenviar a qBittorrent» para sembrarlo.'
+          ? `El torrent ya está en ${tracker}: usa «Reenviar a qBittorrent» para sembrarlo.`
           : job.error_message || undefined }
     }
     case 'cancelled': {

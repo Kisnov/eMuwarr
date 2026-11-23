@@ -239,7 +239,7 @@ const JobRow = memo(function JobRow({ job, instances, seeding, onOpen, indent, i
   // Un intento anterior de una cadena ya se reintentó: el servidor solo acepta reintentar el último.
   const canRetry = !indent && RETRYABLE_STATUSES.has(job.status)
   const deepLink = buildDeepLink(job, instances)
-  const { triggerProps: emuTip, tooltipNode: emuTooltip } = useTooltip(job.result_url ? 'Ver en eMuwarez' : null)
+  const { triggerProps: emuTip, tooltipNode: emuTooltip } = useTooltip(job.result_url ? `Ver en ${job.tracker_nombre || 'eMuwarez'}` : null)
   const { triggerProps: originTip, tooltipNode: originTooltip } = useTooltip(deepLink ? `Abrir en ${job.instance_name ?? job.instance_type}` : null)
   const hayCadena = !!intentosAnteriores && !!onToggleCadena
   const retryToggleTip = useTooltip(hayCadena ? (desplegada ? 'Ocultar intentos anteriores' : 'Ver intentos anteriores') : null)
@@ -313,7 +313,7 @@ const JobRow = memo(function JobRow({ job, instances, seeding, onOpen, indent, i
             {!indent && faltaTrailer(job) && <ChipSinTrailer job={job} onAbrir={abrir} />}
             {job.result_url && (
               <a className="hover-link sub-enlace-emu" href={job.result_url} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()}
-                aria-label="Ver en eMuwarez" {...emuTip}>
+                aria-label={`Ver en ${job.tracker_nombre || 'eMuwarez'}`} {...emuTip}>
                 <ExternalLinkButtonIcon />
                 {emuTooltip}
               </a>

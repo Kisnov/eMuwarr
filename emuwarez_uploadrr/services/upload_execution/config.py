@@ -177,10 +177,24 @@ def preparar_config_de_la_subida(job_id: int, cwd: str, ruta: str | os.PathLike)
         raise _no_preparada(exc) from exc
     append_upload_log(
         job_id, "info",
-        "Config de Uploadrr-EMU preparado para esta subida (DEFAULT.tmdb / TRACKERS.EMU.api_key / SCREENS.img_hosts / "
-        "TORRENT_CLIENTS.qbit).",
+        f"Config de Uploadrr-EMU preparado para esta subida (DEFAULT.tmdb / TRACKERS.{_uploadrr_del_trabajo(job_id)}"
+        ".api_key / SCREENS.img_hosts / TORRENT_CLIENTS.qbit).",
         stream="system",
     )
+
+
+def _uploadrr_del_trabajo(job_id: int) -> str:
+    """El bloque TRACKERS.<X> de la subida (`upload_jobs.tracker`); eMuwarez si no se sabe (solo es para el registro)."""
+    try:
+        conn = _get_db_conn()
+        try:
+            fila = conn.execute("SELECT tracker FROM upload_jobs WHERE id = ?", (job_id,)).fetchone()
+        finally:
+            conn.close()
+    except Exception:  # noqa: BLE001 — el registro no para la subida
+        fila = None
+    tracker = TRACKERS.get(fila[0] if fila and fila[0] else "") or EMU
+    return tracker.uploadrr
 
 
 def borrar_config_de_la_subida(ruta: str | os.PathLike | None) -> None:

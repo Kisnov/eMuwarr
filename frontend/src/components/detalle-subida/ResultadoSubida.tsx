@@ -133,7 +133,7 @@ export function ResultadoSubida({ job, seeding, retryError, pasos, onStart, onRe
         ))}
         {job.result_url && (
           <a className="btn btn-primary btn-sm dsub-sin-subrayado" href={job.result_url} target="_blank" rel="noreferrer">
-            <ExternalLinkButtonIcon /> Ver en eMuwarez
+            <ExternalLinkButtonIcon /> Ver en {job.tracker_nombre || 'eMuwarez'}
           </a>
         )}
         <RellenarPeticion job={job} />
@@ -160,9 +160,9 @@ export function ResultadoSubida({ job, seeding, retryError, pasos, onStart, onRe
         </Dato>
         <Dato etiqueta="Petición"><PeticionDeSubida job={job} /></Dato>
         {job.result_url && (
-          <Dato etiqueta="Torrent" ayuda="La ficha del torrent en eMuwarez, con su número.">
+          <Dato etiqueta="Torrent" ayuda={`La ficha del torrent en ${job.tracker_nombre || 'eMuwarez'}, con su número.`}>
             <ValueChip linkable>
-              <ExternalIdLink id={job.result_torrent_id ? `#${job.result_torrent_id}` : 'Ver torrent'} href={job.result_url} label="eMuwarez" />
+              <ExternalIdLink id={job.result_torrent_id ? `#${job.result_torrent_id}` : 'Ver torrent'} href={job.result_url} label={job.tracker_nombre || 'eMuwarez'} />
             </ValueChip>
           </Dato>
         )}

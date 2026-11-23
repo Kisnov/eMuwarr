@@ -1,6 +1,7 @@
 """Post-upload trailer check.
 
-Uploadrr-EMU writes its own `[EMU]DESCRIPTION.txt` under its `tmp/` dir right
+Uploadrr-EMU writes its own `[<TRACKER>]DESCRIPTION.txt` (`[EMU]…`, `[NOBS]…`, `[MNV]…`: the job's tracker, its
+`Tracker.uploadrr` name) under its `tmp/` dir right
 before uploading, and — confirmed by reading Uploadrr-EMU's own source
 (src/trackers/UNIT3D.py) — that exact file is read back verbatim and sent as
 the torrent's real description to eMuwarez. So finding a `[youtube]KEY
@@ -45,24 +46,27 @@ def _instante(desde) -> Optional[float]:
 
 
 def find_emu_description_file(uploadrr_path: str, candidate_names: list[str],
-                              desde=None) -> Optional[Path]:
+                              desde=None, tracker: str = "EMU") -> Optional[Path]:
     """Locate the [EMU]DESCRIPTION.txt Uploadrr-EMU generated for this
     upload. `candidate_names` are the tmp/ subfolder names most likely to
     match (the applied filename for a single file, the season-pack's own
     eMuwarez title for a pack) — checked first since they're exact and free;
     the mtime-sorted scan of the whole tmp/ tree is the fallback, and it only
     accepts a file written after `desde` (when the job started): otherwise it
-    picked up the previous job's description and reported its trailer."""
+    picked up the previous job's description and reported its trailer.
+    `tracker` is the job's tracker as Uploadrr-EMU names it (EMU, NOBS, MNV):
+    only that tracker's file counts, never another tracker's of the same item."""
     if not uploadrr_path:
         return None
     tmp_dir = Path(uploadrr_path) / "tmp"
     if not tmp_dir.exists():
         return None
+    fichero = f"[{tracker}]DESCRIPTION.txt"
 
     for name in candidate_names:
         if not name:
             continue
-        exact = tmp_dir / name / "[EMU]DESCRIPTION.txt"
+        exact = tmp_dir / name / fichero
         if exact.exists():
             return exact
 
@@ -72,7 +76,7 @@ def find_emu_description_file(uploadrr_path: str, candidate_names: list[str],
         # would actually match e.g. "EDESCRIPTION.txt" (one char from
         # {E,U,M}) and never the real filename.
         candidates = sorted(
-            tmp_dir.rglob(glob.escape("[EMU]DESCRIPTION.txt")),
+            tmp_dir.rglob(glob.escape(fichero)),
             key=lambda p: p.stat().st_mtime,
             reverse=True,
         )
@@ -106,12 +110,12 @@ def extract_youtube_trailer_url(description_file: Path) -> Optional[str]:
     return f"https://www.youtube.com/watch?v={m.group(1)}"
 
 
-def check_trailer_for_job(uploadrr_path: str, candidate_names: list[str], desde=None) -> dict:
+def check_trailer_for_job(uploadrr_path: str, candidate_names: list[str], desde=None, tracker: str = "EMU") -> dict:
     """{checked, found, url}. `checked=False` means the description file
     itself couldn't be located at all (inconclusive — say nothing rather
     than falsely claim "no trailer"). `checked=True, found=False` means the
     file WAS read but had no [youtube] tag — a real "not found"."""
-    desc_file = find_emu_description_file(uploadrr_path, candidate_names, desde=desde)
+    desc_file = find_emu_description_file(uploadrr_path, candidate_names, desde=desde, tracker=tracker)
     if not desc_file:
         return {"checked": False, "found": False, "url": None}
     url = extract_youtube_trailer_url(desc_file)
