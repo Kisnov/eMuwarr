@@ -212,6 +212,7 @@ def _job_to_detail(
         reenvio_qbit_at=j.get("reenvio_qbit_at"),
         puede_reenviar_qbit=puede_reenviar_qbit(j),
         copia_de_job_id=j.get("copia_de_job_id"),
+        descripcion=j.get("descripcion"),
         pendiente_moderacion=pendiente_moderacion,
         nomenclature_snapshot=_extract_json_dict(j, "nomenclature_snapshot_json"),
         remux_snapshot=_extract_json_dict(j, "remux_snapshot_json"),
@@ -373,6 +374,7 @@ def queue_upload(
             source_override=body.source, provider_override=body.provider, tag_override=body.tag,
             title_override=body.title, idiomas_audio=body.idiomas, lote_id=body.lote_id,
             anonimo=body.anonimo, personal_release=body.personal_release, tracker=tracker,
+            descripcion=body.descripcion,
         )
 
     job = result.get("job")

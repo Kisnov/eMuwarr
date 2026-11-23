@@ -1,4 +1,4 @@
-// ServiceIcon — SVG icons for Radarr, Sonarr, EMU, Uploadrr
+// ServiceIcon — SVG icons for Radarr, Sonarr, the manual folder, EMU, Uploadrr
 // Must appear next to any Radarr/Sonarr text in tables or summaries.
 //
 // Radarr/Sonarr use the real official marks, fetched directly from
@@ -11,7 +11,7 @@
 // background chip behind it.
 
 interface ServiceIconProps {
-  type: 'radarr' | 'sonarr' | 'emu' | 'uploadrr' | 'discord' | 'telegram' | 'qbittorrent' | 'imghost' | 'tmdb'
+  type: 'radarr' | 'sonarr' | 'carpeta' | 'emu' | 'uploadrr' | 'discord' | 'telegram' | 'qbittorrent' | 'imghost' | 'tmdb'
   size?: number
 }
 
@@ -59,6 +59,15 @@ export function ServiceIcon({ type, size = 16 }: ServiceIconProps) {
           <path d="M157.8 59.75l-15 14.65M30.785 32.526L71.65 73.25m84.6 84.25l27.808 28.78m1.855-153.894L157.8 59.75m-125.45 126l27.35-27.4" fill="none" stroke="#0CF" strokeMiterlimit={1} strokeWidth={2} />
           <path d="M157.8 59.75l-16.95 17.2M58.97 60.604l17.2 17.15M59.623 158.43l16.75-17.4m61.928-1.396l18.028 17.945" fill="none" stroke="#0CF" strokeMiterlimit={1} strokeWidth={7} />
         </g>
+      </svg>
+    )
+  }
+
+  if (type === 'carpeta') {
+    // Carpeta manual: sin marca propia, la carpeta del mismo trazo que los iconos de línea, en el color del texto.
+    return (
+      <svg width={s} height={s} viewBox="0 0 24 24" fill="none" aria-label="Carpeta manual">
+        <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z" fill="currentColor" fillOpacity="0.12" stroke="currentColor" strokeWidth="1.75" strokeLinejoin="round" />
       </svg>
     )
   }
@@ -133,15 +142,15 @@ export function ServiceIcon({ type, size = 16 }: ServiceIconProps) {
 
 // Inline helper: icon + text
 interface ServiceLabelProps {
-  type: 'radarr' | 'sonarr' | 'emu' | 'uploadrr' | string
+  type: 'radarr' | 'sonarr' | 'carpeta' | 'emu' | 'uploadrr' | string
   label?: string
   size?: number
 }
 
 export function ServiceLabel({ type, label, size = 14 }: ServiceLabelProps) {
-  const iconType = (['radarr', 'sonarr', 'emu', 'uploadrr'].includes(type)
+  const iconType = (['radarr', 'sonarr', 'carpeta', 'emu', 'uploadrr'].includes(type)
     ? type
-    : null) as 'radarr' | 'sonarr' | 'emu' | 'uploadrr' | null
+    : null) as 'radarr' | 'sonarr' | 'carpeta' | 'emu' | 'uploadrr' | null
 
   return (
     <span className="service-inline">

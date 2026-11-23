@@ -14,14 +14,14 @@ import { enfocarPrimerError } from '../Campo'
 // Los valores del formulario, uno por campo, serializados para comparar el estado actual con el cargado.
 function configSignature(v: {
   tags: string[]; gruposPR: string[]; gruposAnon: string[]; providerOrder: string[]; region: string
-  emuUsername: string; ignoreSpecials: boolean; sourceEngine: boolean; addLogo: boolean; capturasPorCapitulo: boolean; modoDePistas: ModoPistas; sinCopiasReflink: boolean; sincronizarAlVolver: boolean
+  emuUsername: string; ignoreSpecials: boolean; sourceEngine: boolean; addLogo: boolean; capturasPorCapitulo: boolean; plantillaDescripcion: string; modoDePistas: ModoPistas; sinCopiasReflink: boolean; sincronizarAlVolver: boolean
   recentLimit: number; uploadMaxConcurrent: number; qbitUrl: string; qbitPublicUrl: string; qbitTag: string; qbitUser: string
   imgEnabled: string[]; allowedRoots: string
   newKey?: string; newEmuKey?: string; newNobsKey?: string; newMnvKey?: string; quitarNobs?: boolean; quitarMnv?: boolean; qbitPass?: string; qbitQui?: string; quitarQui?: boolean; quitarQbitPass?: boolean
 }): Record<string, string> {
   const campos: Record<string, unknown> = {
     tags: v.tags, gruposPR: v.gruposPR, gruposAnon: v.gruposAnon, providerOrder: v.providerOrder, region: v.region, emuUsername: v.emuUsername,
-    ignoreSpecials: v.ignoreSpecials, sourceEngine: v.sourceEngine, addLogo: v.addLogo, capturasPorCapitulo: v.capturasPorCapitulo, modoDePistas: v.modoDePistas, sinCopiasReflink: v.sinCopiasReflink, sincronizarAlVolver: v.sincronizarAlVolver, recentLimit: v.recentLimit, uploadMaxConcurrent: v.uploadMaxConcurrent, qbitUrl: v.qbitUrl, qbitPublicUrl: v.qbitPublicUrl, qbitTag: v.qbitTag, qbitUser: v.qbitUser, imgEnabled: v.imgEnabled, allowedRoots: v.allowedRoots,
+    ignoreSpecials: v.ignoreSpecials, sourceEngine: v.sourceEngine, addLogo: v.addLogo, capturasPorCapitulo: v.capturasPorCapitulo, plantillaDescripcion: v.plantillaDescripcion, modoDePistas: v.modoDePistas, sinCopiasReflink: v.sinCopiasReflink, sincronizarAlVolver: v.sincronizarAlVolver, recentLimit: v.recentLimit, uploadMaxConcurrent: v.uploadMaxConcurrent, qbitUrl: v.qbitUrl, qbitPublicUrl: v.qbitPublicUrl, qbitTag: v.qbitTag, qbitUser: v.qbitUser, imgEnabled: v.imgEnabled, allowedRoots: v.allowedRoots,
     newKey: v.newKey ?? '', newEmuKey: v.newEmuKey ?? '', newNobsKey: v.newNobsKey ?? '', newMnvKey: v.newMnvKey ?? '', quitarNobs: v.quitarNobs ?? false, quitarMnv: v.quitarMnv ?? false, qbitPass: v.qbitPass ?? '', qbitQui: v.qbitQui ?? '', quitarQui: v.quitarQui ?? false, quitarQbitPass: v.quitarQbitPass ?? false,
   }
   return Object.fromEntries(Object.entries(campos).map(([k, x]) => [k, JSON.stringify(x)]))
@@ -77,6 +77,8 @@ export function useConfigForm() {
   const [addLogo, setAddLogo] = useState(true)
   // Capturas de un pack: solo del primer capítulo por defecto.
   const [capturasPorCapitulo, setCapturasPorCapitulo] = useState(false)
+  // La descripción con la que empieza el Resumen de cada subida (BBCode).
+  const [plantillaDescripcion, setPlantillaDescripcion] = useState('')
   // Reordenar pistas: apagado por defecto, reescribe el contenedor entero.
   const [modoDePistas, setModoDePistas] = useState<ModoPistas>(MODO_PISTAS_POR_DEFECTO)
   // Copias por reflink de un archivo compartido: se hacen por defecto.
@@ -111,7 +113,7 @@ export function useConfigForm() {
   const anonAGuardar = gruposAnon.filter(g => tags.includes(g))
   const currentSig = configSignature({
     tags: tagsAGuardar, gruposPR: prAGuardar, gruposAnon: anonAGuardar, providerOrder, region, emuUsername,
-    ignoreSpecials, sourceEngine, addLogo, capturasPorCapitulo, modoDePistas, sinCopiasReflink, sincronizarAlVolver, recentLimit, uploadMaxConcurrent, qbitUrl, qbitPublicUrl, qbitTag, qbitUser, imgEnabled, allowedRoots,
+    ignoreSpecials, sourceEngine, addLogo, capturasPorCapitulo, plantillaDescripcion, modoDePistas, sinCopiasReflink, sincronizarAlVolver, recentLimit, uploadMaxConcurrent, qbitUrl, qbitPublicUrl, qbitTag, qbitUser, imgEnabled, allowedRoots,
     newKey, newEmuKey, newNobsKey, newMnvKey, quitarNobs, quitarMnv, qbitPass, qbitQui, quitarQui, quitarQbitPass,
   })
   const cambios = baseline ? contarCambios(baseline, currentSig) : 0
@@ -142,6 +144,7 @@ export function useConfigForm() {
         setSourceEngine(s.source_engine_enabled ?? false)
         setAddLogo(s.emu_add_logo ?? true)
         setCapturasPorCapitulo(s.emu_per_episode_screens ?? false)
+        setPlantillaDescripcion(s.descripcion_plantilla ?? '')
         setModoDePistas(normalizarModo(s.remux_track_mode))
         setSinCopiasReflink(s.remux_no_reflink_copies ?? false)
         setSincronizarAlVolver(s.sincronizar_al_volver_instancia ?? true)
@@ -158,7 +161,7 @@ export function useConfigForm() {
           gruposPR: marcasDe(s, 'pr'), gruposAnon: marcasDe(s, 'anon'), providerOrder: s.provider_priority_order,
           region: s.tmdb_watch_region,
           emuUsername: s.emu_username ?? '',
-          ignoreSpecials: s.series_ignore_specials ?? true, sourceEngine: s.source_engine_enabled ?? false, addLogo: s.emu_add_logo ?? true, capturasPorCapitulo: s.emu_per_episode_screens ?? false, modoDePistas: normalizarModo(s.remux_track_mode), sinCopiasReflink: s.remux_no_reflink_copies ?? false, sincronizarAlVolver: s.sincronizar_al_volver_instancia ?? true,
+          ignoreSpecials: s.series_ignore_specials ?? true, sourceEngine: s.source_engine_enabled ?? false, addLogo: s.emu_add_logo ?? true, capturasPorCapitulo: s.emu_per_episode_screens ?? false, plantillaDescripcion: s.descripcion_plantilla ?? '', modoDePistas: normalizarModo(s.remux_track_mode), sinCopiasReflink: s.remux_no_reflink_copies ?? false, sincronizarAlVolver: s.sincronizar_al_volver_instancia ?? true,
           recentLimit: s.recent_activity_limit ?? 100,
           uploadMaxConcurrent: s.upload_max_concurrent ?? 1,
           qbitUrl: s.qbit_url ?? '', qbitPublicUrl: s.qbit_public_url ?? '', qbitTag: s.qbit_tag ?? '', qbitUser: s.qbit_username ?? '',
@@ -229,6 +232,7 @@ export function useConfigForm() {
         source_engine_enabled: sourceEngine,
         emu_add_logo: addLogo,
         emu_per_episode_screens: capturasPorCapitulo,
+        descripcion_plantilla: plantillaDescripcion,
         remux_track_mode: modoDePistas,
         remux_no_reflink_copies: sinCopiasReflink,
         sincronizar_al_volver_instancia: sincronizarAlVolver,
@@ -291,7 +295,7 @@ export function useConfigForm() {
         gruposPR: marcasDe(updated, 'pr'), gruposAnon: marcasDe(updated, 'anon'), providerOrder: updated.provider_priority_order,
         region: updated.tmdb_watch_region,
         emuUsername: updated.emu_username ?? '',
-        ignoreSpecials: updated.series_ignore_specials ?? true, sourceEngine: updated.source_engine_enabled ?? false, addLogo: updated.emu_add_logo ?? true, capturasPorCapitulo: updated.emu_per_episode_screens ?? false, modoDePistas: normalizarModo(updated.remux_track_mode), sinCopiasReflink: updated.remux_no_reflink_copies ?? false, sincronizarAlVolver: updated.sincronizar_al_volver_instancia ?? true,
+        ignoreSpecials: updated.series_ignore_specials ?? true, sourceEngine: updated.source_engine_enabled ?? false, addLogo: updated.emu_add_logo ?? true, capturasPorCapitulo: updated.emu_per_episode_screens ?? false, plantillaDescripcion: updated.descripcion_plantilla ?? '', modoDePistas: normalizarModo(updated.remux_track_mode), sinCopiasReflink: updated.remux_no_reflink_copies ?? false, sincronizarAlVolver: updated.sincronizar_al_volver_instancia ?? true,
         recentLimit: updated.recent_activity_limit ?? 100,
         uploadMaxConcurrent: updated.upload_max_concurrent ?? 1,
         qbitUrl: updated.qbit_url ?? '', qbitPublicUrl: updated.qbit_public_url ?? '', qbitTag: updated.qbit_tag ?? '', qbitUser: updated.qbit_username ?? '',
@@ -312,7 +316,7 @@ export function useConfigForm() {
     newKey, setNewKey, newEmuKey, setNewEmuKey, emuUsername, setEmuUsername,
     newNobsKey, setNewNobsKey, newMnvKey, setNewMnvKey, quitarNobs, setQuitarNobs, quitarMnv, setQuitarMnv,
     ignoreSpecials, setIgnoreSpecials, sourceEngine, setSourceEngine, addLogo, setAddLogo,
-    capturasPorCapitulo, setCapturasPorCapitulo, modoDePistas, setModoDePistas,
+    capturasPorCapitulo, setCapturasPorCapitulo, plantillaDescripcion, setPlantillaDescripcion, modoDePistas, setModoDePistas,
     sinCopiasReflink, setSinCopiasReflink, sincronizarAlVolver, setSincronizarAlVolver, recentLimit, setRecentLimit,
     uploadMaxConcurrent, setUploadMaxConcurrent,
     qbitUrl, setQbitUrl, qbitPublicUrl, setQbitPublicUrl, qbitTag, setQbitTag, qbitUser, setQbitUser, qbitPass, setQbitPass,

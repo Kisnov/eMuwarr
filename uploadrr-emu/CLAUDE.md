@@ -43,6 +43,10 @@ or report their errors unless they break an eMuwarez upload.
   app picks with `services/reglas_tracker.py` (only when it is not the plain one). `Unit3dConTabla.get_cat_id` looks up the
   token `<CATEGORY>_<VARIANTE>` (`MOVIE_ANIME`, `TV_LATINO`…) in `data/trackers/<TRACKER>.json` and falls back to the plain
   category when the table has none (EMU has no anime categories: its ids never change).
+- `-df FILE` (`--descfile`, `meta["descfile"]`, in `overwrite_keys`): the upload's own BBCode description from the app.
+  `gen_desc` adds it to `DESCRIPTION.txt` as is, so `edit_desc` keeps trailer, logo, screenshots and signature around it
+  unless the text has a `# USE:` line of its own (then that marker rules). Prep runs on `--resume` too, so each tracker's
+  job gets its own.
 - `--solo-cliente ID` (`-sc`, `meta["solo_cliente"]`, an int, in `overwrite_keys`): the app adds it (plus `--resume`) to
   the usual argv when the torrent is already on the `-tk` tracker (EMU, NOBS, MNV: any one UNIT3D tracker; more than one, or one
   without `descargar_subido`, is the `cliente` reason `sin_emu`) but not in qBittorrent. After prep (and the TMDb check) the item

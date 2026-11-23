@@ -21,8 +21,10 @@ export function ResumenSubida({ a }: { a: Asistente }) {
     checks, batchContentChecks, nombresTanda, requestId, preselect,
     anonimoMarcado, personalReleaseMarcado, elegirAnonimo, elegirPersonalRelease, opcionesTracker, uploading,
     sources, elegirTipo, trackersParaSubir, trackersElegidos, elegirTracker, reglas, reglasDe, batchChecksLoading,
+    descripcion, escribirDescripcion, descripcionPorTracker, descripcionPropia, editarDescripcionDe,
   } = a
   const esTanda = batchQueue.length > 1
+  const destinosElegidos = trackersParaSubir.filter(t => trackersElegidos.includes(t.id))
   // Si eMuwarez no lo admite (sus normas de idioma), se dice junto a su casilla: sale desmarcada de entrada.
   const emuNoLoAdmite = esTanda ? undefined : reglasDe(targetId)?.find(r => r.tracker === 'emu' && !r.permitido)
   const ids = esTanda ? batchQueue : targetId != null ? [targetId] : []
@@ -129,6 +131,35 @@ export function ResumenSubida({ a }: { a: Asistente }) {
                     ? 'Elige al menos uno.'
                     : 'Una subida por tracker, una detrás de otra, con el mismo fichero y el mismo nombre.'}
                 </span>
+              </dd>
+            </>
+          )}
+          {/* Una subida suelta: la tanda no lleva descripción propia. */}
+          {!esTanda && (
+            <>
+              <dt>Descripción</dt>
+              <dd>
+                <textarea className="form-input asist-descripcion" rows={4} value={descripcion} disabled={uploading}
+                  maxLength={30000} aria-label="Descripción propia (BBCode)" placeholder="[b]Notas del encode[/b]…"
+                  onChange={e => escribirDescripcion(e.target.value)} />
+                <span className="asist-dato-nota">
+                  BBCode opcional: va tras el tráiler y antes de las capturas y la firma
+                  {destinosElegidos.length > 1 ? ', la misma en todos los trackers.' : '.'}
+                </span>
+                {destinosElegidos.length > 1 && destinosElegidos.map(t => (
+                  <span key={t.id} className="asist-descripcion-tracker">
+                    <label className="asist-casilla">
+                      <input type="checkbox" checked={t.id in descripcionPorTracker} disabled={uploading}
+                        onChange={e => descripcionPropia(t.id, e.target.checked)} />
+                      Otra para {t.nombre}
+                    </label>
+                    {t.id in descripcionPorTracker && (
+                      <textarea className="form-input asist-descripcion" rows={4} value={descripcionPorTracker[t.id]}
+                        disabled={uploading} maxLength={30000} aria-label={`Descripción para ${t.nombre}`}
+                        onChange={e => editarDescripcionDe(t.id, e.target.value)} />
+                    )}
+                  </span>
+                ))}
               </dd>
             </>
           )}

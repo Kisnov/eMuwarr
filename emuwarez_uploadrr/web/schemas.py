@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import re
 from typing import Any, Dict, Literal, Optional
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from ..services.lotes import MAX_ELEMENTOS_LOTE, PATRON_LOTE_ID
 
@@ -311,9 +311,13 @@ class InstanceTestResponse(BaseModel):
     version: Optional[str] = None
     username: Optional[str] = None
     error: Optional[str] = None
+    message: Optional[str] = None  # carpeta manual: cuántos vídeos tiene
+    warning: Optional[str] = None  # carpeta manual: lo que conviene mirar (no se puede escribir, fuera de las rutas)
 
 
-_VALID_INSTANCE_TYPES = ("radarr", "sonarr")
+_VALID_INSTANCE_TYPES = ("radarr", "sonarr", "carpeta")
+_RE_URL_ARR = r"^https?://[^\s/]+"
+_ERROR_URL_ARR = "La URL debe empezar por http:// o https:// e incluir un host válido"
 
 
 class AddInstanceRequest(BaseModel):
@@ -347,16 +351,25 @@ class AddInstanceRequest(BaseModel):
         v = v.strip()
         if not v:
             raise ValueError("La URL no puede estar vacía")
-        if not re.match(r"^https?://[^\s/]+", v):
-            raise ValueError("La URL debe empezar por http:// o https:// e incluir un host válido")
         return v
 
     @field_validator("api_key")
     @classmethod
-    def api_key_not_empty(cls, v: str) -> str:
-        if not v.strip():
-            raise ValueError("La API key no puede estar vacía")
+    def api_key_strip(cls, v: str) -> str:
         return v.strip()
+
+    @model_validator(mode="after")
+    def destino_segun_tipo(self) -> "AddInstanceRequest":
+        # Una carpeta manual no tiene URL ni clave: `url` es su ruta.
+        if self.type == "carpeta":
+            if not self.url.startswith("/"):
+                raise ValueError("La ruta de la carpeta debe ser absoluta (empieza por /)")
+            return self
+        if not re.match(_RE_URL_ARR, self.url):
+            raise ValueError(_ERROR_URL_ARR)
+        if not self.api_key:
+            raise ValueError("La API key no puede estar vacía")
+        return self
 
 
 class UpdateInstanceRequest(BaseModel):
@@ -384,8 +397,9 @@ class UpdateInstanceRequest(BaseModel):
         v = v.strip()
         if not v:
             raise ValueError("La URL no puede estar vacía")
-        if not re.match(r"^https?://[^\s/]+", v):
-            raise ValueError("La URL debe empezar por http:// o https:// e incluir un host válido")
+        # La ruta de una carpeta manual también; qué vale para cada tipo lo mira services/instances.update_instance.
+        if not (re.match(_RE_URL_ARR, v) or v.startswith("/")):
+            raise ValueError(_ERROR_URL_ARR)
         return v
 
     @field_validator("api_key")
@@ -765,6 +779,23 @@ class LibraryItemResponse(BaseModel):
     # emu_aportes: list of {dim, detail} describing what your copy would add.
     emu_in_catalog: Optional[int] = None
     emu_aportes: Optional[list] = None
+    # Carpeta manual: sin ficha de TMDb confirmada no se sube; la sugerencia (película o serie) la buscó el escaneo.
+    por_identificar: bool = False
+    sugerencia_tmdb: Optional[dict] = None
+
+
+class IdentificarRequest(BaseModel):
+    tmdb_id: str
+    tipo: Optional[Literal["movie", "tv"]] = None
+
+    @field_validator("tmdb_id", mode="before")
+    @classmethod
+    def tmdb_id_texto(cls, v: Any) -> str:
+        return str(v).strip()
+
+
+class IdentificarSugeridasRequest(BaseModel):
+    instance_id: Optional[int] = None
 
 
 class LibraryListResponse(BaseModel):
@@ -1203,6 +1234,8 @@ class UploadJobDetail(BaseModel):
     subir_tambien_a: list[TrackerParaSubir] = []
     # La subida completada a otro tracker cuyo fichero y torrent reutiliza esta («Subir también a…»).
     copia_de_job_id: Optional[int] = None
+    # La descripción propia que lleva (BBCode), o None.
+    descripcion: Optional[str] = None
     # En eMuwarez, pendiente de que un moderador la apruebe (services/mis_torrents.py, pendiente_de_moderacion).
     pendiente_moderacion: bool = False
     # Read-only snapshots taken at apply time — the nomenclature field
@@ -1403,6 +1436,8 @@ class UploadQueueBody(BaseModel):
     personal_release: Optional[bool] = None
     # El id del tracker (services/trackers.py). None: eMuwarez. Para subir a varios, una petición por tracker.
     tracker: Optional[str] = None
+    # Descripción propia (BBCode) del Resumen: Uploadrr-EMU la añade a la que genera. None o vacía: solo la generada.
+    descripcion: Optional[str] = Field(None, max_length=30000)
 
 
 class TrackerParaSubir(BaseModel):

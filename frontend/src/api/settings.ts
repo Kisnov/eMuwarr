@@ -19,6 +19,7 @@ export interface SettingsData {
   source_engine_enabled: boolean
   emu_add_logo: boolean
   emu_per_episode_screens: boolean
+  descripcion_plantilla: string | null
   remux_track_mode: ModoPistas
   remux_no_reflink_copies: boolean
   qbit_username: string | null
@@ -80,6 +81,7 @@ export interface SettingsUpdatePayload {
   source_engine_enabled?: boolean
   emu_add_logo?: boolean
   emu_per_episode_screens?: boolean
+  descripcion_plantilla?: string
   remux_track_mode?: ModoPistas
   remux_no_reflink_copies?: boolean
   qbit_username?: string
