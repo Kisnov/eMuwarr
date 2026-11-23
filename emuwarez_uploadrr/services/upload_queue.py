@@ -217,9 +217,10 @@ def _insert_and_start_queued_job(
     motivo = trackers.motivo_para_no_subir(conn, tracker)
     if motivo:
         return {"status": "blocked", "errors": [motivo], "job": None}
-    if tracker != trackers.POR_DEFECTO:
+    if tracker != trackers.POR_DEFECTO or copia_de_job_id:
         # Las normas de idioma de otro tracker (services/reglas_tracker.py), antes de crear nada: lo que no admite no
-        # llega a lanzarse. Las de eMuwarez siguen donde siempre (comprobaciones del asistente y plan del pack).
+        # llega a lanzarse. Las de eMuwarez siguen donde siempre (comprobaciones del asistente y plan del pack), salvo
+        # en una copia de otro tracker, que no pasa por el asistente.
         from .reglas_tracker import reglas_para_subir
         reglas = reglas_para_subir(conn, item, tracker)
         if not reglas.permitido:

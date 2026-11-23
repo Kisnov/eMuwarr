@@ -73,11 +73,12 @@ descripción y el cliente.
        tracker (`upload_jobs.tracker`), con el mismo nombre y el mismo fichero. El segundo espera a que acabe el primero,
        reutiliza su preparación y lanza Uploadrr-EMU con `--resume` (mismo BASE.torrent: mismas piezas). «Reenviar a
        qBittorrent» pide el torrent al tracker de la subida.
-     - Ya está (PR 4): «Subir también a…» lo que ya está en eMuwarez (las ~50 subidas hechas con eMuwarr), desde el
-       detalle de una subida o, varias elegidas a mano, desde Subidas (un trabajo por subida y tracker, en un lote). Mismo
-       fichero y mismo nombre; si el `tmp/<nombre>` ya no tiene el BASE.torrent, Uploadrr-EMU lo hace con el torrent de
-       eMuwarez (`--base-desde EMU:<id>`): mismas piezas, sin hashear. Antes, qBittorrent tiene que tener ese torrent
-       entero con el fichero como contenido.
+     - Ya está (PR 4): «Subir también a…» una subida completada con eMuwarr a cualquier otro tracker con clave (las ~50
+       de eMuwarez a N.O.B.S y Milnueve, o de uno de ellos a eMuwarez), desde el detalle de una subida o, varias elegidas
+       a mano, desde Subidas (un trabajo por subida y tracker, en un lote). Mismo fichero y mismo nombre; si el
+       `tmp/<nombre>` ya no tiene el BASE.torrent, Uploadrr-EMU lo hace con el torrent del otro tracker
+       (`--base-desde <TK>:<id>`): mismas piezas, sin hashear. Antes, qBittorrent tiene que tener ese torrent entero con
+       el fichero como contenido. Las subidas a mano quedan fuera.
      - Ya están sus normas de idioma y categoría (`services/reglas_tracker.py::reglas_de`): eMuwarez como siempre;
        N.O.B.S admite castellano, latino o VOSE, y Milnueve además el catalán. El anime (instancia marcada de anime o
        con id de MyAnimeList) va a sus categorías de anime; en Milnueve, sin castellano, el anime con catalán va a
@@ -90,9 +91,6 @@ descripción y el cliente.
        no, los que lo admiten; el plan del pack usa las normas del primero de ellos.
      - Queda: la subida por lotes del asistente a otros trackers y probarlo en el NAS (una subida vieja a N.O.B.S:
        los dos torrents sembrando el mismo fichero sin comprobar datos).
-     - Por hacer: «Subir también a…» entre cualquier par de trackers, no solo desde eMuwarez: de una subida
-       completada con eMuwarr a cualquier tracker, a cualquier otro con clave. Solo las hechas con eMuwarr; las
-       subidas a mano quedan fuera (Gabriel, 23/11).
   3. Después, los internacionales que ya tienen código en `uploadrr-emu/`, solo para contenido con el audio en inglés y
      donde haya permiso.
 - **Por estudiar: nekoBT (nekobt.to; añadido y estudiado el 22/11).** Tracker público de anime centrado en fansubs y
