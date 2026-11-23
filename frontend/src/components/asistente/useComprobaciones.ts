@@ -131,7 +131,6 @@ export function useComprobacionesTanda({
   const trackersDeLaCola = batchQueue.map(trackerDeCada).join(',')
   useEffect(() => {
     if (step !== 2 || batchQueue.length < minimo || batchPhase !== 'idle') return
-    if (batchChecksLoading) return
     // Todo lo de este tracker sigue valiendo: el error de otro (uno elegido antes) ya no cuenta.
     if (entornoVale && batchQueue.every(sigueValiendo)) { setBatchChecksError(null); return }
     let alive = true

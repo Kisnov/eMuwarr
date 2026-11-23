@@ -138,24 +138,27 @@ export function useAnalisisLote({ activo, elementos }: { activo: boolean; elemen
 
 /**
  * Qué trackers con clave admiten cada elemento por sus normas de idioma (/upload/elegibilidad), por id, mientras
- * `activo` (más de un tracker). Sin red; lo ya pedido se guarda. Uno por elemento: son 50 como mucho.
+ * `activo` (más de un tracker). Sin red; lo ya pedido se guarda. Uno por elemento: son 50 como mucho. `listo`: han
+ * respondido todos (o no hacía falta preguntar).
  */
 export function useElegibilidadLote({ activo, ids }: { activo: boolean; ids: readonly number[] }) {
   const [reglas, setReglas] = useState<ReadonlyMap<number, ReglasConNombre[]>>(() => new Map())
+  // Los que no respondieron: se quedan con la regla de eMuwarez (el servidor las mira al encolar).
+  const [sinRespuesta, setSinRespuesta] = useState<ReadonlySet<number>>(() => new Set())
   const clave = ids.join(',')
   useEffect(() => {
     if (!activo) return
     let vivo = true
     for (const id of ids) {
-      if (reglas.has(id)) continue
+      if (reglas.has(id) || sinRespuesta.has(id)) continue
       fetchElegibilidad(id)
         .then(r => { if (vivo) setReglas(m => new Map(m).set(id, r.trackers)) })
-        .catch(() => { /* sin respuesta, la regla de eMuwarez: el servidor las mira al encolar */ })
+        .catch(() => { if (vivo) setSinRespuesta(s => new Set(s).add(id)) })
     }
     return () => { vivo = false }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- se pide al cambiar lo que se mira, no con cada resultado
   }, [activo, clave])
-  return reglas
+  return { reglas, listo: !activo || ids.every(id => reglas.has(id) || sinRespuesta.has(id)) }
 }
 
 /** «Subidas en paralelo» de Ajustes, para decir de cuántas en cuántas irá el lote; null si no se pudo leer. */

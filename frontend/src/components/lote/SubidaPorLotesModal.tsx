@@ -52,7 +52,9 @@ export function SubidaPorLotesModal({ entradas, onClose, onDone, onNavigate }: {
   const [paso, setPaso] = useState<Paso>('contenido')
   const { trackersParaSubir, trackersElegidos, setTrackersElegidos, elegirTracker, destinos, destinoSubida } = useDestinos()
   // Con más de un tracker, qué admite cada uno: entra lo que admita alguno.
-  const elegibilidad = useElegibilidadLote({ activo: trackersParaSubir.length > 1, ids: elementos.map(e => e.id) })
+  const { reglas: elegibilidad, listo: elegibilidadLista } = useElegibilidadLote({
+    activo: trackersParaSubir.length > 1, ids: elementos.map(e => e.id),
+  })
   const razon = (e: LibraryItemResponse) => {
     const r = elegibilidad.get(e.id)
     return razonNoSubible(e, r && admiten(r))
@@ -162,6 +164,9 @@ export function SubidaPorLotesModal({ entradas, onClose, onDone, onNavigate }: {
     }
   }
 
+  // Lo que había marcado al pasar al Resumen: volver sin cambiarlo conserva los trackers elegidos.
+  const colaAlContinuar = useRef('')
+
   // Mientras se encola no se cierra: no se vería qué entró y qué no.
   const cerrar = () => { if (fase !== 'processing') onClose() }
 
@@ -207,9 +212,13 @@ export function SubidaPorLotesModal({ entradas, onClose, onDone, onNavigate }: {
       {paso === 'contenido' && (
         <PasoContenidoLote
           elementos={elementos} marcadas={marcadas} onAlternar={alternar} elegibilidad={elegibilidad}
+          comprobandoIdiomas={!elegibilidadLista}
           onContinuar={() => {
-            // Como el asistente: eMuwarez si admite todo; si no, también los que admiten lo demás.
-            setTrackersElegidos(destinosDeEntradaDeVarios(enCola.map(e => elegibilidad.get(e.id))))
+            // Como el asistente, si cambió lo marcado: eMuwarez si admite todo; si no, también los que admiten lo demás.
+            if (colaAlContinuar.current !== cola.join(',')) {
+              colaAlContinuar.current = cola.join(',')
+              setTrackersElegidos(destinosDeEntradaDeVarios(enCola.map(e => elegibilidad.get(e.id))))
+            }
             setPaso('resumen')
           }}
           expandiendo={expansion.elementos ? null : { hechas: expansion.hechas, series: expansion.series }}

@@ -89,11 +89,7 @@ descripción y el cliente.
        capítulo a capítulo, lo que un tracker no admite no se encola para él y su trabajo lanza con su `--variante`.
        Con más de un tracker con clave, el paso «Contenido» del asistente deja elegir el pack o los capítulos que
        admite alguno (`/upload/elegibilidad`), dice cuáles, y el Resumen marca de entrada eMuwarez si lo admite y, si
-       no, los que lo admiten; el plan del pack usa las normas del primero de ellos. Lo mismo en «Subir por lotes» y en
-       las tandas de temporadas o capítulos: entra lo que admite alguno (Biblioteca deja marcarlo y el paso 1 lo mira
-       elemento a elemento), el Resumen marca de entrada eMuwarez y los que admiten lo que eMuwarez no, cada elemento
-       se comprueba con las normas del primero que lo admite y dice «Solo a Milnueve» si no va a todos, y a los que
-       no lo admiten no se manda (también en el servidor, `lotes._encolar_uno`).
+       no, los que lo admiten; el plan del pack usa las normas del primero de ellos.
      - Queda: probarlo en el NAS (una subida vieja a N.O.B.S: los dos torrents sembrando el mismo fichero sin comprobar
        datos).
   3. Después, los internacionales que ya tienen código en `uploadrr-emu/`, solo para contenido con el audio en inglés y

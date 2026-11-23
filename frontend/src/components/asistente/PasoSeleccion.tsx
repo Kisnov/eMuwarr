@@ -13,7 +13,7 @@ export function PasoSeleccion({ a }: { a: Asistente }) {
   const {
     item, allowMultiSeason, seasons, episodes, multiSelected, setMultiSelected, seasonUploadMode, setSeasonUploadMode,
     episodeSelected, setEpisodeSelected, selError, confirmMultiSelection, confirmEpisodeSelection, confirmSeasonWhole,
-    reglasDe,
+    reglasDe, temporadasMiradas,
   } = a
   const idMotivo = useId()
 
@@ -237,8 +237,9 @@ export function PasoSeleccion({ a }: { a: Asistente }) {
         <button
           className="btn btn-primary"
           // Sin nada elegido no hay a dónde continuar: antes se pulsaba y solo entonces avisaba.
+          // De una serie, tampoco hasta saber qué admite cada tracker: de ahí salen los de entrada del Resumen.
           disabled={allowMultiSeason
-            ? multiSelected.size === 0
+            ? multiSelected.size === 0 || !temporadasMiradas
             : seasonUploadMode === null || (seasonUploadMode === 'episodes' && episodeSelected.size === 0)}
           onClick={
             allowMultiSeason ? confirmMultiSelection

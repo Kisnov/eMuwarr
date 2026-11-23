@@ -30,12 +30,14 @@ function partesDelTitulo(item: LibraryItemResponse): { nombre: string; parte: st
 
 export function PasoContenidoLote({
   elementos, marcadas, onAlternar, onContinuar, expandiendo = null, avisos = [], peticiones, peticionDe,
-  onElegirPeticion, elegibilidad = SIN_ELEGIBILIDAD,
+  onElegirPeticion, elegibilidad = SIN_ELEGIBILIDAD, comprobandoIdiomas = false,
 }: {
   elementos: readonly LibraryItemResponse[]
   marcadas: ReadonlySet<number>
   // Con más de un tracker, qué admite cada uno (/upload/elegibilidad).
   elegibilidad?: ReadonlyMap<number, readonly ReglasConNombre[]>
+  // Aún no han respondido todos: no se continúa, que de ellos salen los trackers de entrada.
+  comprobandoIdiomas?: boolean
   onAlternar: (id: number) => void
   onContinuar: () => void
   // Mientras se cargan las temporadas de las series marcadas: cuántas series van de cuántas.
@@ -115,7 +117,12 @@ export function PasoContenidoLote({
         {formatNumero(n)} de {formatNumero(elementos.length)} {elementos.length === 1 ? 'marcada' : 'marcadas'} · máximo {MAX_ELEMENTOS_LOTE} por lote
       </p>
       <div className="asist-pie asist-pie-fin">
-        <button className="btn btn-primary" type="button" onClick={onContinuar} disabled={n === 0}>
+        {comprobandoIdiomas && (
+          <span className="text-muted asist-t12" role="status">
+            <span className="spinner asist-spinner-14" /> Mirando qué admite cada tracker…
+          </span>
+        )}
+        <button className="btn btn-primary" type="button" onClick={onContinuar} disabled={n === 0 || comprobandoIdiomas}>
           Continuar ({n})
         </button>
       </div>

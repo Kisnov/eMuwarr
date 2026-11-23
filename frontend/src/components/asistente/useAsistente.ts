@@ -190,7 +190,9 @@ export function useAsistente({ item, onClose: onCloseProp, onDone, onNavigate, p
     return () => { vigente = false }
   }, [item.id, variosTrackers, isSeries])
   // Lo de cada temporada de la serie: la tanda deja elegir las que admite alguno.
-  const elegibilidadTemporadas = useElegibilidadLote({ activo: variosTrackers && isSeries, ids: seasons.map(s => s.id) })
+  const { reglas: elegibilidadTemporadas, listo: temporadasMiradas } = useElegibilidadLote({
+    activo: variosTrackers && isSeries, ids: seasons.map(s => s.id),
+  })
   // Las normas de cada tracker para un elemento de este asistente (el abierto, una temporada o un capítulo suyo);
   // undefined si no se sabe (un solo tracker, o aún sin respuesta).
   const reglasDe = (id: number | null): ReglasConNombre[] | undefined => {
@@ -302,8 +304,8 @@ export function useAsistente({ item, onClose: onCloseProp, onDone, onNavigate, p
   const trackerPrincipal = destinos[0]?.id ?? 'emu'
   // En una tanda, las de cada uno van con las del primero que lo admite (sin ninguno, del primero, que dicen por qué).
   const trackerDe = (id: number) => (destinosQueAdmiten(destinos, reglasDe(id))[0] ?? destinos[0])?.id ?? 'emu'
-  // El plan del pack, igual: el de una temporada de la tanda que solo admite Milnueve, con las de Milnueve.
-  const trackerDelPack = targetId == null ? trackerPrincipal : trackerDe(targetId)
+  // El plan del pack de la tanda, igual: el de una temporada que solo admite Milnueve, con las de Milnueve.
+  const trackerDelPack = esTanda(seleccion) && targetId != null ? trackerDe(targetId) : trackerPrincipal
   const {
     checks: checksDelServidor, checksLoading, checksError, liveChecks, runChecks: comprobar,
   } = useComprobaciones(targetId, proveedorElegido, trackerPrincipal)
@@ -1098,7 +1100,9 @@ export function useAsistente({ item, onClose: onCloseProp, onDone, onNavigate, p
   ) => {
     for (const { id, nombre } of destinos) {
       const titulo = destinos.length > 1 ? `${title} (${nombre})` : title
-      const noLoAdmite = reglasDe(seasonId)?.find(r => r.tracker === id && !r.permitido)
+      // Sin idiomas elegidos a mano: /upload/elegibilidad no los ve, y con ellos deciden el servidor y el plan del pack.
+      const noLoAdmite = !idiomasParaServidor(idiomasPorTemporada.get(seasonId))
+        && reglasDe(seasonId)?.find(r => r.tracker === id && !r.permitido)
       if (noLoAdmite) { results.push({ seasonId, title: titulo, status: 'failed', reason: noLoAdmite.motivo }); continue }
       try {
         const r = await encolar(id === 'emu' ? [] : [id])
@@ -1232,7 +1236,7 @@ export function useAsistente({ item, onClose: onCloseProp, onDone, onNavigate, p
     item, onDone, onNavigate, onClose, needsSelection, allowMultiSeason, step, setStep, requestId, preselect, modoPistasAjuste,
     seleccion, targetId, targetIsSeason, seasonQueue, episodeQueue,
     // Paso 0
-    seasons, episodes, selError, multiSelected, setMultiSelected, seasonUploadMode, setSeasonUploadMode,
+    seasons, episodes, selError, multiSelected, setMultiSelected, seasonUploadMode, setSeasonUploadMode, temporadasMiradas,
     episodeSelected, setEpisodeSelected, confirmMultiSelection, confirmEpisodeSelection, confirmSeasonWhole,
     // Paso 1
     existingJob, existingJobBlocking, cambiarElemento,
