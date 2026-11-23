@@ -4,6 +4,9 @@ import type { ModoAvisoLote } from '../utils/lote'
 
 export type UploadrrRuntimeType = 'uploadrr_emu' | 'uploadrr_generic'
 
+// Las marcas de los grupos en otro tracker; null: las de eMuwarez.
+export type MarcasTracker = { personal_release: string[]; anonimos: string[] } | null
+
 export interface SettingsData {
   default_release_tag: string
   upload_tags?: string[]
@@ -37,6 +40,9 @@ export interface SettingsData {
   nobs_api_key_masked: string | null
   mnv_api_key_configured: boolean
   mnv_api_key_masked: string | null
+  nobs_url: string
+  mnv_url: string
+  marcas_por_tracker?: Record<string, MarcasTracker>
   emu_username: string | null
   uploadrr_path: string | null
   uploadrr_runtime_type: UploadrrRuntimeType
@@ -92,6 +98,9 @@ export interface SettingsUpdatePayload {
   emu_api_key?: string
   nobs_api_key?: string
   mnv_api_key?: string
+  nobs_url?: string
+  mnv_url?: string
+  marcas_por_tracker?: Record<string, MarcasTracker>
   emu_username?: string
   uploadrr_path?: string
   uploadrr_runtime_type?: UploadrrRuntimeType

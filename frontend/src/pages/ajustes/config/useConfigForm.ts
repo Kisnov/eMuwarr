@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useUnsavedGuard } from '../../../utils/unsavedGuard'
-import { fetchSettings, updateSettings, type SettingsData } from '../../../api/settings'
+import { fetchSettings, updateSettings, type MarcasTracker, type SettingsData } from '../../../api/settings'
 import { usePerfilEmu } from '../../../context/PerfilEmuContext'
 import { isValidHttpUrl, isValidPublicUrl } from '../../../utils/validation'
 import { MODO_PISTAS_POR_DEFECTO, normalizarModo, type ModoPistas } from '../../../utils/modoPistas'
@@ -16,12 +16,12 @@ function configSignature(v: {
   tags: string[]; gruposPR: string[]; gruposAnon: string[]; providerOrder: string[]; region: string
   emuUsername: string; ignoreSpecials: boolean; sourceEngine: boolean; addLogo: boolean; capturasPorCapitulo: boolean; modoDePistas: ModoPistas; sinCopiasReflink: boolean; sincronizarAlVolver: boolean
   recentLimit: number; uploadMaxConcurrent: number; qbitUrl: string; qbitPublicUrl: string; qbitTag: string; qbitUser: string
-  imgEnabled: string[]; allowedRoots: string
+  imgEnabled: string[]; allowedRoots: string; urlsTrackers: Record<string, string>; marcasTrackers: Record<string, MarcasTracker>
   newKey?: string; newEmuKey?: string; newNobsKey?: string; newMnvKey?: string; quitarNobs?: boolean; quitarMnv?: boolean; qbitPass?: string; qbitQui?: string; quitarQui?: boolean; quitarQbitPass?: boolean
 }): Record<string, string> {
   const campos: Record<string, unknown> = {
     tags: v.tags, gruposPR: v.gruposPR, gruposAnon: v.gruposAnon, providerOrder: v.providerOrder, region: v.region, emuUsername: v.emuUsername,
-    ignoreSpecials: v.ignoreSpecials, sourceEngine: v.sourceEngine, addLogo: v.addLogo, capturasPorCapitulo: v.capturasPorCapitulo, modoDePistas: v.modoDePistas, sinCopiasReflink: v.sinCopiasReflink, sincronizarAlVolver: v.sincronizarAlVolver, recentLimit: v.recentLimit, uploadMaxConcurrent: v.uploadMaxConcurrent, qbitUrl: v.qbitUrl, qbitPublicUrl: v.qbitPublicUrl, qbitTag: v.qbitTag, qbitUser: v.qbitUser, imgEnabled: v.imgEnabled, allowedRoots: v.allowedRoots,
+    ignoreSpecials: v.ignoreSpecials, sourceEngine: v.sourceEngine, addLogo: v.addLogo, capturasPorCapitulo: v.capturasPorCapitulo, modoDePistas: v.modoDePistas, sinCopiasReflink: v.sinCopiasReflink, sincronizarAlVolver: v.sincronizarAlVolver, recentLimit: v.recentLimit, uploadMaxConcurrent: v.uploadMaxConcurrent, qbitUrl: v.qbitUrl, qbitPublicUrl: v.qbitPublicUrl, qbitTag: v.qbitTag, qbitUser: v.qbitUser, imgEnabled: v.imgEnabled, allowedRoots: v.allowedRoots, urlsTrackers: v.urlsTrackers, marcasTrackers: v.marcasTrackers,
     newKey: v.newKey ?? '', newEmuKey: v.newEmuKey ?? '', newNobsKey: v.newNobsKey ?? '', newMnvKey: v.newMnvKey ?? '', quitarNobs: v.quitarNobs ?? false, quitarMnv: v.quitarMnv ?? false, qbitPass: v.qbitPass ?? '', qbitQui: v.qbitQui ?? '', quitarQui: v.quitarQui ?? false, quitarQbitPass: v.quitarQbitPass ?? false,
   }
   return Object.fromEntries(Object.entries(campos).map(([k, x]) => [k, JSON.stringify(x)]))
@@ -36,6 +36,22 @@ function marcasDe(s: SettingsData, cual: 'pr' | 'anon'): string[] {
   const tags = s.upload_tags?.length ? s.upload_tags : [s.default_release_tag]
   const marcados = (cual === 'pr' ? s.upload_tags_personal_release : s.upload_tags_anonimos) ?? []
   return marcados.filter(g => tags.includes(g))
+}
+
+// Marca o desmarca un grupo en una lista de marcas.
+export const alternar = (lista: string[], tag: string, si: boolean) => (si ? [...lista.filter(g => g !== tag), tag] : lista.filter(g => g !== tag))
+
+// Los trackers que no son eMuwarez, con el nombre que ve el usuario.
+export const OTROS_TRACKERS = [{ id: 'nobs', nombre: 'N.O.B.S' }, { id: 'mnv', nombre: 'Milnueve' }] as const
+
+const urlsDe = (s: SettingsData): Record<string, string> => ({ nobs: s.nobs_url ?? '', mnv: s.mnv_url ?? '' })
+
+// Las marcas de cada otro tracker, solo de los grupos que existen (como marcasDe).
+function marcasTrackersDe(s: SettingsData, tags: string[]): Record<string, MarcasTracker> {
+  return Object.fromEntries(OTROS_TRACKERS.map(({ id }) => {
+    const m = s.marcas_por_tracker?.[id]
+    return [id, m ? { personal_release: m.personal_release.filter(g => tags.includes(g)), anonimos: m.anonimos.filter(g => tags.includes(g)) } : null]
+  }))
 }
 
 // Cuántos campos difieren de lo cargado.
@@ -100,6 +116,9 @@ export function useConfigForm() {
   // Uploadrr sandboxing: folder(s) where THIS container reaches the media,
   // comma-separated. Empty means real uploads fail closed until it's set.
   const [allowedRoots, setAllowedRoots] = useState('')
+  // La URL y las marcas de los grupos de los otros trackers (null: las de eMuwarez).
+  const [urlsTrackers, setUrlsTrackers] = useState<Record<string, string>>({})
+  const [marcasTrackers, setMarcasTrackers] = useState<Record<string, MarcasTracker>>({})
 
   // Unsaved-changes tracking: compare current form values to the loaded ones.
   const [baseline, setBaseline] = useState<Record<string, string> | null>(null)
@@ -109,9 +128,12 @@ export function useConfigForm() {
   // Solo los de grupos que siguen en la lista: quitar un grupo quita también sus marcas.
   const prAGuardar = gruposPR.filter(g => tags.includes(g))
   const anonAGuardar = gruposAnon.filter(g => tags.includes(g))
+  const marcasAGuardar = Object.fromEntries(Object.entries(marcasTrackers).map(([id, m]) => [id, m && {
+    personal_release: m.personal_release.filter(g => tags.includes(g)), anonimos: m.anonimos.filter(g => tags.includes(g)),
+  }]))
   const currentSig = configSignature({
     tags: tagsAGuardar, gruposPR: prAGuardar, gruposAnon: anonAGuardar, providerOrder, region, emuUsername,
-    ignoreSpecials, sourceEngine, addLogo, capturasPorCapitulo, modoDePistas, sinCopiasReflink, sincronizarAlVolver, recentLimit, uploadMaxConcurrent, qbitUrl, qbitPublicUrl, qbitTag, qbitUser, imgEnabled, allowedRoots,
+    ignoreSpecials, sourceEngine, addLogo, capturasPorCapitulo, modoDePistas, sinCopiasReflink, sincronizarAlVolver, recentLimit, uploadMaxConcurrent, qbitUrl, qbitPublicUrl, qbitTag, qbitUser, imgEnabled, allowedRoots, urlsTrackers, marcasTrackers: marcasAGuardar,
     newKey, newEmuKey, newNobsKey, newMnvKey, quitarNobs, quitarMnv, qbitPass, qbitQui, quitarQui, quitarQbitPass,
   })
   const cambios = baseline ? contarCambios(baseline, currentSig) : 0
@@ -153,6 +175,8 @@ export function useConfigForm() {
         setQbitUser(s.qbit_username ?? '')
         setImgEnabled(s.image_hosts_enabled ?? [])
         setAllowedRoots((s.uploadrr_allowed_roots ?? []).join(', '))
+        setUrlsTrackers(urlsDe(s))
+        setMarcasTrackers(marcasTrackersDe(s, s.upload_tags?.length ? s.upload_tags : [s.default_release_tag]))
         setBaseline(configSignature({
           tags: s.upload_tags?.length ? s.upload_tags : [s.default_release_tag],
           gruposPR: marcasDe(s, 'pr'), gruposAnon: marcasDe(s, 'anon'), providerOrder: s.provider_priority_order,
@@ -164,6 +188,7 @@ export function useConfigForm() {
           qbitUrl: s.qbit_url ?? '', qbitPublicUrl: s.qbit_public_url ?? '', qbitTag: s.qbit_tag ?? '', qbitUser: s.qbit_username ?? '',
           imgEnabled: s.image_hosts_enabled ?? [],
           allowedRoots: (s.uploadrr_allowed_roots ?? []).join(', '),
+          urlsTrackers: urlsDe(s), marcasTrackers: marcasTrackersDe(s, s.upload_tags?.length ? s.upload_tags : [s.default_release_tag]),
         }))
       })
       .catch((e: unknown) => {
@@ -240,7 +265,11 @@ export function useConfigForm() {
         qbit_username: qbitUser.trim(),
         image_hosts_enabled: imgEnabled,
         uploadrr_allowed_roots: allowedRoots,
+        marcas_por_tracker: marcasAGuardar,
       }
+      // La URL solo si se ha cambiado: guardada sin tocar, dejaría de seguir a la de fábrica.
+      if (urlsTrackers.nobs !== settings.nobs_url) payload.nobs_url = urlsTrackers.nobs.trim()
+      if (urlsTrackers.mnv !== settings.mnv_url) payload.mnv_url = urlsTrackers.mnv.trim()
       if (newKey.trim()) payload.tmdb_api_key = newKey.trim()
       if (newEmuKey.trim()) payload.emu_api_key = newEmuKey.trim()
       if (newNobsKey.trim()) payload.nobs_api_key = newNobsKey.trim()
@@ -286,6 +315,8 @@ export function useConfigForm() {
       setQuitarNobs(false)
       setQuitarMnv(false)
       setAllowedRoots((updated.uploadrr_allowed_roots ?? []).join(', '))
+      setUrlsTrackers(urlsDe(updated))
+      setMarcasTrackers(marcasTrackersDe(updated, updated.upload_tags?.length ? updated.upload_tags : [updated.default_release_tag]))
       setBaseline(configSignature({
         tags: updated.upload_tags?.length ? updated.upload_tags : [updated.default_release_tag],
         gruposPR: marcasDe(updated, 'pr'), gruposAnon: marcasDe(updated, 'anon'), providerOrder: updated.provider_priority_order,
@@ -297,6 +328,7 @@ export function useConfigForm() {
         qbitUrl: updated.qbit_url ?? '', qbitPublicUrl: updated.qbit_public_url ?? '', qbitTag: updated.qbit_tag ?? '', qbitUser: updated.qbit_username ?? '',
         imgEnabled: updated.image_hosts_enabled ?? [],
         allowedRoots: (updated.uploadrr_allowed_roots ?? []).join(', '),
+        urlsTrackers: urlsDe(updated), marcasTrackers: marcasTrackersDe(updated, updated.upload_tags?.length ? updated.upload_tags : [updated.default_release_tag]),
       }))
       setMsg({ ok: true, text: '✓ Configuración guardada' })
     } catch (e: unknown) {
@@ -318,6 +350,7 @@ export function useConfigForm() {
     qbitUrl, setQbitUrl, qbitPublicUrl, setQbitPublicUrl, qbitTag, setQbitTag, qbitUser, setQbitUser, qbitPass, setQbitPass,
     quitarQbitPass, setQuitarQbitPass, qbitQui, setQbitQui, quitarQui, setQuitarQui,
     imgEnabled, setImgEnabled, allowedRoots, setAllowedRoots,
+    urlsTrackers, setUrlsTrackers, marcasTrackers, setMarcasTrackers,
   }
 }
 

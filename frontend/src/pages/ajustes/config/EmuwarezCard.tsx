@@ -7,7 +7,7 @@ import { InfoIcon } from '../../../components/InfoIcon'
 import { emuTestCooldownSeconds } from '../../../utils/integrationResult'
 import { Campo, EstadoSecreto, ResultadoPrueba } from '../Campo'
 import { CabeceraTarjeta } from '../CabeceraTarjeta'
-import type { ConfigForm } from './useConfigForm'
+import { alternar, type ConfigForm } from './useConfigForm'
 
 export function EmuwarezCard({ form }: { form: ConfigForm }) {
   const {
@@ -36,8 +36,6 @@ export function EmuwarezCard({ form }: { form: ConfigForm }) {
     }
   }
 
-  // Marca o desmarca un grupo en una de las dos listas.
-  const alternar = (lista: string[], tag: string, si: boolean) => (si ? [...lista.filter(g => g !== tag), tag] : lista.filter(g => g !== tag))
 
   function anadirTag() {
     const t = nuevoTag.trim()
@@ -96,7 +94,7 @@ export function EmuwarezCard({ form }: { form: ConfigForm }) {
       </Campo>
       <Campo
         etiqueta="Grupos de subida"
-        info={<InfoIcon text="El tag que va tras el último «-» en el nombre del torrent (tu grupo/usuario). El primero es el que sale por defecto al subir; los demás se eligen en el asistente. Marca «Personal release» o «Anónimo» en un grupo y sus subidas irán así a eMuwarez; en el Resumen de cada subida se puede cambiar solo para ella." />}
+        info={<InfoIcon text="El tag que va tras el último «-» en el nombre del torrent (tu grupo/usuario). El primero es el que sale por defecto al subir; los demás se eligen en el asistente. Marca «Personal release» o «Anónimo» en un grupo y sus subidas irán así a eMuwarez (y a los otros trackers que no tengan marcas propias); en el Resumen de cada subida se puede cambiar solo para ella." />}
       >
         {c => (
           <>

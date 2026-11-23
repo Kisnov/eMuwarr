@@ -98,7 +98,8 @@ or report their errors unless they break an eMuwarez upload.
   the app pass it, with the absolute path of a per-job file it creates before launching and deletes afterwards.
 - `config.yaml` keys the app writes into that per-job file (it no longer launches a checkout without `--config`): `DEFAULT.tmdb`,
   `DEFAULT.add_logo`, `DEFAULT.always_anon`, `TRACKERS.EMU.anon` and `AUTO.keep_quiet` (all three forced to `false`: only `-a` makes an upload
-  anonymous, and the app needs the console output), `TRACKERS.EMU.api_key`, `TRACKERS.BLU.useAPI` (forced to `false`), `SCREENS.img_hosts`,
+  anonymous, and the app needs the console output), `TRACKERS.EMU.api_key`, `TRACKERS.<NOBS|MNV>.api_key` / `anon` (`false`) /
+  `url` (the tracker's URL in the app's settings; `Unit3d.__init__` uses it instead of the class `domain`), `TRACKERS.BLU.useAPI` (forced to `false`), `SCREENS.img_hosts`,
   `SCREENS.API_KEYS`, `SCREENS.per_episode` (`0`, only the first episode of a pack, unless the app is set to screenshot
   every episode), `SCREENS.use_oxipng` (`true`) and `SCREENS.oxipng_level` (`2`; lossless PNG optimisation, falls back to ffmpeg when `pyoxipng` is missing), `TORRENT_CLIENTS.qbit.*`. When `torrent_storage_dir` doesn't exist (it resolves against this
   repo's cwd), the app drops it from `TORRENT_CLIENTS.qbit` and sets `enable_search: False`.

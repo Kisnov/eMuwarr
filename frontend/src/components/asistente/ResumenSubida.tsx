@@ -19,7 +19,7 @@ export function ResumenSubida({ a }: { a: Asistente }) {
     item, seasons, episodes, targetId, targetIsSeason, batchQueue, batchIsEpisodes, batchItemTitle,
     preview, seasonDisplayTitle, seasonPlan, fields, remuxPreview, remuxEdits, modoPistasAjuste,
     checks, batchContentChecks, nombresTanda, requestId, preselect,
-    anonimoMarcado, personalReleaseMarcado, elegirAnonimo, elegirPersonalRelease, opcionesTracker, uploading,
+    anonimoMarcado, personalReleaseMarcado, marcasMixtas, elegirAnonimo, elegirPersonalRelease, opcionesTracker, uploading,
     sources, elegirTipo, trackersParaSubir, trackersElegidos, elegirTracker, reglas, reglasDe, batchChecksLoading,
   } = a
   const esTanda = batchQueue.length > 1
@@ -146,21 +146,23 @@ export function ResumenSubida({ a }: { a: Asistente }) {
             <span className="asist-marcas">
               <label className="asist-casilla">
                 <input type="checkbox" checked={anonimoMarcado} disabled={uploading}
+                  ref={el => { if (el) el.indeterminate = opcionesTracker.anonimo === null && marcasMixtas.anonimo }}
                   onChange={e => elegirAnonimo(e.target.checked)} />
                 Anónimo
               </label>
               <label className="asist-casilla">
                 <input type="checkbox" checked={personalReleaseMarcado} disabled={uploading}
+                  ref={el => { if (el) el.indeterminate = opcionesTracker.personalRelease === null && marcasMixtas.personalRelease }}
                   onChange={e => elegirPersonalRelease(e.target.checked)} />
                 Personal release
               </label>
             </span>
             <span className="asist-dato-nota">
-              {!esTanda
+              {!esTanda && !marcasMixtas.anonimo && !marcasMixtas.personalRelease
                 ? 'De entrada, lo que tenga marcado el grupo en Configuración; aquí cambia solo esta subida.'
                 : opcionesTracker.anonimo === null && opcionesTracker.personalRelease === null
-                ? 'Sin tocarlas, cada subida lleva lo que tenga marcado su grupo en Configuración.'
-                : 'Lo que cambies aquí vale para todas las subidas de la tanda; lo que no toques sigue al grupo de cada una.'}
+                ? 'Sin tocarlas, cada subida lleva lo que tenga marcado su grupo en Configuración para su tracker.'
+                : 'Lo que cambies aquí vale para todas estas subidas; lo que no toques sigue al grupo de cada una.'}
             </span>
           </dd>
         </dl>

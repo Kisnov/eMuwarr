@@ -166,6 +166,8 @@ def test_cada_ajuste_sencillo_se_guarda_en_su_clave_y_se_lee(client, auth_header
     if a.tipo == STR:
         if campo in ("qbit_url", "qbit_public_url"):  # estos solo admiten una URL http(s)
             enviado, valor = f"  http://{valor}  ", f"http://{valor}"
+        elif campo in ("nobs_url", "mnv_url"):  # y estos solo https
+            enviado, valor = f"  https://{valor}  ", f"https://{valor}"
         else:
             enviado = f"  {valor}  "
     else:

@@ -40,8 +40,8 @@ descripción y el cliente.
      - La cola, Peticiones y el Panel dicen de qué tracker es cada fila con un chip (`ChipTracker`), solo si no es
        eMuwarez: quien solo usa eMuwarez no ve nada nuevo.
      - Queda: que esas sincronizaciones reciban el tracker como parámetro cuando haya un segundo adaptador, la
-       comparación con el catálogo por tracker (`library_items.emu_in_catalog`/`emu_aportes` son de eMuwarez), el
-       resto de ajustes por tracker (URL, grupos, anónimo) y su sitio en Configuración.
+       comparación con el catálogo por tracker (`library_items.emu_in_catalog`/`emu_aportes` son de eMuwarez) y la URL
+       de eMuwarez en Configuración (la de N.O.B.S y Milnueve ya se cambia; la de eMuwarez es `EMU_BASE_URL`).
   2. **Fase B: NOBS (nobs.rawsmoke.net) y Milnueve (tracker.milnueve.cc).** Los dos son UNIT3D y ya se sube a ellos con
      otras herramientas: se puede empezar (Gabriel les avisa). El primero valida la abstracción. Decidido el 22/11:
      - **Nomenclatura: la de eMuwarez, sin más.** Los dos son nuevos y cada uno sube como quiere; sus guías (formato

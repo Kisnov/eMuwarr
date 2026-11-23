@@ -59,9 +59,9 @@ def _lineas_preparadas(job_id: int, cwd: str) -> list[str] | None:
     try:
         tmdb_key = get_setting_canonical(conn, "tmdb.api_key")
         emu_key = ajuste_de_tracker(conn, "api_key")
-        # Los otros trackers (fase B) con clave puesta: su bloque TRACKERS.<X> va en el config de la subida.
+        # Los otros trackers (fase B) con clave puesta: su bloque TRACKERS.<X> (clave y URL) va en el config de la subida.
         claves_otros = {
-            t.uploadrr: clave for t in TRACKERS.values() if t is not EMU
+            t.uploadrr: (clave, ajuste_de_tracker(conn, "url", t.id, t.url)) for t in TRACKERS.values() if t is not EMU
             if (clave := (ajuste_de_tracker(conn, "api_key", t.id) or "").strip())
         }
         img_hosts = fallback_order(conn)
@@ -97,8 +97,8 @@ def _lineas_preparadas(job_id: int, cwd: str) -> list[str] | None:
         if emu_key:
             lines, _msg = stage_emu_config(lines, api_key=emu_key)
             changed = True
-        for tracker, clave in claves_otros.items():
-            lines, _msg = stage_tracker_config(lines, tracker, api_key=clave)
+        for tracker, (clave, url) in claves_otros.items():
+            lines, _msg = stage_tracker_config(lines, tracker, api_key=clave, url=url)
         lines, _msg = stage_add_logo(lines, add_logo)
         lines, _msg = stage_per_episode_screens(lines, per_episode_screens)
         lines, _msg = stage_blu_api_off(lines)
