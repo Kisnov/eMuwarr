@@ -519,17 +519,28 @@ def _season_title_options(series: dict | None, season: dict, conn) -> list[dict]
 
 def _capitulos_con_audio_sin_idioma(episode_entries: list[dict], conn,
                                     idiomas_audio: dict[int, str] | None = None) -> list:
-    """Los capítulos con alguna pista de audio sin idioma, contando ya con los
-    idiomas elegidos (el informe ya está en caché)."""
+    """Los capítulos MKV con alguna pista de audio sin idioma, contando ya con los
+    idiomas elegidos (el informe ya está en caché). Los que no son MKV, aparte:
+    _avisos_no_mkv."""
+    return [e["episode"].get("episode_number") for e in _sin_idioma_en(episode_entries, idiomas_audio)
+            if e["episode"]["path"].lower().endswith(".mkv")]
+
+
+def _avisos_no_mkv(episode_entries: list[dict]) -> list[str]:
+    """Los avisos de los capítulos que no son MKV con alguna pista de audio sin idioma: no bloquean, porque la app no
+    puede etiquetarlas (reglas_tracker.aviso_no_mkv)."""
+    from .reglas_tracker import aviso_no_mkv
+    return [f"Capítulo {e['episode'].get('episode_number')}: {aviso}" for e in _sin_idioma_en(episode_entries, None)
+            if (aviso := aviso_no_mkv(e["episode"]["path"]))]
+
+
+def _sin_idioma_en(episode_entries: list[dict], idiomas_audio: dict[int, str] | None) -> list[dict]:
+    """Los capítulos con alguna pista de audio sin idioma según MediaInfo."""
     from .media_info_service import build_mediainfo_report
-    salida = []
-    for e in episode_entries:
-        path = e["episode"].get("path")
-        # build_mediainfo_report ya aplica los mappings: se le pasa la ruta guardada,
-        # sin mapear, para no aplicarlos dos veces.
-        if path and build_mediainfo_report(path, idiomas_audio=idiomas_audio).get("pistas_sin_idioma"):
-            salida.append(e["episode"].get("episode_number"))
-    return salida
+    # build_mediainfo_report ya aplica los mappings: se le pasa la ruta guardada,
+    # sin mapear, para no aplicarlos dos veces.
+    return [e for e in episode_entries if e["episode"].get("path")
+            and build_mediainfo_report(e["episode"]["path"], idiomas_audio=idiomas_audio).get("pistas_sin_idioma")]
 
 
 def aviso_audio_sin_idioma_del_pack(capitulos: list) -> Optional[str]:
@@ -947,6 +958,7 @@ def build_season_pack_plan(
         # idioma y lo quita en cuanto se elige, sin rehacer el plan.
         audio_warning = aviso_audio_sin_idioma_del_pack(
             _capitulos_con_audio_sin_idioma(episode_entries, conn, idiomas_audio))
+        warnings.extend(_avisos_no_mkv(episode_entries))
 
         # Internal Source Tool comparison (name vs Radarr/Sonarr vs
         # MediaInfo-bitrate), computed once from the first available episode

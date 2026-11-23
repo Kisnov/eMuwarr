@@ -17,6 +17,7 @@ la base de datos; si es anime lo dice quien llama, con `es_anime`.
 """
 from __future__ import annotations
 
+import os
 import sqlite3
 from typing import NamedTuple, Optional
 
@@ -134,6 +135,16 @@ def motivo_audio_sin_idioma(posiciones: list[int]) -> str:
             "pistas»; en un pack, junto al campo Audio), o «Sin diálogo (zxx)» si de verdad no tiene diálogo.")
 
 
+def aviso_no_mkv(ruta: str | None) -> Optional[str]:
+    """El aviso de una pista sin idioma en un fichero que no es MKV, que no bloquea: la app solo etiqueta pistas de un
+    MKV. None en un MKV o en un ISO (imagen de disco, que los trackers admiten tal cual)."""
+    ext = os.path.splitext(ruta or "")[1].lower()
+    if ext in (".mkv", ".iso"):
+        return None
+    return (f"Es un {ext.lstrip('.').upper() or 'archivo sin extensión'}: la mayoría de trackers piden MKV. Conviértelo "
+            "a MKV (mkvmerge lo hace sin recodificar) y podrás poner el idioma de las pistas en Ver pistas.")
+
+
 def con_idiomas_elegidos(item: dict, *, overrides: dict | None = None, idiomas: dict | None = None) -> dict:
     """`item` con el audio que tendrá su fichero con los idiomas elegidos en «Ver pistas» (`overrides` por id de pista
     o `idiomas` por posición), que es lo que miran las normas. Sin nada elegido, o sin leer sus pistas, tal cual."""
@@ -188,5 +199,6 @@ def elegibilidad(conn: sqlite3.Connection, item: dict) -> dict:
     return {"trackers": de(item), "capitulos": capitulos}
 
 
-__all__ = ["VARIANTES", "Reglas", "reglas_de", "motivo_audio_sin_idioma", "con_idiomas_elegidos", "es_anime",
+__all__ = ["VARIANTES", "Reglas", "reglas_de", "motivo_audio_sin_idioma", "aviso_no_mkv", "con_idiomas_elegidos",
+           "es_anime",
            "reglas_para_subir", "elegibilidad"]

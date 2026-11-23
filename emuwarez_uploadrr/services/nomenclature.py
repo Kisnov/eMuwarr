@@ -46,13 +46,16 @@ def _huella(item: dict) -> list:
     return [_VERSION_REGLAS, *(item.get(c) for c in _CAMPOS_HUELLA)]
 
 
-def aviso_pistas_sin_idioma(posiciones: list[int]) -> str:
-    """El aviso de una o varias pistas de audio sin idioma."""
+def aviso_pistas_sin_idioma(posiciones: list[int], ruta: str | None) -> str:
+    """El aviso de una o varias pistas de audio sin idioma en `ruta`. Solo un MKV se bloquea sin elegirlo: los demás
+    no se pueden etiquetar (reglas_tracker.aviso_no_mkv)."""
+    from .reglas_tracker import aviso_no_mkv
     cuales = ", ".join(str(p) for p in posiciones)
-    return (f"La pista de audio {cuales} no tiene idioma (und) y el nombre no la incluye: "
-            "elige su idioma en Ver Pistas, que sin él no se puede subir.") if len(posiciones) == 1 else (
-            f"Las pistas de audio {cuales} no tienen idioma (und) y el nombre no las incluye: "
-            "elige su idioma en Ver Pistas, que sin él no se puede subir.")
+    base = (f"La pista de audio {cuales} no tiene idioma (und) y el nombre no la incluye" if len(posiciones) == 1
+            else f"Las pistas de audio {cuales} no tienen idioma (und) y el nombre no las incluye")
+    if (ruta or "").lower().endswith(".mkv"):
+        return f"{base}: elige su idioma en Ver Pistas, que sin él no se puede subir."
+    return f"{base}. {aviso_no_mkv(ruta)}" if aviso_no_mkv(ruta) else f"{base}."
 
 
 def _huella_guardada(proposal: dict):
@@ -553,7 +556,7 @@ def build_nomenclature_proposal(
                 dynamic_range = emu_by_field.get("HDR/DV") or dynamic_range
                 # El nombre no bloquea: avisa y sale sin esa pista (la subida sí, en upload_checks).
                 if mi_report.get("pistas_sin_idioma"):
-                    warnings.append(aviso_pistas_sin_idioma(mi_report["pistas_sin_idioma"]))
+                    warnings.append(aviso_pistas_sin_idioma(mi_report["pistas_sin_idioma"], local_path))
             else:
                 warnings.append("Sin MediaInfo del archivo: el audio y los subtítulos del nombre salen "
                                 "de Radarr/Sonarr y pueden no ser exactos.")

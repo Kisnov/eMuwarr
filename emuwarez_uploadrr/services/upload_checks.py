@@ -69,13 +69,8 @@ def _se_puede_leer(ruta: str | None) -> bool:
         return False
 
 
-def _no_se_escribe(es_mkv: bool, escribe: bool) -> str:
-    """Por qué el idioma elegido para una pista sin idioma no llegaría al archivo, tras el motivo; "" si llega."""
-    if not es_mkv:
-        return " La app solo lo escribe en un MKV: etiquétalo fuera de ella."
-    if not escribe:
-        return " Con «Renombrar/Ordenar pistas» en «Ninguno» (Configuración) no se escribe."
-    return ""
+# Con las pistas en «Ninguno», «Ver pistas» no deja elegir el idioma: lo que hay que cambiar para poder.
+_EN_NINGUNO = " Con «Renombrar/Ordenar pistas» en «Ninguno» (Configuración) no se puede poner: cámbialo para elegirlo."
 
 
 def run_upload_checks(conn: sqlite3.Connection, item_id: int, *, scope: str = "all",
@@ -197,7 +192,7 @@ def run_upload_checks(conn: sqlite3.Connection, item_id: int, *, scope: str = "a
                    "No se puede preparar el pack de temporada", ok, msg):
             return done()
         if not add("idioma_audio", "Todas las pistas de audio tienen idioma", "Hay pistas de audio sin idioma",
-                   not sin_idioma, (audio + _no_se_escribe(True, escribe)) if audio else ""):
+                   not sin_idioma, (audio + ("" if escribe else _EN_NINGUNO)) if audio else ""):
             return done()
 
         # Y TODOS sus capítulos, uno a uno. Un pack se nombra leyendo cada
@@ -281,19 +276,22 @@ def run_upload_checks(conn: sqlite3.Connection, item_id: int, *, scope: str = "a
                      bool(parent) and os.access(parent, os.W_OK), parent):
             return done()
 
-        # 1b. Cada pista de audio con su idioma, contando los elegidos en «Ver pistas». Sin leer las pistas (no es un
-        # MKV), lo que diga la biblioteca.
+        # 1b. Cada pista de audio con su idioma, contando los elegidos en «Ver pistas». Sin leer las pistas de un MKV,
+        # lo que diga la biblioteca. Fuera de un MKV la app no puede etiquetarlas: no bloquea (reglas_tracker.aviso_no_mkv).
         from .emu_format import audio_sin_idioma
         from .mkv_remux import idiomas_de_las_pistas
-        from .reglas_tracker import motivo_audio_sin_idioma
+        from .reglas_tracker import aviso_no_mkv, motivo_audio_sin_idioma
         elegidos = (ajustes or {}).get("idiomas") if escribe else None
         pistas = idiomas_de_las_pistas(local_path, idiomas=elegidos)
         sin_lengua = [i for i, c in enumerate(pistas or [], 1) if c == "UND"]
         falta = bool(sin_lengua) or (pistas is None and audio_sin_idioma(item.get("audio_languages")))
-        motivo = motivo_audio_sin_idioma(sin_lengua) + _no_se_escribe(
-            (local_path or "").lower().endswith(".mkv"), escribe) if falta else ""
-        if not add("idioma_audio", "Todas las pistas de audio tienen idioma", "Hay pistas de audio sin idioma",
-                   not falta, motivo):
+        if falta and not (local_path or "").lower().endswith(".mkv"):
+            aviso = aviso_no_mkv(local_path)
+            if aviso:
+                add_skip("idioma_audio", "Hay pistas de audio sin idioma (no es MKV)", aviso)
+        elif not add("idioma_audio", "Todas las pistas de audio tienen idioma", "Hay pistas de audio sin idioma",
+                     not falta, (motivo_audio_sin_idioma(sin_lengua) + ("" if escribe else _EN_NINGUNO))
+                     if falta else ""):
             return done()
         if elegidos and pistas:
             item = {**item, "audio_languages": " / ".join(dict.fromkeys(pistas))}

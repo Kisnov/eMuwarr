@@ -729,7 +729,7 @@ def build_editable_nomenclature_fields(
             "title_options": title_options,
             # Set when the source had to be estimated from MediaInfo.
             "source_warning": source_warning,
-            "audio_warning": (aviso_pistas_sin_idioma(report["pistas_sin_idioma"])
+            "audio_warning": (aviso_pistas_sin_idioma(report["pistas_sin_idioma"], local_path)
                               if report.get("pistas_sin_idioma") else None),
             # Name vs Radarr/Sonarr vs MediaInfo-bitrate cross-check for the
             # Source field's alert icon.

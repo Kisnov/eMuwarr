@@ -156,13 +156,57 @@ def test_sin_leer_las_pistas_manda_la_biblioteca(db_conn, tmp_path, monkeypatch)
     assert _check(r, "idioma_audio")["status"] == "fail"
 
 
-def test_un_mp4_sin_idioma_dice_que_la_app_no_lo_escribe(db_conn, tmp_path):
-    iid = _pelicula(db_conn, tmp_path, "eng/und")
-    db_conn.execute("UPDATE library_items SET path = ? WHERE id = ?", (str(tmp_path / "movie.mp4"), iid))
-    (tmp_path / "movie.mp4").write_bytes(b"x" * 2048)
-    db_conn.commit()
-    c = _check(uc.run_upload_checks(db_conn, iid, scope="content"), "idioma_audio")
-    assert c["status"] == "fail" and "solo lo escribe en un MKV" in c["message"]
+def _con_ruta(conn, tmp_path, iid: int, nombre: str) -> None:
+    (tmp_path / nombre).write_bytes(b"x" * 2048)
+    conn.execute("UPDATE library_items SET path = ? WHERE id = ?", (str(tmp_path / nombre), iid))
+    conn.commit()
+
+
+def test_un_mp4_sin_idioma_avisa_de_pasarlo_a_mkv_sin_bloquear(db_conn, tmp_path):
+    iid = _pelicula(db_conn, tmp_path, "spa/und")
+    _con_ruta(db_conn, tmp_path, iid, "movie.mp4")
+    r = uc.run_upload_checks(db_conn, iid, scope="content")
+    c = _check(r, "idioma_audio")
+    assert c["status"] == "skip" and c["message"].startswith("Es un MP4: la mayoría de trackers piden MKV.")
+    assert r["ready"] is True
+
+
+@pytest.mark.parametrize("nombre", ["movie.avi", "movie.m2ts"])
+def test_otros_contenedores_avisan_como_un_mp4(db_conn, tmp_path, nombre):
+    iid = _pelicula(db_conn, tmp_path, "spa/und")
+    _con_ruta(db_conn, tmp_path, iid, nombre)
+    assert _check(uc.run_upload_checks(db_conn, iid, scope="content"), "idioma_audio")["status"] == "skip"
+
+
+def test_un_iso_sin_idioma_pasa_sin_aviso(db_conn, tmp_path):
+    iid = _pelicula(db_conn, tmp_path, "spa/und")
+    _con_ruta(db_conn, tmp_path, iid, "movie.iso")
+    r = uc.run_upload_checks(db_conn, iid, scope="content")
+    assert r["ready"] is True and "idioma_audio" not in {c["id"] for c in r["checks"]}
+
+
+def test_el_aviso_del_nombre_depende_del_contenedor():
+    from emuwarez_uploadrr.services.nomenclature import aviso_pistas_sin_idioma
+    assert aviso_pistas_sin_idioma([2], "/m/a.mkv").endswith("que sin él no se puede subir.")
+    assert "Conviértelo a MKV" in aviso_pistas_sin_idioma([2], "/m/a.mp4")
+    assert aviso_pistas_sin_idioma([2], "/m/a.iso").endswith("no la incluye.")
+
+
+def test_un_pack_en_mp4_avisa_sin_bloquear(tmp_path, monkeypatch):
+    from emuwarez_uploadrr.services import season_pack
+    monkeypatch.setattr(svc, "build_mediainfo_report", lambda ruta, **k: {"pistas_sin_idioma": [2]})
+    entradas = [{"episode": {"episode_number": 1, "path": "/s/e01.mkv"}},
+                {"episode": {"episode_number": 2, "path": "/s/e02.mp4"}},
+                {"episode": {"episode_number": 3, "path": "/s/e03.iso"}}]
+    assert season_pack._capitulos_con_audio_sin_idioma(entradas, None) == [1]
+    (aviso,) = season_pack._avisos_no_mkv(entradas)
+    assert aviso.startswith("Capítulo 2: Es un MP4")
+
+
+def test_antes_de_lanzar_un_mp4_no_se_para(tmp_path):
+    from emuwarez_uploadrr.services.upload_queue import _sin_idioma_preparado
+    (tmp_path / "a.mp4").write_bytes(b"x")
+    assert _sin_idioma_preparado(str(tmp_path / "a.mp4")) is None
 
 
 def test_con_las_pistas_en_ninguno_lo_elegido_no_cuenta(db_conn, tmp_path, pistas):
