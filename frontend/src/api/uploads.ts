@@ -87,13 +87,14 @@ export async function fetchTrackersParaSubir(): Promise<TrackerParaSubir[]> {
   return api.get<TrackerParaSubir[]>('/upload/trackers')
 }
 
-// «Subir también a…» (services/subir_tambien.py): lo que ya está en eMuwarez, a N.O.B.S o Milnueve con el mismo fichero.
+// «Subir también a…» (services/subir_tambien.py): lo que ya está en un tracker, a otro con el mismo fichero.
 export interface SubirTambienCandidata {
   job_id: number
   title: string | null
   nombre: string
   result_url: string | null
   finished_at: string | null
+  origen: TrackerParaSubir
   trackers: TrackerParaSubir[]
 }
 
