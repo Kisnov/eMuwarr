@@ -1,5 +1,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef, useTransition, memo } from 'react'
-import { getLibrary, TOP_LEVEL_PARENT_FILTER, getLibraryFilterOptions, getLibraryItem, type LibraryFilterOptions } from '../api/library'
+import {
+  getLibrary, TOP_LEVEL_PARENT_FILTER, getLibraryFilterOptions, getLibraryItem, identificarSugeridas, type LibraryFilterOptions,
+} from '../api/library'
 import { Tooltip } from '../components/Tooltip'
 import { getLocalStatusInfo } from '../utils/status'
 import { useSync } from '../context/SyncContext'
@@ -11,6 +13,8 @@ import { ErrorState } from '../components/ErrorState'
 import { EmptyState, FilaVacia } from '../components/EmptyState'
 import { UploadWizardModal } from '../components/UploadWizardModal'
 import { RequestFormModal } from '../components/RequestFormModal'
+import { IdentificarTmdbModal } from '../components/IdentificarTmdbModal'
+import { ChipPorIdentificar } from '../components/ChipPorIdentificar'
 import { LibraryTreeRow, type LibraryActionKind } from '../components/LibraryTreeRow'
 import { LargePosterCard } from '../components/LargePosterCard'
 import { LibraryDetailPage } from '../components/LibraryDetailPage'
@@ -47,6 +51,8 @@ const LOAD_LIMIT = 20000  // show everything in one container (no pagination); b
 const TYPE_LABELS: Record<string, string> = {
   movie: 'Película', series: 'Serie', season: 'Temporada', episode: 'Episodio',
 }
+// Lo que precede al nombre de cada instancia en el filtro Origen.
+const ORIGEN_LABELS: Record<string, string> = { radarr: 'Radarr', sonarr: 'Sonarr', carpeta: 'Carpeta' }
 
 const VIEW_MODE_STORAGE_KEY = 'emuwarez_uploadrr_library_view'
 
@@ -79,14 +85,16 @@ const tituloDeTarjeta = (it: LibraryItemResponse) => (it.year ? `${it.title} (${
 // new function identity every render, defeating memo — so this takes a
 // stable onSelect (openDetail, itself wrapping setSelected) and calls it with `item` internally.
 // «Subir por lotes»: con `onToggle`, una película, una serie o una temporada lleva su casilla arriba a la izquierda
-// (arriba a la derecha va el estado), fuera del layout: la tarjeta no puede cambiar de alto (RejillaVirtual la mide).
-const PosterCard = memo(function PosterCard({ item, onSelect, priority, seleccionado = false, loteLleno = false, onToggle }: {
+// (arriba a la derecha va el estado, o «Por identificar»), fuera del layout: la tarjeta no puede cambiar de alto
+// (RejillaVirtual la mide).
+const PosterCard = memo(function PosterCard({ item, onSelect, priority, seleccionado = false, loteLleno = false, onToggle, onIdentificar }: {
   item: LibraryItemResponse
   onSelect: (item: LibraryItemResponse) => void
   priority?: boolean
   seleccionado?: boolean
   loteLleno?: boolean
   onToggle?: (item: LibraryItemResponse) => void
+  onIdentificar?: (item: LibraryItemResponse) => void
 }) {
   const nombre = tituloDeTarjeta(item)
   return (
@@ -126,7 +134,9 @@ const PosterCard = memo(function PosterCard({ item, onSelect, priority, seleccio
           <CasillaLote item={item} seleccionado={seleccionado} bloqueada={loteLleno} motivo={razonNoMarcable(item)} onAlternar={onToggle} className="lote-casilla-poster" />
         )}
         <div className="bib-tarjeta-estado">
-          <PosterStatusIcon status={item.local_status} />
+          {item.por_identificar && onIdentificar
+            ? <ChipPorIdentificar item={item} onIdentificar={onIdentificar} />
+            : <PosterStatusIcon status={item.local_status} />}
         </div>
       </div>
     </div>
@@ -220,6 +230,8 @@ export function LibraryPage({ onNavigate }: { onNavigate?: (page: string) => voi
   }, [onNavigate])
   const [wizardItem, setWizardItem] = useState<LibraryItemResponse | null>(null)
   const [requestItem, setRequestItem] = useState<LibraryItemResponse | null>(null)
+  // Carpeta manual: la fila cuya ficha de TMDb se está confirmando.
+  const [identificarItem, setIdentificarItem] = useState<LibraryItemResponse | null>(null)
   const [viewMode, setViewMode] = useState<ViewMode>(loadViewMode)
 
   // «Subir por lotes»: el botón «Seleccionar» pone las casillas (en películas, series y temporadas; no en capítulos);
@@ -243,6 +255,7 @@ export function LibraryPage({ onNavigate }: { onNavigate?: (page: string) => voi
   // for every row's onAction prop.
   const handleTreeAction = useCallback((kind: LibraryActionKind, item: LibraryItemResponse) => {
     if (kind === 'request') { setRequestItem(item); return }
+    if (kind === 'identificar') { setIdentificarItem(item); return }
     // 'upload' abre el asistente. Él decide qué preguntar según el tipo: una
     // serie elige temporadas, una temporada elige entre pack y capítulos
     // sueltos, y una película o un capítulo entran directos.
@@ -300,6 +313,8 @@ export function LibraryPage({ onNavigate }: { onNavigate?: (page: string) => voi
   const [filterEmu, setFilterEmu] = useState<string[]>(NINGUNO)
   const [filterAporte, setFilterAporte] = useState('')
   const [filterSpanish, setFilterSpanish] = useState<string[]>(NINGUNO)
+  // Solo lo de las carpetas manuales que falta identificar (películas y series: la raíz, así que no aplana).
+  const [porIdentificar, setPorIdentificar] = useState(false)
   const [sortBy, setSortBy] = useState(ORDEN_POR_DEFECTO)
   const [offset, setOffset] = useState(0)
   const [vistas, setVistas] = useState<VistaGuardada[]>(cargarVistas)
@@ -313,7 +328,7 @@ export function LibraryPage({ onNavigate }: { onNavigate?: (page: string) => voi
     filterEmu, filterAporte,
   }
   const flatFilter = necesitaTodosLosNiveles(filtros)
-  const filtrando = hayAlgunFiltro(filtros)
+  const filtrando = hayAlgunFiltro(filtros) || porIdentificar
 
   // Lo que guarda una vista: la búsqueda tal como está escrita, los filtros y el orden.
   const filtrosDeAhora: FiltrosDeVista = {
@@ -326,6 +341,7 @@ export function LibraryPage({ onNavigate }: { onNavigate?: (page: string) => voi
     setFilterType(f.type); setFilterStatus(f.status); setFilterInstanceId(f.instanceId); setFilterRequest(f.request)
     setSearchProvider(f.provider); setSearchQuality(f.quality); setSearchSource(f.source); setSearchGroup(f.group)
     setFilterEmu(f.emu); setFilterAporte(f.aporte); setFilterSpanish(f.spanish); setSortBy(f.sort)
+    setPorIdentificar(false)
     setOffset(0)
   }
   function guardarVista(nombre: string) {
@@ -361,12 +377,13 @@ export function LibraryPage({ onNavigate }: { onNavigate?: (page: string) => voi
     release_group: searchGroup,
     emu: filterEmu,
     aporte: filterAporte || undefined,
+    por_identificar: porIdentificar || undefined,
     sort: sortBy,
     parent_id: flatFilter ? undefined : TOP_LEVEL_PARENT_FILTER,
     limit: LOAD_LIMIT,
     offset: desde,
   }), [debouncedSearch, filterType, filterStatus, filterInstanceId, filterRequest, flatFilter, filterSpanish,
-    searchProvider, searchQuality, searchSource, searchGroup, filterEmu, filterAporte, sortBy])
+    searchProvider, searchQuality, searchSource, searchGroup, filterEmu, filterAporte, porIdentificar, sortBy])
   const [cargandoMas, setCargandoMas] = useState(false)
   const [fallaMas, setFallaMas] = useState(false)
   const load = useCallback(async () => {
@@ -391,6 +408,9 @@ export function LibraryPage({ onNavigate }: { onNavigate?: (page: string) => voi
       }
     }
   }, [consulta, offset])
+  // Lo que acaba tras un await (confirmar fichas) recarga con los filtros de ese momento, no con los de cuando empezó.
+  const loadRef = useRef(load)
+  loadRef.current = load
 
   useEffect(() => { load() }, [load])
 
@@ -440,7 +460,7 @@ export function LibraryPage({ onNavigate }: { onNavigate?: (page: string) => voi
     setSearch(''); setDebouncedSearch('')
     setFilterType(NINGUNO); setFilterStatus(NINGUNO); setFilterInstanceId(NINGUNO); setFilterRequest(NINGUNO)
     setSearchProvider(NINGUNO); setSearchQuality(NINGUNO); setSearchSource(NINGUNO); setSearchGroup(NINGUNO)
-    setFilterEmu(NINGUNO); setFilterAporte(''); setFilterSpanish(NINGUNO)
+    setFilterEmu(NINGUNO); setFilterAporte(''); setFilterSpanish(NINGUNO); setPorIdentificar(false)
     setOffset(0)
   }
 
@@ -540,6 +560,49 @@ export function LibraryPage({ onNavigate }: { onNavigate?: (page: string) => voi
     // eslint-disable-next-line react-hooks/exhaustive-deps -- `load` cambia con cada filtro y recargaría dos veces (ver arriba)
   }, [lastInvalidatedAt])
 
+  // Cuántas fichas de carpetas manuales faltan por identificar: solo con alguna carpeta, y se repide como la lista.
+  const hayCarpeta = !!filterOptions?.instances?.some(i => i.type === 'carpeta')
+  const [totalPorIdentificar, setTotalPorIdentificar] = useState(0)
+  const contarPorIdentificar = useCallback(() => {
+    getLibrary({ por_identificar: true, parent_id: TOP_LEVEL_PARENT_FILTER, limit: 1 })
+      .then(r => setTotalPorIdentificar(r.total)).catch(() => {})
+  }, [])
+  useEffect(() => { if (hayCarpeta) contarPorIdentificar() }, [hayCarpeta, lastInvalidatedAt, contarPorIdentificar])
+
+  // Lo que respondió el servidor al confirmar fichas; se va solo.
+  const [aviso, setAviso] = useState<{ texto: string; error: boolean } | null>(null)
+  useEffect(() => {
+    if (!aviso) return
+    const t = setTimeout(() => setAviso(null), 6000)
+    return () => clearTimeout(t)
+  }, [aviso])
+  const [confirmandoSugeridas, setConfirmandoSugeridas] = useState(false)
+  async function confirmarSugeridas() {
+    setConfirmandoSugeridas(true)
+    setAviso(null)
+    try {
+      // Con una sola carpeta elegida en Origen, solo las suyas.
+      const r = await identificarSugeridas(filterInstanceId.length === 1 ? Number(filterInstanceId[0]) : undefined)
+      setAviso({ texto: r.message, error: !r.ok })
+      loadRef.current()
+      contarPorIdentificar()
+    } catch (e) {
+      setAviso({ texto: e instanceof Error && e.message ? e.message : 'No se pudieron confirmar las sugeridas', error: true })
+    } finally {
+      setConfirmandoSugeridas(false)
+    }
+  }
+  function alIdentificar(mensaje: string) {
+    setIdentificarItem(null)
+    setAviso({ texto: mensaje, error: false })
+    loadRef.current()
+    contarPorIdentificar()
+    // En la ficha, el título, el póster y los botones cambian con la ficha confirmada.
+    if (selected) {
+      getLibraryItem(selected.id).then(full => setSelected(prev => (prev && prev.id === full.id ? full : prev))).catch(() => {})
+    }
+  }
+
   // Enter aplica la búsqueda ya, sin esperar al retardo. El cambio de `debouncedSearch` es lo que recarga: llamar
   // a load() aquí lo hacía con la búsqueda de antes y luego otra vez con la nueva.
   function applyFilters() {
@@ -627,6 +690,9 @@ export function LibraryPage({ onNavigate }: { onNavigate?: (page: string) => voi
       {requestItem && (
         <RequestFormModal item={requestItem} onClose={() => setRequestItem(null)} />
       )}
+      {identificarItem && (
+        <IdentificarTmdbModal item={identificarItem} onClose={() => setIdentificarItem(null)} onDone={alIdentificar} />
+      )}
       {loteAbierto && (
         <SubidaPorLotesModal
           entradas={loteAbierto}
@@ -672,7 +738,7 @@ export function LibraryPage({ onNavigate }: { onNavigate?: (page: string) => voi
       </th>
       <th><HeaderFilter label="Origen" value={filterInstanceId} onChange={v => { setFilterInstanceId(v); setOffset(0) }} options={[
         { value: '', label: 'Todos' },
-        ...(filterOptions?.instances ?? []).map(inst => ({ value: String(inst.id), label: `${inst.type === 'radarr' ? 'Radarr' : 'Sonarr'}: ${inst.name.length > 15 ? inst.name.slice(0, 15) + '…' : inst.name}` })),
+        ...(filterOptions?.instances ?? []).map(inst => ({ value: String(inst.id), label: `${ORIGEN_LABELS[inst.type] ?? inst.type}: ${inst.name.length > 15 ? inst.name.slice(0, 15) + '…' : inst.name}` })),
       ]} /></th>
       <th><HeaderFilter label="Estado" value={filterStatus} onChange={v => { setFilterStatus(v); setOffset(0) }} options={[
         { value: '', label: 'Todos' },
@@ -784,6 +850,26 @@ export function LibraryPage({ onNavigate }: { onNavigate?: (page: string) => voi
             Seleccionar
           </button>
         </Tooltip>
+        {hayCarpeta && (totalPorIdentificar > 0 || porIdentificar) && (
+          <Tooltip content="Lo de tus carpetas manuales que falta confirmar en TMDb: hasta entonces no se puede subir">
+            <button
+              type="button"
+              className={`btn btn-secondary btn-sm${porIdentificar ? ' lote-boton-activo' : ''}`}
+              onClick={() => { setPorIdentificar(v => !v); setOffset(0) }}
+              aria-pressed={porIdentificar}
+            >
+              Por identificar <span className="badge status-pending">{formatNumero(totalPorIdentificar)}</span>
+            </button>
+          </Tooltip>
+        )}
+        {porIdentificar && items.some(i => i.sugerencia_tmdb) && (
+          <Tooltip content="Acepta la ficha que el escaneo encontró en TMDb en cada una que la tenga; las demás siguen por identificar">
+            <button type="button" className="btn btn-primary btn-sm" onClick={confirmarSugeridas} disabled={confirmandoSugeridas}>
+              {confirmandoSugeridas ? 'Confirmando…' : 'Confirmar las sugeridas'}
+            </button>
+          </Tooltip>
+        )}
+        {aviso && <span role="status" className={aviso.error ? 'error-text' : 'text-muted'}>{aviso.texto}</span>}
         {/* La tabla apagada sola no decía que estuviera cargando. */}
         {tarda && (
           <span role="status" className="bib-cargando">
@@ -821,7 +907,7 @@ export function LibraryPage({ onNavigate }: { onNavigate?: (page: string) => voi
         <EmptyState
           icon={<IconoLibros />}
           title="Biblioteca vacía"
-          body="Añade instancias Radarr/Sonarr en la sección Instancias y sincroniza para ver el contenido aquí."
+          body="Añade instancias Radarr/Sonarr o una carpeta manual en la sección Instancias y sincroniza para ver el contenido aquí."
         />
       ) : items.length === 0 && viewMode !== 'list' ? (
         <EmptyState icon={<IconoLibros />} {...sinResultados} />
@@ -837,10 +923,12 @@ export function LibraryPage({ onNavigate }: { onNavigate?: (page: string) => voi
               ? <LargePosterCard
                   item={item} onSelect={openDetail} priority={i < GRID_PRIORITY_COUNT}
                   seleccionado={seleccion.has(item.id)} loteLleno={loteLleno} onToggle={onToggleLote}
+                  onIdentificar={setIdentificarItem}
                 />
               : <PosterCard
                   item={item} onSelect={openDetail} priority={i < GRID_PRIORITY_COUNT}
                   seleccionado={seleccion.has(item.id)} loteLleno={loteLleno} onToggle={onToggleLote}
+                  onIdentificar={setIdentificarItem}
                 />}
           />
         </div>

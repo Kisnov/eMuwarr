@@ -61,7 +61,7 @@ def vigilar_instancias(conn: sqlite3.Connection) -> tuple[str, str]:
 
     if not leer_ajuste(conn, "sincronizar_al_volver_instancia"):
         return "skipped", "Desactivado en Configuración"
-    instancias = list_instances(conn, enabled_only=True)
+    instancias = list_instances(conn, enabled_only=True, solo_arr=True)
     # Una instancia que se desactiva o se borra y vuelve después empieza de cero: su primera mirada no sincroniza.
     for id_ in set(_respondia) - {i.id for i in instancias}:
         del _respondia[id_]
@@ -122,7 +122,7 @@ def instancias_caidas(conn: sqlite3.Connection) -> list[dict]:
         return []
     vigencia = timedelta(minutes=tarea["interval_minutes"] * VIGENCIA_MIRADA_VUELTAS)
     caidas = []
-    for instancia in list_instances(conn, enabled_only=True):
+    for instancia in list_instances(conn, enabled_only=True, solo_arr=True):
         mirada = _mirada.get(instancia.id)
         if mirada is None or mirada[0] or _ahora() - mirada[1] > vigencia:
             continue

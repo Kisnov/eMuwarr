@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 
 DB_FILE = CONFIG_DIR / "emuwarez_uploadrr.db"
 
-SCHEMA_VERSION = 62
+SCHEMA_VERSION = 63
 
 # Fase A del plan multitracker: el tracker de las filas de antes de que hubiera varios. Es `services.trackers.POR_DEFECTO`
 # (aquí en literal para que la base no importe servicios; test_tracker_en_la_base.py comprueba que coinciden).
@@ -188,6 +188,8 @@ def _rebuild_instances_table(
     and the idempotency guard — this just issues the DDL/DML statements one
     at a time (never `executescript()`, which issues its own implicit commit
     and would break a caller-managed transaction)."""
+    # El contador de AUTOINCREMENT, no el id más alto que quede: el de una instancia borrada no se reutiliza.
+    contador = conn.execute("SELECT seq FROM sqlite_sequence WHERE name = 'instances'").fetchone()
     conn.execute(f"""
         CREATE TABLE instances_new (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -217,6 +219,10 @@ def _rebuild_instances_table(
     """)
     conn.execute("DROP TABLE instances")
     conn.execute("ALTER TABLE instances_new RENAME TO instances")
+    if contador:
+        if not conn.execute("UPDATE sqlite_sequence SET seq = MAX(seq, ?) WHERE name = 'instances'",
+                            (contador[0],)).rowcount:
+            conn.execute("INSERT INTO sqlite_sequence (name, seq) VALUES ('instances', ?)", (contador[0],))
 
 
 def _migrate_instances_widen_type_check(conn: sqlite3.Connection) -> None:
@@ -347,6 +353,28 @@ def _migrate_instances_unique_name(conn: sqlite3.Connection) -> None:
             )
 
         _rebuild_instances_table(conn, "'radarr','sonarr'", unique_clause="UNIQUE(name)")
+        conn.execute("COMMIT")
+    except BaseException:
+        conn.execute("ROLLBACK")
+        raise
+    finally:
+        conn.isolation_level = prior_isolation
+
+
+def _migrate_instances_carpeta(conn: sqlite3.Connection) -> None:
+    """Admite el tipo 'carpeta' (carpeta manual: `url` es su ruta, sin clave). Va después de las tres reconstrucciones
+    de arriba, que la dejan en ('radarr','sonarr') con UNIQUE(name); el mismo BEGIN IMMEDIATE que ellas."""
+    prior_isolation = conn.isolation_level
+    conn.isolation_level = None
+    try:
+        conn.execute("BEGIN IMMEDIATE")
+        row = conn.execute(
+            "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'instances'"
+        ).fetchone()
+        if not row or not row["sql"] or "'carpeta'" in row["sql"]:
+            conn.execute("COMMIT")
+            return
+        _rebuild_instances_table(conn, "'radarr','sonarr','carpeta'", unique_clause="UNIQUE(name)")
         conn.execute("COMMIT")
     except BaseException:
         conn.execute("ROLLBACK")
@@ -1111,7 +1139,7 @@ def _migrate_upload_jobs_copia_de(conn: sqlite3.Connection) -> None:
 
 
 def _migrate_upload_jobs_descripcion(conn: sqlite3.Connection) -> None:
-    """Esquema 62: la descripción propia (BBCode) que se escribió en el Resumen para esta subida; Uploadrr-EMU la pone
+    """Esquema 63: la descripción propia (BBCode) que se escribió en el Resumen para esta subida; Uploadrr-EMU la pone
     tras el tráiler y antes de las capturas (`-df`). NULL: solo la que genera Uploadrr-EMU."""
     _anadir_columna(conn, "upload_jobs", "descripcion", "TEXT")
 
@@ -1902,6 +1930,7 @@ def init_db(conn: Optional[sqlite3.Connection] = None) -> None:
         _migrate_quitar_esquema_sin_uso(conn)
         _migrate_tracker_en_tablas(conn)
         _migrate_upload_jobs_copia_de(conn)
+        _migrate_instances_carpeta(conn)  # esquema 62: en dev era el 60
         _migrate_upload_jobs_descripcion(conn)
         set_state(conn, "schema_version", str(SCHEMA_VERSION))
         if sin_copia:
