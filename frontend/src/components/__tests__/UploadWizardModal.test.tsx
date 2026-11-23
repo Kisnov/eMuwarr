@@ -13,7 +13,7 @@ vi.mock('../../api/nomenclature', () => ({
 }))
 vi.mock('../../api/uploads', () => ({
   queueUpload: vi.fn(), getExistingJobForItem: vi.fn(), runUploadChecks: vi.fn(), getUploadChecksProgress: vi.fn(),
-  fetchTrackersParaSubir: vi.fn(),
+  fetchTrackersParaSubir: vi.fn(), fetchReglasTracker: vi.fn(),
 }))
 vi.mock('../../api/library', () => ({
   getLibrary: vi.fn(), getMediaInfoReport: vi.fn(), suggestProvider: vi.fn(),
@@ -156,6 +156,8 @@ beforeEach(() => {
   m(subidas.queueUpload).mockResolvedValue({ status: 'queued', job: { id: 99 } } as never)
   // Solo eMuwarez: sin otro tracker con clave, el Resumen no enseña la elección.
   m(subidas.fetchTrackersParaSubir).mockResolvedValue([{ id: 'emu', nombre: 'eMuwarez' }])
+  m(subidas.fetchReglasTracker).mockImplementation(async (_id, tracker) =>
+    ({ tracker, permitido: true, motivo: 'Audio en castellano.', variante: null }))
   m(temporada.previewSeasonPack).mockResolvedValue(plan())
   m(temporada.getSeasonPlanProgress).mockResolvedValue({ done: 0, total: 0, current_title: null })
   m(temporada.previewSeasonPackFields).mockImplementation(async (_id, f) => ({
@@ -252,6 +254,39 @@ describe('película', () => {
     const llamadas = m(subidas.queueUpload).mock.calls
     expect(llamadas.map(c => c[8])).toEqual([undefined, 'nobs'])
     expect(llamadas.every(c => c[0] === 10)).toBe(true)
+  })
+
+  it('el Resumen dice las normas de idioma de cada otro tracker y no sube a uno que no lo admite', async () => {
+    m(subidas.fetchTrackersParaSubir).mockResolvedValue([{ id: 'emu', nombre: 'eMuwarez' }, { id: 'nobs', nombre: 'N.O.B.S' }])
+    m(subidas.fetchReglasTracker).mockResolvedValue(
+      { tracker: 'nobs', permitido: false, motivo: 'N.O.B.S no lo admite: el audio (cat) no está en castellano ni latino.', variante: null })
+    await abrir(PELICULA)
+    await esperar(() => texto().includes('Dune WEB-DL AMZN [GRP]'))
+    await pulsar(boton('Continuar'))
+    await esperar(() => texto().includes('✓ Todo listo para subir'))
+    await esperar(() => texto().includes('N.O.B.S: ✗ N.O.B.S no lo admite'))
+    expect(subidas.fetchReglasTracker).toHaveBeenCalledWith(10, 'nobs')
+    const casilla = [...document.querySelectorAll<HTMLLabelElement>('.asist-marcas label')]
+      .find(l => l.textContent?.includes('N.O.B.S'))!.querySelector('input')!
+    await pulsar(casilla)
+    expect(boton('Subir a eMuwarez y N.O.B.S')!.disabled).toBe(true)
+  })
+
+  it('sin eMuwarez, las comprobaciones se rehacen con las normas del tracker elegido', async () => {
+    m(subidas.fetchTrackersParaSubir).mockResolvedValue([{ id: 'emu', nombre: 'eMuwarez' }, { id: 'mnv', nombre: 'Milnueve' }])
+    await abrir(PELICULA)
+    await esperar(() => texto().includes('Dune WEB-DL AMZN [GRP]'))
+    await pulsar(boton('Continuar'))
+    await esperar(() => texto().includes('✓ Todo listo para subir'))
+    const casilla = (nombre: string) => [...document.querySelectorAll<HTMLLabelElement>('.asist-marcas label')]
+      .find(l => l.textContent?.includes(nombre))!.querySelector('input')!
+    await pulsar(casilla('Milnueve'))
+    await pulsar(casilla('eMuwarez'))
+    await esperar(() => m(subidas.runUploadChecks).mock.calls.some(c => c[4] === 'mnv'))
+    await esperar(() => texto().includes('✓ Todo listo para subir'))
+    await pulsar(boton('Subir a Milnueve'))
+    await esperar(() => onClose.mock.calls.length > 0)
+    expect(m(subidas.queueUpload).mock.calls.map(c => c[8])).toEqual(['mnv'])
   })
 
   it('sin ningún tracker elegido no se puede subir', async () => {

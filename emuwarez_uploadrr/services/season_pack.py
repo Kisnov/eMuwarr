@@ -597,7 +597,7 @@ def recalcular_audio_del_pack(season_id: int, idiomas_audio: dict | None = None,
             conn.close()
 
 
-def _spanish_errors(episode_entries: list[dict]) -> list[str]:
+def _spanish_errors(episode_entries: list[dict], tracker: str = "emu", *, anime: bool = False) -> list[str]:
     """Every episode has to carry Castilian one way or the other: dubbed
     (audio) or at least subtitled. Reports the episodes that carry neither,
     naming what they actually have so it's obvious what to fix.
@@ -613,10 +613,21 @@ def _spanish_errors(episode_entries: list[dict]) -> list[str]:
     exempts the entire season or none of it.
 
     An episode with no info at all fails: "we never read it" is not evidence
-    that it meets the rule."""
+    that it meets the rule.
+
+    `tracker` (services/trackers.py): otro que eMuwarez aplica su regla a cada capítulo
+    (services/reglas_tracker.py::reglas_de) y el mensaje es el suyo. eMuwarez, la de siempre."""
     from .emu_format import has_castellano
 
     errors: list[str] = []
+    if tracker != "emu":
+        from .reglas_tracker import reglas_de
+        for entry in episode_entries:
+            ep = entry["episode"]
+            reglas = reglas_de(tracker, ep, anime=anime)
+            if not reglas.permitido:
+                errors.append(f"Capítulo {ep.get('episode_number')}: {reglas.motivo}")
+        return errors
     for entry in episode_entries:
         ep = entry["episode"]
         if has_castellano(ep.get("audio_languages")) == 1:
@@ -631,6 +642,48 @@ def _spanish_errors(episode_entries: list[dict]) -> list[str]:
             f"({subs or 'sin subtítulos detectados'})."
         )
     return errors
+
+
+def es_anime_el_pack(season: dict, conn) -> bool:
+    """Si la temporada es anime: ella misma o su serie (que es la que suele llevar el id de MyAnimeList)."""
+    from .reglas_tracker import es_anime
+    if es_anime(conn, season):
+        return True
+    serie = _get_series_row(season["parent_id"], conn=conn) if season.get("parent_id") else None
+    return bool(serie and es_anime(conn, serie))
+
+
+def variante_del_pack(episode_entries: list[dict], tracker: str, *, anime: bool = False) -> Optional[str]:
+    """La variante de categoría (`--variante`) del pack en `tracker`: la de sus capítulos juntos, con los idiomas de
+    todos (un capítulo con castellano basta para que el pack no vaya a Latino). eMuwarez nunca lleva."""
+    if tracker == "emu" or not episode_entries:
+        return None
+    from .reglas_tracker import reglas_de
+
+    def union(campo: str) -> str:
+        vistos: list[str] = []
+        for entry in episode_entries:
+            for parte in str(entry["episode"].get(campo) or "").split("/"):
+                parte = parte.strip()
+                if parte and parte not in vistos:
+                    vistos.append(parte)
+        return "/".join(vistos)
+
+    juntos = {"audio_languages": union("audio_languages"), "subtitle_languages": union("subtitle_languages")}
+    return reglas_de(tracker, juntos, anime=anime).variante
+
+
+def reglas_del_pack(season: dict, tracker: str, conn):
+    """La regla de idioma de `tracker` en cada capítulo disponible de la temporada y la variante del pack, sin construir
+    el plan entero (sin propuestas ni TMDb): lo que se mira al encolar y en el Resumen (reglas_tracker.reglas_para_subir)."""
+    from .reglas_tracker import Reglas
+    entries = [{"episode": e} for e in _get_season_episodes(season["id"], conn=conn)
+               if e.get("local_status") == LocalStatus.AVAILABLE.value]
+    anime = tracker != "emu" and es_anime_el_pack(season, conn)
+    errores = _spanish_errors(entries, tracker, anime=anime)
+    if errores:
+        return Reglas(False, " ".join(errores), None)
+    return Reglas(True, "Todos los capítulos tienen idiomas admitidos.", variante_del_pack(entries, tracker, anime=anime))
 
 
 def _decidir_proveedor_pack(
@@ -720,6 +773,7 @@ def build_season_pack_plan(
     source_override: str | None = None, provider_override: str | None = None,
     tag_override: str | None = None, title_override: str | None = None,
     idiomas_audio: dict | None = None,
+    tracker: str = "emu",
 ) -> dict[str, Any]:
     """Build a dry-run plan for a season-pack upload. Never modifies the
     filesystem. Blocks (status="blocked") on: season not found, no episode
@@ -740,7 +794,10 @@ def build_season_pack_plan(
     `idiomas_audio` ({posición de audio: código}): el idioma elegido en el
     asistente para las pistas sin idioma. Una elección por posición vale para
     todos los capítulos: entra en el nombre del pack, en el de cada capítulo y,
-    al subir, en el remux de cada uno (upload_queue, mismas posiciones)."""
+    al subir, en el remux de cada uno (upload_queue, mismas posiciones).
+
+    `tracker`: el de la subida (services/trackers.py). Su regla de idioma se aplica a cada capítulo y el plan lleva
+    la `variante` de categoría que le toca al pack allí (None en eMuwarez, que es la de por defecto)."""
     idiomas_audio = _idiomas_del_pack(idiomas_audio)
     own = conn is None
     conn = conn or connect()
@@ -872,7 +929,8 @@ def build_season_pack_plan(
         _set_season_plan_progress(season_id, done=total, total=total, current_title=None)
 
         errors.extend(_consistency_errors(episode_entries))
-        errors.extend(_spanish_errors(episode_entries))
+        anime = tracker != "emu" and es_anime_el_pack(season, conn)
+        errors.extend(_spanish_errors(episode_entries, tracker, anime=anime))
         # Se suman a los avisos de la decisión del proveedor, no los sustituyen.
         for aviso in (_resolucion_del_pack(episode_entries)[1], _fuente_del_pack(episode_entries)[1]):
             if aviso:
@@ -995,6 +1053,8 @@ def build_season_pack_plan(
             "pistas_sin_idioma": _pistas_sin_idioma_del_pack(episode_entries, idiomas_audio),
             "idiomas_audio": idiomas_audio or {},
             "idiomas_elegibles": opciones_de_idioma(),
+            # La categoría del pack en el tracker de la subida (`--variante`); None, la de siempre.
+            "variante": variante_del_pack(episode_entries, tracker, anime=anime),
         }
     except SeasonPlanCancelled:
         # Not an error: the user closed the wizard, so there is nothing to

@@ -305,6 +305,8 @@ def build_uploadrr_execution_command(job: dict, conn=None, *, solo_cliente: str 
                 eventos=eventos,
                 config=config,
                 tracker=tracker_del_trabajo(job).uploadrr,
+                # La guardó upload_queue._populate_ready con sus normas (reglas_tracker); eMuwarez nunca la lleva.
+                variante=None if tracker_del_trabajo(job).id == trackers.EMU.id else cmd_data.get("variante"),
             )
             executable = full_argv[0]
             args = full_argv[1:]

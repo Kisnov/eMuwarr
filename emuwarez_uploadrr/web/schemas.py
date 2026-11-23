@@ -1408,6 +1408,14 @@ class TrackerParaSubir(BaseModel):
     nombre: str
 
 
+class ReglasDeTracker(BaseModel):
+    """Lo que dicen las normas de idioma de un tracker de un elemento (services/reglas_tracker.reglas_para_subir)."""
+    tracker: str
+    permitido: bool
+    motivo: str
+    variante: Optional[str] = None  # la categoría allí (--variante); None, la de siempre
+
+
 class LoteResumen(BaseModel):
     """Cuántos elementos de un lote hay en cada estado (services/lotes.resumen_de_lote)."""
     lote_id: str

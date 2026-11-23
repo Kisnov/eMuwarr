@@ -125,6 +125,18 @@ export async function subirTambien(jobIds: number[], trackers: string[]): Promis
   return api.post<SubirTambienRespuesta>('/uploads/subir-tambien', { job_ids: jobIds, trackers })
 }
 
+// Lo que dicen las normas de idioma de un tracker de un elemento (web/schemas.py::ReglasDeTracker).
+export interface ReglasDeTracker {
+  tracker: string
+  permitido: boolean
+  motivo: string
+  variante: string | null
+}
+
+export async function fetchReglasTracker(itemId: number, tracker: string): Promise<ReglasDeTracker> {
+  return api.get<ReglasDeTracker>(`/library/${itemId}/upload/reglas?tracker=${encodeURIComponent(tracker)}`)
+}
+
 // Un elemento de «Subir por lotes» (web/schemas.py::UploadLoteElemento).
 export interface ElementoLote {
   item_id: number
@@ -329,9 +341,12 @@ export async function runUploadChecks(
   // Temporada: lo editado a mano en el asistente (Source, Tag, Título e idiomas de las pistas sin idioma), para que el
   // `nombre` del pack sea el que saldrá. Sin nada, no viaja nada.
   ajustes?: AjustesComprobacion,
+  // De quién son las normas de idioma (emu, nobs, mnv). Sin él, eMuwarez.
+  tracker?: string,
 ): Promise<UploadChecksResult> {
   const qs = new URLSearchParams()
   if (scope) qs.set('scope', scope)
+  if (tracker && tracker !== 'emu') qs.set('tracker', tracker)
   if (provider !== undefined) qs.set('provider', provider)
   if (ajustes?.source) qs.set('source', ajustes.source)
   if (ajustes?.tag) qs.set('tag', ajustes.tag)

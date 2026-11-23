@@ -7,7 +7,8 @@ import {
 import { seguirProgreso } from '../../api/eventos'
 import { proveedorParaServidor, type ProveedoresElegidos } from '../../utils/origenProveedor'
 
-export function useComprobaciones(targetId: number | null, proveedorElegido: ProveedoresElegidos) {
+// `tracker`: de quién son las normas de idioma (el primero de los elegidos en el Resumen); eMuwarez, las de siempre.
+export function useComprobaciones(targetId: number | null, proveedorElegido: ProveedoresElegidos, tracker = 'emu') {
   const [checks, setChecks] = useState<UploadChecksResult | null>(null)
   const [checksLoading, setChecksLoading] = useState(false)
   // Una petición que no llegó (red, eMuwarez caído): sin su resultado no se puede subir.
@@ -42,7 +43,9 @@ export function useComprobaciones(targetId: number | null, proveedorElegido: Pro
     let fallo: string | null = null
     const proveedor = proveedorParaServidor(proveedorElegido, targetId)
     try {
-      resultado = ajustes
+      resultado = tracker !== 'emu'
+        ? await runUploadChecks(targetId, undefined, proveedor, ajustes, tracker)
+        : ajustes
         ? await runUploadChecks(targetId, undefined, proveedor, ajustes)
         : await runUploadChecks(targetId, undefined, proveedor)
     }
@@ -57,7 +60,7 @@ export function useComprobaciones(targetId: number | null, proveedorElegido: Pro
         setLiveChecks([])
       }
     }
-  }, [targetId, proveedorElegido])
+  }, [targetId, proveedorElegido, tracker])
 
   return { checks, checksLoading, checksError, liveChecks, runChecks }
 }
