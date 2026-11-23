@@ -726,7 +726,7 @@ def test_pack_blocked_when_an_episode_has_no_castilian_subtitles(isolated_db, tm
     season_id = _seed_pack(conn, tmp_path, ["spa", "eng"], audio="eng")
     plan = build_season_pack_plan(season_id, conn=conn)
     assert plan["status"] == "blocked"
-    assert any("no tiene castellano" in e for e in plan["errors"])
+    assert any("castellano ni en el audio" in e for e in plan["errors"])
     # Names the offending episode, not just "something is wrong".
     assert any("capítulo 2" in e for e in plan["errors"])
     conn.close()
@@ -757,7 +757,7 @@ def test_latin_only_audio_does_not_exempt_from_subtitles(isolated_db, tmp_path):
     season_id = _seed_pack(conn, tmp_path, [None, None], audio="es-419")
     plan = build_season_pack_plan(season_id, conn=conn)
     assert plan["status"] == "blocked"
-    assert any("no tiene castellano" in e for e in plan["errors"])
+    assert any("castellano ni en el audio" in e for e in plan["errors"])
     conn.close()
 
 
@@ -839,7 +839,7 @@ def test_latin_only_subtitles_do_not_satisfy_the_rule(isolated_db, tmp_path):
     season_id = _seed_pack(conn, tmp_path, ["spa", "es-419"], audio="eng")
     plan = build_season_pack_plan(season_id, conn=conn)
     assert plan["status"] == "blocked"
-    assert any("no tiene castellano" in e for e in plan["errors"])
+    assert any("castellano ni en el audio" in e for e in plan["errors"])
     conn.close()
 
 
@@ -1499,3 +1499,23 @@ def test_con_proveedores_distintos_el_aviso_no_dice_que_el_pack_lo_lleva(isolate
         "del archivo: esa coincidencia no cuenta."
     ]
     conn.close()
+
+
+def test_un_pack_sin_castellano_da_una_linea_por_motivo_y_no_una_por_capitulo():
+    from emuwarez_uploadrr.services.season_pack import _spanish_errors
+    caps = [{"episode": {"episode_number": n, "audio_languages": "cat/jpn", "subtitle_languages": "cat"}}
+            for n in range(1, 29)]
+    caps.append({"episode": {"episode_number": 30, "audio_languages": "eng", "subtitle_languages": ""}})
+    assert _spanish_errors(caps) == [
+        "Los capítulos 1-28 no tienen castellano ni en el audio (cat/jpn) ni en los subtítulos (cat).",
+        "El capítulo 30 no tiene castellano ni en el audio (eng) ni en los subtítulos (sin subtítulos detectados).",
+    ]
+    otros = _spanish_errors(caps, "nobs")
+    assert len(otros) == 2 and otros[0].startswith("Capítulos 1-28: N.O.B.S no lo admite")
+    assert otros[1].startswith("Capítulo 30: N.O.B.S no lo admite")
+
+
+def test_numeros_de_capitulo_juntan_las_tiradas_de_tres_o_mas():
+    from emuwarez_uploadrr.services.season_pack import _numeros
+    assert _numeros([1, 2]) == "1, 2"
+    assert _numeros([2, 4, 6, 7, 8, 9]) == "2, 4, 6-9"

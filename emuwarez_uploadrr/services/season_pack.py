@@ -535,7 +535,7 @@ def _avisos_no_mkv(episode_entries: list[dict]) -> list[str]:
         aviso = aviso_no_mkv(e["episode"]["path"])
         if aviso:
             por_aviso.setdefault(aviso, []).append(e["episode"].get("episode_number"))
-    return [f"Capítulo(s) {', '.join(str(n) for n in capitulos)}: {aviso}" for aviso, capitulos in por_aviso.items()]
+    return [f"Capítulo(s) {_numeros(capitulos)}: {aviso}" for aviso, capitulos in por_aviso.items()]
 
 
 def _sin_idioma_en(episode_entries: list[dict], idiomas_audio: dict[int, str] | None) -> list[dict]:
@@ -551,7 +551,7 @@ def aviso_audio_sin_idioma_del_pack(capitulos: list) -> Optional[str]:
     """El aviso del plan para los capítulos que aún tienen una pista de audio sin idioma."""
     if not capitulos:
         return None
-    return (f"Capítulo(s) {', '.join(str(n) for n in capitulos)}: una pista de audio no tiene idioma (und) y "
+    return (f"Capítulo(s) {_numeros(capitulos)}: una pista de audio no tiene idioma (und) y "
             "el nombre del pack no la incluye. Elige su idioma junto al campo Audio: sin él no se puede subir.")
 
 
@@ -635,29 +635,40 @@ def _spanish_errors(episode_entries: list[dict], tracker: str = "emu", *, anime:
     (services/reglas_tracker.py::reglas_de) y el mensaje es el suyo. eMuwarez, la de siempre."""
     from .emu_format import has_castellano, solo_sin_dialogo
 
-    errors: list[str] = []
+    # Un motivo por línea con sus capítulos: un pack de 28 capítulos iguales no da 28 líneas.
+    por_motivo: dict[str, list] = {}
     if tracker != "emu":
         from .reglas_tracker import reglas_de
         for entry in episode_entries:
             ep = entry["episode"]
             reglas = reglas_de(tracker, ep, anime=anime)
             if not reglas.permitido:
-                errors.append(f"Capítulo {ep.get('episode_number')}: {reglas.motivo}")
-        return errors
+                por_motivo.setdefault(reglas.motivo, []).append(ep.get("episode_number"))
+        return [f"{'Capítulo' if len(n) == 1 else 'Capítulos'} {_numeros(n)}: {motivo}" for motivo, n in por_motivo.items()]
     for entry in episode_entries:
         ep = entry["episode"]
         if has_castellano(ep.get("audio_languages")) == 1 or solo_sin_dialogo(ep.get("audio_languages")):
             continue
         if has_castellano(ep.get("subtitle_languages")) == 1:
             continue
-        audio = ep.get("audio_languages")
-        subs = ep.get("subtitle_languages")
-        errors.append(
-            f"El capítulo {ep.get('episode_number')} no tiene castellano ni en el audio "
-            f"({audio or 'sin audio detectado'}) ni en los subtítulos "
-            f"({subs or 'sin subtítulos detectados'})."
-        )
-    return errors
+        motivo = (f"castellano ni en el audio ({ep.get('audio_languages') or 'sin audio detectado'}) ni en los "
+                  f"subtítulos ({ep.get('subtitle_languages') or 'sin subtítulos detectados'}).")
+        por_motivo.setdefault(motivo, []).append(ep.get("episode_number"))
+    return [f"El capítulo {_numeros(n)} no tiene {motivo}" if len(n) == 1
+            else f"Los capítulos {_numeros(n)} no tienen {motivo}" for motivo, n in por_motivo.items()]
+
+
+def _numeros(capitulos: list) -> str:
+    """Los números de capítulo con las tiradas de tres o más seguidos juntas: «1-28», «2, 4, 6-9»."""
+    partes: list[str] = []
+    i = 0
+    while i < len(capitulos):
+        j = i
+        while j + 1 < len(capitulos) and capitulos[j + 1] == capitulos[j] + 1:
+            j += 1
+        partes.extend([f"{capitulos[i]}-{capitulos[j]}"] if j - i >= 2 else [str(c) for c in capitulos[i:j + 1]])
+        i = j + 1
+    return ", ".join(partes)
 
 
 def es_anime_el_pack(season: dict, conn) -> bool:

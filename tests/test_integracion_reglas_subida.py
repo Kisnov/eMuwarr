@@ -209,7 +209,7 @@ def test_un_pack_a_milnueve_usa_su_norma_en_cada_capitulo(db_conn, tmp_path):
     temporada = _temporada(db_conn, tmp_path, ["es-419", "es-419"])
     emu = build_season_pack_plan(temporada, conn=db_conn)
     mnv = build_season_pack_plan(temporada, conn=db_conn, tracker="mnv")
-    assert emu["status"] == "blocked" and any("no tiene castellano" in e for e in emu["errors"])
+    assert emu["status"] == "blocked" and any("castellano ni en el audio" in e for e in emu["errors"])
     assert emu["variante"] is None
     assert mnv["status"] == "valid", mnv["errors"]
     assert mnv["variante"] == "latino"
@@ -261,8 +261,8 @@ def test_la_elegibilidad_de_un_anime_solo_en_catalan_lo_deja_solo_a_milnueve(db_
     assert list(pack) == ["emu", "nobs", "mnv"]
     assert pack["mnv"]["permitido"] is True and pack["mnv"]["variante"] == "anime_catalan"
     assert pack["mnv"]["nombre"] == "Milnueve"
-    assert pack["emu"]["permitido"] is False and "no tiene castellano" in pack["emu"]["motivo"]
-    assert pack["nobs"]["permitido"] is False and pack["nobs"]["motivo"].startswith("Capítulo 1: N.O.B.S no lo admite")
+    assert pack["emu"]["permitido"] is False and "castellano ni en el audio" in pack["emu"]["motivo"]
+    assert pack["nobs"]["permitido"] is False and pack["nobs"]["motivo"].startswith("Capítulos 1, 2: N.O.B.S no lo admite")
     assert len(r["capitulos"]) == 2
     for capitulo in r["capitulos"]:
         cada = _por_tracker(capitulo["trackers"])
@@ -286,7 +286,7 @@ def test_la_api_de_elegibilidad_y_el_plan_del_pack_por_tracker(db_conn, tmp_path
     mnv = client.get(url, params={"tracker": "mnv"}, headers=auth_headers).json()
     assert mnv["status"] == "valid", mnv["errors"]
     emu = client.get(url, headers=auth_headers).json()
-    assert emu["status"] == "blocked" and any("no tiene castellano" in e for e in emu["errors"])
+    assert emu["status"] == "blocked" and any("castellano ni en el audio" in e for e in emu["errors"])
     assert client.get(url, params={"tracker": "xyz"}, headers=auth_headers).status_code == 422
 
 
