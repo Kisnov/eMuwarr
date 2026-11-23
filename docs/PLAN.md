@@ -90,8 +90,11 @@ descripción y el cliente.
        Con más de un tracker con clave, el paso «Contenido» del asistente deja elegir el pack o los capítulos que
        admite alguno (`/upload/elegibilidad`), dice cuáles, y el Resumen marca de entrada eMuwarez si lo admite y, si
        no, los que lo admiten; el plan del pack usa las normas del primero de ellos.
-     - Queda: la subida por lotes del asistente a otros trackers y probarlo en el NAS (una subida vieja a N.O.B.S:
-       los dos torrents sembrando el mismo fichero sin comprobar datos).
+     - Queda: probarlo en el NAS (una subida vieja a N.O.B.S: los dos torrents sembrando el mismo fichero sin comprobar
+       datos).
+     - Por hacer: lo que eMuwarez no admite (sin castellano) aún no entra en «Subir por lotes» ni en una tanda de
+       temporadas, aunque N.O.B.S o Milnueve lo admitan: el paso 1 y la selección de Biblioteca usan su regla
+       (`utils/lote.ts::razonNoSubible`, `seasonNotReadyReason` sin elegibilidad). Hoy va por la subida suelta.
   3. Después, los internacionales que ya tienen código en `uploadrr-emu/`, solo para contenido con el audio en inglés y
      donde haya permiso.
 - **Por estudiar: nekoBT (nekobt.to; añadido y estudiado el 22/11).** Tracker público de anime centrado en fansubs y

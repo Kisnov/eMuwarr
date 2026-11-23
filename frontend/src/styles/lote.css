@@ -164,6 +164,8 @@
 
 /* Paso 2: el recuento sobre la tabla. */
 .lote-cifras { display: flex; flex-wrap: wrap; gap: 6px 10px; margin: 0 0 12px; }
+/* Paso 2: a qué trackers, entre el recuento y la tabla. */
+.lote-trackers { margin: 0 0 12px; }
 .lote-cifra {
   padding: 3px 10px;
   border-radius: var(--radius-badge);
