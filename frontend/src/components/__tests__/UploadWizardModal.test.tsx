@@ -287,6 +287,29 @@ describe('película', () => {
     expect(m(subidas.queueUpload).mock.calls.map(c => c[8])).toEqual(['nobs'])
   })
 
+  it('si eMuwarez se encola y N.O.B.S no, reintentar sube solo a N.O.B.S', async () => {
+    m(subidas.fetchTrackersParaSubir).mockResolvedValue([{ id: 'emu', nombre: 'eMuwarez' }, { id: 'nobs', nombre: 'N.O.B.S' }])
+    m(subidas.queueUpload)
+      .mockResolvedValueOnce({ status: 'queued', job: { id: 99 } } as never)
+      .mockResolvedValueOnce({ status: 'blocked', errors: ['N.O.B.S no responde'] } as never)
+      .mockResolvedValueOnce({ status: 'queued', job: { id: 100 } } as never)
+    await abrir(PELICULA)
+    await esperar(() => texto().includes('Dune WEB-DL AMZN [GRP]'))
+    await pulsar(boton('Continuar'))
+    await esperar(() => texto().includes('✓ Todo listo para subir'))
+    const casilla = (nombre: string) => [...document.querySelectorAll<HTMLLabelElement>('.asist-marcas label')]
+      .find(l => l.textContent?.includes(nombre))!.querySelector('input')!
+    await pulsar(casilla('N.O.B.S'))
+    await pulsar(boton('Subir a eMuwarez y N.O.B.S'))
+    await esperar(() => texto().includes('Ya en cola: eMuwarez'))
+    expect(onClose).not.toHaveBeenCalled()
+    expect(casilla('eMuwarez').checked).toBe(false)
+
+    await pulsar(boton('Subir a N.O.B.S'))
+    await esperar(() => onClose.mock.calls.length > 0)
+    expect(m(subidas.queueUpload).mock.calls.map(c => c[8])).toEqual([undefined, 'nobs', 'nobs'])
+  })
+
   it('sin tipo conocido, el Resumen deja elegirlo con el Source, lo guarda y vuelve a comprobar', async () => {
     m(subidas.runUploadChecks).mockResolvedValueOnce(SIN_TIPO as never)
     await abrir(PELICULA)

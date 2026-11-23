@@ -983,6 +983,14 @@ export function useAsistente({ item, onClose: onCloseProp, onDone, onNavigate, p
   const doUpload = async () => {
     if (targetId == null || !canUpload) return
     setUploading(true); setUploadMsg(null)
+    // Los ya encolados, si uno posterior falla, salen de la elección: reintentar sube solo a los que faltan (volver
+    // a eMuwarez lo bloquearía la subida que ya tiene en cola, y el que faltaba no se intentaría).
+    const encolados: { id: string; nombre: string }[] = []
+    const yaEnCola = () => {
+      if (!encolados.length) return ''
+      setTrackersElegidos(t => t.filter(x => !encolados.some(e => e.id === x)))
+      return ` Ya en cola: ${encolados.map(e => e.nombre).join(', ')}; «Subir» reintenta solo lo que falta.`
+    }
     try {
       await saveNomenclatureFields(targetId, fields)
       const remuxSnapshot = remuxPreview
@@ -1005,15 +1013,16 @@ export function useAsistente({ item, onClose: onCloseProp, onDone, onNavigate, p
           ...(tracker === 'emu' ? [] : [tracker]),
         )
         if (r.status !== 'queued' || !r.job?.id) {
-          setUploadMsg(`✗ No se pudo encolar la subida a ${nombre} (estado: ${r.status}). ${(r.errors || []).join(' ')}`)
+          setUploadMsg(`✗ No se pudo encolar la subida a ${nombre} (estado: ${r.status}). ${(r.errors || []).join(' ')}${yaEnCola()}`)
           return
         }
+        encolados.push({ id: tracker, nombre })
       }
       onDone?.()
       onNavigate?.('uploads')
       onClose()
     } catch (e: unknown) {
-      setUploadMsg(`✗ ${e instanceof Error ? e.message : 'Error encolando la subida'}`)
+      setUploadMsg(`✗ ${e instanceof Error ? e.message : 'Error encolando la subida'}${yaEnCola()}`)
     } finally {
       setUploading(false)
     }
