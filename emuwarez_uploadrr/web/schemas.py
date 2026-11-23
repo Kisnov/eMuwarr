@@ -846,6 +846,9 @@ class RequestMatchResponse(BaseModel):
 
 class RequestItemResponse(BaseModel):
     id: int
+    # El tracker de la petición (services/trackers.py): su id y su nombre para enseñarlo.
+    tracker: str = "emu"
+    tracker_nombre: str = "eMuwarez"
     emu_id: str
     title: str
     category: Optional[str] = None
@@ -1195,8 +1198,8 @@ class UploadJobDetail(BaseModel):
     reenvio_qbit_estado: Optional[str] = None
     reenvio_qbit_at: Optional[str] = None
     puede_reenviar_qbit: bool = False
-    # «Subir también a…» (services/subir_tambien.py): los trackers a los que se puede subir también esta subida a
-    # eMuwarez con el mismo fichero. Solo lo rellena el detalle (GET /uploads/{id}); en la lista va vacío.
+    # «Subir también a…» (services/subir_tambien.py): los trackers a los que se puede subir también esta subida
+    # completada con el mismo fichero. Solo lo rellena el detalle (GET /uploads/{id}); en la lista va vacío.
     subir_tambien_a: list[TrackerParaSubir] = []
     # La subida completada a otro tracker cuyo fichero y torrent reutiliza esta («Subir también a…»).
     copia_de_job_id: Optional[int] = None
@@ -1525,13 +1528,14 @@ class UploadLoteResponse(BaseModel):
 
 
 class SubirTambienBody(BaseModel):
-    """«Subir también a…»: las subidas a eMuwarez y los trackers a los que subirlas (una subida por cada par)."""
+    """«Subir también a…»: las subidas completadas y los trackers a los que subirlas (una subida por cada par, salvo
+    a su propio tracker)."""
     job_ids: list[int] = Field(min_length=1, max_length=MAX_ELEMENTOS_LOTE)
     trackers: list[str] = Field(min_length=1, max_length=8)
 
 
 class SubirTambienResultado(BaseModel):
-    job_id: int  # la subida a eMuwarez
+    job_id: int  # la subida de origen
     tracker: str
     status: str  # "queued" | "blocked"
     nuevo_job_id: Optional[int] = None
@@ -1552,11 +1556,12 @@ class SubirTambienCandidata(BaseModel):
     nombre: str  # el del fichero o carpeta en la carpeta de subidas (el del torrent)
     result_url: Optional[str] = None
     finished_at: Optional[str] = None
+    origen: TrackerParaSubir  # el tracker donde ya está
     trackers: list[TrackerParaSubir]
 
 
 class SubirTambienCandidatas(BaseModel):
-    # Los trackers con clave (sin eMuwarez) y las subidas a eMuwarez que aún no están en alguno de ellos.
+    # Los trackers con clave (eMuwarez también) y las subidas que aún no están en alguno de los otros.
     trackers: list[TrackerParaSubir]
     subidas: list[SubirTambienCandidata]
 

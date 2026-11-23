@@ -5,11 +5,11 @@ import { Modal } from './Modal'
 import { formatDate } from '../utils/format'
 import { MAX_ELEMENTOS_LOTE } from '../utils/lote'
 
-// «Subir también a…» (services/subir_tambien.py): lo que ya está en eMuwarez se sube a N.O.B.S o Milnueve con el mismo
-// fichero de la carpeta de subidas, el mismo nombre y las mismas piezas. Antes de encolar, el servidor mira en
-// qBittorrent que el torrent de eMuwarez está entero desde ese fichero.
-export const AYUDA_SUBIR_TAMBIEN = 'Con el mismo fichero, el mismo nombre y las mismas piezas que en eMuwarez: no se '
-  + 'prepara ni se hashea de nuevo, y qBittorrent siembra los dos torrents desde el mismo fichero.'
+// «Subir también a…» (services/subir_tambien.py): lo que ya está en un tracker se sube a otro con el mismo fichero de la
+// carpeta de subidas, el mismo nombre y las mismas piezas. Antes de encolar, el servidor mira en qBittorrent que el
+// torrent de origen está entero desde ese fichero.
+export const ayudaSubirTambien = (origen: string) => `Con el mismo fichero, el mismo nombre y las mismas piezas que en ${origen}: `
+  + 'no se prepara ni se hashea de nuevo, y qBittorrent siembra los dos torrents desde el mismo fichero.'
 
 const error = (e: unknown, porDefecto: string) => (e instanceof Error && e.message ? e.message : porDefecto)
 
@@ -22,7 +22,7 @@ function textoResultado(r: SubirTambienRespuesta, nombres: Record<string, string
   })
 }
 
-// En el detalle de una subida completada a eMuwarez: un botón por tracker que la acepta.
+// En el detalle de una subida completada: un botón por cada otro tracker que la acepta.
 export function SubirTambienBloque({ job, onEncolado }: { job: UploadJob; onEncolado?: () => void }) {
   const destinos = job.subir_tambien_a ?? []
   const [enviando, setEnviando] = useState<string | null>(null)
@@ -46,7 +46,7 @@ export function SubirTambienBloque({ job, onEncolado }: { job: UploadJob; onEnco
     <div className="dsub-panel" data-testid="subir-tambien">
       <h2 className="dsub-panel-titulo">Subir también a otros trackers</h2>
       <div className="detail-card dsub-caja">
-        <p className="sub-muted sub-t12" id={`subir-tambien-${job.id}`}>{AYUDA_SUBIR_TAMBIEN}</p>
+        <p className="sub-muted sub-t12" id={`subir-tambien-${job.id}`}>{ayudaSubirTambien(job.tracker_nombre || 'eMuwarez')}</p>
         <div className="sub-fila">
           {destinos.map(t => (
             <button key={t.id} type="button" className="btn btn-secondary btn-sm" aria-describedby={`subir-tambien-${job.id}`}
@@ -63,8 +63,8 @@ export function SubirTambienBloque({ job, onEncolado }: { job: UploadJob; onEnco
   )
 }
 
-// En Subidas: elegir varias subidas a eMuwarez y los trackers. Solo lo elegido a mano; cada par es una subida de la
-// cola, todas en un lote, y van saliendo según «Subidas en paralelo».
+// En Subidas: elegir varias subidas completadas y los trackers (a su propio tracker no se sube). Solo lo elegido a
+// mano; cada par es una subida de la cola, todas en un lote, y van saliendo según «Subidas en paralelo».
 export function SubirTambienModal({ onClose, onEncolado }: {
   onClose: () => void
   // Con el lote creado (o null si solo hubo una), para filtrar la tabla por él.
@@ -113,12 +113,12 @@ export function SubirTambienModal({ onClose, onEncolado }: {
 
   return (
     <Modal titulo="Subir también a otros trackers" onClose={onClose} className="sub-modal-560">
-      <p className="sub-muted sub-t12">{AYUDA_SUBIR_TAMBIEN} Elige las subidas: se suben de pocas en pocas, según «Subidas en paralelo».</p>
+      <p className="sub-muted sub-t12">{ayudaSubirTambien('el tracker donde ya está')} Elige las subidas: se suben de pocas en pocas, según «Subidas en paralelo».</p>
       {fallo ? <p role="alert">{fallo}</p> : !datos ? <p className="sub-muted">Cargando…</p>
         : datos.trackers.length === 0 ? (
           <p>Pon la clave de N.O.B.S o de Milnueve en Configuración → Otros trackers para subir también a ellos.</p>
         ) : datos.subidas.length === 0 ? (
-          <p>No hay subidas a eMuwarez que falten en {datos.trackers.map(t => t.nombre).join(' o ')}.</p>
+          <p>No hay subidas completadas que falten en otro tracker.</p>
         ) : (
           <>
             <fieldset className="subir-tambien-trackers">
@@ -130,7 +130,7 @@ export function SubirTambienModal({ onClose, onEncolado }: {
                 </label>
               ))}
             </fieldset>
-            <ul className="subir-tambien-lista" aria-label="Subidas a eMuwarez">
+            <ul className="subir-tambien-lista" aria-label="Subidas completadas">
               {datos.subidas.map(s => (
                 <li key={s.job_id}>
                   <label>
@@ -138,7 +138,7 @@ export function SubirTambienModal({ onClose, onEncolado }: {
                       onChange={() => setElegidas(c => alternar(c, s.job_id))} />
                     {' '}<span>{s.title || s.nombre}</span>
                     <span className="sub-muted sub-t11"> · #{s.job_id}{s.finished_at ? ` · ${formatDate(s.finished_at)}` : ''}
-                      {' '}· falta en {s.trackers.map(t => t.nombre).join(', ')}</span>
+                      {' '}· en {s.origen.nombre} · falta en {s.trackers.map(t => t.nombre).join(', ')}</span>
                   </label>
                 </li>
               ))}

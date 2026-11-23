@@ -1,8 +1,9 @@
-"""«Subir también a…» (services/subir_tambien.py): lo que ya está en eMuwarez, a N.O.B.S o Milnueve con el mismo fichero.
+"""«Subir también a…» (services/subir_tambien.py): lo que ya está en un tracker, a otro con el mismo fichero (de eMuwarez
+a N.O.B.S o Milnueve, o al revés).
 
-La subida nueva reutiliza la preparación de la de eMuwarez (`copia_de_job_id`) y, si su `tmp/<nombre>` ya no tiene el
-BASE.torrent, lanza Uploadrr-EMU con `--base-desde EMU:<id>` para hacerlo con el torrent de eMuwarez: mismas piezas.
-Antes de encolar se mira que qBittorrent tiene entero el torrent de eMuwarez con ese fichero como contenido.
+La subida nueva reutiliza la preparación de la de origen (`copia_de_job_id`) y, si su `tmp/<nombre>` ya no tiene el
+BASE.torrent, lanza Uploadrr-EMU con `--base-desde <TK>:<id>` para hacerlo con el torrent del otro tracker: mismas piezas.
+Antes de encolar se mira que qBittorrent tiene entero el torrent de origen con ese fichero como contenido.
 """
 from __future__ import annotations
 
@@ -44,7 +45,7 @@ def _entero(ruta):
 
 
 def _emu_completada(conn, tmp_path, nombre="Peli.mkv", **extra):
-    """Una subida a eMuwarez completada (id 42 en eMuwarez) con su fichero en la carpeta de subidas."""
+    """Una subida a eMuwarez (u otro `tracker=`) completada (id 42 allí) con su fichero en la carpeta de subidas."""
     ruta = tmp_path / nombre
     ruta.write_bytes(b"x")
     iid = _peli(conn, str(tmp_path / f"orig-{nombre}"))
@@ -131,14 +132,36 @@ def test_sin_subida_completada_con_id_no_hay_base_desde(db_conn, tmp_path):
     assert "--base-desde" not in _comando(db_conn, nobs)
 
 
+def test_base_desde_con_el_torrent_de_nobs_para_subir_a_emuwarez(db_conn, tmp_path):
+    from emuwarez_uploadrr.services.settings import set_setting
+    set_setting(db_conn, "uploadrr.path", str(tmp_path / "Uploadrr"))
+    db_conn.commit()
+    iid, _nobs, ruta = _emu_completada(db_conn, tmp_path, tracker="nobs")
+    emu = _trabajo(db_conn, iid, tracker="emu", prepared_path=str(ruta), reanuda_uploadrr=1)
+    args = _comando(db_conn, emu)
+    assert args[args.index("-tk") + 1] == "EMU" and args[args.index("--base-desde") + 1] == "NOBS:42"
+
+
+def test_base_desde_con_el_torrent_de_la_subida_elegida(db_conn, tmp_path):
+    """Con el mismo fichero en eMuwarez y N.O.B.S, las piezas salen de la que se eligió en «Subir también a…»."""
+    from emuwarez_uploadrr.services.settings import set_setting
+    set_setting(db_conn, "uploadrr.path", str(tmp_path / "Uploadrr"))
+    db_conn.commit()
+    iid, _emu, ruta = _emu_completada(db_conn, tmp_path)
+    nobs = _trabajo(db_conn, iid, tracker="nobs", status="completed", prepared_path=str(ruta), result_torrent_id="7")
+    mnv = _trabajo(db_conn, iid, tracker="mnv", prepared_path=str(ruta), reanuda_uploadrr=1, copia_de_job_id=nobs)
+    args = _comando(db_conn, mnv)
+    assert args[args.index("--base-desde") + 1] == "NOBS:7"
+
+
 # ---------------------------------------------------------------------------
-# qBittorrent: el torrent de eMuwarez entero, con ese fichero como contenido
+# qBittorrent: el torrent de origen entero, con ese fichero como contenido
 # ---------------------------------------------------------------------------
 
 def test_qbit_entero_en_la_misma_ruta(db_conn, monkeypatch, tmp_path):
     ruta = str(tmp_path / "Peli.mkv")
     _qbit(monkeypatch, db_conn, [_entero(ruta)])
-    assert seeding_qbit.completo_en_qbit(db_conn, [ruta]) == {ruta: None}
+    assert seeding_qbit.completo_en_qbit(db_conn, {ruta: "eMuwarez"}) == {ruta: None}
 
 
 @pytest.mark.parametrize("torrent, texto", [
@@ -151,12 +174,13 @@ def test_qbit_sin_el_torrent_entero(db_conn, monkeypatch, tmp_path, torrent, tex
     ruta = str(tmp_path / "Peli.mkv")
     otro = {"content_path": str(tmp_path / "Otra.mkv"), "state": "stalledUP", "progress": 1.0}
     _qbit(monkeypatch, db_conn, [otro] + ([{"content_path": ruta, **torrent}] if torrent else []))
-    assert texto in seeding_qbit.completo_en_qbit(db_conn, [ruta])[ruta]
+    assert texto in seeding_qbit.completo_en_qbit(db_conn, {ruta: "eMuwarez"})[ruta]
 
 
 def test_sin_qbittorrent_configurado_no_se_puede_comprobar(db_conn, tmp_path):
     ruta = str(tmp_path / "Peli.mkv")
-    assert "qBittorrent no está configurado" in seeding_qbit.completo_en_qbit(db_conn, [ruta])[ruta]
+    motivo = seeding_qbit.completo_en_qbit(db_conn, {ruta: "N.O.B.S"})[ruta]
+    assert "qBittorrent no está configurado" in motivo and "el torrent de N.O.B.S" in motivo
 
 
 # ---------------------------------------------------------------------------
@@ -213,11 +237,69 @@ def test_sin_el_torrent_entero_en_qbittorrent_no_se_encola(db_conn, monkeypatch,
     assert db_conn.execute("SELECT COUNT(*) FROM upload_jobs WHERE tracker = 'nobs'").fetchone()[0] == 0
 
 
-def test_solo_lo_que_esta_en_emuwarez_completado(db_conn, monkeypatch, tmp_path, sin_hilos):
+def test_solo_lo_completado(db_conn, monkeypatch, tmp_path, sin_hilos):
     _clave(db_conn, "nobs")
     _iid, fallida, ruta = _emu_completada(db_conn, tmp_path, status="failed")
     _qbit(monkeypatch, db_conn, [_entero(ruta)])
     assert "no está completada" in st.subir_tambien(db_conn, [fallida], ["nobs"])["resultados"][0]["motivo"]
+
+
+def test_de_nobs_a_emuwarez_y_milnueve(db_conn, monkeypatch, tmp_path, sin_hilos):
+    _clave(db_conn, "emu")
+    _clave(db_conn, "nobs")
+    _clave(db_conn, "mnv")
+    iid, nobs, ruta = _emu_completada(db_conn, tmp_path, tracker="nobs")
+    _qbit(monkeypatch, db_conn, [_entero(ruta)])
+
+    from emuwarez_uploadrr.services.upload_execution import get_upload_job
+    assert [t.id for t in st.ofrecidos(db_conn, get_upload_job(nobs, conn=db_conn))] == ["emu", "mnv"]
+    # Con todos marcados, su propio tracker no cuenta: ni se encola ni sale como saltada.
+    r = st.subir_tambien(db_conn, [nobs], ["emu", "nobs", "mnv"])
+
+    assert (r["encolados"], r["saltados"]) == (2, 0) and r["lote_id"]
+    filas = db_conn.execute("SELECT tracker, copia_de_job_id, library_item_id FROM upload_jobs "
+                            "WHERE copia_de_job_id IS NOT NULL ORDER BY id").fetchall()
+    assert [tuple(f) for f in filas] == [("emu", nobs, iid), ("mnv", nobs, iid)]
+
+
+def test_solo_a_su_propio_tracker_no_se_encola_nada(db_conn, tmp_path, sin_hilos):
+    _clave(db_conn, "emu")
+    _iid, emu, _ruta = _emu_completada(db_conn, tmp_path)
+    with pytest.raises(st.SubirTambienRechazado) as e:
+        st.subir_tambien(db_conn, [emu], ["emu"])
+    assert "Elige un tracker distinto" in e.value.args[0][0]
+
+
+def test_sin_la_clave_de_emuwarez_no_se_ofrece_ni_se_encola(db_conn, tmp_path, sin_hilos):
+    """eMuwarez se sube sin su clave desde el asistente (allí la pide); aquí no, porque fallaría después."""
+    _clave(db_conn, "nobs")
+    _clave(db_conn, "mnv")
+    _iid, nobs, _ruta = _emu_completada(db_conn, tmp_path, tracker="nobs")
+    from emuwarez_uploadrr.services.upload_execution import get_upload_job
+    assert [t.id for t in st.ofrecidos(db_conn, get_upload_job(nobs, conn=db_conn))] == ["mnv"]
+    with pytest.raises(st.SubirTambienRechazado) as e:
+        st.subir_tambien(db_conn, [nobs], ["emu"])
+    assert "Falta la clave de API de eMuwarez" in e.value.args[0][0]
+
+
+def test_sin_qbittorrent_el_motivo_nombra_el_tracker_de_origen(db_conn, tmp_path, sin_hilos):
+    _clave(db_conn, "emu")
+    _iid, nobs, _ruta = _emu_completada(db_conn, tmp_path, tracker="nobs")
+    assert "el torrent de N.O.B.S" in st.subir_tambien(db_conn, [nobs], ["emu"])["resultados"][0]["motivo"]
+
+
+def test_a_emuwarez_se_aplican_sus_normas_de_idioma(db_conn, monkeypatch, tmp_path, sin_hilos):
+    """Solo latino: N.O.B.S lo admite y eMuwarez no; la copia no pasa por las comprobaciones del asistente."""
+    _clave(db_conn, "emu")
+    _clave(db_conn, "nobs")
+    iid, nobs, ruta = _emu_completada(db_conn, tmp_path, tracker="nobs")
+    db_conn.execute("UPDATE library_items SET audio_languages = 'es-419' WHERE id = ?", (iid,))
+    db_conn.commit()
+    _qbit(monkeypatch, db_conn, [_entero(ruta)])
+
+    r = st.subir_tambien(db_conn, [nobs], ["emu"])
+
+    assert r["encolados"] == 0 and "castellano" in r["resultados"][0]["motivo"]
 
 
 def test_la_tanda_crea_una_subida_por_elemento_y_tracker(db_conn, monkeypatch, tmp_path, sin_hilos):
@@ -239,14 +321,19 @@ def test_la_tanda_crea_una_subida_por_elemento_y_tracker(db_conn, monkeypatch, t
     assert [x["status"] for x in r["resultados"] if x["job_id"] == c[1]] == ["blocked", "blocked"]
 
 
-def test_las_candidatas_son_las_de_emuwarez_que_faltan(db_conn, tmp_path):
+def test_las_candidatas_son_las_completadas_que_faltan_en_otro(db_conn, tmp_path):
+    _clave(db_conn, "emu")
     assert st.candidatas(db_conn) == []  # sin la clave de otro tracker no hay nada que ofrecer
     _clave(db_conn, "nobs")
     a = _emu_completada(db_conn, tmp_path, "A.mkv")
     b = _emu_completada(db_conn, tmp_path, "B.mkv")
     _trabajo(db_conn, b[0], tracker="nobs", status="completed", stage="completed")
     _emu_completada(db_conn, tmp_path, "C.mkv", status="failed")
-    assert [(f["job"]["id"], [t.id for t in f["trackers"]]) for f in st.candidatas(db_conn)] == [(a[1], ["nobs"])]
+    d = _emu_completada(db_conn, tmp_path, "D.mkv", tracker="nobs")
+    # Una subida más nueva de A que ya no vale (sin id) no tapa la de eMuwarez.
+    _trabajo(db_conn, a[0], tracker="mnv", status="completed", stage="completed")
+    assert sorted((f["job"]["id"], f["origen"].id, [t.id for t in f["trackers"]]) for f in st.candidatas(db_conn)) == [
+        (a[1], "emu", ["nobs"]), (d[1], "nobs", ["emu"])]
 
 
 # ---------------------------------------------------------------------------
@@ -312,5 +399,5 @@ def test_la_api_ofrece_los_trackers_en_el_detalle_y_la_lista(client, auth_header
     assert client.get(f"/api/uploads/{emu}", headers=auth_headers).json()["subir_tambien_a"] == [
         {"id": "mnv", "nombre": "Milnueve"}]
     datos = client.get("/api/uploads/subir-tambien", headers=auth_headers).json()
-    assert datos["trackers"] == [{"id": "mnv", "nombre": "Milnueve"}]
-    assert [(s["job_id"], s["nombre"]) for s in datos["subidas"]] == [(emu, "Peli.mkv")]
+    assert datos["trackers"] == [{"id": "mnv", "nombre": "Milnueve"}]  # eMuwarez, sin su clave, no
+    assert [(s["job_id"], s["nombre"], s["origen"]["id"]) for s in datos["subidas"]] == [(emu, "Peli.mkv", "emu")]

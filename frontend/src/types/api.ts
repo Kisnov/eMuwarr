@@ -326,6 +326,8 @@ export interface RequestMatchResponse {
 
 export interface RequestItemResponse {
   id: number
+  tracker?: string
+  tracker_nombre?: string
   emu_id: string
   title: string
   category: string | null
@@ -680,8 +682,8 @@ export interface UploadJob {
   reenvio_qbit_estado?: 'en_curso' | 'ok' | 'fallido' | null
   reenvio_qbit_at?: string | null
   puede_reenviar_qbit?: boolean
-  // «Subir también a…»: a qué trackers se puede subir también esta subida a eMuwarez (solo en el detalle), y en una
-  // subida creada así, la de eMuwarez cuyo fichero y torrent reutiliza.
+  // «Subir también a…»: a qué trackers se puede subir también esta subida (solo en el detalle), y en una
+  // subida creada así, la de origen cuyo fichero y torrent reutiliza.
   subir_tambien_a?: { id: string; nombre: string }[]
   copia_de_job_id?: number | null
   // Completada pero eMuwarez aún no la enseña: se deduce de «Tus subidas» (cada 6 h), puede ir con retraso.

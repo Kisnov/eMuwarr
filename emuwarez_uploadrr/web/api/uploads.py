@@ -464,7 +464,7 @@ def _tracker_para_subir(t: trackers.Tracker) -> TrackerParaSubir:
 
 @router.get("/uploads/subir-tambien", response_model=SubirTambienCandidatas)
 def candidatas_subir_tambien(current_user: dict = Depends(require_auth)):
-    """«Subir también a…»: las subidas a eMuwarez que se pueden subir también a N.O.B.S o Milnueve, y a cuáles."""
+    """«Subir también a…»: las subidas completadas que se pueden subir también a otro tracker, y a cuáles."""
     with _get_conn() as conn:
         destinos = subir_tambien.destinos(conn)
         filas = subir_tambien.candidatas(conn)
@@ -473,6 +473,7 @@ def candidatas_subir_tambien(current_user: dict = Depends(require_auth)):
         subidas=[SubirTambienCandidata(
             job_id=f["job"]["id"], title=f["job"].get("title"),
             nombre=os.path.basename(f["job"]["prepared_path"]), result_url=f["job"].get("result_url"),
+            origen=_tracker_para_subir(f["origen"]),
             finished_at=f["job"].get("finished_at"), trackers=[_tracker_para_subir(t) for t in f["trackers"]],
         ) for f in filas],
     )
@@ -480,9 +481,9 @@ def candidatas_subir_tambien(current_user: dict = Depends(require_auth)):
 
 @router.post("/uploads/subir-tambien", response_model=SubirTambienResponse)
 def encolar_subir_tambien(body: SubirTambienBody, current_user: dict = Depends(require_auth)):
-    """«Subir también a…»: una subida por cada subida a eMuwarez y tracker elegidos, con el mismo fichero y el mismo
-    torrent. La que no se puede (sin el torrent entero en qBittorrent, ya subida a ese tracker…) se salta con su
-    motivo; si falta algo que haría fallar a todas (la clave del tracker), 422 y nada encolado."""
+    """«Subir también a…»: una subida por cada subida completada y tracker elegidos (salvo el suyo), con el mismo
+    fichero y el mismo torrent. La que no se puede (sin el torrent entero en qBittorrent, ya subida a ese tracker…)
+    se salta con su motivo; si falta algo que haría fallar a todas (la clave del tracker), 422 y nada encolado."""
     with db(_db_path()) as conn:
         try:
             return SubirTambienResponse(**subir_tambien.subir_tambien(conn, body.job_ids, body.trackers))

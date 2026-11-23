@@ -37,10 +37,11 @@ descripción y el cliente.
        y el perfil incluyen el tracker. Las sincronizaciones de eMuwarez (peticiones, catálogo, «Tus subidas», perfil)
        solo escriben, borran y comparan filas de eMuwarez. La clave y el usuario de un tracker se leen con
        `settings.ajuste_de_tracker` (para eMuwarez, `emu.<nombre>`), nunca con la clave escrita a mano.
+     - La cola, Peticiones y el Panel dicen de qué tracker es cada fila con un chip (`ChipTracker`), solo si no es
+       eMuwarez: quien solo usa eMuwarez no ve nada nuevo.
      - Queda: que esas sincronizaciones reciban el tracker como parámetro cuando haya un segundo adaptador, la
        comparación con el catálogo por tracker (`library_items.emu_in_catalog`/`emu_aportes` son de eMuwarez), el
-       resto de ajustes por tracker (URL, grupos, anónimo) y su sitio en Configuración, y en la cola, Peticiones y el
-       Panel, de qué tracker es cada cosa.
+       resto de ajustes por tracker (URL, grupos, anónimo) y su sitio en Configuración.
   2. **Fase B: NOBS (nobs.rawsmoke.net) y Milnueve (tracker.milnueve.cc).** Los dos son UNIT3D y ya se sube a ellos con
      otras herramientas: se puede empezar (Gabriel les avisa). El primero valida la abstracción. Decidido el 22/11:
      - **Nomenclatura: la de eMuwarez, sin más.** Los dos son nuevos y cada uno sube como quiere; sus guías (formato
@@ -73,11 +74,12 @@ descripción y el cliente.
        tracker (`upload_jobs.tracker`), con el mismo nombre y el mismo fichero. El segundo espera a que acabe el primero,
        reutiliza su preparación y lanza Uploadrr-EMU con `--resume` (mismo BASE.torrent: mismas piezas). «Reenviar a
        qBittorrent» pide el torrent al tracker de la subida.
-     - Ya está (PR 4): «Subir también a…» lo que ya está en eMuwarez (las ~50 subidas hechas con eMuwarr), desde el
-       detalle de una subida o, varias elegidas a mano, desde Subidas (un trabajo por subida y tracker, en un lote). Mismo
-       fichero y mismo nombre; si el `tmp/<nombre>` ya no tiene el BASE.torrent, Uploadrr-EMU lo hace con el torrent de
-       eMuwarez (`--base-desde EMU:<id>`): mismas piezas, sin hashear. Antes, qBittorrent tiene que tener ese torrent
-       entero con el fichero como contenido.
+     - Ya está (PR 4): «Subir también a…» una subida completada con eMuwarr a cualquier otro tracker con clave (las ~50
+       de eMuwarez a N.O.B.S y Milnueve, o de uno de ellos a eMuwarez), desde el detalle de una subida o, varias elegidas
+       a mano, desde Subidas (un trabajo por subida y tracker, en un lote). Mismo fichero y mismo nombre; si el
+       `tmp/<nombre>` ya no tiene el BASE.torrent, Uploadrr-EMU lo hace con el torrent del otro tracker
+       (`--base-desde <TK>:<id>`): mismas piezas, sin hashear. Antes, qBittorrent tiene que tener ese torrent entero con
+       el fichero como contenido. Las subidas a mano quedan fuera.
      - Ya están sus normas de idioma y categoría (`services/reglas_tracker.py::reglas_de`): eMuwarez como siempre;
        N.O.B.S admite castellano, latino o VOSE, y Milnueve además el catalán. El anime (instancia marcada de anime o
        con id de MyAnimeList) va a sus categorías de anime; en Milnueve, sin castellano, el anime con catalán va a
@@ -93,9 +95,6 @@ descripción y el cliente.
      - Por hacer: lo que eMuwarez no admite (sin castellano) aún no entra en «Subir por lotes» ni en una tanda de
        temporadas, aunque N.O.B.S o Milnueve lo admitan: el paso 1 y la selección de Biblioteca usan su regla
        (`utils/lote.ts::razonNoSubible`, `seasonNotReadyReason` sin elegibilidad). Hoy va por la subida suelta.
-     - Por hacer: «Subir también a…» entre cualquier par de trackers, no solo desde eMuwarez: de una subida
-       completada con eMuwarr a cualquier tracker, a cualquier otro con clave. Solo las hechas con eMuwarr; las
-       subidas a mano quedan fuera (Gabriel, 23/11).
   3. Después, los internacionales que ya tienen código en `uploadrr-emu/`, solo para contenido con el audio en inglés y
      donde haya permiso.
 - **Por estudiar: nekoBT (nekobt.to; añadido y estudiado el 22/11).** Tracker público de anime centrado en fansubs y
