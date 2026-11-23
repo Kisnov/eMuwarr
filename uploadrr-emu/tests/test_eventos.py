@@ -5,6 +5,7 @@ Regenerar los .jsonl: igual que los .txt (ver test_transcripcion_dorada.py)."""
 import io
 import json
 import os
+import shutil
 import sys
 from types import SimpleNamespace
 
@@ -298,6 +299,97 @@ def test_la_subida_a_nobs_tras_la_de_emu_reutiliza_capturas_y_torrent(flujo, mon
     assert piezas(torrent_nobs["torrent"]) == piezas(torrent_emu["torrent"])
     # El de N.O.B.S también va a qBittorrent (cada ejecución empieza con la lista del falso vacía).
     assert len(Qbit.anadidos) == 1 and _codigos(eventos, "cliente")[0]["ok"] is True
+
+
+# --base-desde: la subida a N.O.B.S de algo que ya está en eMuwarez, cuando el tmp/<nombre> de entonces ya no está
+
+
+def _info(contenido: bytes) -> dict:
+    return torf.Torrent.read_stream(io.BytesIO(contenido), validate=False).metainfo["info"]
+
+
+def _ya_en_emu(flujo, monkeypatch):
+    """Una subida a eMuwarez hecha (id 42) cuyo tmp/<nombre> borró el mantenimiento. Devuelve (ruta, .torrent de eMuwarez)."""
+    flujo.config["TRACKERS"]["NOBS"] = {"api_key": TOKEN, "anon": False}
+    monkeypatch.setattr(NOBS, "domain", flujo.tracker.url)
+    ruta = flujo.crear_video(PELICULA)
+    flujo.tracker_que_acepta()
+    assert _correr(flujo, ruta, ARGV_PELICULA)[0] == 0
+    firmado = flujo.tracker.routes[("GET", "/torrent/download/42.rsskey")](None)[1]  # el que da eMuwarez (source eMuwarez)
+    atributos = {"name": NOMBRE_PELICULA, "download_link": f"{flujo.tracker.url}/torrent/download/42.rsskey"}
+    flujo.tracker.routes[("GET", "/api/torrents/42")] = lambda q: (200, {"data": {"attributes": atributos}})
+    os.chdir(flujo.base)  # las capturas dejan el directorio de trabajo dentro de tmp/<nombre>
+    shutil.rmtree(flujo.base / "tmp" / f"{PELICULA}.mkv")
+    flujo.ruta_eventos.unlink()
+    flujo.tracker.bodies.clear()
+    return ruta, firmado
+
+
+def _sin_hashear(monkeypatch):
+    async def hashear(*_a, **_k):
+        raise AssertionError("se ha vuelto a hashear")
+    monkeypatch.setattr("src.utils.torrentman.TorrentMaker.create", hashear)
+
+
+ARGV_NOBS_BASE = ["-tk", "NOBS", *ARGV_PELICULA[2:], "--resume", "--base-desde", "EMU:42"]
+
+
+def test_base_desde_hace_el_base_torrent_con_el_de_emu_y_no_hashea(flujo, monkeypatch):
+    ruta, firmado = _ya_en_emu(flujo, monkeypatch)
+    _sin_hashear(monkeypatch)
+
+    codigo, salida = _correr(flujo, ruta, ARGV_NOBS_BASE)
+
+    assert codigo == 0, salida
+    assert "Step done: torrent" in salida
+    eventos = _revisar(flujo)
+    assert _resultado(eventos) == ("subido", True)
+    emu = _info(firmado)
+    base = _info((flujo.base / "tmp" / f"{PELICULA}.mkv" / "BASE.torrent").read_bytes())
+    (nobs, torrent_nobs), = flujo.tracker.bodies
+    subido = _info(torrent_nobs["torrent"])
+    for info in (base, subido):
+        assert info["name"] == emu["name"] == f"{PELICULA}.mkv"
+        assert info.get("files") == emu.get("files") and info.get("length") == emu["length"]
+        assert info["pieces"] == emu["pieces"] and info["piece length"] == emu["piece length"]
+    assert base["source"] == "Uploadrr" and subido["source"] != emu["source"]  # otro info-hash: dos torrents en qBittorrent
+    assert nobs["name"] == NOMBRE_PELICULA
+    # El de eMuwarez no se queda en el tmp ni va a qBittorrent: solo el de N.O.B.S.
+    guardados = sorted(p.name for p in (flujo.base / "tmp" / f"{PELICULA}.mkv").glob("[[]*.torrent"))
+    assert guardados and all(n.startswith("[NOBS]") for n in guardados)
+    assert len(Qbit.anadidos) == 1
+
+
+def test_base_desde_con_otro_fichero_falla_sin_subir_nada(flujo, monkeypatch):
+    ruta, _firmado = _ya_en_emu(flujo, monkeypatch)
+    otro = torf.Torrent(path=ruta, private=True)
+    otro.generate()
+    ruta.write_bytes(ruta.read_bytes() + b"otro")  # el fichero ya no es el que tiene eMuwarez
+    flujo.tracker.routes[("GET", "/torrent/download/42.rsskey")] = lambda q: (200, otro.dump(validate=False))
+    _sin_hashear(monkeypatch)
+
+    codigo, salida = _correr(flujo, ruta, ARGV_NOBS_BASE)
+
+    assert codigo == 1, salida
+    eventos = _revisar(flujo)
+    assert _resultado(eventos) == ("base_no_coincide", False)
+    assert f"{PELICULA}.mkv" in eventos[-1]["detalle"]
+    assert flujo.tracker.bodies == [] and not Qbit.anadidos
+    assert not (flujo.base / "tmp" / f"{PELICULA}.mkv" / "BASE.torrent").exists()
+    assert [e for e in eventos if e["ev"] == "paso_hecho" and e["paso"] == "torrent"] == []
+
+
+def test_base_desde_sin_el_torrent_en_emu_falla(flujo, monkeypatch):
+    ruta, _firmado = _ya_en_emu(flujo, monkeypatch)
+    flujo.tracker.routes[("GET", "/api/torrents/42")] = lambda q: (404, b"")
+
+    codigo, _ = _correr(flujo, ruta, ARGV_NOBS_BASE)
+
+    assert codigo == 1
+    eventos = _revisar(flujo)
+    assert _resultado(eventos) == ("base_sin_torrent", False)
+    assert "moderación" in eventos[-1]["detalle"]
+    assert flujo.tracker.bodies == []
 
 
 # --solo-cliente de punta a punta

@@ -73,6 +73,11 @@ descripción y el cliente.
        tracker (`upload_jobs.tracker`), con el mismo nombre y el mismo fichero. El segundo espera a que acabe el primero,
        reutiliza su preparación y lanza Uploadrr-EMU con `--resume` (mismo BASE.torrent: mismas piezas). «Reenviar a
        qBittorrent» pide el torrent al tracker de la subida.
+     - Ya está (PR 4): «Subir también a…» lo que ya está en eMuwarez (las ~50 subidas hechas con eMuwarr), desde el
+       detalle de una subida o, varias elegidas a mano, desde Subidas (un trabajo por subida y tracker, en un lote). Mismo
+       fichero y mismo nombre; si el `tmp/<nombre>` ya no tiene el BASE.torrent, Uploadrr-EMU lo hace con el torrent de
+       eMuwarez (`--base-desde EMU:<id>`): mismas piezas, sin hashear. Antes, qBittorrent tiene que tener ese torrent
+       entero con el fichero como contenido.
      - Ya están sus normas de idioma y categoría (`services/reglas_tracker.py::reglas_de`): eMuwarez como siempre;
        N.O.B.S admite castellano, latino o VOSE, y Milnueve además el catalán. El anime (instancia marcada de anime o
        con id de MyAnimeList) va a sus categorías de anime; en Milnueve, sin castellano, el anime con catalán va a
@@ -82,8 +87,8 @@ descripción y el cliente.
        capítulo a capítulo, lo que un tracker no admite no se encola para él y su trabajo lanza con su `--variante`.
        Falta que el paso del pack del asistente deje seguir con un pack que solo admite otro tracker (hoy su plan
        usa las de eMuwarez).
-     - Queda: subir a NOBS/Milnueve lo que ya está en eMuwarez (PR 4), la subida por lotes a otros trackers y probarlo
-       en el NAS.
+     - Queda: la subida por lotes del asistente a otros trackers y probarlo en el NAS (una subida vieja a N.O.B.S:
+       los dos torrents sembrando el mismo fichero sin comprobar datos).
   3. Después, los internacionales que ya tienen código en `uploadrr-emu/`, solo para contenido con el audio en inglés y
      donde haya permiso.
 - **Por estudiar: nekoBT (nekobt.to; añadido y estudiado el 22/11).** Tracker público de anime centrado en fansubs y

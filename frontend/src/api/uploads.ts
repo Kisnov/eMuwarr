@@ -87,6 +87,44 @@ export async function fetchTrackersParaSubir(): Promise<TrackerParaSubir[]> {
   return api.get<TrackerParaSubir[]>('/upload/trackers')
 }
 
+// «Subir también a…» (services/subir_tambien.py): lo que ya está en eMuwarez, a N.O.B.S o Milnueve con el mismo fichero.
+export interface SubirTambienCandidata {
+  job_id: number
+  title: string | null
+  nombre: string
+  result_url: string | null
+  finished_at: string | null
+  trackers: TrackerParaSubir[]
+}
+
+export interface SubirTambienCandidatas {
+  trackers: TrackerParaSubir[]
+  subidas: SubirTambienCandidata[]
+}
+
+export interface SubirTambienResultado {
+  job_id: number
+  tracker: string
+  status: 'queued' | 'blocked'
+  nuevo_job_id: number | null
+  motivo: string | null
+}
+
+export interface SubirTambienRespuesta {
+  lote_id: string | null
+  encolados: number
+  saltados: number
+  resultados: SubirTambienResultado[]
+}
+
+export async function getSubirTambien(): Promise<SubirTambienCandidatas> {
+  return api.get<SubirTambienCandidatas>('/uploads/subir-tambien')
+}
+
+export async function subirTambien(jobIds: number[], trackers: string[]): Promise<SubirTambienRespuesta> {
+  return api.post<SubirTambienRespuesta>('/uploads/subir-tambien', { job_ids: jobIds, trackers })
+}
+
 // Lo que dicen las normas de idioma de un tracker de un elemento (web/schemas.py::ReglasDeTracker).
 export interface ReglasDeTracker {
   tracker: string
