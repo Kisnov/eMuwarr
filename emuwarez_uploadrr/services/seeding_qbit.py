@@ -276,10 +276,12 @@ def casar(ruta: Optional[str], indices: dict[str, dict[str, list[dict[str, Any]]
             elegido = _unico(candidatos, etiqueta)
             return elegido, "ruta" if elegido else ""
     raiz = _norm(raiz)
-    propios = [
-        t for t in _del_tracker(indices["nombre"].get(posixpath.basename(ruta), []), tracker, result_url)
+    # Primero lo que es de eMuwarr (etiqueta o carpeta de subidas) y después el tracker: al revés, una descarga del
+    # mismo nombre con el anuncio de ese tracker se quedaba sola y luego caía por no tener la etiqueta.
+    propios = _del_tracker([
+        t for t in indices["nombre"].get(posixpath.basename(ruta), [])
         if (etiqueta in _etiquetas(t) if etiqueta else t["save_path"] == raiz or t["save_path"].startswith(raiz + "/"))
-    ]
+    ], tracker, result_url)
     elegido = _unico(propios, etiqueta)
     return elegido, "nombre" if elegido else ""
 

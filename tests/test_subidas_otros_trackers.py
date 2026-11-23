@@ -170,6 +170,18 @@ def test_el_torrent_viejo_de_emuwarez_com_es_de_emuwarez():
     assert t["hash"] == "e" * 40
 
 
+def test_por_nombre_la_etiqueta_va_antes_que_el_tracker():
+    """qBittorrent ve otra ruta: casa por nombre. El torrent etiquetado de la subida, sin anuncio ni comentario, gana a
+    una descarga del mismo nombre sin etiqueta que sí lleva el anuncio de N.O.B.S."""
+    otra = "/otra/ruta"
+    propio = torrent(FICHERO, ruta=otra, hash="b" * 40, tags="uploadrr")
+    descarga = _de("nobs.rawsmoke.net", "https://nobs.rawsmoke.net/torrents/999", "d" * 40)
+    descarga.update(save_path=otra + "/", content_path=f"{otra}/{FICHERO}", tags="")
+    indices = sq._indices([sq._resumir(propio), sq._resumir(descarga)])
+    t, como = sq.casar(f"{RAIZ}/{FICHERO}", indices, "uploadrr", RAIZ, tracker="nobs", result_url=NOBS_URL)
+    assert t["hash"] == "b" * 40 and como == "nombre"
+
+
 def test_la_clave_de_paso_del_anuncio_no_se_guarda():
     resumen = sq._resumir(_de("nobs.rawsmoke.net", NOBS_URL, "b" * 40))
     assert "CLAVE-DE-PASO" not in json.dumps(resumen)
