@@ -18,6 +18,7 @@ from .uploadrr_yaml import (
     set_block_key,
     set_child_inline_mapping,
     set_emu_config,
+    set_tracker_config,
     yaml_scalar,
 )
 from ..integrations.qbittorrent import split_base_url
@@ -237,12 +238,21 @@ def stage_emu_config(
     return staged, message
 
 
+def stage_tracker_config(lines: list[str], tracker: str, *, api_key: str) -> tuple[list[str], str]:
+    """TRACKERS.<tracker> de otro tracker (NOBS, MNV) con su clave y `anon: false`: como en EMU, solo el flag `-a` de la
+    subida la hace anónima."""
+    staged = list(lines)
+    message = set_tracker_config(staged, tracker, api_key=api_key, anon=False)
+    return staged, message
+
+
 __all__ = [
     "default_uploadrr_config_path",
     "read_config_lines",
     "staged_config_text",
     "stage_tmdb_key",
     "stage_emu_config",
+    "stage_tracker_config",
     "stage_add_logo",
     "stage_anon_off",
     "stage_firma_actual",

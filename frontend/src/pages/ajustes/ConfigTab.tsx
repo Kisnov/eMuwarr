@@ -9,6 +9,7 @@ import { AccountCard } from './config/AccountCard'
 import { SessionsCard } from './config/SessionsCard'
 import { WidgetCard } from './config/WidgetCard'
 import { EmuwarezCard } from './config/EmuwarezCard'
+import { OtrosTrackersCard } from './config/OtrosTrackersCard'
 import { TmdbCard } from './config/TmdbCard'
 import { QbitCard } from './config/QbitCard'
 import { ProveedoresVideoCard } from './config/ProveedoresVideoCard'
@@ -26,6 +27,7 @@ const TARJETAS: { id: string; titulo: string; palabras?: string; tarjeta: (form:
   { id: 'qbittorrent', titulo: 'qBittorrent', palabras: 'cliente torrent seeding qui', tarjeta: form => <QbitCard form={form} /> },
   { id: 'proveedores-video', titulo: 'Proveedores de vídeo', palabras: 'plataformas streaming source', tarjeta: form => <ProveedoresVideoCard form={form} /> },
   { id: 'proveedores-imagenes', titulo: 'Proveedores de imágenes', palabras: 'capturas screenshots clave api key imgbox imgbb ptpimg pixhost', tarjeta: form => <ProveedoresImagenesCard form={form} /> },
+  { id: 'otros-trackers', titulo: 'Otros trackers', palabras: 'nobs milnueve clave api key tracker', tarjeta: form => <OtrosTrackersCard form={form} /> },
   { id: 'otros', titulo: 'Otros', tarjeta: form => <OtrosCard form={form} /> },
   { id: 'widget', titulo: 'Widget para Homepage', palabras: 'clave token', tarjeta: () => <WidgetCard /> },
   { id: 'cuenta', titulo: 'Cuenta', palabras: 'usuario contrasena password', tarjeta: () => <AccountCard /> },

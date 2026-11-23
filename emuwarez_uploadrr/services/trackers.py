@@ -18,15 +18,22 @@ class Tracker:
     url: str              # origen por defecto (el usuario puede cambiarlo en sus ajustes)
     plataforma: str       # "unit3d": habla con integrations/cliente_unit3d.py
     prefijo_ajustes: str  # espacio de nombres de sus ajustes: `emu` → emu.api_key, emu.username…
+    uploadrr: str         # su nombre en Uploadrr-EMU: `-tk`, TRACKERS.<uploadrr> y src/trackers/<uploadrr>.py
 
     def clave(self, nombre: str) -> str:
         """La clave en la tabla `settings` del ajuste `nombre` de este tracker: `api_key` → `emu.api_key`."""
         return f"{self.prefijo_ajustes}.{nombre}"
 
 
-EMU = Tracker(id="emu", nombre="eMuwarez", url=EMU_BASE_URL, plataforma="unit3d", prefijo_ajustes="emu")
+EMU = Tracker(id="emu", nombre="eMuwarez", url=EMU_BASE_URL, plataforma="unit3d", prefijo_ajustes="emu",
+              uploadrr="EMU")
+# Fase B: dos UNIT3D más, con la clave en sus propios ajustes. Aún no se sube a ellos desde la app.
+NOBS = Tracker(id="nobs", nombre="N.O.B.S", url="https://nobs.rawsmoke.net", plataforma="unit3d",
+               prefijo_ajustes="nobs", uploadrr="NOBS")
+MNV = Tracker(id="mnv", nombre="Milnueve", url="https://tracker.milnueve.cc", plataforma="unit3d",
+              prefijo_ajustes="mnv", uploadrr="MNV")
 
-TRACKERS: dict[str, Tracker] = {t.id: t for t in (EMU,)}
+TRACKERS: dict[str, Tracker] = {t.id: t for t in (EMU, NOBS, MNV)}
 
 # El de las filas de antes de que hubiera varios, y el de toda llamada que aún no dice cuál.
 POR_DEFECTO = EMU.id
@@ -40,4 +47,4 @@ def obtener(tracker_id: str) -> Tracker:
         raise ValueError(f"Tracker desconocido: {tracker_id!r}") from None
 
 
-__all__ = ["Tracker", "EMU", "TRACKERS", "POR_DEFECTO", "obtener"]
+__all__ = ["Tracker", "EMU", "NOBS", "MNV", "TRACKERS", "POR_DEFECTO", "obtener"]

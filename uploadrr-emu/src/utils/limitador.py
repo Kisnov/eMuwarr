@@ -32,7 +32,9 @@ except ImportError:  # Windows: no hay límite entre procesos
     fcntl = None  # type: ignore[assignment]
 
 VENTANA = 60.0
-CAPACIDAD = {"EMU": 28}  # eMuwarez deja 30 por minuto; dos de margen para otras apps con la misma key
+# eMuwarez deja 30 por minuto; dos de margen para otras apps con la misma key. NOBS y Milnueve no publican el suyo:
+# el mismo que eMuwarez hasta que lo digan (pendiente de preguntar).
+CAPACIDAD = {"EMU": 28, "NOBS": 28, "MNV": 28}
 RESERVA = 8  # huecos que los recorridos largos no pueden usar
 ESPERA_429 = 60.0  # tras un 429 sin Retry-After: una ventana entera
 PENALIZACION_MAXIMA = 600.0  # un Retry-After mayor, o una pausa más lejana en el fichero, no se cree
