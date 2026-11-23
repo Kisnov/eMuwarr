@@ -54,6 +54,7 @@ from ..schemas import (
     UploadStartRequest,
     UploadStartResult,
     TrackerParaSubir,
+    ReglasDeTracker,
 )
 
 router = APIRouter(tags=["uploads"])
@@ -225,6 +226,7 @@ def upload_checks(
     tag: str | None = Query(default=None),
     title: str | None = Query(default=None),
     idiomas: str | None = Query(default=None),
+    tracker: str | None = Query(default=None),
     current_user: dict = Depends(require_auth),
 ) -> dict:
     """Run the pre-upload checks (fail-fast, eMuwarez last) for the 'Subida a
@@ -240,8 +242,12 @@ def upload_checks(
     "all" (por defecto) las hace todas, que es lo que usa un solo elemento.
 
     Una temporada acepta además lo que el asistente editó a mano para el pack (`source`, `tag`, `title` e
-    `idiomas`, un JSON {"2": "spa"}): así el `nombre` que devuelve es el que saldrá. Sin ellos, todo igual."""
+    `idiomas`, un JSON {"2": "spa"}): así el `nombre` que devuelve es el que saldrá. Sin ellos, todo igual.
+
+    `tracker` (emu, nobs, mnv): de quién son las normas de idioma (la comprobación «spanish» y la de cada capítulo de
+    un pack). Sin él, eMuwarez; uno desconocido es un 422."""
     from emuwarez_uploadrr.services.upload_checks import run_upload_checks
+    tracker = _tracker_valido(tracker)
     try:
         elegidos = json.loads(idiomas) if idiomas else None
     except ValueError:
@@ -253,7 +259,36 @@ def upload_checks(
         # `provider` de una temporada: el elegido en el asistente ("" = Sin proveedor).
         return run_upload_checks(conn, item_id, scope=scope,
                                  provider_override=None if provider is None else provider.strip(),
-                                 **({"ajustes": ajustes} if ajustes else {}))
+                                 **({"ajustes": ajustes} if ajustes else {}),
+                                 **({} if tracker == trackers.POR_DEFECTO else {"tracker": tracker}))
+
+
+def _tracker_valido(tracker: str | None) -> str:
+    """El id del tracker pedido (eMuwarez sin él), o un 422 si no existe."""
+    try:
+        return trackers.obtener(tracker or trackers.POR_DEFECTO).id
+    except ValueError:
+        raise HTTPException(status_code=422, detail=f"Tracker desconocido: {tracker}.") from None
+
+
+@router.get("/library/{item_id}/upload/reglas", response_model=ReglasDeTracker)
+def reglas_para_subir(
+    item_id: int,
+    tracker: str = Query(...),
+    current_user: dict = Depends(require_auth),
+):
+    """Si las normas de idioma de `tracker` admiten el elemento, por qué, y la categoría que le toca allí
+    (services/reglas_tracker.py; una temporada, capítulo a capítulo). Barato, sin red: el Resumen lo pide para cada
+    tracker que ofrece."""
+    from ...services.library import get_library_item
+    from ...services.reglas_tracker import reglas_para_subir as reglas
+    tracker = _tracker_valido(tracker)
+    with _get_conn() as conn:
+        item = get_library_item(conn, item_id)
+        if not item:
+            raise HTTPException(status_code=404, detail="Elemento no encontrado.")
+        r = reglas(conn, item, tracker)
+    return ReglasDeTracker(tracker=tracker, permitido=r.permitido, motivo=r.motivo, variante=r.variante)
 
 
 @router.get("/library/{item_id}/upload/checks/progress")
