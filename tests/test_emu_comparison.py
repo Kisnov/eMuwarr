@@ -137,7 +137,7 @@ def test_a_igual_resolucion_decide_el_source(db_conn):
 def test_un_nombre_sin_source_o_sin_codec_se_mejora(db_conn):
     """Source y códec son obligatorios en el nombre: el torrent que no los dice pierde frente a una copia que sí."""
     item_id = _movie(db_conn, "Película", tmdb_id=564, resolution="1080p", source="WEB-DL", video_codec="x265")
-    _catalogo_con(db_conn, 564, "1080p", None, "Película 1080p x265")
+    _catalogo_con(db_conn, 564, "1080p", None, "Película 1080p x265", codec="H.265")
     _catalogo_con(db_conn, 564, "1080p", "WEB-DL", "Película 1080p WEB-DL", codec=None)
     _catalogo_con(db_conn, 564, "2160p", None, "Película 2160p", codec=None)
     set_state(db_conn, SYNC_COMPLETED_STATE_KEY, "2026-01-01T00:00:00Z")
