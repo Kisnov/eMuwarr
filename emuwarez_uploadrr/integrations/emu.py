@@ -284,7 +284,7 @@ def emu_fetch_all_torrents(
                 progress(page, total_pages, len(all_items), total_items)
             except Exception:  # noqa: BLE001 — progress is best-effort
                 pass
-        if len(items) < per_page:
+        if len(items) < per_page or (total_pages and page >= total_pages):
             break
         page += 1
     # Acabar las páginas permitidas sin ver el final no es el catálogo entero: guardarlo borraría lo que falta.
