@@ -32,7 +32,7 @@ def _ruta_ids(tracker: str) -> Path:
 RUTA_IDS_EMU = _ruta_ids("EMU")
 
 
-def _cargar_etiquetas(ruta: Path) -> Optional[dict[str, dict[int, str]]]:
+def _cargar_etiquetas(ruta: Path, nombre: str = "eMuwarez") -> Optional[dict[str, dict[int, str]]]:
     """id -> etiqueta por sección (las entradas sin `label` no se enseñan) y, en `subibles`, las categorías con token;
     None y un aviso si no se puede leer."""
     try:
@@ -41,8 +41,8 @@ def _cargar_etiquetas(ruta: Path) -> Optional[dict[str, dict[int, str]]]:
                      for s in ("categories", "types", "resolutions")}
         return {**etiquetas, "subibles": {e["id"]: e.get("label") for e in tabla["categories"] if e.get("tokens")}}
     except (OSError, ValueError, KeyError, TypeError) as exc:
-        logger.warning("No se puede leer la tabla de ids de eMuwarez (%s): las peticiones llevarán el id, no el nombre",
-                       exc)
+        logger.warning("No se puede leer la tabla de ids de %s (%s): las peticiones llevarán el id, no el nombre",
+                       nombre, exc)
         return None
 
 
@@ -52,7 +52,7 @@ EMU_CATEGORIAS = (_ETIQUETAS or {}).get("categories", {})
 EMU_TIPOS = (_ETIQUETAS or {}).get("types", {})
 EMU_RESOLUCIONES = (_ETIQUETAS or {}).get("resolutions", {})
 # Las de los otros UNIT3D (N.O.B.S, Milnueve), por su nombre en Uploadrr-EMU.
-_ETIQUETAS_OTROS = {t: _cargar_etiquetas(_ruta_ids(t)) for t in ("NOBS", "MNV")}
+_ETIQUETAS_OTROS = {t: _cargar_etiquetas(_ruta_ids(t), t) for t in ("NOBS", "MNV")}
 
 
 def _etiquetas_de(tracker: str) -> Optional[dict[str, dict[int, str]]]:
@@ -62,7 +62,12 @@ def _etiquetas_de(tracker: str) -> Optional[dict[str, dict[int, str]]]:
 def _categorias_de_peticiones(tracker: str) -> list[int]:
     """Las categorías cuyas peticiones se leen: en eMuwarez las que tienen nombre; en otro, las de vídeo a las que se
     sube (las que tienen token: fuera libros, juegos o música)."""
-    return list(EMU_CATEGORIAS) if tracker == "EMU" else list((_etiquetas_de(tracker) or {}).get("subibles", {}))
+    if tracker == "EMU":
+        return list(EMU_CATEGORIAS)
+    # Sin su tabla no se sabe cuáles son de vídeo: sin filtro llegarían también libros, juegos y música.
+    if _etiquetas_de(tracker) is None:
+        raise IntegrationError(f"No se puede leer la tabla de ids de {tracker}: no se leen sus peticiones")
+    return list(_etiquetas_de(tracker)["subibles"])
 
 
 def _etiqueta(etiquetas: Optional[dict], seccion: str, nombre: str, valor: Any) -> Optional[str]:

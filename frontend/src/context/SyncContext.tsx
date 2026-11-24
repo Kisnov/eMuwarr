@@ -262,8 +262,9 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
         const p = await getRequestsSyncProgress()
         setRequestsProgress(p)
         if (p.done || !p.active) {
-          const otros = p.error_otros ? `. ${p.error_otros}` : ''
-          showMessage((p.error ? `Error al sincronizar las peticiones: ${p.error}` : p.message || 'Peticiones sincronizadas') + otros,
+          const otros = p.error_otros ? ` ${p.error_otros}` : ''
+          const texto = p.error ? `Error al sincronizar las peticiones: ${p.error}` : p.message || 'Peticiones sincronizadas'
+          showMessage((otros && !/[.!?]$/.test(texto) ? `${texto}.` : texto) + otros,
             !!(p.error || otros))
           invalidarTodo()
           break

@@ -321,6 +321,9 @@ def _importar_peticiones(conn: sqlite3.Connection) -> dict[str, int | str]:
         # eMuwarez y luego cada otro tracker con clave, de uno en uno: el fallo de uno no frena a los demás ni borra
         # sus peticiones.
         otros = [t for t in TRACKERS.values() if t is not EMU and tiene_clave(conn, t)]
+        # Las de un tracker cuya clave se ha quitado ya no se pueden refrescar: se borran.
+        removed_sin_clave = sum(borrar_peticiones(conn, "tracker = ?", (t.id,)) for t in TRACKERS.values()
+                                if t is not EMU and t not in otros)
         error_emu = None
         try:
             imported, removed = _leer_peticiones_de(conn, EMU, api_key)
@@ -329,6 +332,7 @@ def _importar_peticiones(conn: sqlite3.Connection) -> dict[str, int | str]:
                 raise
             conn.rollback()
             error_emu, imported, removed = exc, 0, 0
+        removed += removed_sin_clave
         fallos: list[str] = []
         for tracker in otros:
             try:
@@ -336,7 +340,9 @@ def _importar_peticiones(conn: sqlite3.Connection) -> dict[str, int | str]:
                 imported, removed = imported + n, removed + r
             except Exception as exc:  # noqa: BLE001 — se cuenta en el progreso y en la tarea
                 conn.rollback()
-                fallos.append(f"{tracker.nombre}: {texto_de_error(exc)}")
+                # Los errores de la API ya dicen de qué tracker son.
+                texto = texto_de_error(exc)
+                fallos.append(texto if tracker.nombre in texto else f"{tracker.nombre}: {texto}")
                 logger.warning("No se pudieron sincronizar las peticiones de %s: %s", tracker.nombre, texto_de_error(exc))
         _set_progress(error_otros="; ".join(fallos) or None)
         set_state(conn, SYNC_STATE_KEY, _utcnow().isoformat())

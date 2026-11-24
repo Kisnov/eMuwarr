@@ -85,6 +85,22 @@ def test_de_otro_tracker_solo_se_piden_sus_categorias_de_video(monkeypatch):
     assert pedidas == [("NOBS", [1, 2, 4, 5]), ("MNV", [1, 2, 3, 4, 8, 10, 14]), ("EMU", [1, 2, 4])]
 
 
+def test_sin_la_tabla_de_otro_tracker_no_se_piden_sus_peticiones(monkeypatch):
+    """Sin su tabla no se sabe qué categorías son de vídeo: sin filtro llegarían libros, juegos y música."""
+    monkeypatch.setitem(emu._ETIQUETAS_OTROS, "MNV", None)
+    monkeypatch.setattr(emu, "_pedir_pagina", lambda *a, **k: pytest.fail("pidió sin filtro"))
+    with pytest.raises(IntegrationError, match="tabla de ids de MNV"):
+        emu.emu_get_requests("K", tracker="MNV")
+
+
+def test_las_de_un_tracker_sin_clave_se_borran(db_conn, trackers):
+    db_conn.execute("INSERT INTO request_items (tracker, emu_id, title) VALUES ('nobs', '9', 'De cuando tenía clave')")
+    db_conn.commit()
+    trackers["EMU"] = ([_fila(1)], 1)
+    reqs.sync_emu_requests(db_conn, force=True)
+    assert _filas(db_conn) == [("emu", "1")]
+
+
 def test_los_errores_de_otro_tracker_dicen_su_nombre(monkeypatch):
     def limitado(*_a, **_kw):
         raise IntegrationError("http 429 en una URL con la clave", status=429)
@@ -104,7 +120,7 @@ def test_el_fallo_de_otro_tracker_no_frena_a_los_demas_ni_borra_sus_peticiones(d
     trackers["MNV"] = ([_fila(3)], 1)
     assert reqs.sync_emu_requests(db_conn, force=True)["status"] == "ok"
     assert _filas(db_conn) == [("emu", "1"), ("mnv", "3"), ("nobs", "9")]
-    fallo = "N.O.B.S: N.O.B.S ha rechazado la API key (¿ratio por debajo de 1?)"
+    fallo = "N.O.B.S ha rechazado la API key (¿ratio por debajo de 1?)"  # el nombre, una vez
     assert reqs.get_request_sync_progress()["error_otros"] == fallo
     resumen = db_conn.execute("SELECT summary FROM task_runs WHERE name = 'sync-emu-requests' "
                               "ORDER BY id DESC LIMIT 1").fetchone()[0]

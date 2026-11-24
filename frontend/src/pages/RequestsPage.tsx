@@ -391,7 +391,7 @@ function RequestDetailPage({ item, readiness, instances, onBack, onShowCandidate
   const tracker = item.tracker_nombre ?? 'eMuwarez'
   const consultarTip = useTooltip(item.url
     ? `Abrir la petición en ${tracker} (reclamarla, marcarla como llena, ver el ID del torrent…)`
-    : 'Todavía no tenemos la URL exacta de esta petición: abre el listado general de peticiones en eMuwarez')
+    : `Todavía no tenemos la URL exacta de esta petición: abre el listado general de peticiones en ${tracker}`)
   // Sin el contenido en la biblioteca el botón no hace nada, y el motivo va escrito a su lado: en un tooltip no llegaba
   // ni al dedo ni a un botón deshabilitado, que no recibe el ratón.
   const subirTip = useTooltip(libraryTargetId

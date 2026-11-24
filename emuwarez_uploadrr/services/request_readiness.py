@@ -356,7 +356,8 @@ def build_request_candidates(
         # La temporada o el capítulo pedidos se puntúan con sus propios datos, no con el resumen de la serie.
         destino = _scoped_library_id(conn, lib, req)
         pedida = dict(conn.execute(_LEER_FILA_PEDIDA, (destino,)).fetchone())
-        if tracker is not EMU:
+        fuera_de_alcance = req.get("req_scope") in ("season", "episode") and pedida["item_type"] != req["req_scope"]
+        if tracker is not EMU and not fuera_de_alcance:
             # Las columnas de la biblioteca son de eMuwarez: lo que ya hay sale del catálogo local de ese tracker
             # (igual o mejor que tu copia = está y no aportas), y el idioma, de sus normas. Una serie, temporada a
             # temporada (las que cuentan en su resumen).
@@ -371,7 +372,7 @@ def build_request_candidates(
                                                                     (i,)).fetchone()), tracker.id) for i in partes]
                 no = next((r for r in reglas if not r.permitido), None)
                 pedida.update(has_spanish_ok=int(no is None), motivo_idioma=(no or reglas[0]).motivo)
-        if req.get("req_scope") in ("season", "episode") and pedida["item_type"] != req["req_scope"]:
+        if fuera_de_alcance:
             # Lo pedido no está en la biblioteca, solo su serie o su temporada: no hay nada que preparar.
             pedida.update(local_status="Faltante", emu_in_catalog=None)
         del pedida["item_type"]
