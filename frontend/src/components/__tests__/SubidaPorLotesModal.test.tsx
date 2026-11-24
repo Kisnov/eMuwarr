@@ -782,6 +782,16 @@ describe('a varios trackers', () => {
       expect(texto()).not.toContain('Mirando qué admite')
     })
 
+    it('mientras tanto no se puede cambiar lo marcado', async () => {
+      const respuesta = diferida<Awaited<ReturnType<typeof subidas.fetchElegibilidad>>>()
+      m(subidas.fetchElegibilidad).mockReturnValueOnce(respuesta.promesa)
+      await abrir([DUNE, CATALAN])
+      await esperar(() => texto().includes('Mirando qué admite cada tracker'))
+      expect(casillaPaso1('Dune').disabled).toBe(true)
+      await act(async () => respuesta.resolver({ trackers: [si('emu', 'eMuwarez')], capitulos: [] }))
+      await esperar(() => !casillaPaso1('Dune').disabled)
+    })
+
     it('sin Milnueve marcado, se comprueba con las de eMuwarez y se salta', async () => {
       m(subidas.runUploadChecks).mockImplementation(async (id, scope) => (scope === 'environment' ? ENTORNO
         : id === 15 ? { ready: false, checks: [{ id: 'spanish', label: 'No tiene castellano', status: 'fail' as const, message: '' }] } : LISTO))

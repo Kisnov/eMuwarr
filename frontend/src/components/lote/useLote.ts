@@ -138,7 +138,7 @@ export function useAnalisisLote({ activo, elementos }: { activo: boolean; elemen
 
 /**
  * Qué trackers con clave admiten cada elemento por sus normas de idioma (/upload/elegibilidad), por id, mientras
- * `activo` (más de un tracker). Sin red; lo ya pedido se guarda. Uno por elemento: son 50 como mucho. `listo`: han
+ * `activo` (más de un tracker). Sin red; lo ya pedido se guarda. `listo`: han
  * respondido todos (o no hacía falta preguntar).
  */
 export function useElegibilidadLote({ activo, ids }: { activo: boolean; ids: readonly number[] }) {
@@ -149,12 +149,16 @@ export function useElegibilidadLote({ activo, ids }: { activo: boolean; ids: rea
   useEffect(() => {
     if (!activo) return
     let vivo = true
-    for (const id of ids) {
-      if (reglas.has(id) || sinRespuesta.has(id)) continue
-      fetchElegibilidad(id)
-        .then(r => { if (vivo) setReglas(m => new Map(m).set(id, r.trackers)) })
-        .catch(() => { if (vivo) setSinRespuesta(s => new Set(s).add(id)) })
+    const run = async () => {
+      // De una en una: una serie expandida puede traer cientos de temporadas.
+      for (const id of ids.filter(id => !reglas.has(id) && !sinRespuesta.has(id))) {
+        await fetchElegibilidad(id)
+          .then(r => { if (vivo) setReglas(m => new Map(m).set(id, r.trackers)) })
+          .catch(() => { if (vivo) setSinRespuesta(s => new Set(s).add(id)) })
+        if (!vivo) return
+      }
     }
+    run()
     return () => { vivo = false }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- se pide al cambiar lo que se mira, no con cada resultado
   }, [activo, clave])

@@ -36,7 +36,7 @@ export function PasoContenidoLote({
   marcadas: ReadonlySet<number>
   // Con más de un tracker, qué admite cada uno (/upload/elegibilidad).
   elegibilidad?: ReadonlyMap<number, readonly ReglasConNombre[]>
-  // Aún no han respondido todos: no se continúa, que de ellos salen los trackers de entrada.
+  // Aún no han respondido todos: no se cambia ni se continúa, que de ellos salen las que entran.
   comprobandoIdiomas?: boolean
   onAlternar: (id: number) => void
   onContinuar: () => void
@@ -89,7 +89,7 @@ export function PasoContenidoLote({
                 <input
                   type="checkbox"
                   checked={marcada}
-                  disabled={!!motivo || (!marcada && lleno)}
+                  disabled={!!motivo || (!marcada && lleno) || comprobandoIdiomas}
                   onChange={() => onAlternar(item.id)}
                 />
                 <TituloDeFila item={item} />
