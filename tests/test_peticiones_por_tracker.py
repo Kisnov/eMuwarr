@@ -248,3 +248,23 @@ def test_una_serie_entera_de_otro_tracker_se_mira_temporada_a_temporada(db_conn,
 
     assert comparadas == temporadas and mirada == temporadas
     assert candidata["readiness_status"] == "already_exists", candidata["blockers"]
+
+
+def test_el_pack_de_una_peticion_de_otro_tracker_sigue_sus_normas(db_conn, monkeypatch):
+    """Una temporada solo en latino no se puede subir como pack a eMuwarez, pero sí a N.O.B.S."""
+    from emuwarez_uploadrr.services import reglas_tracker
+    from emuwarez_uploadrr.services.reglas_tracker import Reglas
+    from emuwarez_uploadrr.services.season_pack import _PACK_ROLLUP_FIELDS
+    serie = db_conn.execute("INSERT INTO library_items (item_type, title, local_status) VALUES ('series', 'Serie', 'Disponible')").lastrowid
+    temporada = db_conn.execute(
+        "INSERT INTO library_items (item_type, title, parent_id, season_number, has_spanish_ok, local_status) "
+        "VALUES ('season', 'Serie', ?, 1, 0, 'Disponible')", (serie,)).lastrowid
+    db_conn.execute(f"UPDATE library_items SET {', '.join(f'{c} = 1' for c in _PACK_ROLLUP_FIELDS)} WHERE id = ?",
+                    (temporada,))
+    db_conn.commit()
+    monkeypatch.setattr(reglas_tracker, "reglas_para_subir",
+                        lambda _c, _f, t: Reglas(permitido=t == "nobs", motivo="Audio latino.", variante=None))
+    serie_fila = {"id": serie, "item_type": "series"}
+    pide = {"req_scope": "season", "req_season": 1}
+    assert "castellano" in reqs._pack_blocked_reason(db_conn, serie_fila, {**pide, "tracker": "emu"})
+    assert reqs._pack_blocked_reason(db_conn, serie_fila, {**pide, "tracker": "nobs"}) is None

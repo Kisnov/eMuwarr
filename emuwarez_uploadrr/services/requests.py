@@ -585,6 +585,12 @@ def _pack_blocked_reason(conn: sqlite3.Connection, matched_item: dict, req: dict
     if not row:
         return None
     season = dict(row)
+    tracker = req.get("tracker") or EMU.id
+    if tracker != EMU.id and season.get("has_spanish_ok") == 0:
+        from .reglas_tracker import reglas_para_subir
+        # En otro tracker lo que vale es lo que admiten sus normas (latino, catalán…), no el castellano de eMuwarez.
+        if reglas_para_subir(conn, season, tracker).permitido:
+            season["has_spanish_ok"] = 1
     if can_pack_from_rollup(season):
         return None
     if not season.get("video_codec"):

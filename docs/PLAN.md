@@ -154,8 +154,7 @@ descripción y el cliente.
   anónimo → 401 JSON, comprobado el 18/11).
 - **Por resolver en la fase A:** de dónde salen los ids de cada tracker (su formulario de subida o el staff; los de
   NOBS y Milnueve están en `docs/trackers-ids.md`), una nomenclatura por tracker (para NOBS y Milnueve vale la de
-  eMuwarez; el fichero es el mismo para todos, ver la fase B), etiqueta/categoría de qBittorrent por tracker, peticiones por tracker sin pasar del límite de
-  cada API (el catálogo ya va por tracker), y si la app cambia de nombre (hoy «eMuwarr» es de eMuwarez).
+  eMuwarez; el fichero es el mismo para todos, ver la fase B), etiqueta/categoría de qBittorrent por tracker, y si la app cambia de nombre (hoy «eMuwarr» es de eMuwarez).
 
 ## Por probar en el NAS (`:dev`)
 
