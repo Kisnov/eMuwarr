@@ -75,6 +75,8 @@ describe('razonNoSubible', () => {
   it('sin castellano, o sin poder leer sus pistas, no se puede', () => {
     expect(razonNoSubible(pelicula({ has_spanish_ok: 0 }))).toBe('No tiene castellano ni en el audio ni en los subtítulos.')
     expect(razonNoSubible(pelicula({ has_spanish_ok: null }))).toContain('no se puede confirmar que tenga castellano')
+    // Con lo que admite cada tracker, manda eso: el servidor lo ha mirado con sus normas.
+    expect(razonNoSubible(pelicula({ has_spanish_ok: null }), ['mnv'])).toBeNull()
   })
 
   it('una temporada entra si se puede subir como pack, y si no, con el motivo de seasonNotReadyReason', () => {

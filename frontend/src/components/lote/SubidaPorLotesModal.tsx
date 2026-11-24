@@ -50,7 +50,7 @@ export function SubidaPorLotesModal({ entradas, onClose, onDone, onNavigate }: {
   const expansion = useExpansionLote(copia)
   const elementos = useMemo(() => expansion.elementos ?? [], [expansion.elementos])
   const [paso, setPaso] = useState<Paso>('contenido')
-  const { trackersParaSubir, trackersElegidos, setTrackersElegidos, elegirTracker, destinos, destinoSubida } = useDestinos()
+  const { trackersParaSubir, trackersElegidos, setTrackersElegidos, elegirTracker, destinos, destinoSubida, listo: destinosListos } = useDestinos()
   // Con más de un tracker, qué admite cada uno: entra lo que admita alguno.
   const { reglas: elegibilidad, listo: elegibilidadLista } = useElegibilidadLote({
     activo: trackersParaSubir.length > 1, ids: elementos.map(e => e.id),
@@ -212,7 +212,7 @@ export function SubidaPorLotesModal({ entradas, onClose, onDone, onNavigate }: {
       {paso === 'contenido' && (
         <PasoContenidoLote
           elementos={elementos} marcadas={marcadas} onAlternar={alternar} elegibilidad={elegibilidad}
-          comprobandoIdiomas={!elegibilidadLista}
+          comprobandoIdiomas={!destinosListos || !elegibilidadLista}
           onContinuar={() => {
             // Como el asistente, si cambió lo marcado: eMuwarez si admite todo; si no, también los que admiten lo demás.
             if (colaAlContinuar.current !== cola.join(',')) {

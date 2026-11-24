@@ -110,8 +110,8 @@ export function razonNoSubible(item: LibraryItemResponse, admiten?: readonly str
       ? `El capítulo está «${estado}»: ahora no se puede subir.`
       : `La película está «${estado}»: ahora no se puede subir.`
   }
-  if (item.has_spanish_ok == null) return 'No se han podido leer sus pistas: no se puede confirmar que tenga castellano.'
   if (admiten) return admiten.length ? null : 'Ningún tracker con clave admite sus idiomas.'
+  if (item.has_spanish_ok == null) return 'No se han podido leer sus pistas: no se puede confirmar que tenga castellano.'
   if (item.has_spanish_ok !== 1) return 'No tiene castellano ni en el audio ni en los subtítulos.'
   return null
 }

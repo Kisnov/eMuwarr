@@ -782,6 +782,15 @@ describe('a varios trackers', () => {
       expect(texto()).not.toContain('Mirando qué admite')
     })
 
+    it('tampoco mientras no ha llegado la lista de trackers', async () => {
+      const lista = diferida<Awaited<ReturnType<typeof subidas.fetchTrackersParaSubir>>>()
+      m(subidas.fetchTrackersParaSubir).mockReturnValueOnce(lista.promesa)
+      await abrir([DUNE])
+      expect(boton('Continuar (1)')!.disabled).toBe(true)
+      await act(async () => lista.resolver([]))
+      await esperar(() => !boton('Continuar (1)')!.disabled)
+    })
+
     it('mientras tanto no se puede cambiar lo marcado', async () => {
       const respuesta = diferida<Awaited<ReturnType<typeof subidas.fetchElegibilidad>>>()
       m(subidas.fetchElegibilidad).mockReturnValueOnce(respuesta.promesa)

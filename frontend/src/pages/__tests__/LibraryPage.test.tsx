@@ -90,6 +90,19 @@ describe('Seleccionar en Biblioteca', () => {
     expect(casilla('Dune')!.disabled).toBe(false)
   })
 
+  it('una clave añadida en Ajustes se nota al volver, sin recargar', async () => {
+    vi.mocked(getLibrary).mockResolvedValue({ items: [DUNE, ALIEN, item(4, 'Catalana', { has_spanish_ok: 0 })], total: 3 } as never)
+    await pagina()
+    await pulsar(boton('Seleccionar'))
+    expect(casilla('Catalana')!.disabled).toBe(true)
+
+    vi.mocked(fetchTrackersParaSubir).mockResolvedValueOnce([{ id: 'emu', nombre: 'eMuwarez' }, { id: 'mnv', nombre: 'Milnueve' }])
+    await act(async () => fijarVisible(false))
+    await act(async () => fijarVisible(true))
+    if (!casilla('Catalana')) await pulsar(boton('Seleccionar'))
+    await esperar(() => casilla('Catalana') && !casilla('Catalana')!.disabled)
+  })
+
   it('sin el modo selección no hay casillas ni barra; con él, en películas y series', async () => {
     await pagina()
     expect(casilla('Dune')).toBeNull()
