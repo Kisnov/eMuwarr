@@ -88,6 +88,7 @@ export function SubirTambienModal({ inicial, onClose, onEncolado }: {
         if (!vigente) return
         const deLaFila = d.subidas.find(s => s.job_id === inicial)
         setDatos(d)
+        if (!deLaFila) setElegidas(new Set())  // ya no se ofrece: no queda marcada sin casilla
         setTrackers(new Set((deLaFila?.trackers ?? d.trackers).map(t => t.id)))
       },
       e => { if (vigente) setFallo(error(e, 'No se pudieron cargar las subidas.')) },

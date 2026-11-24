@@ -446,12 +446,14 @@ export function UploadsPage({ onNavigate }: { onNavigate?: (page: string) => voi
   // Las subidas que llevan el botón de la fila: se vuelve a preguntar cuando cambia cuántas hay completadas.
   const [paraSubirTambien, setParaSubirTambien] = useState<Set<number>>(new Set())
   const completadas = useMemo(() => jobs.filter(j => j.status === 'completed').length, [jobs])
+  // Al cerrar el modal también: lo encolado ya no se ofrece, aunque aún no haya terminado.
+  const [cerradoSubirTambien, setCerradoSubirTambien] = useState(0)
   useEffect(() => {
     if (!subidasALaVista || !hayOtrosTrackers) return
     let vigente = true
     getSubirTambien().then(d => { if (vigente) setParaSubirTambien(new Set(d.subidas.map(s => s.job_id))) }, () => {})
     return () => { vigente = false }
-  }, [subidasALaVista, hayOtrosTrackers, completadas])
+  }, [subidasALaVista, hayOtrosTrackers, completadas, cerradoSubirTambien])
   // Cuántas se piden (las más recientes), cuántas hay en total con el filtro de estado, y si ya llegó la primera
   // respuesta (hasta entonces «no está en la lista» no quiere decir nada).
   const [limite, setLimite] = useState(PAGINA)
@@ -890,9 +892,9 @@ export function UploadsPage({ onNavigate }: { onNavigate?: (page: string) => voi
         onCancel={alCancelar}
         onDelete={setDeleteJob}
         onRetry={alReintentar}
+        onSubirTambien={job.id != null && paraSubirTambien.has(job.id) ? abrirSubirTambien : undefined}
         // Con la lista ya filtrada por ese lote, el banner lo dice: la chapa en cada fila sobra.
         // Y debajo de otra del mismo lote, también.
-        onSubirTambien={job.id != null && paraSubirTambien.has(job.id) ? abrirSubirTambien : undefined}
         onFiltrarLote={job.lote_id === loteFiltro || (enGrupo === 'otra' && job.lote_id === loteArriba) ? undefined : setLoteFiltro}
       />,
       ...(expanded ? ancestors.map(a => (
@@ -998,7 +1000,7 @@ export function UploadsPage({ onNavigate }: { onNavigate?: (page: string) => voi
         </div>
       </div>
       {subirTambien && (
-        <SubirTambienModal inicial={subirTambien.inicial} onClose={() => setSubirTambien(null)}
+        <SubirTambienModal inicial={subirTambien.inicial} onClose={() => { setSubirTambien(null); setCerradoSubirTambien(n => n + 1) }}
           onEncolado={loteId => { if (loteId) verLote(loteId); else load({ silent: true }) }} />
       )}
 
