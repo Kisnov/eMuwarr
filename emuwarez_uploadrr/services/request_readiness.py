@@ -28,6 +28,7 @@ from .compatibility import (
     parse_source,
     reclamada_por,
 )
+from .settings import leer_ajuste
 from .trackers import EMU, POR_DEFECTO, obtener
 
 
@@ -357,13 +358,19 @@ def build_request_candidates(
         pedida = dict(conn.execute(_LEER_FILA_PEDIDA, (destino,)).fetchone())
         if tracker is not EMU:
             # Las columnas de la biblioteca son de eMuwarez: lo que ya hay sale del catálogo local de ese tracker
-            # (igual o mejor que tu copia = está y no aportas), y el idioma, de sus normas.
-            conclusion = get_item_comparison(conn, destino, tracker=tracker).get("conclusion")
-            pedida.update(emu_in_catalog=int(bool(conclusion and conclusion["ya_lo_tiene"])), emu_aportes="[]")
-            if pedida["has_spanish_ok"] == 0:
-                fila = dict(conn.execute("SELECT * FROM library_items WHERE id = ?", (destino,)).fetchone())
-                reglas = reglas_para_subir(conn, fila, tracker.id)
-                pedida.update(has_spanish_ok=int(reglas.permitido), motivo_idioma=reglas.motivo)
+            # (igual o mejor que tu copia = está y no aportas), y el idioma, de sus normas. Una serie, temporada a
+            # temporada (las que cuentan en su resumen).
+            partes = [destino] if pedida["item_type"] != "series" else [i for (i,) in conn.execute(
+                "SELECT id FROM library_items WHERE parent_id = ? AND item_type = 'season' AND NOT (? AND season_number = 0)",
+                (destino, bool(leer_ajuste(conn, "series_ignore_specials"))))]
+            conclusiones = [get_item_comparison(conn, i, tracker=tracker).get("conclusion") for i in partes]
+            pedida.update(emu_in_catalog=int(bool(partes) and all(c and c["ya_lo_tiene"] for c in conclusiones)),
+                          emu_aportes="[]")
+            if pedida["has_spanish_ok"] == 0 and partes:
+                reglas = [reglas_para_subir(conn, dict(conn.execute("SELECT * FROM library_items WHERE id = ?",
+                                                                    (i,)).fetchone()), tracker.id) for i in partes]
+                no = next((r for r in reglas if not r.permitido), None)
+                pedida.update(has_spanish_ok=int(no is None), motivo_idioma=(no or reglas[0]).motivo)
         if req.get("req_scope") in ("season", "episode") and pedida["item_type"] != req["req_scope"]:
             # Lo pedido no está en la biblioteca, solo su serie o su temporada: no hay nada que preparar.
             pedida.update(local_status="Faltante", emu_in_catalog=None)

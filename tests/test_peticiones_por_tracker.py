@@ -206,3 +206,29 @@ def test_el_aviso_de_peticiones_nuevas_dice_de_que_tracker_son(db_conn, trackers
         "Hay una petición nueva que ya puedes rellenar: «Dune» (N.O.B.S)."]
     compatibles = [n["body"] for n in avisos if n["event_type"] == "request_match_found"]
     assert compatibles == ["Tienes contenido compatible con esta petición de N.O.B.S."]
+
+
+def test_una_serie_entera_de_otro_tracker_se_mira_temporada_a_temporada(db_conn, monkeypatch):
+    """El catálogo y las normas de N.O.B.S se miran en cada temporada, no en la fila de la serie."""
+    from emuwarez_uploadrr.services import emu_catalog, reglas_tracker
+    from emuwarez_uploadrr.services.reglas_tracker import Reglas
+    from emuwarez_uploadrr.services.request_readiness import build_request_candidates
+    serie = db_conn.execute(
+        "INSERT INTO library_items (item_type, title, year, tvdb_id, local_status, file_exists, has_spanish_ok)"
+        " VALUES ('series', 'Serie', 2020, '77', 'Disponible', 1, 0)").lastrowid
+    temporadas = [db_conn.execute(
+        "INSERT INTO library_items (item_type, title, parent_id, season_number, local_status, has_spanish_ok)"
+        " VALUES ('season', 'Serie', ?, ?, 'Disponible', 0)", (serie, n)).lastrowid for n in (1, 2)]
+    pid = db_conn.execute("INSERT INTO request_items (tracker, emu_id, title, category, tvdb_id) "
+                          "VALUES ('nobs', 1, 'Serie', 'TV', '77')").lastrowid
+    db_conn.commit()
+    comparadas, mirada = [], []
+    monkeypatch.setattr(emu_catalog, "get_item_comparison", lambda _c, i, tracker: (
+        comparadas.append(i) or {"conclusion": {"ya_lo_tiene": True}}))
+    monkeypatch.setattr(reglas_tracker, "reglas_para_subir", lambda _c, fila, _t: (
+        mirada.append(fila["id"]) or Reglas(permitido=True, motivo="Audio latino.", variante=None)))
+
+    [candidata] = build_request_candidates(pid, db_conn)
+
+    assert comparadas == temporadas and mirada == temporadas
+    assert candidata["readiness_status"] == "already_exists", candidata["blockers"]
