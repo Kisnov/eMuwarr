@@ -52,6 +52,27 @@ export function PasoTemporada({ a }: { a: Asistente }) {
   const origenProveedor = textoOrigenProveedor(
     seasonPlan?.provider, seasonPlan?.provider_source_detail, fields.provider)
 
+  // El idioma de las pistas sin idioma del pack: junto al Audio y, si el plan está bloqueado (puede ser por eso: la
+  // norma del castellano cuenta lo elegido), en el error.
+  const selectorIdiomas = (seasonPlan?.pistas_sin_idioma?.length ?? 0) > 0 && (
+    <div className="asist-col-completa asist-pila">
+      {(seasonPlan?.pistas_sin_idioma ?? []).map(p => (
+        <label htmlFor={`${idCampo}-pista-${p.posicion}`} key={p.posicion}>
+          <FieldLabel label={etiquetaPistaSinIdioma(p.posicion, p.pista, p.capitulos)} info={FIELD_INFO.idioma_pista_pack} />
+          <select id={`${idCampo}-pista-${p.posicion}`}
+            className="form-input form-select"
+            value={idiomasPackActuales[p.posicion] ?? ''}
+            onChange={e => elegirIdiomaPack(p.posicion, e.target.value)}
+          >
+            <option value="">— Sin idioma (und): falta el dato —</option>
+            {(seasonPlan?.idiomas_elegibles ?? []).map(o => <option key={o.code} value={o.code}>{o.label}</option>)}
+          </select>
+        </label>
+      ))}
+      {recalculandoIdioma && <span className="form-hint"><span className="spinner asist-spinner-10" /> Recalculando el nombre del pack…</span>}
+    </div>
+  )
+
   const seasonFieldBox = (
     <div className="asist-rejilla-campos">
       <label htmlFor={`${idCampo}-titulo`}><FieldLabel label="Título" info={FIELD_INFO.title} />
@@ -98,24 +119,7 @@ export function PasoTemporada({ a }: { a: Asistente }) {
         </label>
       )}
       <CampoTag value={fields.tag} opciones={opcionesTag} onChange={t => setField('tag', t)} />
-      {(seasonPlan?.pistas_sin_idioma?.length ?? 0) > 0 && (
-        <div className="asist-col-completa asist-pila">
-          {(seasonPlan?.pistas_sin_idioma ?? []).map(p => (
-            <label htmlFor={`${idCampo}-pista-${p.posicion}`} key={p.posicion}>
-              <FieldLabel label={etiquetaPistaSinIdioma(p.posicion, p.pista, p.capitulos)} info={FIELD_INFO.idioma_pista_pack} />
-              <select id={`${idCampo}-pista-${p.posicion}`}
-                className="form-input form-select"
-                value={idiomasPackActuales[p.posicion] ?? ''}
-                onChange={e => elegirIdiomaPack(p.posicion, e.target.value)}
-              >
-                <option value="">— Sin idioma (und): falta el dato —</option>
-                {(seasonPlan?.idiomas_elegibles ?? []).map(o => <option key={o.code} value={o.code}>{o.label}</option>)}
-              </select>
-            </label>
-          ))}
-          {recalculandoIdioma && <span className="form-hint"><span className="spinner asist-spinner-10" /> Recalculando el nombre del pack…</span>}
-        </div>
-      )}
+      {selectorIdiomas}
     </div>
   )
   const seasonDerivados = (
@@ -195,6 +199,7 @@ export function PasoTemporada({ a }: { a: Asistente }) {
         <div className="asist-bloque-error">
           <p className="text-error asist-mt-0 asist-mb-10"><IconoAviso /> {seasonPlanError}</p>
           {avisosDelPlan}
+          {selectorIdiomas}
           {(seasonPlan?.provider_conflict?.length ?? 0) > 0 && (
             // El error pide elegir un proveedor: el selector tiene que estar aquí.
             <label htmlFor={`${idCampo}-proveedor-pack`} className="asist-bloque asist-mb-10"><FieldLabel label="Proveedor" info={FIELD_INFO.provider} />

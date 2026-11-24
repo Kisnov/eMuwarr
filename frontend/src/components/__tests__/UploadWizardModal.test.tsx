@@ -648,6 +648,23 @@ describe('pack de temporada', () => {
     })
   })
 
+  it('un plan bloqueado que pasa con el idioma elegido se vuelve a pedir con él', async () => {
+    m(temporada.previewSeasonPack)
+      .mockResolvedValueOnce(plan({ status: 'blocked', errors: ['El capítulo 1 no tiene castellano.'] }))
+      .mockResolvedValueOnce(plan())
+    m(temporada.getSeasonPackAudio).mockResolvedValue({
+      audio_summary: 'Castellano DD 5.1', custom: false, audio_warning: null, pistas_sin_idioma: [],
+      idiomas_audio: { 1: 'spa' },
+    } as never)
+    await abrir(TEMPORADA, { preselect: { season: 1 } })
+    await pulsar(await esperar(() => boton('Continuar')))
+    await esperar(() => texto().includes('El capítulo 1 no tiene castellano.'))
+    await elegir(campo('Pista de audio 1'), 'spa')
+    await esperar(() => texto().includes('✓ 2 capítulo(s) listos'))
+    expect(temporada.previewSeasonPack).toHaveBeenLastCalledWith(20, undefined, { 1: 'spa' })
+    await esperar(() => !boton('Continuar')!.disabled)
+  })
+
   it('un plan bloqueado por proveedores distintos deja elegir uno y lo vuelve a pedir', async () => {
     m(temporada.previewSeasonPack)
       .mockResolvedValueOnce(plan({ status: 'blocked', errors: ['Proveedores distintos.'], provider_conflict: ['AMZN', 'NF'] }))

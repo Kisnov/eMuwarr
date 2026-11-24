@@ -28,6 +28,7 @@ _FIXTURES_COMPARTIDAS = (db_conn, pipeline)
 def _pistas_con_idioma(monkeypatch):
     """Los MKV de estos tests son de mentira: para mkvmerge, una pista de audio en castellano."""
     from emuwarez_uploadrr.services import mkv_remux
+    monkeypatch.setattr(mkv_remux, "check_mkvmerge_available", lambda: {"available": True, "path": "mkvmerge"})
     monkeypatch.setattr(mkv_remux, "read_tracks_json", lambda ruta: {"ok": True, "data": {"tracks": [
         {"id": 0, "type": "audio", "properties": {"language": "spa"}}]}})
 

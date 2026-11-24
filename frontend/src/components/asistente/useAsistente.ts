@@ -604,13 +604,14 @@ export function useAsistente({ item, onClose: onCloseProp, onDone, onNavigate, p
   // it's in flight (real work per episode — build_nomenclature_proposal()).
   // `proveedor`: el elegido a mano para salir de un plan bloqueado por
   // proveedores distintos; si no, el que ya se eligió para esta temporada.
-  const loadSeasonPlan = useCallback(async (proveedor?: string) => {
+  // `idiomas`: los recién confirmados, que el estado aún no tiene.
+  const loadSeasonPlan = useCallback(async (proveedor?: string, idiomas?: IdiomasPorPosicion) => {
     if (targetId == null) return
     if (proveedor) elegirProveedor(targetId, proveedor)
     const yaElegido = proveedorElegido.has(targetId)
     const proveedorPedido = proveedor ?? proveedorParaServidor(proveedorElegido, targetId)
     // Lo ya elegido para esta temporada (al volver a ella desde el desplegable).
-    const idiomasPedidos = idiomasPorTemporada.get(targetId)
+    const idiomasPedidos = idiomas ?? idiomasPorTemporada.get(targetId)
     const pedido = ++planPedido.current
     setSeasonPlanLoading(true); setSeasonPlanError(null)
     buildingPlanFor.current = targetId
@@ -890,6 +891,8 @@ export function useAsistente({ item, onClose: onCloseProp, onDone, onNavigate, p
       })
       setAudioWarning(null)
       detalles.olvidarPorIdioma()
+      // Un plan bloqueado puede dejar de estarlo con el idioma (la norma del castellano lo cuenta): se vuelve a pedir.
+      if (seasonPlan?.status !== 'valid') void loadSeasonPlan(undefined, idiomasDelServidor(r.idiomas_audio))
     } catch {
       if (objetivoActual.current !== id || version !== versionIdioma.current) return
       setAudioWarning('No se pudo recalcular el nombre con ese idioma; se queda lo que había. Vuelve a elegirlo.')

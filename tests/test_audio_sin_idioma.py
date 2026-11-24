@@ -20,6 +20,12 @@ def _mkv(*audio: dict) -> dict:
     ]}}
 
 
+@pytest.fixture(autouse=True)
+def _con_mkvmerge(monkeypatch):
+    """mkvmerge disponible, sin depender de la máquina: los tests que lo quieren ausente lo dicen."""
+    monkeypatch.setattr(mkv_remux, "check_mkvmerge_available", lambda: {"available": True, "path": "mkvmerge"})
+
+
 @pytest.fixture
 def pistas(monkeypatch):
     """Lo que `mkvmerge -J` devuelve para cualquier fichero: se fija con pistas(...)."""

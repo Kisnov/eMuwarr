@@ -313,6 +313,7 @@ def test_solo_con_emuwarez_la_elegibilidad_es_la_de_siempre(db_conn, tmp_path):
 def pistas_und(monkeypatch):
     """Todo fichero, a ojos de `mkvmerge -J`, con una sola pista de audio sin idioma (id 1)."""
     from emuwarez_uploadrr.services import mkv_remux
+    monkeypatch.setattr(mkv_remux, "check_mkvmerge_available", lambda: {"available": True, "path": "mkvmerge"})
     monkeypatch.setattr(mkv_remux, "read_tracks_json", lambda ruta: {"ok": True, "data": {"tracks": [
         {"id": 0, "type": "video", "properties": {}},
         {"id": 1, "type": "audio", "properties": {"language": "und"}}]}})
@@ -357,6 +358,7 @@ def test_antes_de_lanzar_manda_el_fichero_preparado(db_conn, tmp_path, monkeypat
 
 def test_antes_de_lanzar_un_mkv_que_no_se_lee_falla(db_conn, tmp_path, monkeypatch):
     from emuwarez_uploadrr.services import mkv_remux, upload_preflight
+    monkeypatch.setattr(mkv_remux, "check_mkvmerge_available", lambda: {"available": True, "path": "mkvmerge"})
     monkeypatch.setattr(mkv_remux, "read_tracks_json", lambda ruta: {"ok": False, "error": "x"})
     monkeypatch.setattr(upload_preflight, "validate_upload_preconditions", lambda *a, **k: {"ok": True, "errors": []})
     iid = _peli(db_conn, tmp_path, "spa")
