@@ -83,6 +83,13 @@ def test_el_catalogo_de_otro_tracker_va_con_su_clave_su_url_y_su_cupo(db_conn, d
     assert {k: get_state(db_conn, k) for k in marcas} == marcas
 
 
+def test_el_catalogo_de_otro_tracker_lee_la_url_de_sus_ajustes(db_conn, descargas):
+    set_setting(db_conn, "nobs.api_key", "KEY-NOBS")
+    set_setting(db_conn, "nobs.url", "https://nobs.example")
+    ec.sync_emu_catalog(db_conn, force=True, mode="full", tracker=NOBS)
+    assert descargas.llamadas[-1]["base_url"] == "https://nobs.example"
+
+
 def test_la_comparacion_lee_el_catalogo_del_tracker_pedido(db_conn, descargas):
     set_setting(db_conn, "nobs.api_key", "KEY-NOBS")
     item = _pelicula(db_conn, "7")

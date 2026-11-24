@@ -261,9 +261,10 @@ def set_emu_config(lines: list[str], api_key: Optional[str] = None, anon: Option
 
 
 def set_tracker_config(
-    lines: list[str], tracker: str, api_key: Optional[str] = None, anon: Optional[bool] = None
+    lines: list[str], tracker: str, api_key: Optional[str] = None, anon: Optional[bool] = None,
+    url: Optional[str] = None,
 ) -> str:
-    """TRACKERS.<tracker>.api_key / anon (tracker como lo nombra Uploadrr-EMU: EMU, NOBS, MNV)."""
+    """TRACKERS.<tracker>.api_key / anon / url (tracker como lo nombra Uploadrr-EMU: EMU, NOBS, MNV)."""
     trackers_start, trackers_end = find_top_block(lines, "TRACKERS")
     if trackers_start < 0:
         if lines and lines[-1].strip():
@@ -271,39 +272,26 @@ def set_tracker_config(
         lines.append("TRACKERS:")
         trackers_start = len(lines) - 1
 
+    valores = {"api_key": api_key, "anon": anon, "url": url}
     emu_start, emu_end = find_child_block(lines, "TRACKERS", tracker, indent=2)
     if emu_start < 0:
-        insert_at = trackers_start + 1
-        block = [f"  {tracker}:"]
-        if api_key is not None:
-            block.append(f"    api_key: {yaml_scalar(api_key)}")
-        block.append(f"    anon: {yaml_scalar(False if anon is None else anon)}")
-        lines[insert_at:insert_at] = block
+        valores["anon"] = False if anon is None else anon
+        block = [f"  {tracker}:"] + [f"    {k}: {yaml_scalar(v)}" for k, v in valores.items() if v is not None]
+        lines[trackers_start + 1:trackers_start + 1] = block
         return f"TRACKERS.{tracker} creado"
 
     changed = False
-    if api_key is not None:
-        rendered = f"    api_key: {yaml_scalar(api_key)}"
+    for clave, valor in valores.items():
+        if valor is None:
+            continue
+        rendered = f"    {clave}: {yaml_scalar(valor)}"
         for i in range(emu_start + 1, emu_end):
-            if re.match(r"^\s{4}api_key\s*:", lines[i]):
+            if re.match(rf"^\s{{4}}{clave}\s*:", lines[i]):
                 lines[i] = rendered
-                changed = True
                 break
-        if not changed:
+        else:
             lines.insert(emu_start + 1, rendered)
             emu_end += 1
-            changed = True
-
-    if anon is not None:
-        rendered = f"    anon: {yaml_scalar(anon)}"
-        replaced = False
-        for i in range(emu_start + 1, emu_end):
-            if re.match(r"^\s{4}anon\s*:", lines[i]):
-                lines[i] = rendered
-                replaced = True
-                break
-        if not replaced:
-            lines.insert(emu_start + 1, rendered)
         changed = True
 
     return f"TRACKERS.{tracker} actualizado" if changed else f"TRACKERS.{tracker} sin cambios"

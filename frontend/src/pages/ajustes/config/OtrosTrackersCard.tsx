@@ -1,6 +1,6 @@
 import { Campo, EstadoSecreto } from '../Campo'
 import { CabeceraTarjeta } from '../CabeceraTarjeta'
-import type { ConfigForm } from './useConfigForm'
+import { alternar, OTROS_TRACKERS, type ConfigForm } from './useConfigForm'
 
 // Las claves de los otros trackers (fase B del plan multitracker). Opcionales: sin clave no se sube a ese tracker.
 // No se prueban al guardar; una clave mala sale en el registro de la primera subida.
@@ -41,22 +41,72 @@ function ClaveTracker({ nombre, configurado, enmascarado, valor, setValor, quita
   )
 }
 
+// Personal release / Anónimo de cada grupo en este tracker: los de eMuwarez hasta que se marcan aparte.
+function MarcasTracker({ id, nombre, form }: { id: string; nombre: string; form: ConfigForm }) {
+  const { tags, gruposPR, gruposAnon, marcasTrackers, setMarcasTrackers } = form
+  const marcas = marcasTrackers[id] ?? null
+  const poner = (m: typeof marcas) => setMarcasTrackers(t => ({ ...t, [id]: m }))
+  return (
+    <div className="form-group aj-campo">
+      <span className="form-label aj-campo__etiqueta">Marcas de los grupos</span>
+      <label className="checkbox-label aj-fs-13">
+        <input type="checkbox" checked={!marcas}
+          onChange={e => poner(e.target.checked ? null : { personal_release: gruposPR, anonimos: gruposAnon })} />
+        Las mismas que en eMuwarez
+      </label>
+      {marcas && (
+        <ul className="aj-grupos" aria-label={`Marcas de los grupos en ${nombre}`}>
+          {tags.map(t => (
+            <li key={t} className="aj-grupos__fila">
+              <span className="aj-grupos__nombre">{t}</span>
+              <label className="aj-grupos__marca">
+                <input type="checkbox" checked={marcas.personal_release.includes(t)}
+                  onChange={e => poner({ ...marcas, personal_release: alternar(marcas.personal_release, t, e.target.checked) })} />
+                Personal release
+              </label>
+              <label className="aj-grupos__marca">
+                <input type="checkbox" checked={marcas.anonimos.includes(t)}
+                  onChange={e => poner({ ...marcas, anonimos: alternar(marcas.anonimos, t, e.target.checked) })} />
+                Anónimo
+              </label>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  )
+}
+
 export function OtrosTrackersCard({ form }: { form: ConfigForm }) {
   const {
     settings, newNobsKey, setNewNobsKey, newMnvKey, setNewMnvKey, quitarNobs, setQuitarNobs, quitarMnv, setQuitarMnv,
+    urlsTrackers, setUrlsTrackers,
   } = form
+  const claves = {
+    nobs: { configurado: settings?.nobs_api_key_configured, enmascarado: settings?.nobs_api_key_masked, valor: newNobsKey,
+      setValor: setNewNobsKey, quitar: quitarNobs, setQuitar: setQuitarNobs },
+    mnv: { configurado: settings?.mnv_api_key_configured, enmascarado: settings?.mnv_api_key_masked, valor: newMnvKey,
+      setValor: setNewMnvKey, quitar: quitarMnv, setQuitar: setQuitarMnv },
+  }
   return (
     <div className="placeholder-card">
       <CabeceraTarjeta
         titulo="Otros trackers"
         descripcion="Para subir también a N.O.B.S y a Milnueve, con el mismo fichero que en eMuwarez. Con su clave puesta, el Resumen del asistente y el de «Subir por lotes» dejan elegirlos (una subida por tracker)."
       />
-      <ClaveTracker nombre="N.O.B.S" configurado={settings?.nobs_api_key_configured}
-        enmascarado={settings?.nobs_api_key_masked} valor={newNobsKey} setValor={setNewNobsKey}
-        quitar={quitarNobs} setQuitar={setQuitarNobs} />
-      <ClaveTracker nombre="Milnueve" configurado={settings?.mnv_api_key_configured}
-        enmascarado={settings?.mnv_api_key_masked} valor={newMnvKey} setValor={setNewMnvKey}
-        quitar={quitarMnv} setQuitar={setQuitarMnv} />
+      {OTROS_TRACKERS.map(({ id, nombre }) => (
+        <fieldset key={id} className="aj-grupo-eventos">
+          <legend className="aj-titulo-grupo">{nombre}</legend>
+          <ClaveTracker nombre={nombre} {...claves[id]} />
+          <Campo etiqueta="URL" ayuda="Vacía, la de siempre. Solo si el tracker cambia de dirección.">
+            {c => (
+              <input {...c} type="url" className="form-input" value={urlsTrackers[id] ?? ''}
+                onChange={e => setUrlsTrackers(u => ({ ...u, [id]: e.target.value }))} placeholder={`URL de ${nombre}`} />
+            )}
+          </Campo>
+          <MarcasTracker id={id} nombre={nombre} form={form} />
+        </fieldset>
+      ))}
     </div>
   )
 }
