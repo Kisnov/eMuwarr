@@ -550,8 +550,12 @@ class DashboardRecommendationsResponse(BaseModel):
 
 
 class EmuPerfilResponse(BaseModel):
-    """Tu cuenta de eMuwarez: los campos de /api/user de UNIT3D tal cual (subido, ratio... ya vienen formateados)."""
+    """Tu cuenta de eMuwarez: los campos de /api/user de UNIT3D tal cual (subido, ratio... ya vienen formateados). En
+    `otros`, la de cada otro tracker con clave."""
     configured: bool = False
+    tracker: str = "emu"
+    nombre: str = "eMuwarez"
+    url: Optional[str] = None
     username: Optional[str] = None
     group: Optional[str] = None
     uploaded: Optional[str] = None
@@ -564,6 +568,7 @@ class EmuPerfilResponse(BaseModel):
     hit_and_runs: Optional[int] = None
     updated_at: Optional[str] = None
     error: Optional[str] = None
+    otros: list["EmuPerfilResponse"] = []
 
 
 class PuntoCuentaResponse(BaseModel):
@@ -648,8 +653,9 @@ class TotalesMisTorrentsResponse(BaseModel):
 
 
 class MisTorrentsResponse(BaseModel):
-    """Tus subidas en eMuwarez (las no anónimas); `leido_at` es None si aún no se han leído nunca."""
+    """Tus subidas en un tracker (las no anónimas); `leido_at` es None si aún no se han leído nunca."""
     leido_at: Optional[str] = None
+    url: str
     torrents: list[MiTorrentResponse]
     totales: TotalesMisTorrentsResponse
 

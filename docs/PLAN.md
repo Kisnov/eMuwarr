@@ -54,7 +54,11 @@ descripción y el cliente.
        mejor se salta solo para ese (en el lote, si lo tienen todos llega desmarcado y marcarlo a mano lo sube a
        todos), y un tracker sin catálogo leído no frena nada, solo se avisa. Biblioteca no: su chip y su filtro salen
        de `emu_in_catalog`, una columna de eMuwarez, y decir lo de los otros pediría una columna por tracker.
-     - Queda: que las sincronizaciones de peticiones, «Tus subidas» y el perfil reciban el tracker como parámetro;
+     - «Tus subidas» y el perfil también leen cada tracker con clave, con su clave y su cupo: Estadísticas tiene unas
+       «Tus subidas» por tracker y un selector para la evolución de la cuenta, el Panel una franja por tracker, y la
+       moderación de una subida sale de la lectura de su tracker. Los avisos de la cuenta y los objetivos siguen
+       siendo de eMuwarez.
+     - Queda: que la sincronización de peticiones reciba el tracker como parámetro;
        y la URL de eMuwarez en Configuración (la de N.O.B.S y Milnueve ya se cambia, y la usan la subida y el catálogo
        con `trackers.url_de`; la de eMuwarez es `EMU_BASE_URL`).
   2. **Fase B: NOBS (nobs.rawsmoke.net) y Milnueve (tracker.milnueve.cc).** Los dos son UNIT3D y ya se sube a ellos con

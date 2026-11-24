@@ -37,7 +37,7 @@ def _subida(conn, *, estado="completed", ficha="https://emu-warez.com/torrents/3
 def llamadas(monkeypatch):
     hechas: list[tuple] = []
 
-    def falso(api_key, torrent_id, base_url=None):
+    def falso(api_key, torrent_id, base_url=None, **kw):
         hechas.append((api_key, torrent_id))
         return dict(TORRENTE["attributes"])
 
@@ -110,7 +110,7 @@ def test_sin_clave_dice_que_falta_y_no_llama(conn, llamadas):
 def test_un_fallo_del_tracker_no_es_un_error_y_se_recuerda_poco(conn, monkeypatch):
     intentos = []
 
-    def falla(api_key, torrent_id, base_url=None):
+    def falla(api_key, torrent_id, base_url=None, **kw):
         intentos.append(1)
         raise IntegrationError("eMuwarez no responde")
 
@@ -138,10 +138,28 @@ def test_el_endpoint_da_404_sin_ficha_y_200_con_ella(client, auth_headers, conn,
 
 def test_un_404_es_que_eMuwarez_aun_no_la_ensena(conn, monkeypatch):
     """Pendiente de moderación: eMuwarez no la da hasta que la aprueban. No es un fallo del tracker."""
-    def no_esta(api_key, torrent_id, base_url=None):
+    def no_esta(api_key, torrent_id, base_url=None, **kw):
         raise IntegrationError("eMuwarez: HTTP 404", status=404)
 
     monkeypatch.setattr(ets, "emu_get_torrent", no_esta)
     datos = estadisticas_de_la_subida(conn, _subida(conn))
     assert datos["aplica"] and not datos["disponible"] and datos["pendiente_moderacion"] is True
     assert "pendiente de moderación" in datos["mensaje"] and "404" not in datos["mensaje"]
+
+
+def test_una_subida_a_otro_tracker_se_pide_a_ese_tracker_con_su_clave(conn, monkeypatch):
+    pedidos = []
+
+    def falso(api_key, torrent_id, base_url=None, **kw):
+        pedidos.append((api_key, torrent_id, base_url, kw["tracker"]))
+        return dict(TORRENTE["attributes"])
+
+    monkeypatch.setattr(ets, "emu_get_torrent", falso)
+    job = conn.execute("INSERT INTO upload_jobs (title, path, status, result_tracker, tracker) "
+                       "VALUES ('Peli', '/x', 'completed', 'https://nobs.rawsmoke.net/torrents/55', 'nobs')").lastrowid
+    conn.commit()
+    assert estadisticas_de_la_subida(conn, job)["mensaje"] == "Falta la API key de N.O.B.S en Configuración."
+    set_setting(conn, "nobs.api_key", "clave-nobs")
+    conn.commit()
+    assert estadisticas_de_la_subida(conn, job)["disponible"] is True
+    assert pedidos == [("clave-nobs", 55, "https://nobs.rawsmoke.net", "NOBS")]
