@@ -256,11 +256,11 @@ def stage_emu_config(
     return staged, message
 
 
-def stage_tracker_config(lines: list[str], tracker: str, *, api_key: str) -> tuple[list[str], str]:
-    """TRACKERS.<tracker> de otro tracker (NOBS, MNV) con su clave y `anon: false`: como en EMU, solo el flag `-a` de la
-    subida la hace anónima."""
+def stage_tracker_config(lines: list[str], tracker: str, *, api_key: str, url: str) -> tuple[list[str], str]:
+    """TRACKERS.<tracker> de otro tracker (NOBS, MNV) con su clave, su URL y `anon: false`: como en EMU, solo el flag
+    `-a` de la subida la hace anónima."""
     staged = list(lines)
-    message = set_tracker_config(staged, tracker, api_key=api_key, anon=False)
+    message = set_tracker_config(staged, tracker, api_key=api_key, anon=False, url=url)
     return staged, message
 
 

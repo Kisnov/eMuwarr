@@ -5,6 +5,10 @@ torrent catalog, index it, and for every movie/season in the local library work
 out whether it's already on eMuwarez and, if so, what your copy would *add*
 (resolution / source / a more efficient codec / Spanish audio it lacks).
 
+Each run also downloads the catalog of every other tracker with a key (N.O.B.S, Milnueve), one after another, into
+the same table under its `tracker`: the library columns (`emu_in_catalog`, `emu_aportes`) stay eMuwarez's, and
+"is it already on X" is read from the table by tracker (filas_del_catalogo, get_item_comparison).
+
 eMuwarez has no language field, so "has Spanish" is parsed from the torrent name
 (same nomenclature the tracker uses). Language comparison is deliberately
 conservative — see _compute_aportes.
@@ -26,7 +30,7 @@ from ..integrations.base import IntegrationError, texto_de_error
 from .tasks import start_task, finish_task
 from .upload_states import ACTIVE_JOB_STATUSES
 from .eventos import EVENTO_SYNC_EMPEZADA, EVENTO_SYNC_TERMINADA, publicar
-from .trackers import EMU
+from .trackers import EMU, TRACKERS, Tracker, tiene_clave, url_de
 from .settings import ajuste_de_tracker
 
 logger = logging.getLogger("emuwarez.emu")
@@ -57,6 +61,11 @@ MIN_FULL_SYNC_SECONDS = 86400  # full re-download: 1/day
 # Una descarga completa que trae menos que esto de lo que se esperaba no sustituye al catálogo guardado.
 MIN_CATALOG_VS_TOTAL = 0.98     # contra el meta.total de eMuwarez, si lo manda
 MIN_CATALOG_VS_PREVIOUS = 0.90  # contra lo que había, si no
+
+
+def _clave(base: str, tracker: Tracker) -> str:
+    """La clave de estado del catálogo de `tracker`: la de siempre para eMuwarez, con su id detrás para los demás."""
+    return base if tracker is EMU else f"{base}.{tracker.id}"
 
 # --- Parsing -----------------------------------------------------------------
 
@@ -126,8 +135,12 @@ def _row_seasons(row: dict) -> list[int]:
     return _parse_seasons(row["name"]) or ([row["season_number"]] if row["season_number"] is not None else [])
 
 
+# Las categorías de series de eMuwarez, N.O.B.S y Milnueve (docs/trackers-ids.md); «Anime en Catalan» lleva las dos.
+_CATEGORIAS_SERIE = frozenset({"Series", "TV", "Anime TV Shows", "Series Anime", "Series latino"})
+
+
 def _is_series(row: dict) -> bool:
-    return row["category"] == "Series" or bool(_row_seasons(row))
+    return row["category"] in _CATEGORIAS_SERIE or bool(_row_seasons(row))
 
 
 # --- Throttle ----------------------------------------------------------------
@@ -206,27 +219,27 @@ _INSERT_CATALOG_SQL = (
 )
 
 
-def _sin_repetidos(rows: list[dict]) -> list[dict]:
-    """Una fila por torrent: si eMuwarez recibe una subida mientras se pagina, la lista se desplaza y el último torrent
-    de una página vuelve a salir en la siguiente (contaba dos veces en los aportes). Cada fila sale ya con su tracker:
-    este catálogo es el de eMuwarez."""
-    return [{**r, "tracker": EMU.id} for r in {r["torrent_id"]: r for r in rows}.values()]
+def _sin_repetidos(rows: list[dict], tracker: Tracker = EMU) -> list[dict]:
+    """Una fila por torrent: si el tracker recibe una subida mientras se pagina, la lista se desplaza y el último
+    torrent de una página vuelve a salir en la siguiente (contaba dos veces en los aportes). Cada fila sale ya con su
+    tracker."""
+    return [{**r, "tracker": tracker.id} for r in {r["torrent_id"]: r for r in rows}.values()]
 
 
-def _store_catalog(conn: sqlite3.Connection, rows: list[dict]) -> None:
+def _store_catalog(conn: sqlite3.Connection, rows: list[dict], tracker: Tracker = EMU) -> None:
     """Full replace — used on the first (complete) download."""
-    conn.execute("DELETE FROM emu_catalog WHERE tracker = ?", (EMU.id,))
-    conn.executemany(_INSERT_CATALOG_SQL, _sin_repetidos(rows))
+    conn.execute("DELETE FROM emu_catalog WHERE tracker = ?", (tracker.id,))
+    conn.executemany(_INSERT_CATALOG_SQL, _sin_repetidos(rows, tracker))
     conn.commit()
 
 
-def _append_catalog(conn: sqlite3.Connection, rows: list[dict]) -> None:
+def _append_catalog(conn: sqlite3.Connection, rows: list[dict], tracker: Tracker = EMU) -> None:
     """Incremental — add newly-uploaded torrents without dropping the rest. Los que ya estaban (una lectura anterior
     que se cortó antes de apuntar hasta dónde llegó) se sustituyen."""
-    rows = _sin_repetidos(rows)
+    rows = _sin_repetidos(rows, tracker)
     if rows:
         conn.executemany("DELETE FROM emu_catalog WHERE tracker = ? AND torrent_id = ?",
-                         [(EMU.id, r["torrent_id"]) for r in rows])
+                         [(tracker.id, r["torrent_id"]) for r in rows])
         conn.executemany(_INSERT_CATALOG_SQL, rows)
         conn.commit()
 
@@ -576,33 +589,33 @@ def _series_ids(conn: sqlite3.Connection, series_id: Optional[int]) -> tuple[Opt
     return (row["tvdb_id"], row["tmdb_id"]) if row else (None, None)
 
 
-def _series_rows(conn: sqlite3.Connection, tvdb, tmdb) -> list[dict]:
+def _series_rows(conn: sqlite3.Connection, tvdb, tmdb, tracker: Tracker = EMU) -> list[dict]:
     """Los torrents de series con ese tvdb o ese tmdb: el mismo criterio que _compute_and_store_item_status."""
     ids = [(col, str(v)) for col, v in (("tvdb_id", tvdb), ("tmdb_id", tmdb)) if v]
     if not ids:
         return []
     rows = conn.execute("SELECT * FROM emu_catalog WHERE tracker = ? AND ("
                         + " OR ".join(f"{col} = ?" for col, _ in ids) + ")",
-                        [EMU.id, *(v for _, v in ids)]).fetchall()
+                        [tracker.id, *(v for _, v in ids)]).fetchall()
     return [r for r in map(dict, rows) if _is_series(r)]
 
 
-def filas_del_catalogo(conn: sqlite3.Connection, item: dict) -> list[dict]:
-    """Los torrents de eMuwarez de una película, temporada, capítulo o serie de la biblioteca."""
+def filas_del_catalogo(conn: sqlite3.Connection, item: dict, tracker: Tracker = EMU) -> list[dict]:
+    """Los torrents de `tracker` de una película, temporada, capítulo o serie de la biblioteca."""
     kind = item["item_type"]
     if kind == "movie":
         if not item["tmdb_id"]:
             return []
         rows = conn.execute("SELECT * FROM emu_catalog WHERE tracker = ? AND tmdb_id = ?",
-                            (EMU.id, str(item["tmdb_id"]))).fetchall()
+                            (tracker.id, str(item["tmdb_id"]))).fetchall()
         return [r for r in map(dict, rows) if not _is_series(r)]
     if kind == "series":
-        return _series_rows(conn, item["tvdb_id"], item["tmdb_id"])
+        return _series_rows(conn, item["tvdb_id"], item["tmdb_id"], tracker)
     if kind == "season":
         if item["season_number"] is None:
             return []
         tvdb, tmdb = _series_ids(conn, item["parent_id"])
-        return [r for r in _series_rows(conn, tvdb, tmdb) if item["season_number"] in _row_seasons(r)]
+        return [r for r in _series_rows(conn, tvdb, tmdb, tracker) if item["season_number"] in _row_seasons(r)]
     if kind == "episode":
         # Series → temporada → capítulo: el tvdb/tmdb salen de la serie y el capítulo se reconoce por su SxxExx.
         season = conn.execute("SELECT parent_id FROM library_items WHERE id = ?", (item["parent_id"],)).fetchone()
@@ -610,7 +623,7 @@ def filas_del_catalogo(conn: sqlite3.Connection, item: dict) -> list[dict]:
         season_n, ep_n = item["season_number"], item["episode_number"]
         if season_n is None or ep_n is None:
             return []
-        return [r for r in _series_rows(conn, tvdb, tmdb)
+        return [r for r in _series_rows(conn, tvdb, tmdb, tracker)
                 if season_n in _row_seasons(r) and _parse_episode_number(r["name"]) == ep_n]
     return []
 
@@ -641,11 +654,11 @@ def catalogo_cubre(conn: sqlite3.Connection, item_id: int, resolucion: Optional[
 # --- Per-item comparison detail (for the detail card) ------------------------
 
 def get_item_comparison(conn: sqlite3.Connection, item_id: int, *,
-                        resolution: Optional[str] = None, source: Optional[str] = None) -> dict:
-    """Your copy vs every eMuwarez torrent that matches this movie/season, for
+                        resolution: Optional[str] = None, source: Optional[str] = None, tracker: Tracker = EMU) -> dict:
+    """Your copy vs every `tracker` torrent that matches this movie/season, for
     the detail-card comparison table. Movies match by tmdb_id, seasons by
     (series tvdb_id, season_number). `resolution` y `source`, si vienen, sustituyen a los de tu copia: son los
-    que el asistente de subida va a poner en el nombre."""
+    que el asistente de subida va a poner en el nombre. `synced_at`: cuándo acabó la última lectura de su catálogo."""
     item = conn.execute("SELECT * FROM library_items WHERE id = ?", (item_id,)).fetchone()
     if not item:
         return {"available": False, "message": "Elemento no encontrado", "matches": []}
@@ -659,10 +672,14 @@ def get_item_comparison(conn: sqlite3.Connection, item_id: int, *,
     # attempt-started throttle timestamp), so a never-finished sync (stuck,
     # crashed, or still running) reads as "not yet synced" instead of
     # confidently claiming "contenido único" for every single item.
-    if not get_state(conn, SYNC_COMPLETED_STATE_KEY):
-        return {"available": False, "message": "Sincroniza con eMuwarez para ver la comparación.", "matches": []}
+    synced_at = get_state(conn, _clave(SYNC_COMPLETED_STATE_KEY, tracker))
+    if not synced_at:
+        mensaje = ("Sincroniza con eMuwarez para ver la comparación." if tracker is EMU
+                   else f"El catálogo de {tracker.nombre} se lee al sincronizar el de eMuwarez.")
+        return {"available": False, "message": mensaje, "matches": []}
 
-    rows = filas_del_catalogo(conn, item)
+
+    rows = filas_del_catalogo(conn, item, tracker)
     if itype == "movie":
         mine = {"resolution": item["resolution"], "source": item["source"],
                 "codec": _norm_codec(item["video_codec"] or "") or item["video_codec"],
@@ -688,9 +705,10 @@ def get_item_comparison(conn: sqlite3.Connection, item_id: int, *,
                 "release_groups": [item["release_group"]] if item["release_group"] else []}
     else:
         # Series is a rollup (drill into its seasons).
+        # El resumen de una serie solo lo hay de eMuwarez (sus columnas de la biblioteca).
         return {"available": False, "message": "La comparación es a nivel de película, temporada o capítulo",
-                "matches": [], "in_catalog": item.get("emu_in_catalog"),
-                "aportes": _safe_json(item.get("emu_aportes"))}
+                "matches": [], **({"in_catalog": item.get("emu_in_catalog"),
+                                   "aportes": _safe_json(item.get("emu_aportes"))} if tracker is EMU else {})}
 
     if resolution:
         mine["resolution"] = resolution
@@ -706,6 +724,7 @@ def get_item_comparison(conn: sqlite3.Connection, item_id: int, *,
     result = {
         "available": True,
         "message": None,
+        "synced_at": synced_at,
         "mine": mine,
         # Whether you actually have the file on disk. For a "Faltante" item there
         # is no local copy, so the "Tu copia" comparison would be meaningless.
@@ -744,8 +763,9 @@ def _safe_json(raw):
 # doing. Single-process app → an in-memory dict is enough (the sync is on-demand,
 # 1/hour). Polled via GET /library/emu-sync-progress.
 _SYNC_LOCK = threading.Lock()
+# `error_otros`: lo que falló al leer el catálogo de otro tracker (lo de eMuwarez vale igual).
 _SYNC_PROGRESS: dict = {"active": False, "done": False, "phase": "", "torrents": 0, "items": 0,
-                        "page": 0, "total_pages": None, "eta_seconds": None, "error": None}
+                        "page": 0, "total_pages": None, "eta_seconds": None, "error": None, "error_otros": None}
 
 
 def get_sync_progress() -> dict:
@@ -804,14 +824,16 @@ def start_emu_sync_background(force: bool = False, mode: str = "incremental") ->
         conn.commit()
     finally:
         conn.close()
-    _set_progress(active=True, done=False, error=None, phase="Iniciando…", torrents=0, items=0,
+    _set_progress(active=True, done=False, error=None, error_otros=None, phase="Iniciando…", torrents=0, items=0,
                   page=0, total_pages=None, eta_seconds=None)
     publicar(EVENTO_SYNC_EMPEZADA, {"que": "catalogo"})
 
     def _run() -> None:
         c = connect(db_path())
+        torrents_emu = 0
         try:
             sync_emu_catalog(c, force=True, mode=mode)  # throttle already recorded above
+            torrents_emu = get_sync_progress()["torrents"]
         except Exception as exc:  # noqa: BLE001 — surface the error to the card
             _set_progress(error=texto_de_error(exc), phase="Error")
             # A failed sync shouldn't lock you out — restore the previous
@@ -825,9 +847,19 @@ def start_emu_sync_background(force: bool = False, mode: str = "incremental") ->
                 cc.close()
             except Exception:  # noqa: BLE001
                 pass
+        try:
+            # Luego cada otro tracker con clave, de uno en uno: cada uno gasta su propio cupo de la API.
+            fallos: list[str] = []
+            for tracker in (t for t in TRACKERS.values() if t is not EMU and tiene_clave(c, t)):
+                try:
+                    sync_emu_catalog(c, force=True, mode=mode, tracker=tracker)
+                except Exception as exc:  # noqa: BLE001 — su fallo no deshace lo de eMuwarez
+                    fallos.append(f"{tracker.nombre}: {texto_de_error(exc)}")
+                    _set_progress(error_otros="; ".join(fallos))
         finally:
             c.close()
-            _set_progress(active=False, done=True)
+            # El aviso del final cuenta los torrents de eMuwarez, no los del último tracker.
+            _set_progress(active=False, done=True, torrents=torrents_emu)
             # Aquí termina la sincronización del catálogo, salga bien o mal.
             publicar(EVENTO_SYNC_TERMINADA, {"que": "catalogo"})
 
@@ -868,8 +900,9 @@ def _notify_if_unique_content_changed(conn: sqlite3.Connection) -> None:
         logger.exception("No se pudo emitir la notificación de contenido único")
 
 
-def sync_emu_catalog(conn: sqlite3.Connection, *, force: bool = False, mode: str = "incremental") -> dict:
-    """Download the eMuwarez catalog and recompute per-item status. 1/hour.
+def sync_emu_catalog(conn: sqlite3.Connection, *, force: bool = False, mode: str = "incremental",
+                     tracker: Tracker = EMU) -> dict:
+    """Download `tracker`'s catalog (eMuwarez by default) and, for eMuwarez, recompute per-item status. 1/hour.
 
     mode="full" re-downloads the whole catalog and replaces it (reconciles
     torrents deleted on the tracker); mode="incremental" only fetches torrents
@@ -879,27 +912,30 @@ def sync_emu_catalog(conn: sqlite3.Connection, *, force: bool = False, mode: str
     if wait > 0 and not force:
         return {"status": "throttled", "wait_seconds": wait, "torrents": 0, "items": 0}
 
-    task_id = start_task(conn, "sync-emu-catalog", f"Sincronizando catálogo eMuwarez ({'completo' if mode == 'full' else 'nuevo'})")
+    nombre = tracker.nombre
+    task_id = start_task(conn, "sync-emu-catalog", f"Sincronizando catálogo {nombre} ({'completo' if mode == 'full' else 'nuevo'})")
     try:
-        api_key = ajuste_de_tracker(conn, "api_key")
+        api_key = ajuste_de_tracker(conn, "api_key", tracker.id)
         if not api_key:
-            raise IntegrationError("No hay API key de eMuwarez configurada")
+            raise IntegrationError(f"No hay API key de {nombre} configurada")
+        url = url_de(conn, tracker)
 
         # Fail fast (and clearly) if eMuwarez itself is unreachable, instead of only
         # discovering it mid-download — this is a single cheap request (perPage=1)
         # bound by request_json's own timeout, so a down/unreachable tracker surfaces
         # as an error within seconds rather than the sync silently hanging.
-        _set_progress(phase="Comprobando conexión con eMuwarez…", page=0, total_pages=None, eta_seconds=None)
+        _set_progress(phase=f"Comprobando conexión con {nombre}…", page=0, total_pages=None, eta_seconds=None)
         try:
-            emu.emu_test_connection(api_key, interactiva=False)  # primer paso del recorrido: espera su turno
+            # primer paso del recorrido: espera su turno
+            emu.emu_test_connection(api_key, url, interactiva=False, tracker=tracker.uploadrr)
         except IntegrationError as exc:
-            raise IntegrationError(f"No se pudo conectar con eMuwarez: {texto_de_error(exc)}") from exc
+            raise IntegrationError(f"No se pudo conectar con {nombre}: {texto_de_error(exc)}") from exc
 
         import time
         # Incremental: only fetch torrents newer than the highest id we already have.
         # First sync ever (no stored max) → full download.
         try:
-            known_max_id = int(get_state(conn, MAX_ID_STATE_KEY) or 0)
+            known_max_id = int(get_state(conn, _clave(MAX_ID_STATE_KEY, tracker)) or 0)
         except (TypeError, ValueError):
             known_max_id = 0
         # Incremental unless a full pass is requested (or there's no baseline yet).
@@ -907,18 +943,18 @@ def sync_emu_catalog(conn: sqlite3.Connection, *, force: bool = False, mode: str
         # Estimate the page total (the API doesn't send last_page): a full pass is
         # ~ceil(previous_count / 100). Only meaningful for a full re-download.
         try:
-            prev_count = int(get_state(conn, COUNT_STATE_KEY) or 0)
+            prev_count = int(get_state(conn, _clave(COUNT_STATE_KEY, tracker)) or 0)
         except (TypeError, ValueError):
             prev_count = 0
         if not prev_count:
             # Fall back to whatever is already stored (e.g. a catalog downloaded
             # before this bookkeeping existed) so the first full bar has an estimate.
             prev_count = int(conn.execute("SELECT COUNT(*) AS n FROM emu_catalog WHERE tracker = ?",
-                                          (EMU.id,)).fetchone()["n"])
+                                          (tracker.id,)).fetchone()["n"])
         est_full_pages = ((prev_count + 99) // 100) if (prev_count and not incremental) else None
 
-        phase_label = "Buscando torrents nuevos en eMuwarez…" if incremental else "Descargando catálogo de eMuwarez…"
-        logger.info("Sincronización de eMuwarez iniciada (modo %s)", "incremental" if incremental else "completo")
+        phase_label = f"Buscando torrents nuevos en {nombre}…" if incremental else f"Descargando catálogo de {nombre}…"
+        logger.info("Sincronización de %s iniciada (modo %s)", nombre, "incremental" if incremental else "completo")
         _set_progress(phase=phase_label, page=0, total_pages=None, eta_seconds=None)
         _dl_start = time.time()
         reported_total: dict[str, Optional[int]] = {"n": None}
@@ -934,42 +970,47 @@ def sync_emu_catalog(conn: sqlite3.Connection, *, force: bool = False, mode: str
                           total_pages=tp, torrents=items_so_far, eta_seconds=eta)
 
         torrents = emu.emu_fetch_all_torrents(
-            api_key, progress=_on_page,
-            stop_after_id=known_max_id if incremental else None,
+            api_key, url, progress=_on_page,
+            stop_after_id=known_max_id if incremental else None, tracker=tracker.uploadrr,
         )
         rows = _index_catalog(torrents)
 
         if incremental:
             _set_progress(phase="Guardando torrents nuevos…", torrents=len(rows), eta_seconds=None)
-            _append_catalog(conn, rows)
+            _append_catalog(conn, rows, tracker)
         else:
             _check_catalog_complete(rows, reported_total["n"], prev_count)
             _set_progress(phase="Guardando catálogo…", torrents=len(rows), eta_seconds=None)
-            _store_catalog(conn, rows)
+            _store_catalog(conn, rows, tracker)
 
         # Track the highest id + total count for the next incremental / estimate.
         new_max_id = max(known_max_id, _max_torrent_id(rows))
         total_now = int(conn.execute("SELECT COUNT(*) AS n FROM emu_catalog WHERE tracker = ?",
-                                      (EMU.id,)).fetchone()["n"])
+                                      (tracker.id,)).fetchone()["n"])
         if new_max_id > 0:
-            set_state(conn, MAX_ID_STATE_KEY, str(new_max_id))
-        set_state(conn, COUNT_STATE_KEY, str(total_now))
+            set_state(conn, _clave(MAX_ID_STATE_KEY, tracker), str(new_max_id))
+        set_state(conn, _clave(COUNT_STATE_KEY, tracker), str(total_now))
 
-        _set_progress(phase="Calculando comparaciones con tu biblioteca…")
-        items = _compute_and_store_item_status(conn)
-        _set_progress(phase="Listo", items=items)
+        items = 0
+        if tracker is EMU:  # las columnas de la biblioteca son las de eMuwarez
+            _set_progress(phase="Calculando comparaciones con tu biblioteca…")
+            items = _compute_and_store_item_status(conn)
+            _set_progress(items=items)
+        _set_progress(phase="Listo")
         now_iso = _utcnow().isoformat()
-        set_state(conn, SYNC_STATE_KEY, now_iso)
-        set_state(conn, SYNC_COMPLETED_STATE_KEY, now_iso)
-        if not incremental:  # a full pass also refreshes the 1/day full throttle
-            set_state(conn, FULL_SYNC_STATE_KEY, now_iso)
-        _notify_if_unique_content_changed(conn)
+        set_state(conn, _clave(SYNC_COMPLETED_STATE_KEY, tracker), now_iso)
+        if tracker is EMU:  # los límites de 1/hora y 1/día son los de la tanda entera, que empieza por eMuwarez
+            set_state(conn, SYNC_STATE_KEY, now_iso)
+            if not incremental:  # a full pass also refreshes the 1/day full throttle
+                set_state(conn, FULL_SYNC_STATE_KEY, now_iso)
+            _notify_if_unique_content_changed(conn)
         conn.commit()
-        summary = f"{len(rows)} torrents {'nuevos' if incremental else 'descargados'}, {total_now} en catálogo, {items} elementos comparados"
+        summary = f"{len(rows)} torrents {'nuevos' if incremental else 'descargados'}, {total_now} en catálogo"
+        if tracker is EMU:
+            summary += f", {items} elementos comparados"
         finish_task(conn, task_id, "completed", summary)
-        logger.info("Sincronización de eMuwarez terminada (%s): %d torrents %s, %d en catálogo, %d elementos comparados",
-                    "incremental" if incremental else "completo", len(rows),
-                    "nuevos" if incremental else "descargados", total_now, items)
+        logger.info("Sincronización de %s terminada (%s): %s", nombre, "incremental" if incremental else "completo",
+                    summary)
         return {"status": "ok", "torrents": len(rows), "items": items, "incremental": incremental}
     except Exception as exc:
         finish_task(conn, task_id, "failed", texto_de_error(exc))

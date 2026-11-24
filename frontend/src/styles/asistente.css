@@ -413,6 +413,7 @@
 
 /* Paso Resumen: dos paneles (lo que se sube, lo que ya hay) que pasan a una columna si no caben. */
 .asist-resumen { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(320px, 100%), 1fr)); gap: 12px; }
+.asist-resumen-yahay { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
 .detail-card.asist-panel { padding: 12px 14px; border-radius: var(--radius-card); min-width: 0; }
 .asist-panel-titulo { margin: 0 0 8px; font-size: 13px; font-weight: 600; color: var(--text-secondary); }
 .asist-nombre-torrent {

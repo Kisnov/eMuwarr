@@ -39,9 +39,17 @@ descripción y el cliente.
        `settings.ajuste_de_tracker` (para eMuwarez, `emu.<nombre>`), nunca con la clave escrita a mano.
      - La cola, Peticiones y el Panel dicen de qué tracker es cada fila con un chip (`ChipTracker`), solo si no es
        eMuwarez: quien solo usa eMuwarez no ve nada nuevo.
-     - Queda: que esas sincronizaciones reciban el tracker como parámetro cuando haya un segundo adaptador, la
-       comparación con el catálogo por tracker (`library_items.emu_in_catalog`/`emu_aportes` son de eMuwarez), el
-       resto de ajustes por tracker (URL, grupos, anónimo) y su sitio en Configuración.
+     - Ya está el catálogo por tracker: cada sincronización (el botón y la completa semanal) lee eMuwarez y luego,
+       de uno en uno, cada otro tracker con clave, con su clave y su cupo de la API (el limitador cuenta cada tracker en
+       su fichero, el mismo que usa Uploadrr-EMU). El Resumen del asistente dice lo que ya hay en cada tracker elegido.
+       Las columnas de la biblioteca (`emu_in_catalog`/`emu_aportes`) siguen siendo de eMuwarez. Falta probar en el
+       NAS la primera lectura de N.O.B.S y Milnueve: los nombres de sus categorías de series
+       (`emu_catalog._CATEGORIAS_SERIE`) salen de sus formularios, no de lo que devuelve su API.
+     - Queda: que las sincronizaciones de peticiones, «Tus subidas» y el perfil reciban el tracker como parámetro;
+       usar el catálogo de cada tracker en las comprobaciones de duplicados de «Subir por lotes» (hoy, el de eMuwarez
+       solo si se sube a eMuwarez) y de «Subir también a…» (hoy solo mira las subidas hechas con eMuwarr), y en
+       Biblioteca si hace falta; y la URL de eMuwarez en Configuración (la de N.O.B.S y Milnueve ya se cambia, y la
+       usan la subida y el catálogo con `trackers.url_de`; la de eMuwarez es `EMU_BASE_URL`).
   2. **Fase B: NOBS (nobs.rawsmoke.net) y Milnueve (tracker.milnueve.cc).** Los dos son UNIT3D y ya se sube a ellos con
      otras herramientas: se puede empezar (Gabriel les avisa). El primero valida la abstracción. Decidido el 22/11:
      - **Nomenclatura: la de eMuwarez, sin más.** Los dos son nuevos y cada uno sube como quiere; sus guías (formato
@@ -132,8 +140,8 @@ descripción y el cliente.
   anónimo → 401 JSON, comprobado el 18/11).
 - **Por resolver en la fase A:** de dónde salen los ids de cada tracker (su formulario de subida o el staff; los de
   NOBS y Milnueve están en `docs/trackers-ids.md`), una nomenclatura por tracker (para NOBS y Milnueve vale la de
-  eMuwarez; el fichero es el mismo para todos, ver la fase B), etiqueta/categoría de qBittorrent por tracker, peticiones y catálogo por tracker sin pasar del límite de
-  cada API, y si la app cambia de nombre (hoy «eMuwarr» es de eMuwarez).
+  eMuwarez; el fichero es el mismo para todos, ver la fase B), etiqueta/categoría de qBittorrent por tracker, peticiones por tracker sin pasar del límite de
+  cada API (el catálogo ya va por tracker), y si la app cambia de nombre (hoy «eMuwarr» es de eMuwarez).
 
 ## Por probar en el NAS (`:dev`)
 

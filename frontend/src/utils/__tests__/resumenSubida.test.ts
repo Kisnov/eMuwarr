@@ -12,7 +12,7 @@ const coincidencia = (nombre: string, extra: Partial<EmuComparison['matches'][nu
   ({ name: nombre, resolution: '1080p', source: 'WEB-DL', codec: null, has_spanish: 1, size: 1, ...extra })
 
 const comparacion = (matches: EmuComparison['matches'], available = true): EmuComparison =>
-  ({ available, message: null, matches })
+  ({ available, message: null, matches, synced_at: '2026-11-23T10:00:00+00:00' })
 
 describe('ficheros', () => {
   it('un fichero con su tamaño', () => {
@@ -118,7 +118,7 @@ describe('lo que ya hay en eMuwarez', () => {
       coincidencia('Dune sin datos', { resolution: null, source: null }),
     ])])
     expect(r).toEqual({
-      estado: 'listo', total: 1, sinNada: 0, filas: [
+      estado: 'listo', total: 1, sinNada: 0, sincronizado: '2026-11-23T10:00:00+00:00', filas: [
         { clave: '0-0', nombre: 'Dune 720p', calidad: '720p HDTV', veredicto: 'mejor' },
         { clave: '0-1', nombre: 'Dune 2160p', calidad: '2160p', veredicto: 'peor' },
         { clave: '0-2', nombre: 'Dune sin datos', calidad: '', veredicto: null },
@@ -137,6 +137,10 @@ describe('la conclusión de duplicados y trumps', () => {
 
   it('sin torrents en eMuwarez no hay conclusión que dar', () => {
     expect(conclusionDuplicados([])).toBeNull()
+  })
+  it('una copia peor dice qué tracker la rechazaría', () => {
+    expect(conclusionDuplicados([fila('peor')])!.texto).toContain(': eMuwarez probablemente la rechace.')
+    expect(conclusionDuplicados([fila('peor')], 'Milnueve')!.texto).toContain(': Milnueve probablemente la rechace.')
   })
 
   it('una calidad igual a alguna es un duplicado, aunque otras sean peores', () => {
