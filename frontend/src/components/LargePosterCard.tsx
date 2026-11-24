@@ -6,6 +6,7 @@ import { formatBytes, formatItemType } from '../utils/format'
 import { IconoTipo } from './Iconos'
 import { CasillaLote } from './lote/CasillaLote'
 import { razonNoMarcable, seleccionableEnLote } from '../utils/lote'
+import { ChipPorIdentificar } from './ChipPorIdentificar'
 
 // Bigger, Overseerr/Jellyseerr-style poster card for the "Pósters grandes"
 // view — additive alongside the existing small grid, not a replacement.
@@ -15,14 +16,16 @@ import { razonNoMarcable, seleccionableEnLote } from '../utils/lote'
 //
 // «Subir por lotes»: con `onToggle`, una película, una serie o una temporada (estas solo salen con un filtro) lleva
 // su casilla arriba a la izquierda, encima del póster (arriba a la derecha va el estado). Fuera del layout: la
-// tarjeta no puede cambiar de alto (RejillaVirtual la mide).
-export const LargePosterCard = memo(function LargePosterCard({ item, onSelect, priority, seleccionado = false, loteLleno = false, onToggle, variosTrackers = false }: {
+// tarjeta no puede cambiar de alto (RejillaVirtual la mide). Una de carpeta manual sin ficha lleva arriba a la derecha
+// la chapa «Por identificar» en vez del estado.
+export const LargePosterCard = memo(function LargePosterCard({ item, onSelect, priority, seleccionado = false, loteLleno = false, onToggle, onIdentificar, variosTrackers = false }: {
   item: LibraryItemResponse
   onSelect: (item: LibraryItemResponse) => void
   priority?: boolean
   seleccionado?: boolean
   loteLleno?: boolean
   onToggle?: (item: LibraryItemResponse) => void
+  onIdentificar?: (item: LibraryItemResponse) => void
   // Más de un tracker con clave: los idiomas los mira el lote (razonNoMarcable).
   variosTrackers?: boolean
 }) {
@@ -54,7 +57,9 @@ export const LargePosterCard = memo(function LargePosterCard({ item, onSelect, p
           <CasillaLote item={item} seleccionado={seleccionado} bloqueada={loteLleno} motivo={razonNoMarcable(item, variosTrackers)} onAlternar={onToggle} className="lote-casilla-poster" />
         )}
         <div className="poster-grande-estado">
-          <PosterStatusIcon status={item.local_status} />
+          {item.por_identificar && onIdentificar
+            ? <ChipPorIdentificar item={item} onIdentificar={onIdentificar} />
+            : <PosterStatusIcon status={item.local_status} />}
         </div>
         <div className="poster-grande-pie">
           <div className="poster-grande-titulo">{item.title}</div>

@@ -84,14 +84,18 @@ export function seleccionableEnLote(item: LibraryItemResponse): boolean {
   return item.item_type === 'movie' || item.item_type === 'series' || item.item_type === 'season'
 }
 
+// Una fila de carpeta manual sin ficha de TMDb confirmada (a cualquier nivel): ni se marca ni se sube.
+export const RAZON_POR_IDENTIFICAR = 'Identifica la ficha en TMDb antes de subirla.'
+
 /**
  * Por qué un elemento no puede entrar en un lote, o null si puede. Una temporada, si no se puede subir como pack
  * (la regla de `seasonNotReadyReason`). Una película o un capítulo, la regla de `episodeNotReadyReason`
  * (utils/libraryItem.ts: en disco y con castellano), pero con su propio texto, que aquel habla de «el capítulo».
- * Una serie no entra tal cual: se cambia por sus temporadas. `admiten`: como en aquellos, los trackers con clave que lo
- * admiten (/upload/elegibilidad); sin él, la regla de eMuwarez.
+ * Una serie no entra tal cual: se cambia por sus temporadas. Nada por identificar entra. `admiten`: como en aquellos,
+ * los trackers con clave que lo admiten (/upload/elegibilidad); sin él, la regla de eMuwarez.
  */
 export function razonNoSubible(item: LibraryItemResponse, admiten?: readonly string[]): string | null {
+  if (item.por_identificar) return RAZON_POR_IDENTIFICAR
   if (item.item_type === 'series') return 'Una serie se sube por temporadas.'
   if (item.item_type === 'season') return seasonNotReadyReason(item, admiten)
   const esCapitulo = item.item_type === 'episode'
@@ -117,11 +121,12 @@ const ALGUNO = ['alguno']
 
 /**
  * Por qué una casilla de Biblioteca no se puede marcar, o null si se puede: lo que `razonNoSubible` ya dice, salvo la
- * serie, que sí se marca (se cambia por sus temporadas, y las que no se pueden subir las dice el primer paso del lote).
- * Con `variosTrackers` (más de uno con clave) tampoco mira los idiomas: lo que admite cada uno lo dice el primer paso.
+ * serie, que sí se marca (se cambia por sus temporadas, y las que no se pueden subir las dice el primer paso del lote)
+ * si no está por identificar. Con `variosTrackers` (más de uno con clave) tampoco mira los idiomas: lo que admite
+ * cada uno lo dice el primer paso.
  */
 export function razonNoMarcable(item: LibraryItemResponse, variosTrackers = false): string | null {
-  return item.item_type === 'series' ? null : razonNoSubible(item, variosTrackers ? ALGUNO : undefined)
+  return item.item_type === 'series' && !item.por_identificar ? null : razonNoSubible(item, variosTrackers ? ALGUNO : undefined)
 }
 
 /**

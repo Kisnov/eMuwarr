@@ -13,6 +13,7 @@ import { ValueChip, PlainValue, ResolutionValueIcon, SourceValueIcon, SizeValueI
 import { estadoCastellano, CASTELLANO_INFO } from '../utils/castellano'
 import { IconoDesplegar, IconoTipo } from './Iconos'
 import { CasillaLote } from './lote/CasillaLote'
+import { ChipPorIdentificar } from './ChipPorIdentificar'
 import { razonNoMarcable, seleccionableEnLote } from '../utils/lote'
 
 const NESTED_PAGE_SIZE = 25
@@ -20,7 +21,7 @@ const NESTED_PAGE_SIZE = 25
 // is never paginated, unlike episodes), but still bounded defensively.
 const MAX_SEASONS_PER_SERIES = 500
 
-export type LibraryActionKind = 'upload' | 'request'
+export type LibraryActionKind = 'upload' | 'request' | 'identificar'
 
 interface LibraryTreeRowProps {
   item: LibraryItemResponse
@@ -278,7 +279,12 @@ export const LibraryTreeRow = memo(function LibraryTreeRow({ item, depth, instan
             )
             : <span className="bib-guion">—</span>}
         </td>
-        <td className="bib-celda-calma"><StatusBadge status={item.local_status} type="local" /></td>
+        {/* Una carpeta manual siempre está en disco: lo que dice el estado de una sin ficha es que falta identificarla. */}
+        <td className="bib-celda-calma">
+          {item.por_identificar
+            ? <ChipPorIdentificar item={item} onIdentificar={it => onAction('identificar', it)} />
+            : <StatusBadge status={item.local_status} type="local" />}
+        </td>
         <td className="bib-nowrap">
           {/* «Sin petición» es lo normal y llenaba la columna de insignias grises: se queda en un guion, y la
               insignia solo sale cuando hay algo que mirar. */}

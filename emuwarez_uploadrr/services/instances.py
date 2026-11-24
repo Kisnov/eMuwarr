@@ -9,7 +9,17 @@ from ..integrations import radarr, sonarr
 from ..integrations.base import IntegrationError, normalize_base_url, texto_de_error
 from ..models import InstanceConfig, InstanceType
 
-_VALID_INSTANCE_TYPES = (InstanceType.RADARR.value, InstanceType.SONARR.value)
+_VALID_INSTANCE_TYPES = (InstanceType.RADARR.value, InstanceType.SONARR.value, InstanceType.CARPETA.value)
+
+
+def _destino(instance_type: str, url: str) -> str:
+    """La URL de Radarr/Sonarr, o la ruta de una carpeta manual (sin http:// delante)."""
+    if instance_type == InstanceType.CARPETA.value:
+        from .library.carpeta import ruta_de_carpeta
+        return ruta_de_carpeta(url)
+    if (url or "").strip().startswith("/"):
+        raise ValueError("La URL debe empezar por http:// o https:// e incluir un host válido")
+    return normalize_base_url(url)
 
 
 def add_instance(
@@ -36,12 +46,12 @@ def add_instance(
     instance is never persisted."""
     instance_type = instance_type.lower().strip()
     if instance_type not in _VALID_INSTANCE_TYPES:
-        raise ValueError("Tipo de instancia inválido. Usa radarr o sonarr.")
+        raise ValueError("Tipo de instancia inválido. Usa radarr, sonarr o carpeta.")
     name = name.strip()
     existing = conn.execute("SELECT id FROM instances WHERE name = ?", (name,)).fetchone()
     if existing:
         raise ValueError(f"Ya existe una instancia con el nombre '{name}'.")
-    url = normalize_base_url(url)
+    url = _destino(instance_type, url)
     if test_connection:
         result = test_connection_params(instance_type, url, api_key, name)
         if not result.get("ok"):
@@ -74,8 +84,9 @@ def update_instance(
     sets = []
     params = []
     if url is not None:
+        actual = get_instance(conn, instance_id)
         sets.append("url = ?")
-        params.append(normalize_base_url(url))
+        params.append(_destino(actual.type if actual else "", url))
     if api_key is not None:
         sets.append("api_key = ?")
         params.append(api_key.strip())
@@ -122,10 +133,14 @@ AVISO_SIN_RESPUESTA = (
 def aviso_si_cambia_el_destino(instance: InstanceConfig, *, url: Optional[str], api_key: Optional[str]) -> Optional[str]:
     """Con otra URL o clave, prueba la nueva: si no responde devuelve el aviso (se guarda igual, hay instancias apagadas
     días). Las fichas se casan por su id de Radarr/Sonarr, así que si apunta a otro servidor la sincronización las mezcla."""
-    nueva_url = normalize_base_url(url) if url is not None else instance.url
+    nueva_url = _destino(instance.type, url) if url is not None else instance.url
     nueva_clave = api_key.strip() if api_key is not None else instance.api_key
     if (nueva_url, nueva_clave) == (instance.url, instance.api_key):
         return None
+    if instance.type == InstanceType.CARPETA.value:
+        # Otra carpeta: el siguiente escaneo quita lo que no esté en ella.
+        prueba = test_connection_params(instance.type, nueva_url, "")
+        return None if prueba.get("ok") else f"Guardada, pero {prueba.get('error')}"
     if test_connection_params(instance.type, nueva_url, nueva_clave, instance.name).get("ok"):
         return None
     return AVISO_SIN_RESPUESTA
@@ -148,13 +163,15 @@ def get_instance(conn: sqlite3.Connection, instance_id: int) -> Optional[Instanc
     return row_to_instance(row) if row else None
 
 
-def list_instances(conn: sqlite3.Connection, enabled_only: bool = False) -> list[InstanceConfig]:
-    sql = "SELECT * FROM instances"
-    params: tuple = ()
+def list_instances(conn: sqlite3.Connection, enabled_only: bool = False, *, solo_arr: bool = False) -> list[InstanceConfig]:
+    """`solo_arr` deja fuera las carpetas manuales: lo que pregunta a la API de Radarr/Sonarr."""
+    sql = "SELECT * FROM instances WHERE 1 = 1"
     if enabled_only:
-        sql += " WHERE enabled = 1"
+        sql += " AND enabled = 1"
+    if solo_arr:
+        sql += " AND type IN ('radarr', 'sonarr')"
     sql += " ORDER BY type, name"
-    rows = conn.execute(sql, params).fetchall()
+    rows = conn.execute(sql).fetchall()
     return [row_to_instance(row) for row in rows]
 
 
@@ -176,6 +193,11 @@ def test_instance(instance: InstanceConfig) -> dict:
         return radarr.test_connection(instance.url, instance.api_key)
     if instance.type == InstanceType.SONARR.value:
         return sonarr.test_connection(instance.url, instance.api_key)
+    if instance.type == InstanceType.CARPETA.value:
+        resultado = test_connection_params(instance.type, instance.url, "")
+        if not resultado.get("ok"):
+            raise IntegrationError(resultado.get("error") or "No se puede leer la carpeta")
+        return resultado
     raise IntegrationError(f"Tipo de instancia no soportado: {instance.type}")
 
 
@@ -184,6 +206,11 @@ def test_connection_params(instance_type: str, url: str, api_key: str, name: str
     Returns a structured result {ok, version?, error?} — never raises, never
     leaks the raw api_key."""
     instance_type = (instance_type or "").lower().strip()
+    if instance_type == InstanceType.CARPETA.value:
+        from .library.carpeta import probar_carpeta
+        from ..database import db
+        with db() as conn:  # para las rutas permitidas
+            return probar_carpeta(url, conn)
     inst_dict = {"url": normalize_base_url(url), "api_key": (api_key or "").strip(), "name": name}
     try:
         if instance_type == InstanceType.RADARR.value:
@@ -203,6 +230,8 @@ def test_instance_safe(instance: InstanceConfig) -> dict:
             result = radarr.radarr_test_connection(inst_dict)
         elif instance.type == InstanceType.SONARR.value:
             result = sonarr.sonarr_test_connection(inst_dict)
+        elif instance.type == InstanceType.CARPETA.value:
+            result = test_connection_params(instance.type, instance.url, "")
         else:
             result = {"ok": False, "error": f"Tipo desconocido: {instance.type}"}
     except Exception as exc:

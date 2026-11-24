@@ -166,6 +166,7 @@ def _insert_and_start_queued_job(
     personal_release: bool | None = None,
     tracker: str = trackers.POR_DEFECTO,
     copia_de_job_id: int | None = None,
+    descripcion: str | None = None,
 ) -> dict:
     """Shared by queue_upload_for_item() and queue_retry_for_job(): insert a
     fresh 'queued' row for `item` and start its pipeline right away.
@@ -213,6 +214,8 @@ def _insert_and_start_queued_job(
 
     `copia_de_job_id` — «Subir también a…» (services/subir_tambien.py): la subida completada a otro tracker cuyo fichero
     y torrent reutiliza esta. Con él, la preparación no rehace nada: o es el mismo fichero, o falla (_paso_preparar).
+
+    `descripcion` — la descripción propia (BBCode) escrita en el Resumen; Uploadrr-EMU la añade a la que genera.
     """
     motivo = trackers.motivo_para_no_subir(conn, tracker)
     if motivo:
@@ -262,9 +265,9 @@ def _insert_and_start_queued_job(
                 retry_of_job_id, retry_count, checks_snapshot_json,
                 nomenclature_proposal_id, nomenclature_snapshot_json,
                 remux_overrides_json, remux_snapshot_json, season_overrides_json,
-                reutiliza_preparacion, lote_id, anonimo, personal_release, tracker, copia_de_job_id,
+                reutiliza_preparacion, lote_id, anonimo, personal_release, tracker, copia_de_job_id, descripcion,
                 created_at, updated_at
-            ) VALUES (?, ?, ?, ?, 'queued', 'queued', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, 'queued', 'queued', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 item["id"], request_item_id, request_title, request_url,
@@ -284,6 +287,7 @@ def _insert_and_start_queued_job(
                 None if personal_release is None else int(bool(personal_release)),
                 tracker,
                 copia_de_job_id,
+                (descripcion or "").strip() or None,
                 now_iso, now_iso,
             ),
         )
@@ -367,11 +371,12 @@ def queue_upload_for_item(
     anonimo: bool | None = None,
     personal_release: bool | None = None,
     tracker: str = trackers.POR_DEFECTO,
+    descripcion: str | None = None,
     conn=None,
 ) -> dict:
     """Encola la subida de un elemento. `lote_id`: la etiqueta de la tanda o lote al que pertenece (no se hereda
     del trabajo anterior del elemento: solo el reintento de un trabajo la conserva). `tracker`: a cuál (eMuwarez si
-    no se dice); para subir a varios, una llamada por tracker."""
+    no se dice); para subir a varios, una llamada por tracker, cada una con su `descripcion`."""
     own = conn is None
     conn = conn or connect()
     try:
@@ -420,6 +425,7 @@ def queue_upload_for_item(
             lote_id=lote_id,
             anonimo=anonimo, personal_release=personal_release,
             tracker=tracker,
+            descripcion=descripcion,
         )
     finally:
         if own:
@@ -499,6 +505,7 @@ def queue_retry_for_job(original_job_id: int, conn=None, *, desde_el_principio: 
             personal_release=None if original.get("personal_release") is None else bool(original.get("personal_release")),
             tracker=original.get("tracker") or trackers.POR_DEFECTO,
             copia_de_job_id=original.get("copia_de_job_id"),
+            descripcion=original.get("descripcion"),
         )
     finally:
         if own:
@@ -518,6 +525,8 @@ def queue_copia_a_otro_tracker(conn, fuente: dict, tracker: str, *, lote_id: str
     sin_idioma = _sin_idioma_preparado(fuente.get("prepared_path"))
     if sin_idioma:
         return {"status": "blocked", "job": None, "errors": [
+            f"{_no_se_lee(sin_idioma[0])} Es el archivo que siembra la subida #{fuente['id']}: no se sube a otro "
+            "tracker." if sin_idioma[1] is None else
             f"«{os.path.basename(sin_idioma[0])}»: la pista de audio {', '.join(map(str, sin_idioma[1]))} no tiene "
             f"idioma (und) en el archivo que siembra la subida #{fuente['id']}, y retocarlo rompería ese torrent: no "
             "se sube a otro tracker."]}
@@ -542,6 +551,8 @@ def queue_copia_a_otro_tracker(conn, fuente: dict, tracker: str, *, lote_id: str
         lote_id=lote_id,
         tracker=tracker,
         copia_de_job_id=fuente["id"],
+        # La misma descripción propia que llevó en el otro tracker.
+        descripcion=fuente.get("descripcion"),
     )
 
 
@@ -823,19 +834,32 @@ def _overrides_de_pack(origen: str | None, season_overrides: dict | None) -> dic
     return {tid: {"language": codigo} for tid, codigo in idiomas.items()} or None
 
 
-def _sin_idioma_preparado(ruta: str | None) -> tuple[str, list[int]] | None:
+def _sin_idioma_preparado(ruta: str | None) -> tuple[str, list[int] | None] | None:
     """El primer fichero preparado (el fichero, o uno de la carpeta de un pack) con alguna pista de audio sin idioma
-    (und), y sus posiciones; None si no hay. El elegido en «Ver pistas» no llega con las pistas en «Ninguno» ni
-    cuando el archivo no se puede editar."""
-    from .mkv_remux import idiomas_de_las_pistas
-    if not ruta:
+    (und), y sus posiciones; None si no hay. Un MKV cuyas pistas no se leen va con None: no se sabe. El elegido en
+    «Ver pistas» no llega con las pistas en «Ninguno» ni cuando el archivo no se puede editar. Lo que no es MKV no se
+    mira: la app no lo etiqueta. Sin mkvmerge no se puede mirar nada, como en la integridad."""
+    from .mkv_remux import check_mkvmerge_available, idiomas_de_las_pistas
+    if not ruta or not check_mkvmerge_available()["available"]:
         return None
     ficheros = [os.path.join(ruta, n) for n in sorted(os.listdir(ruta))] if os.path.isdir(ruta) else [ruta]
     for fichero in ficheros:
-        sin = [i for i, c in enumerate(idiomas_de_las_pistas(fichero) or [], 1) if c == "UND"]
+        if not (fichero.lower().endswith(".mkv") and os.path.isfile(fichero)):
+            continue
+        pistas = idiomas_de_las_pistas(fichero)
+        if pistas is None:
+            return fichero, None
+        sin = [i for i, c in enumerate(pistas, 1) if c == "UND"]
         if sin:
             return fichero, sin
     return None
+
+
+def _no_se_lee(fichero: str) -> str:
+    """Por qué no se sube un MKV cuyas pistas no se leen, con lo que dice mkvmerge."""
+    from .mkv_remux import read_tracks_json
+    return (f"«{os.path.basename(fichero)}»: no se pudo comprobar el idioma de las pistas "
+            f"({read_tracks_json(fichero).get('error')}).")
 
 
 def _populate_ready(job_id: int, item_id: int, conn, season_overrides: dict | None = None) -> bool:
@@ -862,8 +886,9 @@ def _populate_ready(job_id: int, item_id: int, conn, season_overrides: dict | No
     sin_idioma = _sin_idioma_preparado(preparado)
     if sin_idioma:
         from .reglas_tracker import motivo_audio_sin_idioma
-        _fail(job_id, f"«{os.path.basename(sin_idioma[0])}»: {motivo_audio_sin_idioma(sin_idioma[1])} Si ya lo "
-                      "elegiste, no se pudo escribir en el archivo preparado: mira el registro de la preparación.")
+        _fail(job_id, _no_se_lee(sin_idioma[0]) if sin_idioma[1] is None else (
+            f"«{os.path.basename(sin_idioma[0])}»: {motivo_audio_sin_idioma(sin_idioma[1])} Si ya lo elegiste, no se "
+            "pudo escribir en el archivo preparado: mira el registro de la preparación."))
         return False
 
     if item.get("item_type") == "season":

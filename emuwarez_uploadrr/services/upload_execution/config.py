@@ -25,6 +25,7 @@ from ..uploadrr_config import (
     stage_oxipng_on,
     stage_per_episode_screens,
     stage_qbittorrent_config,
+    stage_sin_firma,
     stage_tmdb_key,
     stage_tracker_config,
     staged_config_text,
@@ -78,6 +79,8 @@ def _lineas_preparadas(job_id: int, cwd: str) -> list[str] | None:
         qbit_username = get_setting_canonical(conn, "qbit.username")
         qbit_password = get_setting_canonical(conn, "qbit.password")
         qbit_qui = get_setting_canonical(conn, "qbit.qui_proxy_url")
+        fila = conn.execute("SELECT tracker FROM upload_jobs WHERE id = ?", (job_id,)).fetchone()
+        otro_tracker = bool(fila and fila[0] and fila[0] != EMU.id)
     finally:
         conn.close()
 
@@ -106,6 +109,8 @@ def _lineas_preparadas(job_id: int, cwd: str) -> list[str] | None:
         lines, _msg = stage_oxipng_on(lines)
         lines, _msg = stage_anon_off(lines)
         lines, _msg = stage_firma_actual(lines)
+        if otro_tracker:
+            lines, _msg = stage_sin_firma(lines)
         changed = True
         # Siempre hay al menos uno (ver arriba): esto es lo que hace que la
         # preferencia del usuario (p. ej. Pixhost) llegue de verdad a Uploadrr-EMU
@@ -146,6 +151,26 @@ CARPETA_CONFIGS = "config_uploadrr"
 def ruta_config(job_id: int, *, reenvio: bool = False) -> Path:
     """El config de Uploadrr-EMU de este trabajo, junto a la base; el reenvío a qBittorrent repite el trabajo con otro nombre."""
     return db_path().parent / CARPETA_CONFIGS / f"{job_id}{'-reenvio' if reenvio else ''}.yaml"
+
+
+def ruta_descripcion(job_id: int) -> Path:
+    """La descripción propia de este trabajo (`-df`), junto a su config: se borra igual al acabar y al arrancar."""
+    return db_path().parent / CARPETA_CONFIGS / f"{job_id}-descripcion.txt"
+
+
+def preparar_descripcion_de_la_subida(ruta: str | os.PathLike, texto: str) -> None:
+    """Escribe la descripción propia en `ruta`, como el config (0600, O_EXCL). Si no se puede, la subida no se lanza:
+    saldría sin ella."""
+    ruta = Path(ruta)
+    try:
+        ruta.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+        ruta.unlink(missing_ok=True)  # la de un intento que no se borró
+        with os.fdopen(os.open(ruta, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600), "wb") as destino:
+            destino.write(texto.encode("utf-8"))
+    except OSError as exc:
+        raise ConfigNoPreparada(
+            f"No se pudo preparar la descripción de la subida ({texto_de_error(exc)}). No se lanza: saldría sin ella."
+        ) from exc
 
 
 def sin_config_por_subida(cwd: str) -> ConfigNoPreparada:

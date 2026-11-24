@@ -114,9 +114,9 @@ def retry_upload_job(
                (library_item_id, request_item_id, request_title, request_url,
                 title, path,
                 source_path, prepared_path, uploadrr_command_json,
-                status, stage, retry_of_job_id, retry_count, tracker,
+                status, stage, retry_of_job_id, retry_count, tracker, descripcion,
                 created_at, updated_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'ready', 'preflight', ?, ?, ?, ?, ?)""",
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'ready', 'preflight', ?, ?, ?, ?, ?, ?)""",
             (
                 original.get("library_item_id"),
                 original.get("request_item_id"),
@@ -131,6 +131,7 @@ def retry_upload_job(
                 retry_count,
                 # El reintento va al mismo tracker que el original.
                 original.get("tracker") or POR_DEFECTO,
+                original.get("descripcion"),
                 now,
                 now,
             ),
