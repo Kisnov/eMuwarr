@@ -58,7 +58,7 @@ export function OtrosCard({ form }: { form: ConfigForm }) {
         <Interruptor etiqueta="Subir el logo del contenido" info={<InfoIcon text="Incrusta el logo del contenido al principio de la descripción del torrent, en español cuando TMDb lo tiene en ese idioma. Desactivado, la descripción se sube sin logo; el resto (capturas, ficha técnica y tráiler) no cambia." />} marcado={addLogo} onCambio={setAddLogo} />
         <Campo etiqueta="Plantilla de descripción" info={<InfoIcon text="El texto (BBCode) con el que empieza la descripción propia del Resumen de cada subida, por ejemplo tu firma. En cada subida se puede cambiar o borrar. Va al final de la descripción generada, tras el tráiler y antes de las capturas, y a todos los trackers de la subida." />}>
           {c => (
-            <textarea {...c} className="form-input" rows={4} maxLength={30000} spellCheck={false}
+            <textarea {...c} className="form-input asist-descripcion" rows={4} maxLength={30000} spellCheck={false}
                       value={plantillaDescripcion} onChange={e => setPlantillaDescripcion(e.target.value)} />
           )}
         </Campo>
