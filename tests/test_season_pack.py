@@ -1519,3 +1519,4 @@ def test_numeros_de_capitulo_juntan_las_tiradas_de_tres_o_mas():
     from emuwarez_uploadrr.services.season_pack import _numeros
     assert _numeros([1, 2]) == "1, 2"
     assert _numeros([2, 4, 6, 7, 8, 9]) == "2, 4, 6-9"
+    assert _numeros([1, 2, None, 3]) == "1, 2, None, 3"

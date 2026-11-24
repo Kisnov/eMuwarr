@@ -382,7 +382,7 @@ const SPANISH_ROWS: SpanishRow[] = [
       <>
         El capítulo 6 no está doblado y tampoco trae subtítulos en castellano, así que incumple él
         solo y tumba el pack entero. El aviso lo señala por número:{' '}
-        <em>«Los capítulos 1-12 no tienen castellano ni en el audio (eng) ni en los subtítulos (eng)»</em>.
+        <em>«El capítulo 6 no tiene castellano ni en el audio (eng) ni en los subtítulos (eng)»</em>.
         Arreglando ese capítulo, la temporada pasa.
       </>
     ),

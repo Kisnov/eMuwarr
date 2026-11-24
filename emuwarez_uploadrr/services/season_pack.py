@@ -664,7 +664,7 @@ def _numeros(capitulos: list) -> str:
     i = 0
     while i < len(capitulos):
         j = i
-        while j + 1 < len(capitulos) and capitulos[j + 1] == capitulos[j] + 1:
+        while j + 1 < len(capitulos) and None not in capitulos[j:j + 2] and capitulos[j + 1] == capitulos[j] + 1:
             j += 1
         partes.extend([f"{capitulos[i]}-{capitulos[j]}"] if j - i >= 2 else [str(c) for c in capitulos[i:j + 1]])
         i = j + 1
