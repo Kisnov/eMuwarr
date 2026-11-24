@@ -341,14 +341,9 @@ def grupo_del_nombre(name: Optional[str]) -> Optional[str]:
     return m.group(1)
 
 
-def _veredicto(mine: dict, match: dict) -> Optional[str]:
-    """Tu copia frente a un torrent del catálogo: "mejor", "igual" o "peor". Resolución, luego source, luego códec;
-    solo cuenta lo que se sabe de los dos lados (None si no hay nada que comparar)."""
-    return _decide(mine, match)[0]
-
-
 def _decide(mine: dict, match: dict) -> tuple[Optional[str], Optional[str]]:
-    """El veredicto de _veredicto y la dimensión que lo decide (None si salen iguales)."""
+    """Tu copia frente a un torrent del catálogo: "mejor", "igual" o "peor", y la dimensión que lo decide. Resolución,
+    luego source, luego códec; solo cuenta lo que se sabe de los dos lados (None si no hay nada que comparar)."""
     pares = (("resolucion", _res_rank(mine.get("resolution")), _res_rank(match.get("resolution"))),
              ("source", _src_rank(mine.get("source")), _match_src_rank(match)),
              ("codec", _codec_tier(mine.get("codec")), _codec_tier(match.get("codec"))))
@@ -367,12 +362,25 @@ def _comparados(mine: dict, rows: list[dict], itype: str) -> list[dict]:
              "aporta_audio": _aporta_audio(mine, r),
              # Un capítulo suelto no es el pack de la temporada: no se le compara.
              "veredicto": None if itype == "season" and _parse_episode_number(r["name"]) is not None
-             else _veredicto(mine, r)}
+             else _decide(mine, r)[0]}
             for r in rows]
 
 
-def _aportes(mine: dict, matches: list[dict]) -> list[dict]:
-    """Lo que tu copia mejora ({dim, detail}), solo si conclusion_duplicados dice que es un trump."""
+def _solo_capitulos(rows: list[dict], eps: list[dict]) -> tuple[bool, bool]:
+    """Si de una temporada el catálogo solo tiene capítulos sueltos, y si tienes todos esos capítulos."""
+    sueltos = {_parse_episode_number(r["name"]) for r in rows}
+    tuyos = {e["episode_number"] for e in eps if e["local_status"] in ("Disponible", "Subido", "Subiendo")}
+    return bool(sueltos) and None not in sueltos, bool(sueltos - {None}) and sueltos - {None} <= tuyos
+
+
+def _aportes(mine: dict, matches: list[dict], eps: Optional[list[dict]] = None) -> list[dict]:
+    """Lo que tu copia mejora ({dim, detail}), solo si conclusion_duplicados dice que es un trump. `eps`: los
+    capítulos de una temporada."""
+    if eps is not None:
+        solo, todos = _solo_capitulos(matches, eps)
+        if solo:
+            # Sin pack en el catálogo, la ficha dice «Aportas» si tienes todos sus capítulos.
+            return [{"dim": "pack", "detail": "Pack de temporada"}] if todos else []
     conclusion = conclusion_duplicados(matches)
     if not conclusion or conclusion["nivel"] != "trump":
         return []
@@ -492,7 +500,7 @@ def _compute_and_store_item_status(conn: sqlite3.Connection) -> int:
     for s in seasons:
         s = dict(s)
         eps = [dict(e) for e in conn.execute(
-            "SELECT resolution, source, video_codec, audio_languages, size_bytes "
+            "SELECT resolution, source, video_codec, audio_languages, size_bytes, episode_number, local_status "
             "FROM library_items WHERE parent_id = ? AND item_type = 'episode'", (s["id"],)
         ).fetchall()]
         matches = season_rows(s["tvdb_id"], s["tmdb_id"], s["season_number"]) if s["season_number"] is not None else []
@@ -503,7 +511,7 @@ def _compute_and_store_item_status(conn: sqlite3.Connection) -> int:
             "has_es": _temporada_en_castellano(eps),
             "size": sum(e["size_bytes"] or 0 for e in eps) or None,
         }
-        aportes = _aportes(mine, _comparados(mine, matches, "season"))
+        aportes = _aportes(mine, _comparados(mine, matches, "season"), eps)
         save(s["id"], 1 if matches else 0, aportes)
         # Accumulate into the parent series' rollup. A numberless season is
         # never counted; season 0 (specials) counts unless "Ignorar especiales".
@@ -741,8 +749,8 @@ def get_item_comparison(conn: sqlite3.Connection, item_id: int, *,
                 "release_groups": [item["release_group"]] if item["release_group"] else []}
     elif itype == "season":
         eps = [dict(e) for e in conn.execute(
-            "SELECT resolution, source, video_codec, audio_languages, size_bytes, release_group "
-            "FROM library_items WHERE parent_id = ? AND item_type = 'episode'", (item_id,)
+            "SELECT resolution, source, video_codec, audio_languages, size_bytes, release_group, episode_number, "
+            "local_status FROM library_items WHERE parent_id = ? AND item_type = 'episode'", (item_id,)
         ).fetchall()]
         mine = {
             "resolution": _mode([e["resolution"] for e in eps]),
@@ -779,21 +787,13 @@ def get_item_comparison(conn: sqlite3.Connection, item_id: int, *,
         "mine_available": mine.get("size") is not None,
         "matches": matches,
         "in_catalog": 1 if matches else 0,
-        "aportes": _aportes(mine, matches),
+        "aportes": _aportes(mine, matches, eps if itype == "season" else None),
         "conclusion": conclusion_duplicados(matches, tracker),
     }
     if itype == "season":
-        # Distinguish "there is a season pack" from "only loose episodes". When
-        # only episodes exist, contributing the pack could be new — but only if
-        # you actually have all the episodes.
-        cat_ep_nums = {n for n in (_parse_episode_number(m["name"]) for m in matches) if n is not None}
-        has_pack = any(_parse_episode_number(m["name"]) is None for m in matches)
-        my_ep_nums = {r[0] for r in conn.execute(
-            "SELECT episode_number FROM library_items WHERE parent_id = ? AND item_type = 'episode' "
-            "AND local_status IN ('Disponible','Subido','Subiendo') AND episode_number IS NOT NULL", (item_id,)
-        )}
-        result["only_episodes"] = bool(cat_ep_nums) and not has_pack
-        result["have_all_episodes"] = bool(cat_ep_nums) and cat_ep_nums.issubset(my_ep_nums)
+        # Distinguish "there is a season pack" from "only loose episodes": contributing the pack could be new, but
+        # only if you have all the episodes.
+        result["only_episodes"], result["have_all_episodes"] = _solo_capitulos(matches, eps)
     return result
 
 

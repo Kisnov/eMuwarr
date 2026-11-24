@@ -39,7 +39,7 @@ def _guardado_y_ficha(conn, item):
     ficha = get_item_comparison(conn, item)
     assert row["emu_in_catalog"] == 1
     assert json.loads(row["emu_aportes"]) == ficha["aportes"]
-    assert bool(ficha["aportes"]) == (ficha["conclusion"]["nivel"] == "trump")
+    assert ficha.get("only_episodes") or bool(ficha["aportes"]) == (ficha["conclusion"]["nivel"] == "trump")
     return ficha
 
 
@@ -89,3 +89,23 @@ def test_mejor_que_uno_y_peor_que_otro_no_es_un_aporte(db_conn):
     ficha = _guardado_y_ficha(db_conn, item)
 
     assert ficha["conclusion"]["nivel"] == "mixto" and ficha["aportes"] == []
+
+
+@pytest.mark.parametrize("tus_capitulos, aportes", [((1, 2), [{"dim": "pack", "detail": "Pack de temporada"}]),
+                                                     ((1,), [])])
+def test_una_temporada_con_solo_capitulos_sueltos_aporta_el_pack_si_los_tienes_todos(db_conn, tus_capitulos, aportes):
+    ins = "INSERT INTO library_items (item_type, title, tvdb_id, parent_id, season_number, episode_number, " \
+          "resolution, source, local_status) VALUES (?, 'Serie', '9', ?, ?, ?, '1080p', 'WEB-DL', 'Disponible')"
+    serie = db_conn.execute(ins, ("series", None, None, None)).lastrowid
+    temporada = db_conn.execute(ins, ("season", serie, 1, None)).lastrowid
+    for n in tus_capitulos:
+        db_conn.execute(ins, ("episode", temporada, 1, n))
+    for n in (1, 2):
+        db_conn.execute("INSERT INTO emu_catalog (tracker, category, tvdb_id, season_number, resolution, source, name) "
+                        "VALUES ('emu', 'Series', '9', 1, '720p', 'WEB-DL', ?)", (f"Serie S01E0{n} 720p WEB-DL",))
+    set_state(db_conn, SYNC_COMPLETED_STATE_KEY, "2026-11-24T00:00:00")
+    db_conn.commit()
+
+    ficha = _guardado_y_ficha(db_conn, temporada)
+
+    assert ficha["only_episodes"] and ficha["aportes"] == aportes
