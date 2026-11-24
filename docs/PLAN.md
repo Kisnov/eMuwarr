@@ -149,7 +149,7 @@ descripción y el cliente.
   anónimo → 401 JSON, comprobado el 18/11).
 - **Por resolver en la fase A:** de dónde salen los ids de cada tracker (su formulario de subida o el staff; los de
   NOBS y Milnueve están en `docs/trackers-ids.md`), una nomenclatura por tracker (para NOBS y Milnueve vale la de
-  eMuwarez; el fichero es el mismo para todos, ver la fase B), etiqueta/categoría de qBittorrent por tracker, peticiones por tracker sin pasar del límite de
+  eMuwarez; el fichero es el mismo para todos, ver la fase B), peticiones por tracker sin pasar del límite de
   cada API (el catálogo ya va por tracker), y si la app cambia de nombre (hoy «eMuwarr» es de eMuwarez).
 
 ## Por probar en el NAS (`:dev`)
@@ -183,6 +183,8 @@ Todo lo de interfaz se ha comprobado en Chromium (con emulación táctil), no en
 
 ## Descartado (para no volver a proponerlo)
 
+- Una etiqueta de qBittorrent por tracker: qBittorrent ya filtra por tracker (el dominio del anuncio), y con la
+  etiqueta general basta.
 - Que el filtro «Petición» de Biblioteca cuente la petición heredada: una serie pedida entera se sube en season
   packs, nunca por capítulos.
 - Detectar el toque real con `pointerType` para los objetivos táctiles.
