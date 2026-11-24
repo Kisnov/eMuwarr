@@ -469,6 +469,11 @@ button.sub-reintentos-chip:hover {
   color: var(--color-error-soft);
 }
 
+button.sub-toggle-trackers-fallido:hover {
+  border-color: color-mix(in srgb, var(--color-error) 70%, transparent);
+  color: var(--color-error-pale);
+}
+
 /* Acciones de la fila: solo el icono; el nombre va en aria-label y en el tooltip. Se ofrece solo lo que se puede
    hacer con esa subida, así que no hay botones apagados. */
 .sub-acciones-fila {
