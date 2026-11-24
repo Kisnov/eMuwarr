@@ -22,6 +22,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import threading
 import time
 from collections.abc import Callable
@@ -1291,6 +1292,21 @@ def _motivo_preparacion_cambiada(anterior: dict, destino: str, ficheros: list, i
     return None
 
 
+_EPISODIO = re.compile(r"S\d+E\d+(?:-?E\d+)*", re.IGNORECASE)
+
+
+def _con_nombres_de_la_fuente(destino: str, ficheros: list, is_season: bool) -> list:
+    """`ficheros` con los nombres que ya tienen en `destino` (lo preparado por la subida de origen): un capítulo por su
+    SxxEyy. El que no se encuentra conserva el suyo y la comprobación de la preparación dice que falta."""
+    if not is_season:
+        return [(i, f, os.path.basename(destino)) for i, f, _n in ficheros]
+    try:
+        por_capitulo = {m.group(0).upper(): n for n in sorted(os.listdir(destino)) if (m := _EPISODIO.search(n))}
+    except OSError:
+        return ficheros
+    return [(i, f, por_capitulo.get(m.group(0).upper(), n) if (m := _EPISODIO.search(n)) else n) for i, f, n in ficheros]
+
+
 def _preparada_para_otro_tracker(conn, ruta: str, t: "_Trabajo") -> dict | None:
     """La subida del mismo contenido a otro tracker que ya dejó `ruta` preparada y la siembra, si todas las que usan
     `ruta` son de esas. Es la que esta reutiliza: mismo fichero, mismas piezas, y nadie lo rehace (le rompería el
@@ -1532,15 +1548,14 @@ def _paso_preparar(t: _Trabajo) -> bool:
         t.destino_uploadrr = os.path.join(RAIZ_SUBIDAS, ficheros[0][2])
     copia_de = t.job.get("copia_de_job_id")
     if copia_de:
-        # «Subir también a…»: el mismo fichero que la subida de la que es copia, o nada (otro nombre no se siembra junto).
+        # «Subir también a…»: el fichero y el nombre de la subida de origen, aunque la nomenclatura haya cambiado luego.
         from .upload_execution import get_upload_job
         fuente = get_upload_job(copia_de, conn=conn)
-        if not fuente or fuente.get("prepared_path") != t.destino_uploadrr:
-            antes = os.path.basename((fuente or {}).get("prepared_path") or "") or "?"
-            _fail(job_id, f"El nombre de este contenido ya no es el de la subida #{copia_de} («{antes}», ahora "
-                          f"«{os.path.basename(t.destino_uploadrr)}»): no se sube con otro nombre, porque no se "
-                          "podría sembrar con el mismo fichero.")
+        if not fuente or not fuente.get("prepared_path"):
+            _fail(job_id, f"La subida #{copia_de} ya no tiene fichero en la carpeta de subidas: no hay qué subir también.")
             return False
+        t.destino_uploadrr = fuente["prepared_path"]
+        t.ficheros = ficheros = _con_nombres_de_la_fuente(t.destino_uploadrr, ficheros, is_season)
     # La ruta se apunta ANTES de crearla: así un borrado de otra subida la ve en uso.
     with ENLACES:
         otra = _subida_que_lo_usa(conn, t.destino_uploadrr, job_id)
