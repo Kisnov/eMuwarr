@@ -358,9 +358,14 @@ def _compute_aportes(mine: dict, matches: list[dict]) -> list[dict]:
 
     # Language (conservative): you have Spanish and EVERY match is explicitly
     # non-Spanish (no match is Spanish and none is unknown).
-    if mine.get("has_es") and matches and all(m["has_spanish"] == 0 for m in matches):
+    if matches and all(_aporta_audio(mine, m) for m in matches):
         aportes.append({"dim": "idioma", "detail": "ESP"})
     return aportes
+
+
+def _aporta_audio(mine: dict, row: dict) -> bool:
+    """Tienes audio en castellano y ese torrent dice expresamente que no (desconocido no cuenta)."""
+    return bool(mine.get("has_es")) and row["has_spanish"] == 0
 
 
 # Lo que acaba un nombre de eMuwarez tras el último guion es el grupo de release («Peli (2020) 1080p WEB-DL x265-Ryodan»);
@@ -659,10 +664,11 @@ def catalogo_leido(conn: sqlite3.Connection, tracker: Tracker) -> Optional[str]:
 
 
 def conclusion_duplicados(matches: list[dict], tracker: Tracker = EMU) -> Optional[dict]:
-    """La conclusión de «En <tracker> ya hay», de los veredictos de tu copia frente a cada torrent: `nivel`
-    (duplicado, trump, mixto, peor o sin-comparar), `clase` (el veredicto con que se pinta), `texto` y `ya_lo_tiene`
-    (duplicado o peor: el lote lo salta para ese tracker y «Subir también» no lo ofrece). None sin torrents. No es un
-    permiso: cada tracker tiene sus reglas de trumps y solo ellas deciden si una subida se acepta."""
+    """La conclusión de «En <tracker> ya hay», de lo que aporta tu copia frente a cada torrent (`veredicto` de
+    calidad y `aporta_audio`): `nivel` (duplicado, trump, mixto, peor o sin-comparar), `clase` (el veredicto con que se
+    pinta), `texto` y `ya_lo_tiene` (duplicado o peor: el lote lo salta para ese tracker y «Subir también» no lo
+    ofrece). None sin torrents. Audio en castellano que no tiene ninguno es una mejora aunque la calidad no lo sea. No
+    es un permiso: cada tracker tiene sus reglas de trumps y solo ellas deciden si una subida se acepta."""
     if not matches:
         return None
     veredictos = [m["veredicto"] for m in matches]
@@ -674,6 +680,10 @@ def conclusion_duplicados(matches: list[dict], tracker: Tracker = EMU) -> Option
     def dicho(nivel: str, clase: Optional[str], texto: str) -> dict:
         return {"nivel": nivel, "clase": clase, "texto": texto, "ya_lo_tiene": nivel in ("duplicado", "peor")}
 
+    if all(m["aporta_audio"] for m in matches):
+        aunque = f", aunque tu copia empeora {peor} de lo que hay" if peor else ""
+        return dicho("trump", "mejor", f"Aportas audio ESP que no tiene ninguno{aunque}: puede ser un trump. "
+                                       f"Revisa las reglas de trumps antes de subir.{nota}")
     if mejor + igual + peor == 0:
         return dicho("sin-comparar", None,
                      "No se pudo comparar la calidad con lo que ya hay: revisa a mano si sería un duplicado.")
@@ -758,6 +768,7 @@ def get_item_comparison(conn: sqlite3.Connection, item_id: int, *,
     matches = [{"name": r["name"], "resolution": r["resolution"], "source": r["source"],
                 "codec": r["codec"], "has_spanish": r["has_spanish"], "size": r["size"],
                 "release_group": grupo_del_nombre(r["name"]),
+                "aporta_audio": _aporta_audio(mine, r),
                 # Un capítulo suelto no es el pack de la temporada: no se le compara.
                 "veredicto": None if itype == "season" and _parse_episode_number(r["name"]) is not None
                 else _veredicto(mine, r)}
