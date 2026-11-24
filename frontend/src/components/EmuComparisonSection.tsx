@@ -14,8 +14,8 @@ import { GruposDeRelease } from './GruposDeRelease'
 
 // Three-state summary shown in the "eMuwarez" field chip (Información
 // técnica card) — collapses EmuComparison's several branches (not in
-// catalog, only-loose-episodes, aportes, exact match) down to the three
-// words the user actually wants to see at a glance.
+// catalog, only-loose-episodes, the server's conclusion) down to the three
+// words the user actually wants to see at a glance. «Aportas» es la mejora que concluye el servidor.
 export type EmuFieldStatus = 'si' | 'no' | 'aportas'
 
 function summarize(data: EmuComparison | null): EmuFieldStatus | null {
@@ -23,7 +23,7 @@ function summarize(data: EmuComparison | null): EmuFieldStatus | null {
   const notInCatalog = data.in_catalog === 0 || data.matches.length === 0
   if (notInCatalog) return 'no'
   if (data.only_episodes) return data.have_all_episodes ? 'aportas' : 'si'
-  if ((data.aportes ?? []).length > 0) return 'aportas'
+  if (data.conclusion?.nivel === 'trump') return 'aportas'
   return 'si'
 }
 
@@ -89,6 +89,7 @@ export function EmuFieldChip({ itemId }: { itemId: number }) {
 export function EmuComparisonContent({ data }: { data: EmuComparison | null }) {
   const notInCatalog = !!data && (data.in_catalog === 0 || data.matches.length === 0)
   const aportes = data?.aportes ?? []
+  const mejora = data?.conclusion?.nivel === 'trump'
   const mine = data?.mine
   // You only have a real copy to compare if the file is on disk. For a
   // "Faltante" item there's nothing local, so the "Tu copia" row is hidden and
@@ -136,15 +137,14 @@ export function EmuComparisonContent({ data }: { data: EmuComparison | null }) {
               ? '· tienes todos, podrías aportar el pack de temporada.'
               : '(podrías aportar el pack si tienes todos).'}
           </span>
-        ) : aportes.length > 0 ? (
+        ) : (
+          // Lo que concluye el servidor y, si es una mejora, en qué.
           <>
-            <span className="comp-veredicto-txt">Ya está en eMuwarez, pero aportas:</span>
-            {aportes.map((a, i) => (
+            <span className={`comp-veredicto-txt${mejora ? '' : ' comp-secundario'}`}>{data.conclusion?.texto}</span>
+            {mejora && aportes.map((a, i) => (
               <span key={i} className="comp-chip-aporte">{a.detail}</span>
             ))}
           </>
-        ) : (
-          <span className="comp-veredicto-txt comp-secundario">Ya está en eMuwarez con igual o mejor calidad</span>
         )}
       </div>
 

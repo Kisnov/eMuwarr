@@ -925,7 +925,7 @@ def _populate_ready(job_id: int, item_id: int, conn, season_overrides: dict | No
         }
         command_preview = build_uploadrr_command_preview(synthetic_item, None, None, conn=conn, tracker=tracker,
                                                          variante=plan.get("variante"))
-        return _marcar_lista(job_id, command_preview, conn, grupo=plan.get("release_tag"))
+        return _marcar_lista(job_id, command_preview, conn, grupo=plan.get("release_tag"), tracker=tracker)
 
     proposal_row = conn.execute(
         "SELECT * FROM nomenclature_proposals WHERE library_item_id = ? AND status != 'expired' "
@@ -956,7 +956,7 @@ def _populate_ready(job_id: int, item_id: int, conn, season_overrides: dict | No
         variante = reglas.variante
     command_preview = build_uploadrr_command_preview(item, proposal, None, conn=conn, tracker=tracker,
                                                      variante=variante)
-    return _marcar_lista(job_id, command_preview, conn, grupo=(proposal or {}).get("release_tag"))
+    return _marcar_lista(job_id, command_preview, conn, grupo=(proposal or {}).get("release_tag"), tracker=tracker)
 
 
 def _opciones_elegidas(job_id: int, conn) -> dict:
@@ -968,7 +968,8 @@ def _opciones_elegidas(job_id: int, conn) -> dict:
             "personal_release": None if fila[1] is None else bool(fila[1])}
 
 
-def _marcar_lista(job_id: int, command_preview: dict, conn, *, grupo: str | None = None) -> bool:
+def _marcar_lista(job_id: int, command_preview: dict, conn, *, grupo: str | None = None,
+                  tracker: str = trackers.POR_DEFECTO) -> bool:
     """Deja el trabajo en 'ready' para arrancar Uploadrr.
 
     No toca prepared_path: el paso anterior ya dejó ahí el enlace de la
@@ -978,12 +979,13 @@ def _marcar_lista(job_id: int, command_preview: dict, conn, *, grupo: str | None
 
     Devuelve False si el usuario canceló mientras tanto: no se resucita.
 
-    Aquí se decide también si va anónima y si es Personal release (`grupo`: el tag del nombre ya aplicado), y se
+    Aquí se decide también si va anónima y si es Personal release (`grupo`: el tag del nombre ya aplicado; las marcas
+    de ese grupo en `tracker`), y se
     guarda con el resto del comando: es lo que lee la ejecución (upload_execution.consultas).
     """
     from .opciones_tracker import opciones_de_subida
     from .uploadrr_contract import RUNTIME_EMU, render_command_preview
-    opciones = opciones_de_subida(conn, grupo, **_opciones_elegidas(job_id, conn))
+    opciones = opciones_de_subida(conn, grupo, tracker=tracker, **_opciones_elegidas(job_id, conn))
     command_preview = {**command_preview, **opciones}
     if command_preview.get("runtime_type") == RUNTIME_EMU and isinstance(command_preview.get("command_args"), list):
         # La vista previa del comando (detalle de la subida) enseña las mismas banderas que se lanzarán.

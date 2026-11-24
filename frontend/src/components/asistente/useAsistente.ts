@@ -26,7 +26,7 @@ import type { LibraryItemResponse, SeasonPackPlanResponse, UploadJob } from '../
 import { isSeasonReady, seasonNotReadyReason, episodeNotReadyReason, listDisplayTitle } from '../../utils/libraryItem'
 import { ACTIVE_JOB_STATUSES } from '../../utils/uploadStatus'
 import { seguirProgreso } from '../../api/eventos'
-import { fetchSettings } from '../../api/settings'
+import { fetchSettings, type MarcasTracker } from '../../api/settings'
 import { ajustesDeTemporada, proveedorParaServidor, type ProveedoresElegidos } from '../../utils/origenProveedor'
 import {
   SIN_SELECCION, seleccionUnica, seleccionTemporadas, seleccionCapitulos,
@@ -161,6 +161,8 @@ export function useAsistente({ item, onClose: onCloseProp, onDone, onNavigate, p
   // Los grupos marcados en Configuración como Personal release / anónimos: dan el valor de las casillas del Resumen.
   const [gruposPersonalRelease, setGruposPersonalRelease] = useState<string[]>([])
   const [gruposAnonimos, setGruposAnonimos] = useState<string[]>([])
+  // Las de los otros trackers con marcas propias (null o sin entrada: las de eMuwarez).
+  const [marcasPorTracker, setMarcasPorTracker] = useState<Record<string, MarcasTracker>>({})
   // Anónimo / Personal release: lo cambiado a mano en el Resumen (null mientras no se toque: entonces manda el grupo,
   // aquí para enseñarlo y en el servidor para cada subida, también las de una tanda con grupos distintos). Otra
   // selección lo vuelve a null (elegirSeleccion).
@@ -171,6 +173,7 @@ export function useAsistente({ item, onClose: onCloseProp, onDone, onNavigate, p
       setModoPistasAjuste(s.remux_track_mode)
       setGruposPersonalRelease(s.upload_tags_personal_release ?? [])
       setGruposAnonimos(s.upload_tags_anonimos ?? [])
+      setMarcasPorTracker(s.marcas_por_tracker ?? {})
       plantilla.current = s.descripcion_plantilla ?? ''
       setDescripcion(d => d || plantilla.current)
     }).catch(() => { /* quedan los de siempre */ })
@@ -999,8 +1002,18 @@ export function useAsistente({ item, onClose: onCloseProp, onDone, onNavigate, p
 
   const tagActual = (fields.tag ?? '').trim().toLowerCase()
   const enGrupo = (lista: string[]) => !!tagActual && lista.some(g => g.trim().toLowerCase() === tagActual)
-  const anonimoMarcado = opcionesTracker.anonimo ?? enGrupo(gruposAnonimos)
-  const personalReleaseMarcado = opcionesTracker.personalRelease ?? enGrupo(gruposPersonalRelease)
+  // Lo que dice el grupo en cada tracker elegido; null si no coinciden (entonces cada subida lleva la del suyo).
+  const marcaDelGrupo = (cual: 'anonimos' | 'personal_release') => {
+    const deEmu = cual === 'anonimos' ? gruposAnonimos : gruposPersonalRelease
+    const valores = new Set(trackersElegidos.map(t => enGrupo(marcasPorTracker[t]?.[cual] ?? deEmu)))
+    return valores.size > 1 ? null : valores.size ? [...valores][0] : enGrupo(deEmu)
+  }
+  const anonimoDelGrupo = marcaDelGrupo('anonimos')
+  const personalReleaseDelGrupo = marcaDelGrupo('personal_release')
+  // Sin tocar y sin coincidir, la casilla sale a medias (indeterminate).
+  const marcasMixtas = { anonimo: anonimoDelGrupo === null, personalRelease: personalReleaseDelGrupo === null }
+  const anonimoMarcado = opcionesTracker.anonimo ?? !!anonimoDelGrupo
+  const personalReleaseMarcado = opcionesTracker.personalRelease ?? !!personalReleaseDelGrupo
   const elegirAnonimo = (v: boolean) => setOpcionesTracker(o => ({ ...o, anonimo: v }))
   const elegirPersonalRelease = (v: boolean) => setOpcionesTracker(o => ({ ...o, personalRelease: v }))
 
@@ -1263,8 +1276,8 @@ export function useAsistente({ item, onClose: onCloseProp, onDone, onNavigate, p
     goToUpload, preparing,
     // Paso 2
     checks, checksLoading, checksError, liveChecks, runChecks, elegirTipo, canUpload, uploading, uploadMsg, doUpload,
-    anonimoMarcado, personalReleaseMarcado, elegirAnonimo, elegirPersonalRelease, opcionesTracker,
-    trackersParaSubir, trackersElegidos, elegirTracker, destinoSubida, reglas, reglasDe,
+    anonimoMarcado, personalReleaseMarcado, marcasMixtas, elegirAnonimo, elegirPersonalRelease, opcionesTracker,
+    trackersParaSubir, trackersElegidos, elegirTracker, destinos, destinoSubida, reglas, reglasDe,
     descripcion, escribirDescripcion, descripcionPorTracker, descripcionPropia, editarDescripcionDe,
     batchQueue, batchIsEpisodes, batchItemTitle, batchPhase, batchIndex, batchResults,
     batchViewId, setBatchViewId, batchEnvChecks, batchContentChecks, batchChecksLoading, batchChecksIndex,

@@ -704,6 +704,8 @@ export interface UploadJob {
   // «Subir también a…»: a qué trackers se puede subir también esta subida (solo en el detalle), y en una
   // subida creada así, la de origen cuyo fichero y torrent reutiliza.
   subir_tambien_a?: { id: string; nombre: string }[]
+  // Los que no se ofrecen porque su catálogo local ya lo tiene, y los ofrecidos sin catálogo local.
+  subir_tambien_avisos?: string[]
   copia_de_job_id?: number | null
   // La descripción propia (BBCode) escrita en el Resumen; Uploadrr-EMU la añade a la que genera.
   descripcion?: string | null
