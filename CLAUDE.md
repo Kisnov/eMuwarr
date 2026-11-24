@@ -161,7 +161,9 @@ came in from `Kisnov/Uploadrr-EMU` with `git subtree add`, history kept; that re
   one: `omitir`), «Subir también a…» and the library detail card. The duplicate/trump rule lives only in
   `emu_catalog.conclusion_duplicados` (each available comparison carries its `conclusion`: level, class, sentence,
   `ya_lo_tiene`); the frontend only shows it. It counts quality (`veredicto`) and audio (`aporta_audio`: Spanish no
-  torrent has is an improvement even at equal or worse quality).
+  torrent has is an improvement even at equal or worse quality). `emu_aportes` comes from it too (`_aportes`, at each
+  catalog or library sync): non-empty only when the conclusion is a trump (or, for a season eMuwarez only has as
+  loose episodes, when you have them all: the pack), so «Aportas», the Panel and requests agree with the card.
 - One UNIT3D client: every eMuwarez request, the app's (`emu.cliente`) and Uploadrr-EMU's (`Unit3d._cliente`), goes through
   `integrations/cliente_unit3d.py`. It builds URL and headers (`User-Agent: emuwarr/<version>`; `_lanzar_uploadrr` passes the
   version as `EMUWARR_VERSION`), sends the key only to the tracker's own origin and takes a slot in the limiter first. The key goes

@@ -56,6 +56,8 @@ export interface RequestsSyncProgress {
   imported: number
   message: string
   error: string | null
+  // Lo que falló al leer las peticiones de otro tracker (N.O.B.S, Milnueve).
+  error_otros?: string | null
 }
 
 export async function getRequestsSyncProgress(): Promise<RequestsSyncProgress> {

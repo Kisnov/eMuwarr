@@ -50,12 +50,17 @@ descripción y el cliente.
        una sola y está en el servidor (`emu_catalog.conclusion_duplicados`, en cada comparación): el asistente, el
        lote, «Subir también» y la ficha de Biblioteca enseñan lo que dice, el navegador no la aplica. Cuenta la
        calidad y el audio: castellano que no tiene ninguno de los torrents es una mejora, aunque la calidad sea igual
-       o peor. Las columnas de Biblioteca (`emu_aportes`: su filtro «Aportas», el Panel y las peticiones) siguen
-       saliendo de `_compute_aportes`, con la misma regla del audio. Lo que un tracker ya tiene igual o
-       mejor se salta solo para ese (en el lote, si lo tienen todos llega desmarcado y marcarlo a mano lo sube a
+       o peor. La columna de Biblioteca `emu_aportes` (su filtro «Aportas», el Panel y las peticiones) sale de la
+       misma regla (`_aportes`): solo tiene algo si la conclusión es un trump (o, en una temporada que eMuwarez
+       solo tiene en capítulos sueltos, si los tienes todos: el pack). Lo que un tracker ya tiene igual o mejor se
+       salta solo para ese (en el lote, si lo tienen todos llega desmarcado y marcarlo a mano lo sube a
        todos), y un tracker sin catálogo leído no frena nada, solo se avisa. Biblioteca no: su chip y su filtro salen
        de `emu_in_catalog`, una columna de eMuwarez, y decir lo de los otros pediría una columna por tracker.
-     - Queda: que las sincronizaciones de peticiones, «Tus subidas» y el perfil reciban el tracker como parámetro.
+     - Ya están las peticiones por tracker: cada sincronización lee eMuwarez y luego cada otro tracker con clave, con
+       su URL, su cupo y su tabla de ids (de los otros, solo las categorías de vídeo a las que se sube). El fallo de uno
+       no frena a los demás ni borra sus peticiones, y solo un recorrido completo borra las que ya no están, del suyo.
+       Su preparación mira el catálogo local y las normas de idioma de ese tracker, no las columnas de eMuwarez.
+     - Queda: que las sincronizaciones de «Tus subidas» y el perfil reciban el tracker como parámetro.
   2. **Fase B: NOBS (nobs.rawsmoke.net) y Milnueve (tracker.milnueve.cc).** Los dos son UNIT3D y ya se sube a ellos con
      otras herramientas: se puede empezar (Gabriel les avisa). El primero valida la abstracción. Decidido el 22/11:
      - **Nomenclatura: la de eMuwarez, sin más.** Los dos son nuevos y cada uno sube como quiere; sus guías (formato
@@ -149,8 +154,7 @@ descripción y el cliente.
   anónimo → 401 JSON, comprobado el 18/11).
 - **Por resolver en la fase A:** de dónde salen los ids de cada tracker (su formulario de subida o el staff; los de
   NOBS y Milnueve están en `docs/trackers-ids.md`), una nomenclatura por tracker (para NOBS y Milnueve vale la de
-  eMuwarez; el fichero es el mismo para todos, ver la fase B), peticiones por tracker sin pasar del límite de
-  cada API (el catálogo ya va por tracker), y si la app cambia de nombre (hoy «eMuwarr» es de eMuwarez).
+  eMuwarez; el fichero es el mismo para todos, ver la fase B), y si la app cambia de nombre (hoy «eMuwarr» es de eMuwarez).
 
 ## Por probar en el NAS (`:dev`)
 
