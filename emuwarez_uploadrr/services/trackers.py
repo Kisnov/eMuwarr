@@ -15,7 +15,7 @@ from ..constants import EMU_BASE_URL
 class Tracker:
     id: str               # lo que se guarda en la columna `tracker`; corto y para siempre
     nombre: str           # lo que ve el usuario
-    url: str              # origen por defecto (el usuario puede cambiarlo en sus ajustes)
+    url: str              # origen fijo: si el tracker cambia de dominio, se cambia aquí
     plataforma: str       # "unit3d": habla con integrations/cliente_unit3d.py
     prefijo_ajustes: str  # espacio de nombres de sus ajustes: `emu` → emu.api_key, emu.username…
     uploadrr: str         # su nombre en Uploadrr-EMU: `-tk`, TRACKERS.<uploadrr> y src/trackers/<uploadrr>.py
