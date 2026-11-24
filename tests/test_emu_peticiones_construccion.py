@@ -185,6 +185,12 @@ def test_catalogo_completo_hasta_una_pagina_corta(pedidas):
     assert [_partes(u)[2]["page"] for u in pedidas["urls"]] == ["1", "2"]
 
 
+def test_un_catalogo_con_mas_paginas_de_las_permitidas_no_se_da_por_completo(pedidas):
+    pedidas["respuestas"] = [_pagina([4, 3], last_page=3), _pagina([2, 1], last_page=3)]
+    with pytest.raises(IntegrationError, match="más de 2 páginas"):
+        emu.emu_fetch_all_torrents("KEY", per_page=2, max_pages=2)
+
+
 def test_catalogo_incremental_para_en_el_primer_torrent_conocido(pedidas):
     pedidas["respuestas"] = [_pagina([9, 8], last_page=5), _pagina([7, 6], last_page=5)]
     out = emu.emu_fetch_all_torrents("KEY", per_page=2, stop_after_id=7)
