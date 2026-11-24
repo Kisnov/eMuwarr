@@ -71,6 +71,9 @@ const AJUSTES: SettingsData = {
   nobs_api_key_masked: 'nobs…1234',
   mnv_api_key_configured: false,
   mnv_api_key_masked: null,
+  nobs_url: 'https://nobs.rawsmoke.net',
+  mnv_url: 'https://tracker.milnueve.cc',
+  marcas_por_tracker: { nobs: null, mnv: { personal_release: ['OTRO'], anonimos: [] } },
   emu_username: 'gabriel',
   uploadrr_path: null,
   uploadrr_runtime_type: 'uploadrr_emu',
@@ -285,6 +288,34 @@ describe('Configuración: pestaña de ajustes', () => {
     expect(payload).not.toHaveProperty('clear')
     expect(porPlaceholder('API key de N.O.B.S').value).toBe('')
     expect(hayCambios()).toBe(false)
+  })
+
+  it('la URL de un tracker solo viaja si se cambia, y vacía vuelve a la de siempre', async () => {
+    await montar()
+    const url = () => [...document.body.querySelectorAll<HTMLInputElement>('input[type="url"]')]
+    expect(url().map(i => i.value)).toEqual(['https://nobs.rawsmoke.net', 'https://tracker.milnueve.cc'])
+    await escribir(url()[0], '  ')
+    expect(hayCambios()).toBe(true)
+    await pulsar(boton('Guardar'))
+    const payload = vi.mocked(updateSettings).mock.calls[0][0]
+    expect(payload.nobs_url).toBe('')
+    expect(payload).not.toHaveProperty('mnv_url')
+  })
+
+  it('las marcas de un tracker siguen a eMuwarez hasta marcarlas aparte', async () => {
+    await montar()
+    const igual = () => [...document.body.querySelectorAll<HTMLLabelElement>('label')]
+      .filter(l => l.textContent?.trim() === 'Las mismas que en eMuwarez').map(l => l.querySelector('input')!)
+    expect(igual().map(i => i.checked)).toEqual([true, false])  // N.O.B.S las de eMuwarez, Milnueve las suyas
+    const deMilnueve = document.body.querySelector('[aria-label="Marcas de los grupos en Milnueve"]')!
+    expect([...deMilnueve.querySelectorAll('input')].map(i => i.checked)).toEqual([false, false, true, false])
+    await pulsar(igual()[0])
+    expect(document.body.querySelector('[aria-label="Marcas de los grupos en N.O.B.S"]')).not.toBeNull()
+    await pulsar(igual()[1])
+    await pulsar(boton('Guardar'))
+    expect(vi.mocked(updateSettings).mock.calls[0][0].marcas_por_tracker).toEqual({
+      nobs: { personal_release: [], anonimos: [] }, mnv: null,
+    })
   })
 
   it('«Quitar la clave» de N.O.B.S la manda en `clear`; Milnueve, sin clave guardada, no tiene el botón', async () => {

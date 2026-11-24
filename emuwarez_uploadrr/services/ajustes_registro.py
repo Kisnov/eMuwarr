@@ -24,6 +24,7 @@ from typing import Any, Optional
 from urllib.parse import urlsplit
 
 from .mkv_remux import MODO_PISTAS_POR_DEFECTO, MODOS_PISTAS
+from .trackers import MNV, NOBS
 from .uploadrr_contract import DEFAULT_TIMEOUT_SECONDS, RUNTIME_EMU, RUNTIME_GENERIC
 
 BOOL = "bool"
@@ -98,6 +99,9 @@ _REGISTRO: tuple[Ajuste, ...] = (
     # Otros trackers (fase B): opcionales, se pueden quitar y no se validan al guardar.
     Ajuste("nobs_api_key", "nobs.api_key", SECRET, campo_estado="nobs_api_key", borrable=True),
     Ajuste("mnv_api_key", "mnv.api_key", SECRET, campo_estado="mnv_api_key", borrable=True),
+    # Su URL: vacía, la de services/trackers.py (ver `error_de_url_tracker`).
+    Ajuste("nobs_url", "nobs.url", STR, NOBS.url),
+    Ajuste("mnv_url", "mnv.url", STR, MNV.url),
     # qBittorrent
     Ajuste("qbit_url", "qbit.url", STR),
     Ajuste("qbit_tag", "qbit.tag", STR),
@@ -173,6 +177,17 @@ def error_de_url_publica(valor: Optional[str]) -> Optional[str]:
         return ERROR_URL_PUBLICA_QBIT
     if partes.username is not None or partes.password is not None or "@" in partes.netloc:
         return ERROR_URL_PUBLICA_QBIT
+    return None
+
+
+def error_de_url_tracker(nombre: str, valor: Optional[str]) -> Optional[str]:
+    """Por qué no vale como URL de un tracker, o None si vale (o está vacía: la de siempre). Como la pública de
+    qBittorrent, pero solo https (la clave de API viaja en cada petición) y sin query: se le añaden rutas."""
+    texto = (valor or "").strip()
+    if not texto:
+        return None
+    if error_de_url_publica(texto) or urlsplit(texto).scheme != "https" or "?" in texto or "#" in texto:
+        return f"La URL de {nombre} debe empezar por https://, incluir un host válido y no llevar usuario ni «?»"
     return None
 
 
