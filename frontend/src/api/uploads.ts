@@ -99,11 +99,15 @@ export interface SubirTambienCandidata {
   finished_at: string | null
   origen: TrackerParaSubir
   trackers: TrackerParaSubir[]
+  // Por qué no se ofrecen los que ya lo tienen según su catálogo local.
+  ya_lo_tienen?: string[]
 }
 
 export interface SubirTambienCandidatas {
   trackers: TrackerParaSubir[]
   subidas: SubirTambienCandidata[]
+  // Los trackers sin catálogo local leído: en ellos no se ha mirado si ya está.
+  avisos?: string[]
 }
 
 export interface SubirTambienResultado {
@@ -168,6 +172,8 @@ export interface ElementoLote {
   campos?: NomenclatureFields | null
   // Solo pack: el proveedor elegido.
   provider?: string | null
+  // Los trackers cuyo catálogo local ya lo tiene igual o mejor: para ellos se salta.
+  omitir?: string[]
 }
 
 // Lo que hizo el servidor con cada elemento y tracker, en el orden mandado (web/schemas.py::UploadLoteResultado).

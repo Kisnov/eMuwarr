@@ -41,6 +41,18 @@ describe('SubirTambienBloque', () => {
     expect(encolado).toHaveBeenCalled()
   })
 
+  it('dice por qué no ofrece el que ya lo tiene y avisa del que no tiene catálogo', async () => {
+    const avisos = ['Ya hay uno igual o mejor en N.O.B.S (catálogo local).', 'Sin catálogo local de Milnueve: no se ha mirado si ya lo tiene.']
+    await montar(<SubirTambienBloque job={job({ subir_tambien_a: [MNV], subir_tambien_avisos: avisos })} />)
+    expect(boton('Subir también a N.O.B.S')).toBeUndefined()
+    for (const aviso of avisos) expect(texto()).toContain(aviso)
+  })
+
+  it('aunque todos lo tengan, sale para decir por qué', async () => {
+    await montar(<SubirTambienBloque job={job({ subir_tambien_a: [], subir_tambien_avisos: ['Ya hay uno igual o mejor en N.O.B.S (catálogo local).'] })} />)
+    expect(texto()).toContain('Ya hay uno igual o mejor en N.O.B.S')
+  })
+
   it('de otro tracker a eMuwarez: la ayuda nombra el tracker de origen', async () => {
     await montar(<SubirTambienBloque job={job({ tracker: 'nobs', tracker_nombre: 'N.O.B.S', subir_tambien_a: [EMU] })} />)
     expect(texto()).toContain('las mismas piezas que en N.O.B.S')
@@ -62,6 +74,18 @@ describe('SubirTambienBloque', () => {
 })
 
 describe('SubirTambienModal', () => {
+  it('cada subida dice qué tracker ya lo tiene, y arriba, cuál no tiene catálogo', async () => {
+    vi.mocked(getSubirTambien).mockResolvedValue({
+      trackers: [EMU, NOBS, MNV], avisos: ['Sin catálogo local de Milnueve: no se ha mirado si ya lo tiene.'],
+      subidas: [{ job_id: 1, title: 'Peli A', nombre: 'A.mkv', result_url: null, finished_at: null, origen: EMU,
+        trackers: [MNV], ya_lo_tienen: ['Ya hay uno igual o mejor en N.O.B.S (catálogo local).'] }],
+    })
+    await montar(<SubirTambienModal onClose={() => {}} onEncolado={() => {}} />)
+    await esperar(() => texto().includes('Peli A'))
+    expect(texto()).toContain('falta en Milnueve · Ya hay uno igual o mejor en N.O.B.S (catálogo local).')
+    expect(texto()).toContain('Sin catálogo local de Milnueve')
+  })
+
   it('solo lo elegido a mano: una petición con las subidas y los trackers marcados', async () => {
     vi.mocked(getSubirTambien).mockResolvedValue({
       trackers: [EMU, NOBS, MNV],

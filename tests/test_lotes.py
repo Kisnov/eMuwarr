@@ -779,6 +779,17 @@ def test_lo_que_un_tracker_no_admite_se_salta_solo_para_ese(db_conn, tmp_path, s
     assert (r["encolados"], r["saltados"]) == (3, 1)
 
 
+def test_lo_que_un_tracker_ya_tiene_se_salta_solo_para_ese(db_conn, tmp_path, sin_comprobaciones):
+    _clave(db_conn, "nobs")
+    peli = _con_castellano(db_conn, _peli(db_conn, tmp_path))
+
+    r = lotes.encolar_lote(db_conn, [_el(peli, omitir=["emu"])], ["emu", "nobs"])
+
+    assert [(x["tracker"], x["status"]) for x in r["resultados"]] == [("emu", "blocked"), ("nobs", "queued")]
+    assert r["resultados"][0]["errors"] == ["Ya hay uno igual o mejor en eMuwarez (catálogo local)."]
+    assert [f[0] for f in db_conn.execute("SELECT tracker FROM upload_jobs")] == ["nobs"]
+
+
 def test_lo_que_se_salta_por_el_elemento_se_salta_para_cada_tracker(db_conn, tmp_path, sin_comprobaciones):
     _clave(db_conn, "nobs")
     serie = _item(db_conn, "series", "Serie")

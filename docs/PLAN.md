@@ -45,11 +45,14 @@ descripción y el cliente.
        Las columnas de la biblioteca (`emu_in_catalog`/`emu_aportes`) siguen siendo de eMuwarez. Falta probar en el
        NAS la primera lectura de N.O.B.S y Milnueve: los nombres de sus categorías de series
        (`emu_catalog._CATEGORIAS_SERIE`) salen de sus formularios, no de lo que devuelve su API.
+     - «Subir por lotes» y «Subir también a…» miran el catálogo de cada tracker, con la conclusión del Resumen
+       (`conclusionDuplicados`; su copia en Python, `emu_catalog.ya_lo_tiene`): lo que un tracker ya tiene igual o
+       mejor se salta solo para ese (en el lote, si lo tienen todos llega desmarcado y marcarlo a mano lo sube a
+       todos), y un tracker sin catálogo leído no frena nada, solo se avisa. Biblioteca no: su chip y su filtro salen
+       de `emu_in_catalog`, una columna de eMuwarez, y decir lo de los otros pediría una columna por tracker.
      - Queda: que las sincronizaciones de peticiones, «Tus subidas» y el perfil reciban el tracker como parámetro;
-       usar el catálogo de cada tracker en las comprobaciones de duplicados de «Subir por lotes» (hoy, el de eMuwarez
-       solo si se sube a eMuwarez) y de «Subir también a…» (hoy solo mira las subidas hechas con eMuwarr), y en
-       Biblioteca si hace falta; el resto de ajustes por tracker (URL, grupos, anónimo) y su sitio en Configuración
-       (el catálogo lee `Tracker.url`).
+       el resto de ajustes por tracker (URL, grupos, anónimo) y su sitio en Configuración (el catálogo lee
+       `Tracker.url`).
   2. **Fase B: NOBS (nobs.rawsmoke.net) y Milnueve (tracker.milnueve.cc).** Los dos son UNIT3D y ya se sube a ellos con
      otras herramientas: se puede empezar (Gabriel les avisa). El primero valida la abstracción. Decidido el 22/11:
      - **Nomenclatura: la de eMuwarez, sin más.** Los dos son nuevos y cada uno sube como quiere; sus guías (formato

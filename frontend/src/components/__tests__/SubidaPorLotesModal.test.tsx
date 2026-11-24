@@ -190,7 +190,7 @@ describe('qué llega desmarcado o se salta', () => {
     expect(incluir('Alien').checked).toBe(false)
     expect(incluir('Dune').checked).toBe(true)
     // Lo que compara es lo que irá en el nombre.
-    expect(biblioteca.getEmuComparison).toHaveBeenCalledWith(12, { resolution: '1080p', source: 'BluRay' })
+    expect(biblioteca.getEmuComparison).toHaveBeenCalledWith(12, { resolution: '1080p', source: 'BluRay' }, 'emu')
   })
 
   it('dos películas que saldrían con el mismo nombre se saltan las dos', async () => {
@@ -474,7 +474,7 @@ describe('series y temporadas', () => {
     // Ni su nomenclatura ni su proveedor se miran aparte: los dice el plan del pack.
     expect(nom.getNomenclatureFields).not.toHaveBeenCalled()
     expect(biblioteca.suggestProvider).not.toHaveBeenCalled()
-    expect(m(biblioteca.getEmuComparison).mock.calls).toEqual([[101, undefined]])
+    expect(m(biblioteca.getEmuComparison).mock.calls).toEqual([[101, undefined, 'emu']])
   })
 
   it('una temporada enseña los avisos de su plan, y con audio sin idioma llega desmarcada', async () => {
@@ -677,6 +677,47 @@ describe('a varios trackers', () => {
     await esperar(() => texto().includes('3 de 4 encoladas'))
     expect(m(subidas.queueLote).mock.calls[0][1]).toEqual(['emu', 'nobs'])
     expect(texto()).toContain(`✗ Alien (N.O.B.S): ${NOBS_NO.motivo}`)
+  })
+
+  const IGUAL: EmuComparison = {
+    available: true, message: null,
+    matches: [{ name: 'Dune 1080p', resolution: '1080p', source: 'BluRay', codec: null, has_spanish: 1, size: null, veredicto: 'igual' }],
+  }
+
+  it('lo que un tracker ya tiene se salta solo para ese, y sin su catálogo se dice', async () => {
+    m(biblioteca.getEmuComparison).mockImplementation(async (id, _tuya, tracker) => (
+      tracker !== 'nobs' ? SIN_NADA
+        : id === 11 ? IGUAL : { available: false, message: 'El catálogo de N.O.B.S se lee al sincronizar el de eMuwarez.', matches: [] }))
+    await abrir([DUNE, HEAT])
+    await alResumen(2)
+    await pulsar(casillaTracker('N.O.B.S'))
+    await esperar(() => fila(11).textContent?.includes('No va a N.O.B.S'))
+    expect(texto()).toContain('En eMuwarez y N.O.B.S')
+    expect(fila(11).textContent).toContain('⚠ No va a N.O.B.S: ya hay uno igual o mejor')
+    expect(fila(11).textContent).toContain('eMuwarez: No hay nada igual en eMuwarez.')
+    expect(fila(11).textContent).toContain('N.O.B.S: Ya hay 1 torrent con tu misma calidad')
+    expect(incluir('Dune').checked).toBe(true)
+    expect(fila(13).textContent).toContain('Sin catálogo local de N.O.B.S: se lee al sincronizar el de eMuwarez.')
+    expect(fila(13).textContent).not.toContain('No va a')
+
+    await pulsar(boton('Subir (2) a eMuwarez y N.O.B.S'))
+    await esperar(() => m(subidas.queueLote).mock.calls.length)
+    expect(m(subidas.queueLote).mock.calls[0][0].map(e => e.omitir)).toEqual([['nobs'], undefined])
+  })
+
+  it('lo que tienen todos llega desmarcado y, marcado a mano, va a todos', async () => {
+    m(biblioteca.getEmuComparison).mockResolvedValue(IGUAL)
+    await abrir([DUNE])
+    await alResumen(1)
+    await pulsar(casillaTracker('N.O.B.S'))
+    await esperar(() => fila(11).textContent?.includes('N.O.B.S: Ya hay'))
+    expect(incluir('Dune').checked).toBe(false)
+    expect(fila(11).textContent).not.toContain('No va a')
+
+    await pulsar(incluir('Dune'))
+    await pulsar(boton('Subir (1) a eMuwarez y N.O.B.S'))
+    await esperar(() => m(subidas.queueLote).mock.calls.length)
+    expect(m(subidas.queueLote).mock.calls[0][0][0].omitir).toBeUndefined()
   })
 
   it('sin eMuwarez, las comprobaciones se rehacen con las normas del primero que queda', async () => {

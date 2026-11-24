@@ -3,7 +3,7 @@
 // el nombre que genere la nomenclatura para cada una (sin editar: para eso está el asistente). Una serie marcada
 // entra como sus temporadas. Paso 1, qué entra; paso 2, el resumen de cada una y las comprobaciones (las del entorno una sola
 // vez); «Subir N» manda el lote al servidor (POST /uploads/lote), que encola cada una en este orden, una por tracker
-// elegido, y salta la que no pueda (o la que un tracker no admite, solo para ese) con su motivo.
+// elegido, y salta la que no pueda (o la que un tracker no admite o ya tiene, solo para ese) con su motivo.
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { ApiClientError } from '../../api/client'
 import { queueLote, type LoteEncolado } from '../../api/uploads'
@@ -17,7 +17,7 @@ import { useDestinos } from '../asistente/useDestinos'
 import { Modal } from '../Modal'
 import { PasoContenidoLote } from './PasoContenidoLote'
 import { PasoResumenLote, primerFallo, type FilaResumenLote } from './PasoResumenLote'
-import { useAnalisisLote, useExpansionLote, useReglasLote, useSubidasEnParalelo } from './useLote'
+import { useAnalisisLote, useExpansionLote, useReglasLote, useSubidasEnParalelo, useYaHayLote } from './useLote'
 
 // Nadie elige proveedor en un lote: el de una película va en `campos`, y el de un pack lo decide su plan como en
 // el asistente sin tocar Proveedor (el nombre de los capítulos o TMDb). Con proveedores distintos el pack se salta.
@@ -77,6 +77,7 @@ export function SubidaPorLotesModal({ entradas, onClose, onDone, onNavigate }: {
   const reglas = useReglasLote({
     activo: paso === 'resumen' && fase === 'idle', ids: cola, trackers: destinos.slice(1).map(t => t.id),
   })
+  const yaHay = useYaHayLote({ activo: paso === 'resumen' && fase === 'idle', analisis: analisis.analisis, trackers: destinos })
   const nombreTracker = (id: string) => trackersParaSubir.find(t => t.id === id)?.nombre ?? id
   const paralelo = useSubidasEnParalelo()
 
@@ -115,16 +116,24 @@ export function SubidaPorLotesModal({ entradas, onClose, onDone, onNavigate }: {
     const salto = fallo
       ? (item.item_type === 'season' && CONFLICTO_PROVEEDOR.test(fallo) ? `${fallo} Súbela suelta para elegirlo.` : fallo)
       : a?.bloqueo ?? (repetidos.has(id) ? 'Otro elemento del lote saldría con el mismo nombre.' : null)
-    const pendiente = !contenido || !a
-    // Lo que ya hay en eMuwarez solo desmarca si se sube a eMuwarez.
-    const porDefecto = !!a && !a.sinIdioma && (principal !== 'emu' || marcadaPorDefecto(a.nivel))
-    // Los otros trackers que no lo admiten: se salta solo para ellos.
-    const noLoAdmiten = destinos.slice(1).flatMap(t => {
-      const r = reglas.get(`${t.id}:${id}`)
-      return r && !r.permitido ? [`${t.nombre}: ${r.motivo}`] : []
-    })
+    const enTrackers = destinos.map(t => ({ ...t, en: yaHay.get(`${t.id}:${id}`) }))
+    const pendiente = !contenido || !a || (!a.bloqueo && enTrackers.some(t => !t.en))
+    // Los que ya lo tienen igual o mejor se saltan; si son todos, llega desmarcada (marcada a mano, va a todos).
+    const yaLoTienen = enTrackers.filter(t => t.en && !marcadaPorDefecto(t.en.nivel))
+    const todos = yaLoTienen.length > 0 && yaLoTienen.length === destinos.length
+    const omitir = todos ? [] : yaLoTienen
+    const porDefecto = !!a && !a.sinIdioma && !todos
+    // Los otros trackers que no lo admiten o ya lo tienen: se salta solo para ellos.
+    const noLoAdmiten = [
+      ...destinos.slice(1).flatMap(t => {
+        const r = reglas.get(`${t.id}:${id}`)
+        return r && !r.permitido ? [`${t.nombre}: ${r.motivo}`] : []
+      }),
+      ...omitir.map(t => `${t.nombre}: ya hay uno igual o mejor`),
+    ]
     return {
       item, contenido, analisis: a, nombre: nombreDe(item), salto, pendiente, noLoAdmiten,
+      yaHay: a?.bloqueo ? [] : enTrackers.map(t => ({ tracker: t.nombre, en: t.en })), omitir: omitir.map(t => t.id),
       incluida: !pendiente && !salto && (elegidas.get(id) ?? porDefecto),
     }
   })
@@ -139,6 +148,7 @@ export function SubidaPorLotesModal({ entradas, onClose, onDone, onNavigate }: {
         ...(peticion != null ? { request_item_id: peticion } : {}),
         checks: comprobaciones.mergedChecksFor(f.item.id)!,
         ...(f.analisis?.campos ? { campos: f.analisis.campos } : {}),
+        ...(f.omitir.length ? { omitir: f.omitir } : {}),
       }
     })
     if (elementosLote.length === 0 || elementosLote.some(e => !e.checks)) return

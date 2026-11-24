@@ -653,6 +653,22 @@ def catalogo_cubre(conn: sqlite3.Connection, item_id: int, resolucion: Optional[
 
 # --- Per-item comparison detail (for the detail card) ------------------------
 
+def catalogo_leido(conn: sqlite3.Connection, tracker: Tracker) -> Optional[str]:
+    """Cuándo acabó la última lectura entera del catálogo local de `tracker`; None si no se ha leído nunca."""
+    return get_state(conn, _clave(SYNC_COMPLETED_STATE_KEY, tracker))
+
+
+def ya_lo_tiene(comparacion: dict) -> bool:
+    """Lo que el Resumen llama duplicado o peor (frontend/src/utils/resumenSubida.ts::conclusionDuplicados): algún
+    torrent con tu misma calidad, o todo lo comparable mejor que tu copia."""
+    veredictos = [m["veredicto"] for m in comparacion["matches"] if m["veredicto"]]
+    return "igual" in veredictos or (bool(veredictos) and "mejor" not in veredictos)
+
+
+def motivo_ya_lo_tiene(tracker: Tracker) -> str:
+    return f"Ya hay uno igual o mejor en {tracker.nombre} (catálogo local)."
+
+
 def get_item_comparison(conn: sqlite3.Connection, item_id: int, *,
                         resolution: Optional[str] = None, source: Optional[str] = None, tracker: Tracker = EMU) -> dict:
     """Your copy vs every `tracker` torrent that matches this movie/season, for
@@ -672,7 +688,7 @@ def get_item_comparison(conn: sqlite3.Connection, item_id: int, *,
     # attempt-started throttle timestamp), so a never-finished sync (stuck,
     # crashed, or still running) reads as "not yet synced" instead of
     # confidently claiming "contenido único" for every single item.
-    synced_at = get_state(conn, _clave(SYNC_COMPLETED_STATE_KEY, tracker))
+    synced_at = catalogo_leido(conn, tracker)
     if not synced_at:
         mensaje = ("Sincroniza con eMuwarez para ver la comparación." if tracker is EMU
                    else f"El catálogo de {tracker.nombre} se lee al sincronizar el de eMuwarez.")
