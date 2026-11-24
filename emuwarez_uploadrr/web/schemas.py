@@ -1232,6 +1232,8 @@ class UploadJobDetail(BaseModel):
     # «Subir también a…» (services/subir_tambien.py): los trackers a los que se puede subir también esta subida
     # completada con el mismo fichero. Solo lo rellena el detalle (GET /uploads/{id}); en la lista va vacío.
     subir_tambien_a: list[TrackerParaSubir] = []
+    # Los que no se ofrecen porque su catálogo local ya lo tiene, y los ofrecidos sin catálogo local.
+    subir_tambien_avisos: list[str] = []
     # La subida completada a otro tracker cuyo fichero y torrent reutiliza esta («Subir también a…»).
     copia_de_job_id: Optional[int] = None
     # La descripción propia que lleva (BBCode), o None.
@@ -1538,6 +1540,8 @@ class UploadLoteElemento(BaseModel):
     campos: Optional[Dict[str, Any]] = None
     # Solo pack: el proveedor elegido. None = no elegido; "" = «Sin proveedor» a mano.
     provider: Optional[str] = None
+    # Los trackers cuyo catálogo local ya lo tiene igual o mejor (lo decide el Resumen): para ellos se salta.
+    omitir: list[str] = []
 
 
 class UploadLoteBody(BaseModel):
@@ -1593,12 +1597,16 @@ class SubirTambienCandidata(BaseModel):
     finished_at: Optional[str] = None
     origen: TrackerParaSubir  # el tracker donde ya está
     trackers: list[TrackerParaSubir]
+    # Por qué no se ofrecen los que ya lo tienen según su catálogo local.
+    ya_lo_tienen: list[str] = []
 
 
 class SubirTambienCandidatas(BaseModel):
     # Los trackers con clave (eMuwarez también) y las subidas que aún no están en alguno de los otros.
     trackers: list[TrackerParaSubir]
     subidas: list[SubirTambienCandidata]
+    # Los trackers sin catálogo local leído: en ellos no se ha mirado si ya está.
+    avisos: list[str] = []
 
 
 class UploadQueueResponse(BaseModel):

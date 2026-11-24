@@ -8,7 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 
 vi.mock('../../api/requests', () => ({ getRequests: vi.fn(), getRequestDetail: vi.fn() }))
 vi.mock('../../api/requestReadiness', () => ({ getCandidates: vi.fn(), getReadiness: vi.fn() }))
 vi.mock('../../api/library', () => ({
-  getLibraryItem: vi.fn(), getLibrary: vi.fn(), getEmuComparison: vi.fn(), suggestProvider: vi.fn(),
+  getLibraryItem: vi.fn(), getLibrary: vi.fn(), getEmuComparisons: vi.fn(), suggestProvider: vi.fn(),
 }))
 vi.mock('../../api/instances', () => ({ getInstances: vi.fn() }))
 vi.mock('../../api/uploads', () => ({
@@ -22,7 +22,7 @@ vi.mock('../../components/UploadWizardModal', () => ({ UploadWizardModal: () => 
 import { getRequestDetail, getRequests } from '../../api/requests'
 import { getReadiness } from '../../api/requestReadiness'
 import { getInstances } from '../../api/instances'
-import { getEmuComparison, getLibraryItem } from '../../api/library'
+import { getEmuComparisons, getLibraryItem } from '../../api/library'
 import { getNomenclatureFields } from '../../api/nomenclature'
 import { fetchSettings } from '../../api/settings'
 import { queueLote, runUploadChecks } from '../../api/uploads'
@@ -360,7 +360,7 @@ describe('«Subir seleccionadas» en Peticiones', () => {
     vi.mocked(getNomenclatureFields).mockImplementation(async id => ({
       fields: { source: 'BluRay', provider: null }, torrent_name: `Nombre ${id}`, internal_mkv_title: '', blocked: false,
     }) as never)
-    vi.mocked(getEmuComparison).mockResolvedValue({ available: true, message: null, matches: [] })
+    vi.mocked(getEmuComparisons).mockResolvedValue({ comparaciones: [{ available: true, message: null, matches: [] }], conclusion: null })
     vi.mocked(queueLote).mockImplementation(async elementos => ({
       lote_id: '0123456789ab', encolados: elementos.length, saltados: 0,
       resultados: elementos.map((e, i) => ({ item_id: e.item_id, tracker: 'emu', status: 'queued' as const, job_id: 100 + i, errors: [] })),

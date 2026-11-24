@@ -3,15 +3,15 @@
 // el nombre que genere la nomenclatura para cada una (sin editar: para eso está el asistente). Una serie marcada
 // entra como sus temporadas. Paso 1, qué entra; paso 2, el resumen de cada una y las comprobaciones (las del entorno una sola
 // vez); «Subir N» manda el lote al servidor (POST /uploads/lote), que encola cada una en este orden, una por tracker
-// elegido, y salta la que no pueda (o la que un tracker no admite, solo para ese) con su motivo. Con más de un tracker
-// con clave entra lo que admita alguno, no solo eMuwarez (/upload/elegibilidad).
+// elegido, y salta la que no pueda (o la que un tracker no admite o ya tiene, solo para ese) con su motivo. Con más de
+// un tracker con clave entra lo que admita alguno, no solo eMuwarez (/upload/elegibilidad).
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { ApiClientError } from '../../api/client'
 import { queueLote, type LoteEncolado } from '../../api/uploads'
 import type { LibraryItemResponse } from '../../types/api'
 import { admiten, destinosDeEntradaDeVarios, destinosQueAdmiten, soloA } from '../../utils/elegibilidad'
 import {
-  CLAVE_ABRIR_LOTE, MAX_ELEMENTOS_LOTE, marcadaPorDefecto, nombresRepetidos, razonNoSubible, type EntradaLote,
+  CLAVE_ABRIR_LOTE, MAX_ELEMENTOS_LOTE, nombresRepetidos, razonNoSubible, type EntradaLote,
 } from '../../utils/lote'
 import type { ProveedoresElegidos } from '../../utils/origenProveedor'
 import { useComprobacionesTanda } from '../asistente/useComprobaciones'
@@ -19,7 +19,7 @@ import { useDestinos } from '../asistente/useDestinos'
 import { Modal } from '../Modal'
 import { PasoContenidoLote } from './PasoContenidoLote'
 import { PasoResumenLote, primerFallo, type FilaResumenLote } from './PasoResumenLote'
-import { useAnalisisLote, useElegibilidadLote, useExpansionLote, useSubidasEnParalelo } from './useLote'
+import { useAnalisisLote, useElegibilidadLote, useExpansionLote, useSubidasEnParalelo, useYaHayLote } from './useLote'
 
 // Nadie elige proveedor en un lote: el de una película va en `campos`, y el de un pack lo decide su plan como en
 // el asistente sin tocar Proveedor (el nombre de los capítulos o TMDb). Con proveedores distintos el pack se salta.
@@ -85,6 +85,7 @@ export function SubidaPorLotesModal({ entradas, onClose, onDone, onNavigate }: {
     tracker: principal, trackerDe,
   })
   const analisis = useAnalisisLote({ activo: paso === 'resumen' && fase === 'idle', elementos: enCola })
+  const yaHay = useYaHayLote({ activo: paso === 'resumen' && fase === 'idle', analisis: analisis.analisis, trackers: destinos })
   const nombreTracker = (id: string) => trackersParaSubir.find(t => t.id === id)?.nombre ?? id
   const paralelo = useSubidasEnParalelo()
 
@@ -97,6 +98,7 @@ export function SubidaPorLotesModal({ entradas, onClose, onDone, onNavigate }: {
     })
     comprobaciones.olvidar()
     analisis.olvidar()
+    yaHay.olvidar()
     setElegidas(new Map())
   }
 
@@ -123,17 +125,27 @@ export function SubidaPorLotesModal({ entradas, onClose, onDone, onNavigate }: {
     const salto = fallo
       ? (item.item_type === 'season' && CONFLICTO_PROVEEDOR.test(fallo) ? `${fallo} Súbela suelta para elegirlo.` : fallo)
       : a?.bloqueo ?? (repetidos.has(id) ? 'Otro elemento del lote saldría con el mismo nombre.' : null)
-    const pendiente = !contenido || !a
-    // Lo que ya hay en eMuwarez solo desmarca si se sube a eMuwarez.
-    const porDefecto = !!a && !a.sinIdioma && (trackerDe(id) !== 'emu' || marcadaPorDefecto(a.nivel))
-    // Los elegidos que no lo admiten: se salta solo para ellos.
+    const enTrackers = destinos.map(t => ({ ...t, en: yaHay.get(`${t.id}:${id}`) }))
+    const pendiente = !contenido || !a || (!a.bloqueo && enTrackers.some(t => !t.en))
     const reglas = elegibilidad.get(id)
-    const noLoAdmiten = destinos.flatMap(t => {
-      const r = reglas?.find(x => x.tracker === t.id)
-      return r && !r.permitido ? [`${t.nombre}: ${r.motivo}`] : []
-    })
+    // De los que lo admiten, los que ya lo tienen igual o mejor se saltan; si son todos, llega desmarcada (marcada a
+    // mano, va a todos).
+    const van = destinosQueAdmiten(destinos, reglas)
+    const yaLoTienen = enTrackers.filter(t => t.en?.yaLoTiene && van.some(v => v.id === t.id))
+    const todos = yaLoTienen.length > 0 && van.every(t => yaLoTienen.some(y => y.id === t.id))
+    const omitir = todos ? [] : yaLoTienen
+    const porDefecto = !!a && !a.sinIdioma && !todos
+    // Los elegidos que no lo admiten o ya lo tienen: se salta solo para ellos.
+    const noLoAdmiten = [
+      ...destinos.flatMap(t => {
+        const r = reglas?.find(x => x.tracker === t.id)
+        return r && !r.permitido ? [`${t.nombre}: ${r.motivo}`] : []
+      }),
+      ...omitir.map(t => `${t.nombre}: ya hay uno igual o mejor`),
+    ]
     return {
       item, contenido, analisis: a, nombre: nombreDe(item), salto, pendiente, noLoAdmiten, soloA: soloA(destinos, reglas),
+      yaHay: a?.bloqueo ? [] : enTrackers.map(t => ({ tracker: t.nombre, en: t.en })), omitir: omitir.map(t => t.id),
       incluida: !pendiente && !salto && (elegidas.get(id) ?? porDefecto),
     }
   })
@@ -148,6 +160,7 @@ export function SubidaPorLotesModal({ entradas, onClose, onDone, onNavigate }: {
         ...(peticion != null ? { request_item_id: peticion } : {}),
         checks: comprobaciones.mergedChecksFor(f.item.id)!,
         ...(f.analisis?.campos ? { campos: f.analisis.campos } : {}),
+        ...(f.omitir.length ? { omitir: f.omitir } : {}),
       }
     })
     if (elementosLote.length === 0 || elementosLote.some(e => !e.checks)) return
@@ -245,7 +258,7 @@ export function SubidaPorLotesModal({ entradas, onClose, onDone, onNavigate }: {
           onElegirTracker={elegirTracker}
           destinoSubida={destinoSubida}
           onIncluir={(id, incluir) => setElegidas(prev => new Map(prev).set(id, incluir))}
-          onRepetir={() => { comprobaciones.repetir(); analisis.repetir(); setRechazo(null); setFalloEnvio(null) }}
+          onRepetir={() => { comprobaciones.repetir(); analisis.repetir(); yaHay.olvidar(); setRechazo(null); setFalloEnvio(null) }}
           onVolver={() => { setPaso('contenido'); setRechazo(null); setFalloEnvio(null) }}
           onSubir={subir}
         />

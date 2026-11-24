@@ -210,6 +210,8 @@ export interface EmuMatch {
   release_group?: string | null
   // Tu copia frente a este torrent; null si no hay nada que comparar.
   veredicto?: 'mejor' | 'igual' | 'peor' | null
+  // Tienes castellano y este torrent dice que no lo tiene.
+  aporta_audio?: boolean
 }
 
 export interface EmuComparison {
@@ -226,7 +228,23 @@ export interface EmuComparison {
   // pack), and whether you have every episode (so you could contribute the pack).
   only_episodes?: boolean
   have_all_episodes?: boolean
+  // Lo que concluye el servidor de la calidad y el audio (emu_catalog.conclusion_duplicados); null sin torrents.
+  conclusion?: ConclusionDuplicados | null
 }
+
+export type NivelDuplicado = 'duplicado' | 'trump' | 'mixto' | 'peor' | 'sin-comparar'
+
+// La conclusión de «En <tracker> ya hay», ya dicha: `clase`, el veredicto con que se pinta; `ya_lo_tiene`, duplicado
+// o peor (el lote lo salta para ese tracker).
+export interface ConclusionDuplicados {
+  nivel: NivelDuplicado
+  clase: 'mejor' | 'igual' | 'peor' | null
+  texto: string
+  ya_lo_tiene: boolean
+}
+
+// Varias comparaciones y la conclusión de todos sus torrents juntos.
+export interface EmuComparaciones { comparaciones: EmuComparison[]; conclusion: ConclusionDuplicados | null }
 
 // `resolution` y `source`, si vienen, sustituyen a los de tu copia: lo que el asistente de subida pone en el nombre.
 // `tracker`: el catálogo con el que se compara (eMuwarez sin él).
@@ -239,6 +257,17 @@ export async function getEmuComparison(
   if (tracker) consulta.set('tracker', tracker)
   const query = consulta.toString() ? `?${consulta}` : ''
   return api.get<EmuComparison>(`/library/${id}/emu-comparison${query}`)
+}
+
+// Lo mismo para varios elementos (una tanda o una fila del lote), con la conclusión de todos juntos.
+export async function getEmuComparisons(
+  ids: readonly number[], tuya?: { resolution?: string | null; source?: string | null }, tracker?: string,
+): Promise<EmuComparaciones> {
+  const consulta = new URLSearchParams(ids.map(id => ['ids', String(id)]))
+  if (tuya?.resolution) consulta.set('resolution', tuya.resolution)
+  if (tuya?.source) consulta.set('source', tuya.source)
+  if (tracker) consulta.set('tracker', tracker)
+  return api.get<EmuComparaciones>(`/library/emu-comparisons?${consulta}`)
 }
 
 export type EmuSyncMode = 'incremental' | 'full'

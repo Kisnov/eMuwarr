@@ -6,7 +6,7 @@ import { soloA } from '../../utils/elegibilidad'
 import { timeAgo } from '../../utils/format'
 import { peticionCubre } from '../../utils/seleccionSubida'
 import {
-  conclusionDuplicados, textoCategoria, textoCopia, textoFicheros, textoPistas, tipoDeEnlace, type FilaYaHay, type YaHay,
+  textoCategoria, textoCopia, textoFicheros, textoPistas, tipoDeEnlace, type FilaYaHay, type YaHay,
 } from '../../utils/resumenSubida'
 import { CasillasTrackers } from './piezas'
 import { mergeRemuxTracks } from './RemuxTable'
@@ -249,8 +249,7 @@ function YaHayEn({ tracker, yaHay }: { tracker: string; yaHay: YaHay }) {
       </p>
     )
   }
-  const { filas, sinNada, total } = yaHay
-  const conclusion = conclusionDuplicados(filas, tracker)
+  const { filas, sinNada, total, conclusion } = yaHay
   return (
     <>
       {filas.length === 0 ? (

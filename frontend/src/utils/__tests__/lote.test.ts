@@ -7,7 +7,7 @@ import type { LibraryItemResponse } from '../../types/api'
 import type { DashboardRecommendationItem } from '../../api/dashboard'
 import {
   MAX_ELEMENTOS_LOTE, PATRON_LOTE_ID, claveDelPanel, entradaDePeticion, entradaDelPanel, expandirEntradas,
-  marcadaPorDefecto, nombresRepetidos, nuevoLoteId, peticionSeleccionableEnLote, razonNoMarcable, razonNoSubible,
+  nombresRepetidos, nuevoLoteId, peticionSeleccionableEnLote, razonNoMarcable, razonNoSubible,
   seleccionableEnLote, conAvisoDeLote, loteDeNotificacion,
 } from '../lote'
 
@@ -223,20 +223,6 @@ describe('las peticiones de Peticiones', () => {
       .toEqual({ item: ficha, requestId: 71, alcance: { season: 2, episode: null } })
     expect(entradaDePeticion({ id: 72, req_scope: 'episode', req_season: 1, req_episode: 12 }, ficha))
       .toEqual({ item: ficha, requestId: 72, alcance: { season: 1, episode: 12 } })
-  })
-})
-
-describe('marcadaPorDefecto', () => {
-  it('desmarca un duplicado y una copia peor que todo lo que hay', () => {
-    expect(marcadaPorDefecto('duplicado')).toBe(false)
-    expect(marcadaPorDefecto('peor')).toBe(false)
-  })
-
-  it('marca el resto, también sin nada con lo que comparar', () => {
-    expect(marcadaPorDefecto(null)).toBe(true)
-    expect(marcadaPorDefecto('trump')).toBe(true)
-    expect(marcadaPorDefecto('mixto')).toBe(true)
-    expect(marcadaPorDefecto('sin-comparar')).toBe(true)
   })
 })
 

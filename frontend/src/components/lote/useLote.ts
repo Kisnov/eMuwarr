@@ -1,15 +1,15 @@
 // Lo que «Subir por lotes» mira además de las comprobaciones previas. En el paso 1, las temporadas de cada serie
 // marcada. En el Resumen, de cada película el nombre del torrent que saldría y los avisos de ese nombre, y de cada
-// película o temporada lo que el catálogo local de eMuwarez ya tiene de lo mismo (el nombre de un pack lo dan sus
-// comprobaciones, `nombre` en runUploadChecks).
-import { useEffect, useState } from 'react'
-import { getEmuComparison, getLibrary, suggestProvider } from '../../api/library'
+// película o temporada lo que el catálogo local de cada tracker elegido ya tiene de lo mismo (el nombre de un pack lo
+// dan sus comprobaciones, `nombre` en runUploadChecks).
+import { useEffect, useRef, useState } from 'react'
+import { getEmuComparisons, getLibrary, suggestProvider, type NivelDuplicado } from '../../api/library'
 import { getNomenclatureFields, previewNomenclatureFields, type NomenclatureFields } from '../../api/nomenclature'
 import { fetchSettings } from '../../api/settings'
-import { fetchElegibilidad, type ReglasConNombre } from '../../api/uploads'
+import { fetchElegibilidad, type ReglasConNombre, type TrackerParaSubir } from '../../api/uploads'
 import type { LibraryItemResponse } from '../../types/api'
 import { expandirEntradas, type EntradaLote } from '../../utils/lote'
-import { conclusionDuplicados, resumirComparaciones, type NivelDuplicado } from '../../utils/resumenSubida'
+import { resumirComparaciones } from '../../utils/resumenSubida'
 import { PROVIDER_SOURCES } from '../asistente/constantes'
 
 export interface AnalisisElemento {
@@ -23,17 +23,24 @@ export interface AnalisisElemento {
   sinIdioma: boolean
   // El juego completo de campos con el proveedor sugerido, para que el servidor lo guarde; null si no se sugirió.
   campos: NomenclatureFields | null
-  // «En eMuwarez»: el nivel de `conclusionDuplicados` (null: nada con lo que comparar) y la frase.
-  nivel: NivelDuplicado | null
-  enEmu: string
+  // Lo que irá en el nombre, para compararlo con lo que ya hay; en un pack no hace falta (se compara lo que tienes).
+  tuya?: { resolution?: string | null; source?: string | null }
 }
+
+// Lo que ya hay en el catálogo local de un tracker, como lo concluye el servidor: el nivel (null: nada con lo que
+// comparar), la frase y si ya lo tiene (igual o mejor: se salta para ese).
+export interface YaHayEnTracker { nivel: NivelDuplicado | null; texto: string; yaLoTiene: boolean }
 
 const mensaje = (e: unknown, defecto: string) => (e instanceof Error && e.message ? e.message : defecto)
 
-function textoSinConclusion(estado: 'error' | 'sin-catalogo' | 'listo' | 'cargando'): string {
+function textoSinConclusion(estado: 'error' | 'sin-catalogo' | 'listo' | 'cargando', tracker: string): string {
   if (estado === 'error') return 'No se pudo consultar el catálogo local.'
-  if (estado === 'sin-catalogo') return 'Sin catálogo de eMuwarez: sincronízalo para comparar.'
-  return 'No hay nada igual en eMuwarez.'
+  if (estado === 'sin-catalogo') {
+    return tracker === 'eMuwarez'
+      ? 'Sin catálogo de eMuwarez: sincronízalo para comparar.'
+      : `Sin catálogo local de ${tracker}: se lee al sincronizar el de eMuwarez.`
+  }
+  return `No hay nada igual en ${tracker}.`
 }
 
 /** Una película, paso a paso. No lanza: lo que falla queda dicho en el resultado. */
@@ -44,13 +51,13 @@ export async function analizarPelicula(id: number): Promise<AnalisisElemento> {
   } catch (e) {
     return {
       nombre: null, bloqueo: `No se pudo calcular el nombre: ${mensaje(e, 'error desconocido')}`, avisos: [],
-      sinIdioma: false, campos: null, nivel: null, enEmu: '—',
+      sinIdioma: false, campos: null,
     }
   }
   if (r.blocked) {
     return {
       nombre: null, bloqueo: r.error || 'La nomenclatura está bloqueada.', avisos: [], sinIdioma: false,
-      campos: null, nivel: null, enEmu: '—',
+      campos: null,
     }
   }
   let nombre: string | null = r.torrent_name || null
@@ -70,28 +77,25 @@ export async function analizarPelicula(id: number): Promise<AnalisisElemento> {
   }
 
   const fields = campos ?? r.fields
-  const enEmu = await enEmuwarez(id, { resolution: fields.resolution, source: fields.source })
-  return { nombre, bloqueo: null, avisos, sinIdioma: !!r.audio_sin_idioma, campos, ...enEmu }
+  return {
+    nombre, bloqueo: null, avisos, sinIdioma: !!r.audio_sin_idioma, campos,
+    tuya: { resolution: fields.resolution, source: fields.source },
+  }
 }
 
-/** Lo que ya hay en eMuwarez de lo mismo; `tuya`, lo que irá en el nombre (como el Resumen del asistente). */
-async function enEmuwarez(
-  id: number, tuya?: { resolution?: string | null; source?: string | null },
-): Promise<Pick<AnalisisElemento, 'nivel' | 'enEmu'>> {
-  const comparacion = await getEmuComparison(id, tuya).catch(() => null)
-  const yaHay = resumirComparaciones([comparacion])
-  const conclusion = yaHay.estado === 'listo' ? conclusionDuplicados(yaHay.filas) : null
-  return { nivel: conclusion?.nivel ?? null, enEmu: conclusion?.texto ?? textoSinConclusion(yaHay.estado) }
+/** Lo que ya hay en `tracker` de lo mismo; `tuya`, lo que irá en el nombre (como el Resumen del asistente). */
+async function enTracker(id: number, tuya: AnalisisElemento['tuya'], tracker: TrackerParaSubir): Promise<YaHayEnTracker> {
+  const yaHay = resumirComparaciones(await getEmuComparisons([id], tuya, tracker.id).catch(() => null))
+  const conclusion = yaHay.estado === 'listo' ? yaHay.conclusion : null
+  return {
+    nivel: conclusion?.nivel ?? null, texto: conclusion?.texto ?? textoSinConclusion(yaHay.estado, tracker.nombre),
+    yaLoTiene: !!conclusion?.ya_lo_tiene,
+  }
 }
 
-/**
- * Una temporada (un pack): solo lo que hay en eMuwarez, comparado con lo que tienes, como hace el asistente con una
- * tanda de temporadas. Su nombre, su bloqueo y su proveedor salen de sus comprobaciones (el plan del pack).
- */
-export async function analizarTemporada(id: number): Promise<AnalisisElemento> {
-  const enEmu = await enEmuwarez(id)
-  return { nombre: null, bloqueo: null, avisos: [], sinIdioma: false, campos: null, ...enEmu }
-}
+// Una temporada (un pack): su nombre, su bloqueo y su proveedor salen de sus comprobaciones (el plan del pack), y lo
+// que hay en cada tracker se compara con lo que tienes, como hace el asistente con una tanda de temporadas.
+const TEMPORADA: AnalisisElemento = { nombre: null, bloqueo: null, avisos: [], sinIdioma: false, campos: null }
 
 /**
  * El análisis de cada elemento del lote, de uno en uno (son peticiones locales, pero cada película abre el
@@ -111,7 +115,7 @@ export function useAnalisisLote({ activo, elementos }: { activo: boolean; elemen
     setAnalizando(true)
     const run = async () => {
       for (const e of faltan) {
-        const resultado = e.item_type === 'season' ? await analizarTemporada(e.id) : await analizarPelicula(e.id)
+        const resultado = e.item_type === 'season' ? TEMPORADA : await analizarPelicula(e.id)
         // Una pasada abandonada (otra selección, otro paso) no apunta lo que ya no se mira.
         if (!vivo) return
         setAnalisis(prev => new Map(prev).set(e.id, resultado))
@@ -134,6 +138,35 @@ export function useAnalisisLote({ activo, elementos }: { activo: boolean; elemen
   // Mientras no estén todas, «Subir» no se habilita aunque el efecto aún no haya arrancado.
   const completo = elementos.every(e => analisis.has(e.id))
   return { analisis, analizando: analizando || (activo && !completo), olvidar, repetir }
+}
+
+/**
+ * Lo que ya hay de cada elemento analizado (sin bloqueo) en el catálogo local de cada tracker de `trackers`, por
+ * `tracker:id`, mientras `activo`. Son peticiones locales; lo ya pedido se guarda.
+ */
+export function useYaHayLote({ activo, analisis, trackers }: {
+  activo: boolean; analisis: ReadonlyMap<number, AnalisisElemento>; trackers: readonly TrackerParaSubir[]
+}) {
+  const [yaHay, setYaHay] = useState<ReadonlyMap<string, YaHayEnTracker>>(() => new Map())
+  const pedidos = useRef(new Set<string>())
+  const vuelta = useRef(0)
+  const claveTrackers = trackers.map(t => t.id).join(',')
+  useEffect(() => {
+    if (!activo) return
+    for (const t of trackers) {
+      for (const [id, a] of analisis) {
+        const clave = `${t.id}:${id}`
+        if (a.bloqueo || pedidos.current.has(clave)) continue
+        pedidos.current.add(clave)
+        const v = vuelta.current
+        enTracker(id, a.tuya, t).then(r => { if (v === vuelta.current) setYaHay(m => new Map(m).set(clave, r)) })
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- se pide al cambiar lo que se mira, no con cada pintado
+  }, [activo, analisis, claveTrackers])
+  // Otra selección o «Volver a comprobar»: se vuelve a mirar todo (lo que llegue de antes se descarta).
+  const olvidar = () => { vuelta.current += 1; pedidos.current = new Set(); setYaHay(new Map()) }
+  return { get: (clave: string) => yaHay.get(clave), olvidar }
 }
 
 /**

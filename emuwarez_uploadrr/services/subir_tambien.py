@@ -8,15 +8,19 @@ valga, Uploadrr-EMU lo hace con el torrent de otro tracker (`--base-desde <TK>:<
 upload_execution.consultas.base_desde_para). Varias a la vez van como un lote (services/lotes.py) y respetan «Subidas en
 paralelo» como cualquier subida: solo las que elige el usuario, nada en bloque por su cuenta.
 
+Un tracker cuyo catálogo local ya tiene lo mismo igual o mejor (subido a mano o con otra herramienta) no se ofrece,
+como en el Resumen del asistente; sin catálogo leído, se ofrece con un aviso.
+
 Antes de encolar se mira en qBittorrent que el torrent de origen está entero con ese fichero como contenido: si no,
 el nuevo torrent no tendría de dónde sembrarse."""
 from __future__ import annotations
 
+import json
 import os
 import sqlite3
 
 from ..database import rows_to_dicts
-from . import seeding_qbit, trackers
+from . import emu_catalog, seeding_qbit, trackers
 from .lotes import MAX_ELEMENTOS_LOTE, nuevo_lote_id
 from .upload_execution.consultas import tracker_del_trabajo
 
@@ -79,17 +83,47 @@ def _motivo_destino(conn: sqlite3.Connection, job: dict, tracker_id: str,
     return None
 
 
-def ofrecidos(conn: sqlite3.Connection, job: dict) -> list[trackers.Tracker]:
-    """Los trackers que el detalle de una subida ofrece en «Subir también a…» (sin mirar qBittorrent: eso, al pulsar)."""
+def _motivo_catalogo(conn: sqlite3.Connection, job: dict, tracker_id: str) -> str | None:
+    """Si el catálogo local de `tracker_id` ya tiene lo de `job` igual o mejor, por qué no subirlo; si no, o sin
+    catálogo, None."""
+    tracker = trackers.obtener(tracker_id)
+    # Lo del nombre con que se subió: el fichero de la biblioteca puede haber cambiado después.
+    nombre = json.loads(job.get("nomenclature_snapshot_json") or "{}")
+    comparacion = emu_catalog.get_item_comparison(conn, job["library_item_id"], tracker=tracker,
+                                                  resolution=nombre.get("resolution"), source=nombre.get("source"),
+                                                  codec=nombre.get("video_codec"), audio=nombre.get("audio_summary"))
+    if (comparacion.get("conclusion") or {}).get("ya_lo_tiene"):
+        return emu_catalog.motivo_ya_lo_tiene(tracker)
+    return None
+
+
+def sin_catalogo(conn: sqlite3.Connection, destinos: list[trackers.Tracker]) -> list[str]:
+    """El aviso de cada tracker de `destinos` cuyo catálogo local no se ha leído nunca: en él no se mira si ya está."""
+    return [f"Sin catálogo local de {t.nombre}: no se ha mirado si ya lo tiene." for t in destinos
+            if not emu_catalog.catalogo_leido(conn, t)]
+
+
+def _repartir(conn: sqlite3.Connection, job: dict, posibles: list[trackers.Tracker],
+              existentes: dict[tuple[int, str], int]) -> tuple[list[trackers.Tracker], list[str]]:
+    """De `posibles`, a cuáles se puede subir también `job` y, de los demás, el motivo de los que ya lo tienen."""
+    libres = [t for t in posibles if _motivo_destino(conn, job, t.id, existentes) is None]
+    ya_lo_tienen = {t.id: m for t in libres if (m := _motivo_catalogo(conn, job, t.id))}
+    return [t for t in libres if t.id not in ya_lo_tienen], list(ya_lo_tienen.values())
+
+
+def ofrecidos(conn: sqlite3.Connection, job: dict) -> tuple[list[trackers.Tracker], list[str]]:
+    """Los trackers que el detalle de una subida ofrece en «Subir también a…» (sin mirar qBittorrent: eso, al pulsar)
+    y los avisos: los que ya lo tienen según su catálogo local y los ofrecidos sin catálogo."""
     if _motivo_fuente(job) is not None:
-        return []
-    existentes = _subidas_por_tracker(conn, [job["library_item_id"]])
-    return [t for t in destinos(conn) if _motivo_destino(conn, job, t.id, existentes) is None]
+        return [], []
+    libres, ya_lo_tienen = _repartir(conn, job, destinos(conn), _subidas_por_tracker(conn, [job["library_item_id"]]))
+    return libres, ya_lo_tienen + sin_catalogo(conn, libres)
 
 
 def candidatas(conn: sqlite3.Connection) -> list[dict]:
     """Las subidas que se pueden subir también a algún tracker, la más reciente primero: de cada elemento, la última
-    completada que vale de origen, sea del tracker que sea (`origen`), con los trackers que se le ofrecen."""
+    completada que vale de origen, sea del tracker que sea (`origen`), con los trackers que se le ofrecen y el motivo
+    de los que ya lo tienen según su catálogo local (`ya_lo_tienen`)."""
     posibles = destinos(conn)
     if not posibles:
         return []
@@ -104,9 +138,10 @@ def candidatas(conn: sqlite3.Connection) -> list[dict]:
         if job["library_item_id"] in vistos or _motivo_fuente(job) is not None:
             continue
         vistos.add(job["library_item_id"])
-        libres = [t for t in posibles if _motivo_destino(conn, job, t.id, existentes) is None]
+        libres, ya_lo_tienen = _repartir(conn, job, posibles, existentes)
         if libres:
-            salida.append({"job": job, "origen": tracker_del_trabajo(job), "trackers": libres})
+            salida.append({"job": job, "origen": tracker_del_trabajo(job), "trackers": libres,
+                           "ya_lo_tienen": ya_lo_tienen})
     return salida
 
 
@@ -147,7 +182,8 @@ def subir_tambien(conn: sqlite3.Connection, job_ids: list[int], tracker_ids: lis
     for job_id, tracker_id in pares:
         fuente = fuentes[job_id]
         motivo = (_motivo_fuente(fuente) or en_qbit.get(fuente["prepared_path"])
-                  or _motivo_destino(conn, fuente, tracker_id, existentes))
+                  or _motivo_destino(conn, fuente, tracker_id, existentes)
+                  or _motivo_catalogo(conn, fuente, tracker_id))
         if motivo:
             resultados.append(_bloqueada(job_id, tracker_id, motivo))
             continue
@@ -165,4 +201,4 @@ def subir_tambien(conn: sqlite3.Connection, job_ids: list[int], tracker_ids: lis
             "saltados": len(resultados) - encolados, "resultados": resultados}
 
 
-__all__ = ["SubirTambienRechazado", "destinos", "ofrecidos", "candidatas", "subir_tambien"]
+__all__ = ["SubirTambienRechazado", "destinos", "ofrecidos", "sin_catalogo", "candidatas", "subir_tambien"]

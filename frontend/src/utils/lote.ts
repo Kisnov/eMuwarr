@@ -6,7 +6,6 @@
 import type { DashboardRecommendationItem } from '../api/dashboard'
 import type { LibraryItemResponse, RequestItemResponse } from '../types/api'
 import { seasonNotReadyReason } from './libraryItem'
-import type { NivelDuplicado } from './resumenSubida'
 
 // Copia de services/lotes.py::MAX_ELEMENTOS_LOTE: test_copias_frontend.py vigila que coincidan.
 export const MAX_ELEMENTOS_LOTE = 50
@@ -193,14 +192,6 @@ export function expandirEntradas(
   }
   // Dos peticiones sobre lo mismo que falta darían el mismo aviso dos veces.
   return { elementos, peticiones, avisos: [...new Set(avisos)] }
-}
-
-/**
- * Si un elemento llega marcado al Resumen según lo que ya hay en eMuwarez: un duplicado o una copia peor que todo
- * lo que hay, desmarcados (se pueden marcar a mano); sin nada con lo que comparar (`null`) o el resto, marcados.
- */
-export function marcadaPorDefecto(nivel: NivelDuplicado | null): boolean {
-  return nivel !== 'duplicado' && nivel !== 'peor'
 }
 
 /**

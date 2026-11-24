@@ -25,10 +25,11 @@ function textoResultado(r: SubirTambienRespuesta, nombres: Record<string, string
 // En el detalle de una subida completada: un botón por cada otro tracker que la acepta.
 export function SubirTambienBloque({ job, onEncolado }: { job: UploadJob; onEncolado?: () => void }) {
   const destinos = job.subir_tambien_a ?? []
+  const avisos = job.subir_tambien_avisos ?? []
   const [enviando, setEnviando] = useState<string | null>(null)
   const [mensajes, setMensajes] = useState<string[]>([])
   useEffect(() => { setMensajes([]); setEnviando(null) }, [job.id])
-  if (destinos.length === 0 && mensajes.length === 0) return null
+  if (destinos.length === 0 && avisos.length === 0 && mensajes.length === 0) return null
   const nombres = Object.fromEntries(destinos.map(t => [t.id, t.nombre]))
   const subir = async (tracker: string) => {
     setEnviando(tracker)
@@ -55,6 +56,7 @@ export function SubirTambienBloque({ job, onEncolado }: { job: UploadJob; onEnco
             </button>
           ))}
         </div>
+        {avisos.map(a => <p key={a} className="sub-muted sub-t12">{a}</p>)}
         <div aria-live="polite" data-testid="subir-tambien-resultado">
           {mensajes.map(m => <p key={m} className="sub-t12">{m}</p>)}
         </div>
@@ -130,6 +132,7 @@ export function SubirTambienModal({ onClose, onEncolado }: {
                 </label>
               ))}
             </fieldset>
+            {datos.avisos?.map(a => <p key={a} className="sub-muted sub-t12">{a}</p>)}
             <ul className="subir-tambien-lista" aria-label="Subidas completadas">
               {datos.subidas.map(s => (
                 <li key={s.job_id}>
@@ -138,7 +141,8 @@ export function SubirTambienModal({ onClose, onEncolado }: {
                       onChange={() => setElegidas(c => alternar(c, s.job_id))} />
                     {' '}<span>{s.title || s.nombre}</span>
                     <span className="sub-muted sub-t11"> · #{s.job_id}{s.finished_at ? ` · ${formatDate(s.finished_at)}` : ''}
-                      {' '}· en {s.origen.nombre} · falta en {s.trackers.map(t => t.nombre).join(', ')}</span>
+                      {' '}· en {s.origen.nombre} · falta en {s.trackers.map(t => t.nombre).join(', ')}
+                      {s.ya_lo_tienen?.length ? ` · ${s.ya_lo_tienen.join(' · ')}` : ''}</span>
                   </label>
                 </li>
               ))}

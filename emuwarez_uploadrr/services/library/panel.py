@@ -495,7 +495,7 @@ def get_dashboard_recommendations(conn: sqlite3.Connection, *, limit: int = 100)
 
     # Group 4 — «Mejoras posibles»: lo que tienes disponible y YA está en eMuwarez, pero tu copia aporta algo que
     # no tiene ninguno de sus torrents (mayor resolución, mejor source, un códec más eficiente o el castellano que
-    # les falta): lo que la ficha de Biblioteca marca como «Aportas» (emu_in_catalog = 1 con emu_aportes). Mismas
+    # les falta): emu_in_catalog = 1 con emu_aportes, como el filtro «Aportas» de Biblioteca. Mismas
     # unidades subibles y mismas exigencias de castellano y de pack que el grupo 2. No es un permiso para subir:
     # eMuwarez tiene reglas de trumps y el Resumen del asistente enseña el veredicto frente a cada torrent.
     for row in conn.execute(

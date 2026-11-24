@@ -1,11 +1,12 @@
 // Paso 2 de «Subir por lotes»: por película o temporada, el nombre del torrent, sus avisos, su comprobación y lo
-// que ya hay en eMuwarez, con la casilla «Incluir»; debajo, las comprobaciones comunes (una sola vez) y «Subir N».
+// que ya hay en cada tracker elegido, con la casilla «Incluir»; debajo, las comprobaciones comunes (una sola vez) y
+// «Subir N».
 // Con otro tracker con clave, arriba se eligen a cuáles.
 import type { TrackerParaSubir, UploadCheck, UploadChecksResult } from '../../api/uploads'
 import type { LibraryItemResponse } from '../../types/api'
 import { motivoDelBloqueo } from '../../utils/comprobaciones'
 import { CasillasTrackers, CheckRow } from '../asistente/piezas'
-import type { AnalisisElemento } from './useLote'
+import type { AnalisisElemento, YaHayEnTracker } from './useLote'
 
 export interface FilaResumenLote {
   item: LibraryItemResponse
@@ -19,10 +20,14 @@ export interface FilaResumenLote {
   // Falta su comprobación o su análisis.
   pendiente: boolean
   incluida: boolean
-  // «N.O.B.S: motivo» por cada tracker elegido que no lo admite: para ese se salta.
+  // «N.O.B.S: motivo» por cada tracker elegido que no lo admite o ya lo tiene: para ese se salta.
   noLoAdmiten: string[]
   // «Milnueve»: a cuáles va, si alguno de los elegidos no lo admite; null si va a todos.
   soloA: string | null
+  // Lo que ya hay en cada tracker elegido (undefined mientras se mira); vacío si se salta por su nombre.
+  yaHay: { tracker: string; en: YaHayEnTracker | undefined }[]
+  // Los trackers que ya lo tienen y a los que no se manda.
+  omitir: string[]
 }
 
 // Qué falló y dónde: la etiqueta dice qué («Contenido no accesible») y el mensaje, el detalle (la ruta, los errores
@@ -71,10 +76,11 @@ export function PasoResumenLote({
   const envReady = entorno?.ready === true
   const resumen = !comprobando && (completas || !!errorComprobando)
   const fallidas = filas.filter(f => f.contenido?.ready === false || f.analisis?.bloqueo).length
-  const puedeSubir = !comprobando && !errorComprobando && completas && envReady && !analizando && incluidas > 0 && !enviando
-    && !!destinoSubida
   const salta = filas.filter(f => f.salto).length
   const porComprobar = filas.filter(f => !f.salto && f.pendiente).length
+  // Con alguna aún por comprobar no se sube: quedaría fuera sin saber si era un duplicado.
+  const puedeSubir = !comprobando && !errorComprobando && completas && envReady && !analizando && incluidas > 0 && !enviando
+    && !!destinoSubida && porComprobar === 0
   return (
     <div className="modal-body">
       {/* Lo que va a pasar con el lote, de un vistazo y sin tener que leer la tabla fila a fila. */}
@@ -99,13 +105,14 @@ export function PasoResumenLote({
       <div className="lote-tabla-caja">
         <table className="data-table lote-tabla">
           <thead>
-            <tr><th>Contenido</th><th>Comprobación</th><th>En eMuwarez</th><th>Incluir</th></tr>
+            <tr><th>Contenido</th><th>Comprobación</th><th>En {destinoSubida || 'eMuwarez'}</th><th>Incluir</th></tr>
           </thead>
           <tbody>
             {filas.map(f => {
               const a = f.analisis
               // El de una temporada ya lleva la serie: «Serie - Temporada 2».
               const titulo = f.item.title
+              const una = f.yaHay.length === 1 ? f.yaHay[0] : null
               return (
                 <tr key={f.item.id} data-item={f.item.id}>
                   <td className="lote-celda-titulo">
@@ -125,7 +132,13 @@ export function PasoResumenLote({
                         ? <span className="asist-ok">✓ Lista</span>
                         : <span className="asist-error">✗ {f.salto ?? primerFallo(f.contenido)}</span>}
                   </td>
-                  <td className={['lote-celda-emu', a?.nivel && CLASE_NIVEL[a.nivel]].filter(Boolean).join(' ')}>{a ? a.enEmu : '…'}</td>
+                  {/* Con varios trackers, una línea por tracker con su nombre delante. */}
+                  <td className={['lote-celda-emu', una?.en?.nivel && CLASE_NIVEL[una.en.nivel]].filter(Boolean).join(' ')}
+                    data-etiqueta={una ? `En ${una.tracker}: ` : undefined}>
+                    {!a ? '…' : f.yaHay.length === 0 ? '—' : una ? una.en?.texto ?? '…' : f.yaHay.map(({ tracker, en }) => (
+                      <div key={tracker} className={en?.nivel ? CLASE_NIVEL[en.nivel] : undefined}>{tracker}: {en?.texto ?? '…'}</div>
+                    ))}
+                  </td>
                   <td className="lote-celda-incluir">
                     <label className="checkbox-label">
                       <input
