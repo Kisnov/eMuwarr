@@ -70,6 +70,11 @@ came in from `Kisnov/Uploadrr-EMU` with `git subtree add`, history kept; that re
 
 ## Not obvious
 
+- Audio languages: `und`/empty (and `mis`/`mul`) is missing data. In an MKV it blocks the upload until the real language
+  is set in «Ver pistas» (`upload_checks` «idioma_audio», and the prepared file in `upload_queue._populate_ready`); in
+  another container the app can't tag it, so an MP4/AVI/TS… only warns to convert it to MKV and an ISO passes. `zxx` is a
+  deliberate «no dialogue» tag, valid on every tracker and left out of the release name. Never group the two
+  (`emu_format._SIN_IDIOMA` vs `SIN_DIALOGO`).
 - Push events: call `eventos.publicar` from the one place that writes the data, not from its callers; it
   must never raise. The server stays a single process (no extra uvicorn workers): the event bus is in memory.
   A new `setInterval` in the frontend fails `test_no_han_aparecido_sondeos_nuevos` unless it is listed in
@@ -146,6 +151,13 @@ came in from `Kisnov/Uploadrr-EMU` with `git subtree add`, history kept; that re
   The 30-calls-a-minute eMuwarez budget is shared by the server, the CLI and every Uploadrr-EMU: `_lanzar_uploadrr` sets
   `LIMITADOR_DIR` (`CONFIG_DIR/limitador`), and `integrations/limitador_compartido.py` and `uploadrr-emu/src/utils/limitador.py`
   must stay byte-identical (`test_limitador_compartido.py`); without `fcntl` or a usable directory each process counts alone.
+  Each tracker counts in its own file (`tracker` = its Uploadrr-EMU name: `emu.cliente(..., tracker="NOBS")`).
+- The catalog sync (`services/emu_catalog.py`, button and weekly full task) reads eMuwarez and then, one after
+  another, every other tracker with a key into `emu_catalog` under its `tracker`, each with its own key and API budget.
+  One 1/hour and 1/day throttle covers the whole run; another tracker's failure goes to `error_otros` and doesn't undo
+  eMuwarez's. `library_items.emu_in_catalog`/`emu_aportes` stay eMuwarez's; «is it on X» is
+  `filas_del_catalogo(..., tracker)` / `get_item_comparison(..., tracker)` (`?tracker=` on
+  `/library/{id}/emu-comparison`), used by the wizard's «En <tracker> ya hay» panels.
 - One UNIT3D client: every eMuwarez request, the app's (`emu.cliente`) and Uploadrr-EMU's (`Unit3d._cliente`), goes through
   `integrations/cliente_unit3d.py`. It builds URL and headers (`User-Agent: emuwarr/<version>`; `_lanzar_uploadrr` passes the
   version as `EMUWARR_VERSION`), sends the key only to the tracker's own origin and takes a slot in the limiter first. The key goes

@@ -148,7 +148,6 @@ beforeEach(() => {
   m(nom.previewTrackRemux).mockResolvedValue(PISTAS)
   // El Resumen: catálogo sin nada, sin petición en la ficha.
   m(biblioteca.getEmuComparison).mockResolvedValue({ available: true, message: null, matches: [], in_catalog: 0 })
-  m(biblioteca.getEmuSyncStatus).mockResolvedValue({ last_sync_at: null } as never)
   m(biblioteca.getLibraryItem).mockResolvedValue(elemento({ peticion: null }))
   m(subidas.getExistingJobForItem).mockResolvedValue(null)
   m(subidas.runUploadChecks).mockImplementation(async (_id, alcance) => (alcance === 'environment' ? ENTORNO : LISTO) as never)
@@ -287,6 +286,28 @@ describe('película', () => {
     expect(llamadas.every(c => c[0] === 10)).toBe(true)
   })
 
+  it('el Resumen dice lo que ya hay en cada tracker elegido, con su catálogo', async () => {
+    m(subidas.fetchTrackersParaSubir).mockResolvedValue([{ id: 'emu', nombre: 'eMuwarez' }, { id: 'nobs', nombre: 'N.O.B.S' }])
+    m(biblioteca.getEmuComparison).mockImplementation(async (_id, _tuya, tracker) => ({
+      available: true, message: null, matches: tracker === 'nobs'
+        ? [{ name: 'Dune 2021 2160p', resolution: '2160p', source: 'WEB-DL', codec: null, has_spanish: 1, size: 1, veredicto: 'peor' }]
+        : [],
+    }))
+    await abrir(PELICULA)
+    await esperar(() => texto().includes('Dune WEB-DL AMZN [GRP]'))
+    await pulsar(boton('Continuar'))
+    await esperar(() => texto().includes('Nada de esto está en eMuwarez todavía.'))
+    const titulos = () => [...document.querySelectorAll('.asist-resumen-yahay .asist-panel-titulo')].map(h => h.textContent)
+    expect(titulos()).toEqual(['En eMuwarez ya hay'])
+
+    const casilla = (nombre: string) => [...document.querySelectorAll<HTMLLabelElement>('.asist-marcas label')]
+      .find(l => l.textContent?.includes(nombre))!.querySelector('input')!
+    await pulsar(casilla('N.O.B.S'))
+    await esperar(() => texto().includes('N.O.B.S probablemente la rechace'))
+    expect(titulos()).toEqual(['En eMuwarez ya hay', 'En N.O.B.S ya hay'])
+    expect(biblioteca.getEmuComparison).toHaveBeenCalledWith(10, { resolution: '1080p', source: 'WEB-DL' }, 'nobs')
+  })
+
   it('el Resumen dice las normas de idioma de cada otro tracker y no sube a uno que no lo admite', async () => {
     m(subidas.fetchTrackersParaSubir).mockResolvedValue([{ id: 'emu', nombre: 'eMuwarez' }, { id: 'nobs', nombre: 'N.O.B.S' }])
     m(subidas.fetchReglasTracker).mockResolvedValue(
@@ -296,7 +317,7 @@ describe('película', () => {
     await pulsar(boton('Continuar'))
     await esperar(() => texto().includes('✓ Todo listo para subir'))
     await esperar(() => texto().includes('N.O.B.S: ✗ N.O.B.S no lo admite'))
-    expect(subidas.fetchReglasTracker).toHaveBeenCalledWith(10, 'nobs')
+    expect(subidas.fetchReglasTracker).toHaveBeenCalledWith(10, 'nobs', undefined)
     const casilla = [...document.querySelectorAll<HTMLLabelElement>('.asist-marcas label')]
       .find(l => l.textContent?.includes('N.O.B.S'))!.querySelector('input')!
     await pulsar(casilla)
@@ -605,7 +626,8 @@ describe('pack de temporada', () => {
     await pulsar(boton('Continuar'))
     await esperar(() => texto().includes('✓ Todo listo para subir'))
     expect(nom.saveNomenclatureFields).not.toHaveBeenCalled()
-    expect(subidas.runUploadChecks).toHaveBeenCalledWith(20, undefined, undefined)
+    // Las comprobaciones cuentan el idioma elegido: sin él, la pista sin idioma bloquearía.
+    expect(subidas.runUploadChecks).toHaveBeenCalledWith(20, undefined, undefined, { idiomas: { 1: 'spa' } })
     expect(texto()).toContain('2 capítulos en una carpeta')
 
     await pulsar(boton('Subir a eMuwarez'))
@@ -674,6 +696,23 @@ describe('pack de temporada', () => {
       await esperar(() => texto().includes('Castellano del capítulo nuevo'))
       expect(temporada.getSeasonEpisodeRemuxPreview).toHaveBeenLastCalledWith(20, { 1: 'spa' })
     })
+  })
+
+  it('un plan bloqueado que pasa con el idioma elegido se vuelve a pedir con él', async () => {
+    m(temporada.previewSeasonPack)
+      .mockResolvedValueOnce(plan({ status: 'blocked', errors: ['El capítulo 1 no tiene castellano.'] }))
+      .mockResolvedValueOnce(plan())
+    m(temporada.getSeasonPackAudio).mockResolvedValue({
+      audio_summary: 'Castellano DD 5.1', custom: false, audio_warning: null, pistas_sin_idioma: [],
+      idiomas_audio: { 1: 'spa' },
+    } as never)
+    await abrir(TEMPORADA, { preselect: { season: 1 } })
+    await pulsar(await esperar(() => boton('Continuar')))
+    await esperar(() => texto().includes('El capítulo 1 no tiene castellano.'))
+    await elegir(campo('Pista de audio 1'), 'spa')
+    await esperar(() => texto().includes('✓ 2 capítulo(s) listos'))
+    expect(temporada.previewSeasonPack).toHaveBeenLastCalledWith(20, undefined, { 1: 'spa' })
+    await esperar(() => !boton('Continuar')!.disabled)
   })
 
   it('un plan bloqueado por proveedores distintos deja elegir uno y lo vuelve a pedir', async () => {
@@ -1148,7 +1187,7 @@ describe('los pasos y el Resumen', () => {
       expect(dato('Petición')).toBe('Ninguna abierta para esta película')
       expect(dato('Copia')).toContain('Se decide al preparar los ficheros')
       // Con el nombre y la calidad de lo que se sube, no con lo que dijo Radarr.
-      expect(biblioteca.getEmuComparison).toHaveBeenCalledWith(10, { resolution: '1080p', source: 'WEB-DL' })
+      expect(biblioteca.getEmuComparison).toHaveBeenCalledWith(10, { resolution: '1080p', source: 'WEB-DL' }, 'emu')
       expect(boton('← Volver')).toBeDefined()
       expect(boton('Subir a eMuwarez')!.disabled).toBe(false)
     })
@@ -1206,9 +1245,8 @@ describe('los pasos y el Resumen', () => {
 
     it('«En eMuwarez ya hay» pone mejor, igual o peor a cada torrent del catálogo local', async () => {
       const hace3h = new Date(Date.now() - 3 * 3600_000).toISOString()
-      m(biblioteca.getEmuSyncStatus).mockResolvedValue({ last_sync_at: hace3h } as never)
       m(biblioteca.getEmuComparison).mockResolvedValue({
-        available: true, message: null, in_catalog: 1, matches: [
+        available: true, message: null, synced_at: hace3h, in_catalog: 1, matches: [
           { name: 'Dune 2021 720p HDTV', resolution: '720p', source: 'HDTV', codec: null, has_spanish: 1, size: 1, veredicto: 'mejor' },
           { name: 'Dune 2021 1080p WEB-DL', resolution: '1080p', source: 'WEB-DL', codec: null, has_spanish: 1, size: 1, veredicto: 'igual' },
           { name: 'Dune 2021 2160p BluRay', resolution: '2160p', source: 'BluRay', codec: null, has_spanish: 1, size: 1, veredicto: 'peor' },
@@ -1293,7 +1331,7 @@ describe('los pasos y el Resumen', () => {
       expect(dato('Categoría')).toBe('Serie · WEB-DL · 1080p')
       expect(dato('Petición')).toBe('Ninguna abierta para esta temporada')
       expect(dato('Pistas')).toBe('Solo renombrar')
-      expect(biblioteca.getEmuComparison).toHaveBeenCalledWith(20, { resolution: '1080p', source: 'WEB-DL' })
+      expect(biblioteca.getEmuComparison).toHaveBeenCalledWith(20, { resolution: '1080p', source: 'WEB-DL' }, 'emu')
     })
   })
 
@@ -1323,7 +1361,7 @@ describe('los pasos y el Resumen', () => {
       await esperar(() => dato('Petición').includes('Cubre'))
       expect(dato('Petición')).toBe('Cubre «Serie S01»')
       await esperar(() => texto().includes('1 de 2 no están en eMuwarez.'))
-      expect(m(biblioteca.getEmuComparison).mock.calls).toEqual([[21, undefined], [22, undefined]])
+      expect(m(biblioteca.getEmuComparison).mock.calls).toEqual([[21, undefined, 'emu'], [22, undefined, 'emu']])
       expect(textos()).toEqual(['✓ 1 · Contenido (hecho)', '✓ 2 · Nombre y pistas (hecho)', '3 · Resumen'])
     })
 

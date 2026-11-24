@@ -10,7 +10,7 @@ from emuwarez_uploadrr.services.upload_execution import build_uploadrr_execution
 from emuwarez_uploadrr.services.upload_execution import config as ue
 from tests.test_eventos_uploadrr import _crear_job, _lanzar, _poner_ajustes, _terminal
 from tests.test_subida_por_tracker import _clave, _fila, _peli, _trabajo, db_conn  # noqa: F401 (fixture)
-from tests.test_subir_tambien import _emu_completada, _entero, _qbit, sin_hilos  # noqa: F401 (fixture)
+from tests.test_subir_tambien import _emu_completada, _entero, _pistas_con_idioma, _qbit, sin_hilos  # noqa: F401 (fixture)
 
 _FIXTURES_COMPARTIDAS = (db_conn, sin_hilos)
 

@@ -10,12 +10,13 @@ export type Veredicto = 'mejor' | 'igual' | 'peor'
 
 export interface FilaYaHay { clave: string; nombre: string; calidad: string; veredicto: Veredicto | null }
 
-// Lo que el catálogo local sabe de lo que se sube. `sinNada`: cuántos de los `total` elementos no están.
+// Lo que el catálogo local sabe de lo que se sube. `sinNada`: cuántos de los `total` elementos no están;
+// `sincronizado`: cuándo acabó la última lectura de ese catálogo.
 export type YaHay =
   | { estado: 'cargando' }
   | { estado: 'error' }
   | { estado: 'sin-catalogo' }
-  | { estado: 'listo'; filas: FilaYaHay[]; sinNada: number; total: number }
+  | { estado: 'listo'; filas: FilaYaHay[]; sinNada: number; total: number; sincronizado: string | null }
 
 const plural = (n: number, uno: string, varios: string) => `${formatNumero(n)} ${n === 1 ? uno : varios}`
 
@@ -100,14 +101,15 @@ export function resumirComparaciones(comparaciones: (EmuComparison | null)[]): Y
   return {
     estado: 'listo', filas, total: disponibles.length,
     sinNada: disponibles.filter(c => c.matches.length === 0).length,
+    sincronizado: disponibles[0].synced_at ?? null,
   }
 }
 
 export type NivelDuplicado = 'duplicado' | 'trump' | 'mixto' | 'peor' | 'sin-comparar'
 
-// La conclusión de la tabla «En eMuwarez ya hay», en una frase: qué dicen los veredictos de lo tuyo frente a cada torrent.
-// No es un permiso: eMuwarez tiene sus reglas de trumps y solo ellas deciden si una subida se acepta.
-export function conclusionDuplicados(filas: FilaYaHay[]): { nivel: NivelDuplicado; clase: Veredicto | null; texto: string } | null {
+// La conclusión de la tabla «En <tracker> ya hay», en una frase: qué dicen los veredictos de lo tuyo frente a cada torrent.
+// No es un permiso: cada tracker tiene sus reglas de trumps y solo ellas deciden si una subida se acepta.
+export function conclusionDuplicados(filas: FilaYaHay[], tracker = 'eMuwarez'): { nivel: NivelDuplicado; clase: Veredicto | null; texto: string } | null {
   if (filas.length === 0) return null
   const cuenta = (v: Veredicto) => filas.filter(f => f.veredicto === v).length
   const mejor = cuenta('mejor'), igual = cuenta('igual'), peor = cuenta('peor')
@@ -126,5 +128,5 @@ export function conclusionDuplicados(filas: FilaYaHay[]): { nivel: NivelDuplicad
   if (mejor > 0) {
     return { nivel: 'mixto', clase: 'igual', texto: `Tu copia mejora ${formatNumero(mejor)} y empeora ${formatNumero(peor)} de lo que hay: no es un trump claro.${nota}` }
   }
-  return { nivel: 'peor', clase: 'peor', texto: `Tu copia es peor que todo lo ${parcial ? 'comparado' : 'que ya hay'}: eMuwarez probablemente la rechace.${nota}` }
+  return { nivel: 'peor', clase: 'peor', texto: `Tu copia es peor que todo lo ${parcial ? 'comparado' : 'que ya hay'}: ${tracker} probablemente la rechace.${nota}` }
 }

@@ -215,6 +215,8 @@ export interface EmuMatch {
 export interface EmuComparison {
   available: boolean
   message: string | null
+  // Cuándo acabó la última lectura del catálogo de ese tracker.
+  synced_at?: string | null
   mine?: { resolution: string | null; source: string | null; codec: string | null; has_es: boolean; size: number | null; release_groups?: string[] }
   mine_available?: boolean
   matches: EmuMatch[]
@@ -227,12 +229,14 @@ export interface EmuComparison {
 }
 
 // `resolution` y `source`, si vienen, sustituyen a los de tu copia: lo que el asistente de subida pone en el nombre.
+// `tracker`: el catálogo con el que se compara (eMuwarez sin él).
 export async function getEmuComparison(
-  id: number, tuya?: { resolution?: string | null; source?: string | null },
+  id: number, tuya?: { resolution?: string | null; source?: string | null }, tracker?: string,
 ): Promise<EmuComparison> {
   const consulta = new URLSearchParams()
   if (tuya?.resolution) consulta.set('resolution', tuya.resolution)
   if (tuya?.source) consulta.set('source', tuya.source)
+  if (tracker) consulta.set('tracker', tracker)
   const query = consulta.toString() ? `?${consulta}` : ''
   return api.get<EmuComparison>(`/library/${id}/emu-comparison${query}`)
 }
@@ -253,6 +257,8 @@ export interface EmuSyncProgress {
   total_pages: number | null
   eta_seconds: number | null
   error: string | null
+  // Lo que falló al leer el catálogo de otro tracker (N.O.B.S, Milnueve).
+  error_otros?: string | null
 }
 
 export async function getEmuSyncProgress(): Promise<EmuSyncProgress> {

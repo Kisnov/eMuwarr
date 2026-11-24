@@ -429,7 +429,7 @@ def _aggregate_pack_audio(episode_entries: list[dict], conn=None,
 
     Devuelve (cadena de audio, custom).
     """
-    from .emu_format import (build_audio_string, audio_track_quality,
+    from .emu_format import (SIN_DIALOGO, build_audio_string, audio_track_quality,
                              format_audio_codec, format_channels)
 
     por_capitulo = [_episode_audio_by_language(e["episode"], conn, idiomas_audio) for e in episode_entries]
@@ -476,7 +476,7 @@ def _aggregate_pack_audio(episode_entries: list[dict], conn=None,
             # En un pack CUSTOM un idioma puede salir en dos grupos, así que
             # no se colapsa a DUAL/MULTI: esos tokens dicen "este release trae
             # castellano e inglés" y aquí taparían de qué pista habla cada uno.
-            partes.append(" ".join(x for x in ("-".join(langs),
+            partes.append(" ".join(x for x in ("-".join(c for c in langs if c != SIN_DIALOGO),
                                                format_audio_codec(codec),
                                                format_channels(canales)) if x))
         else:
@@ -519,25 +519,40 @@ def _season_title_options(series: dict | None, season: dict, conn) -> list[dict]
 
 def _capitulos_con_audio_sin_idioma(episode_entries: list[dict], conn,
                                     idiomas_audio: dict[int, str] | None = None) -> list:
-    """Los capítulos con alguna pista de audio sin idioma, contando ya con los
-    idiomas elegidos (el informe ya está en caché)."""
+    """Los capítulos MKV con alguna pista de audio sin idioma, contando ya con los
+    idiomas elegidos (el informe ya está en caché). Los que no son MKV, aparte:
+    _avisos_no_mkv."""
+    return [e["episode"].get("episode_number") for e in _sin_idioma_en(episode_entries, idiomas_audio)
+            if e["episode"]["path"].lower().endswith(".mkv")]
+
+
+def _avisos_no_mkv(episode_entries: list[dict]) -> list[str]:
+    """Los avisos de los capítulos que no son MKV con alguna pista de audio sin idioma: no bloquean, porque la app no
+    puede etiquetarlas (reglas_tracker.aviso_no_mkv)."""
+    from .reglas_tracker import aviso_no_mkv
+    por_aviso: dict[str, list] = {}
+    for e in _sin_idioma_en(episode_entries, None):
+        aviso = aviso_no_mkv(e["episode"]["path"])
+        if aviso:
+            por_aviso.setdefault(aviso, []).append(e["episode"].get("episode_number"))
+    return [f"Capítulo(s) {', '.join(str(n) for n in capitulos)}: {aviso}" for aviso, capitulos in por_aviso.items()]
+
+
+def _sin_idioma_en(episode_entries: list[dict], idiomas_audio: dict[int, str] | None) -> list[dict]:
+    """Los capítulos con alguna pista de audio sin idioma según MediaInfo."""
     from .media_info_service import build_mediainfo_report
-    salida = []
-    for e in episode_entries:
-        path = e["episode"].get("path")
-        # build_mediainfo_report ya aplica los mappings: se le pasa la ruta guardada,
-        # sin mapear, para no aplicarlos dos veces.
-        if path and build_mediainfo_report(path, idiomas_audio=idiomas_audio).get("pistas_sin_idioma"):
-            salida.append(e["episode"].get("episode_number"))
-    return salida
+    # build_mediainfo_report ya aplica los mappings: se le pasa la ruta guardada,
+    # sin mapear, para no aplicarlos dos veces.
+    return [e for e in episode_entries if e["episode"].get("path")
+            and build_mediainfo_report(e["episode"]["path"], idiomas_audio=idiomas_audio).get("pistas_sin_idioma")]
 
 
 def aviso_audio_sin_idioma_del_pack(capitulos: list) -> Optional[str]:
     """El aviso del plan para los capítulos que aún tienen una pista de audio sin idioma."""
     if not capitulos:
         return None
-    return (f"Capítulo(s) {', '.join(str(n) for n in capitulos)}: una pista de audio no tiene idioma y "
-            "el nombre del pack no la incluye. Elige su idioma junto al campo Audio.")
+    return (f"Capítulo(s) {', '.join(str(n) for n in capitulos)}: una pista de audio no tiene idioma (und) y "
+            "el nombre del pack no la incluye. Elige su idioma junto al campo Audio: sin él no se puede subir.")
 
 
 def _pistas_sin_idioma_del_pack(episode_entries: list[dict], idiomas_audio: dict[int, str] | None) -> list[dict]:
@@ -550,7 +565,8 @@ def _pistas_sin_idioma_del_pack(episode_entries: list[dict], idiomas_audio: dict
     por_posicion: dict[int, dict] = {}
     for e in episode_entries:
         path = e["episode"].get("path")
-        if not path:
+        # Solo un MKV se etiqueta: en otro, elegirlo cambiaría el nombre y no el fichero.
+        if not path or not path.lower().endswith(".mkv"):
             continue
         informe = build_mediainfo_report(path)
         filas = {r.get("field"): r for r in informe.get("rows") or []}
@@ -617,7 +633,7 @@ def _spanish_errors(episode_entries: list[dict], tracker: str = "emu", *, anime:
 
     `tracker` (services/trackers.py): otro que eMuwarez aplica su regla a cada capítulo
     (services/reglas_tracker.py::reglas_de) y el mensaje es el suyo. eMuwarez, la de siempre."""
-    from .emu_format import has_castellano
+    from .emu_format import has_castellano, solo_sin_dialogo
 
     errors: list[str] = []
     if tracker != "emu":
@@ -630,7 +646,7 @@ def _spanish_errors(episode_entries: list[dict], tracker: str = "emu", *, anime:
         return errors
     for entry in episode_entries:
         ep = entry["episode"]
-        if has_castellano(ep.get("audio_languages")) == 1:
+        if has_castellano(ep.get("audio_languages")) == 1 or solo_sin_dialogo(ep.get("audio_languages")):
             continue
         if has_castellano(ep.get("subtitle_languages")) == 1:
             continue
@@ -673,12 +689,19 @@ def variante_del_pack(episode_entries: list[dict], tracker: str, *, anime: bool 
     return reglas_de(tracker, juntos, anime=anime).variante
 
 
-def reglas_del_pack(season: dict, tracker: str, conn):
+def _con_idiomas(episode_entries: list[dict], idiomas_audio: dict | None) -> list[dict]:
+    """Los capítulos con el audio que tendrán con los idiomas elegidos por posición: lo que miran las normas."""
+    from .reglas_tracker import con_idiomas_elegidos
+    return [{**e, "episode": con_idiomas_elegidos(e["episode"], idiomas=idiomas_audio)} for e in episode_entries]
+
+
+def reglas_del_pack(season: dict, tracker: str, conn, idiomas: dict | None = None):
     """La regla de idioma de `tracker` en cada capítulo disponible de la temporada y la variante del pack, sin construir
-    el plan entero (sin propuestas ni TMDb): lo que se mira al encolar y en el Resumen (reglas_tracker.reglas_para_subir)."""
+    el plan entero (sin propuestas ni TMDb): lo que se mira al encolar y en el Resumen (reglas_tracker.reglas_para_subir).
+    `idiomas`: los elegidos para las pistas sin idioma, por posición."""
     from .reglas_tracker import Reglas
-    entries = [{"episode": e} for e in _get_season_episodes(season["id"], conn=conn)
-               if e.get("local_status") == LocalStatus.AVAILABLE.value]
+    entries = _con_idiomas([{"episode": e} for e in _get_season_episodes(season["id"], conn=conn)
+                            if e.get("local_status") == LocalStatus.AVAILABLE.value], idiomas)
     anime = tracker != "emu" and es_anime_el_pack(season, conn)
     errores = _spanish_errors(entries, tracker, anime=anime)
     if errores:
@@ -936,7 +959,8 @@ def build_season_pack_plan(
 
         errors.extend(_consistency_errors(episode_entries))
         anime = tracker != "emu" and es_anime_el_pack(season, conn)
-        errors.extend(_spanish_errors(episode_entries, tracker, anime=anime))
+        con_idiomas = _con_idiomas(episode_entries, idiomas_audio)
+        errors.extend(_spanish_errors(con_idiomas, tracker, anime=anime))
         # Se suman a los avisos de la decisión del proveedor, no los sustituyen.
         for aviso in (_resolucion_del_pack(episode_entries)[1], _fuente_del_pack(episode_entries)[1]):
             if aviso:
@@ -945,6 +969,7 @@ def build_season_pack_plan(
         # idioma y lo quita en cuanto se elige, sin rehacer el plan.
         audio_warning = aviso_audio_sin_idioma_del_pack(
             _capitulos_con_audio_sin_idioma(episode_entries, conn, idiomas_audio))
+        warnings.extend(_avisos_no_mkv(episode_entries))
 
         # Internal Source Tool comparison (name vs Radarr/Sonarr vs
         # MediaInfo-bitrate), computed once from the first available episode
@@ -1060,7 +1085,7 @@ def build_season_pack_plan(
             "idiomas_audio": idiomas_audio or {},
             "idiomas_elegibles": opciones_de_idioma(),
             # La categoría del pack en el tracker de la subida (`--variante`); None, la de siempre.
-            "variante": variante_del_pack(episode_entries, tracker, anime=anime),
+            "variante": variante_del_pack(con_idiomas, tracker, anime=anime),
         }
     except SeasonPlanCancelled:
         # Not an error: the user closed the wizard, so there is nothing to

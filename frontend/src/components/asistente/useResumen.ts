@@ -1,11 +1,14 @@
 // Lo que el Resumen pide fuera del asistente: si el catálogo local ya tiene lo que se sube y qué petición cubre.
 import { useEffect, useState } from 'react'
-import { getEmuComparison, getEmuSyncStatus, getLibraryItem } from '../../api/library'
+import { getEmuComparison, getLibraryItem } from '../../api/library'
 import { getRequestDetail } from '../../api/requests'
+import type { TrackerParaSubir } from '../../api/uploads'
 import { resumirComparaciones, textoPeticion, type PeticionResumen, type YaHay } from '../../utils/resumenSubida'
 
-export function useResumen({ ids, tuya, requestId, cubiertos, alcance }: {
+export function useResumen({ ids, trackers, tuya, requestId, cubiertos, alcance }: {
   ids: readonly number[]
+  // Los trackers elegidos: de cada uno, lo que ya hay en su catálogo.
+  trackers: readonly TrackerParaSubir[]
   // Lo que irá en el nombre; solo con un elemento (en una tanda cada uno lleva el suyo).
   tuya?: { resolution?: string | null; source?: string | null }
   requestId?: number
@@ -14,26 +17,22 @@ export function useResumen({ ids, tuya, requestId, cubiertos, alcance }: {
   // Una frase del tipo «esta temporada»; null en una tanda, donde no se mira si hay otra abierta.
   alcance: string | null
 }) {
-  const [yaHay, setYaHay] = useState<YaHay>({ estado: 'cargando' })
-  const [sincronizado, setSincronizado] = useState<string | null>(null)
+  const [yaHay, setYaHay] = useState<ReadonlyMap<string, YaHay>>(() => new Map())
   const [peticion, setPeticion] = useState<PeticionResumen | null>(null)
   const clave = ids.join(',')
+  const claveTrackers = trackers.map(t => t.id).join(',')
 
   useEffect(() => {
     if (ids.length === 0) return
     let vivo = true
-    setYaHay({ estado: 'cargando' })
-    Promise.all([
-      Promise.all(ids.map(id => getEmuComparison(id, tuya).catch(() => null))),
-      getEmuSyncStatus().then(s => s.last_sync_at).catch(() => null),
-    ]).then(([comparaciones, sync]) => {
-      if (!vivo) return
-      setYaHay(resumirComparaciones(comparaciones))
-      setSincronizado(sync)
-    })
+    setYaHay(new Map())
+    Promise.all(trackers.map(t => Promise.all(ids.map(id => getEmuComparison(id, tuya, t.id).catch(() => null)))))
+      .then(porTracker => {
+        if (vivo) setYaHay(new Map(trackers.map((t, i) => [t.id, resumirComparaciones(porTracker[i])])))
+      })
     return () => { vivo = false }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- se pide al entrar en el paso o cambiar lo que se sube, no con cada pintado
-  }, [clave, tuya?.resolution, tuya?.source])
+  }, [clave, claveTrackers, tuya?.resolution, tuya?.source])
 
   useEffect(() => {
     if (ids.length === 0) return
@@ -59,5 +58,7 @@ export function useResumen({ ids, tuya, requestId, cubiertos, alcance }: {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- igual que arriba
   }, [clave, requestId, cubiertos, alcance])
 
-  return { yaHay, sincronizado, peticion }
+  // De cada tracker elegido, lo que ya hay; mientras se lee, «cargando».
+  const yaHayEn = (id: string): YaHay => yaHay.get(id) ?? { estado: 'cargando' }
+  return { yaHayEn, peticion }
 }

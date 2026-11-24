@@ -65,24 +65,26 @@ def _enviar(metodo: str, url: str, cabeceras: dict[str, str]) -> Any:
     return request_json(metodo, url, headers=cabeceras)
 
 
-def cliente(api_key: str, base_url: str | None = None, enviar=None) -> cliente_unit3d.Cliente:
+def cliente(api_key: str, base_url: str | None = None, enviar=None, *, tracker: str = "EMU") -> cliente_unit3d.Cliente:
     """El cliente de eMuwarez: cada petición espera su turno en el limitador compartido (emu_limitador) y un 429 pausa
     a todos. `enviar` (por defecto request_json, que devuelve el JSON y lanza IntegrationError) lo cambia la prueba de
-    conexión, que quiere los errores de http_cliente."""
+    conexión, que quiere los errores de http_cliente. Otro UNIT3D va con su `base_url` y su `tracker` (NOBS, MNV)."""
     return cliente_unit3d.Cliente(
         cliente_unit3d.Tracker(normalize_base_url(base_url or EMU_BASE_URL), api_key, USER_AGENT),
         enviar or _enviar,
-        turno=lambda prioridad: emu_limitador.esperar_turno(api_key, interactiva=prioridad == "interactiva"),
+        turno=lambda prioridad: emu_limitador.esperar_turno(
+            api_key, interactiva=prioridad == "interactiva", tracker=tracker),
         apuntar_429=lambda retry_after: emu_limitador.penalizar(
-            api_key, segundos_retry_after(retry_after, EMU_ESPERA_429)),
+            api_key, segundos_retry_after(retry_after, EMU_ESPERA_429), tracker),
     )
 
 
-def emu_test_connection(api_key: str, base_url: str | None = None, *, interactiva: bool = True) -> dict[str, Any]:
+def emu_test_connection(api_key: str, base_url: str | None = None, *, interactiva: bool = True,
+                        tracker: str = "EMU") -> dict[str, Any]:
     """Test connectivity to eMuwarez (GET /api/torrents/filter?perPage=1).
 
     `interactiva=False` cuando es el primer paso de un recorrido largo: espera su turno en vez de fallar."""
-    return _pedir(api_key, base_url, "/api/torrents/filter", {"perPage": "1"}, interactiva=interactiva)
+    return _pedir(api_key, base_url, "/api/torrents/filter", {"perPage": "1"}, interactiva=interactiva, tracker=tracker)
 
 
 def emu_get_requests(
@@ -191,15 +193,16 @@ _MENSAJE_POR_ESTADO = {
 
 
 def _pedir(api_key: str, base_url: str | None, ruta: str, params: dict[str, Any] | None = None, *,
-           interactiva: bool) -> Any:
-    return cliente(api_key, base_url).pedir("GET", ruta, params, prioridad="interactiva" if interactiva else "recorrido")
+           interactiva: bool, tracker: str = "EMU") -> Any:
+    return cliente(api_key, base_url, tracker=tracker).pedir(
+        "GET", ruta, params, prioridad="interactiva" if interactiva else "recorrido")
 
 
-def _pedir_pagina(api_key: str, base_url: str | None, ruta: str, params: dict[str, Any]) -> Any:
+def _pedir_pagina(api_key: str, base_url: str | None, ruta: str, params: dict[str, Any], tracker: str = "EMU") -> Any:
     """Una página de un recorrido largo: un 429 se repite, tras la pausa que ya ha puesto el cliente."""
     for intento in range(EMU_REINTENTOS_429 + 1):
         try:
-            return _pedir(api_key, base_url, ruta, params, interactiva=False)
+            return _pedir(api_key, base_url, ruta, params, interactiva=False, tracker=tracker)
         except IntegrationError as e:
             if e.status != 429 or intento == EMU_REINTENTOS_429:
                 raise
@@ -213,6 +216,7 @@ def emu_fetch_all_torrents(
     progress=None,
     stop_after_id: int | None = None,
     uploader: str | None = None,
+    tracker: str = "EMU",
 ) -> list[dict[str, Any]]:
     """Fetch eMuwarez torrents (paginated /api/torrents/filter), newest first. Con `uploader`, solo los de ese usuario
     (UNIT3D deja fuera los anónimos).
@@ -227,7 +231,7 @@ def emu_fetch_all_torrents(
     página, el recorrido completo sigue sin él (su orden por defecto) en vez de dejar la sincronización sin
     funcionar; el incremental falla, porque sin orden no puede fiarse de dónde parar.
 
-    El ritmo lo pone el limitador compartido (emu_limitador).
+    El ritmo lo pone el limitador compartido (emu_limitador), con el cupo de `tracker` (EMU, NOBS, MNV).
 
     `progress(page, total_pages, items_so_far, total_items)` is called after each
     page (total_pages/total_items from the API `meta`, or None if absent)."""
@@ -241,7 +245,7 @@ def emu_fetch_all_torrents(
 
     def pedir(n: int) -> Any:
         return _pedir_pagina(api_key, base_url, "/api/torrents/filter", {
-            "perPage": str(per_page), "page": str(n), **filtro, **orden})
+            "perPage": str(per_page), "page": str(n), **filtro, **orden}, tracker)
 
     while page <= max_pages and not reached_known:
         try:
@@ -280,9 +284,12 @@ def emu_fetch_all_torrents(
                 progress(page, total_pages, len(all_items), total_items)
             except Exception:  # noqa: BLE001 — progress is best-effort
                 pass
-        if len(items) < per_page:
+        if len(items) < per_page or (total_pages and page >= total_pages):
             break
         page += 1
+    # Acabar las páginas permitidas sin ver el final no es el catálogo entero: guardarlo borraría lo que falta.
+    if page > max_pages and not reached_known:
+        raise IntegrationError(f"El catálogo tiene más de {max_pages} páginas: no se guarda una lectura a medias")
     return all_items
 
 

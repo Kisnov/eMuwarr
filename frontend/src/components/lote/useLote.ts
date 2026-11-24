@@ -71,7 +71,7 @@ export async function analizarPelicula(id: number): Promise<AnalisisElemento> {
 
   const fields = campos ?? r.fields
   const enEmu = await enEmuwarez(id, { resolution: fields.resolution, source: fields.source })
-  return { nombre, bloqueo: null, avisos, sinIdioma: !!r.audio_warning, campos, ...enEmu }
+  return { nombre, bloqueo: null, avisos, sinIdioma: !!r.audio_sin_idioma, campos, ...enEmu }
 }
 
 /** Lo que ya hay en eMuwarez de lo mismo; `tuya`, lo que irá en el nombre (como el Resumen del asistente). */

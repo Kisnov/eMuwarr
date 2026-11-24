@@ -15,6 +15,7 @@ from emuwarez_uploadrr.services.emu_catalog import (
     SYNC_STATE_KEY,
     get_item_comparison,
 )
+from emuwarez_uploadrr.services.trackers import EMU
 
 
 @pytest.fixture
@@ -160,9 +161,9 @@ def test_el_endpoint_pasa_resolucion_y_source_a_la_comparacion(client, auth_head
                return_value={"available": False, "message": None, "matches": []}) as comparar:
         resp = client.get("/api/library/7/emu-comparison?resolution=2160p&source=WEB-DL", headers=auth_headers)
         assert resp.status_code == 200
-        assert comparar.call_args.kwargs == {"resolution": "2160p", "source": "WEB-DL"}
+        assert comparar.call_args.kwargs == {"resolution": "2160p", "source": "WEB-DL", "tracker": EMU}
         client.get("/api/library/7/emu-comparison", headers=auth_headers)
-        assert comparar.call_args.kwargs == {"resolution": None, "source": None}
+        assert comparar.call_args.kwargs == {"resolution": None, "source": None, "tracker": EMU}
 
 
 def test_un_capitulo_suelto_no_se_compara_con_el_pack_de_la_temporada(db_conn):
