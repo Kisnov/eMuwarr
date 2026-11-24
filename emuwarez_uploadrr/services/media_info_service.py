@@ -160,6 +160,9 @@ def build_mediainfo_report(path: str, radarr_source: str | None = None,
     if not mediainfo_available():
         return {"available": False, "message": "El binario `mediainfo` no está instalado en este entorno.", "rows": []}
     p = Path(path)
+    # Como build_track_plan: el idioma elegido solo se escribe en un MKV, así que en otro no cuenta para el nombre.
+    if p.suffix.lower() != ".mkv":
+        idiomas_audio = None
     if not p.is_file():
         return {"available": False, "message": f"Archivo no accesible desde la app: {path}", "rows": []}
 
@@ -341,7 +344,7 @@ def build_mediainfo_report(path: str, radarr_source: str | None = None,
         if lang == "UND":
             # Sin idioma no se escribe "UND" en el nombre: la pista se queda fuera.
             sin_idioma.append(i)
-        elif lang not in langs:
+        elif lang != emu_format.SIN_DIALOGO and lang not in langs:
             langs.append(lang)
         quality = emu_format.audio_track_quality(codec, ch)
         previous = best_by_lang.get(lang)
@@ -354,7 +357,9 @@ def build_mediainfo_report(path: str, radarr_source: str | None = None,
         add(f"Audio {i}", mi, f"{lang} {codec} {ch or '?'}")
 
     groups: dict[tuple[str, str], list[str]] = {}
-    for lang in langs:
+    # Sin diálogo (zxx) solo se nombra si es todo el audio, y sin idioma: su códec y canales.
+    nombrados = langs or [c for c in (emu_format.SIN_DIALOGO,) if c in best_by_lang]
+    for lang in nombrados:
         chosen = best_by_lang.get(lang)
         if not chosen:
             continue
@@ -365,7 +370,7 @@ def build_mediainfo_report(path: str, radarr_source: str | None = None,
     # parsear "ENG DD+ Atmos 5.1 ESP-JPN DD+ 5.1" sería frágil, y esto ya está
     # calculado aquí arriba.
     audio_by_language = {lang: {"codec": best_by_lang[lang][1], "channels": best_by_lang[lang][2]}
-                         for lang in langs if lang in best_by_lang}
+                         for lang in nombrados if lang in best_by_lang}
 
     audio_summary = None
     if audio_tracks:
@@ -375,7 +380,8 @@ def build_mediainfo_report(path: str, radarr_source: str | None = None,
         # on the entries that do.
         entries = []
         for (codec, ch), group_langs in groups.items():
-            ordered = sorted(group_langs, key=lambda c: (0 if c == "ESP" else 1))
+            ordered = sorted((c for c in group_langs if c != emu_format.SIN_DIALOGO),
+                             key=lambda c: (0 if c == "ESP" else 1))
             if len(ordered) == 2 and "ESP" in ordered and "ENG" in ordered:
                 token = "DUAL"
             elif len(ordered) >= 4:

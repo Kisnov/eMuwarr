@@ -70,6 +70,11 @@ came in from `Kisnov/Uploadrr-EMU` with `git subtree add`, history kept; that re
 
 ## Not obvious
 
+- Audio languages: `und`/empty (and `mis`/`mul`) is missing data. In an MKV it blocks the upload until the real language
+  is set in «Ver pistas» (`upload_checks` «idioma_audio», and the prepared file in `upload_queue._populate_ready`); in
+  another container the app can't tag it, so an MP4/AVI/TS… only warns to convert it to MKV and an ISO passes. `zxx` is a
+  deliberate «no dialogue» tag, valid on every tracker and left out of the release name. Never group the two
+  (`emu_format._SIN_IDIOMA` vs `SIN_DIALOGO`).
 - Push events: call `eventos.publicar` from the one place that writes the data, not from its callers; it
   must never raise. The server stays a single process (no extra uvicorn workers): the event bus is in memory.
   A new `setInterval` in the frontend fails `test_no_han_aparecido_sondeos_nuevos` unless it is listed in

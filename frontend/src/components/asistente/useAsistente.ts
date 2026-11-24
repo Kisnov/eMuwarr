@@ -34,7 +34,7 @@ import {
   cacheCubre, conAjustes, peticionCubre, type Seleccion, type Ajustes,
 } from '../../utils/seleccionSubida'
 import {
-  SIN_IDIOMAS, conIdioma, idiomasDelServidor, idiomasParaServidor, type IdiomasPorPosicion,
+  SIN_IDIOMAS, conIdioma, idiomasDePistas, idiomasDelServidor, idiomasParaServidor, type IdiomasPorPosicion,
 } from '../../utils/idiomasPack'
 import { avisoSourceVisible } from '../../utils/avisoSource'
 import { segunDestinos } from '../../utils/comprobaciones'
@@ -604,13 +604,14 @@ export function useAsistente({ item, onClose: onCloseProp, onDone, onNavigate, p
   // it's in flight (real work per episode — build_nomenclature_proposal()).
   // `proveedor`: el elegido a mano para salir de un plan bloqueado por
   // proveedores distintos; si no, el que ya se eligió para esta temporada.
-  const loadSeasonPlan = useCallback(async (proveedor?: string) => {
+  // `idiomas`: los recién confirmados, que el estado aún no tiene.
+  const loadSeasonPlan = useCallback(async (proveedor?: string, idiomas?: IdiomasPorPosicion) => {
     if (targetId == null) return
     if (proveedor) elegirProveedor(targetId, proveedor)
     const yaElegido = proveedorElegido.has(targetId)
     const proveedorPedido = proveedor ?? proveedorParaServidor(proveedorElegido, targetId)
     // Lo ya elegido para esta temporada (al volver a ella desde el desplegable).
-    const idiomasPedidos = idiomasPorTemporada.get(targetId)
+    const idiomasPedidos = idiomas ?? idiomasPorTemporada.get(targetId)
     const pedido = ++planPedido.current
     setSeasonPlanLoading(true); setSeasonPlanError(null)
     buildingPlanFor.current = targetId
@@ -831,12 +832,9 @@ export function useAsistente({ item, onClose: onCloseProp, onDone, onNavigate, p
     setRemuxEdits(nuevas)
     // Solo vale la respuesta de la última elección: una anterior que llegue tarde no la pisa.
     const version = ++versionIdioma.current
-    const audio = (remuxPreview?.tracks ?? []).filter(t => t.type === 'audio')
-    const idiomas: Record<number, string> = {}
-    audio.forEach((t, i) => { const c = nuevas[t.id]?.language; if (c) idiomas[i + 1] = c })
     try {
       const [campos, plan] = await Promise.all([
-        getNomenclatureFields(id, idiomas),
+        getNomenclatureFields(id, idiomasDePistas(remuxPreview?.tracks, nuevas)),
         applyTrackRemux(id, { dryRun: true, overrides: nuevas }),
       ])
       if (objetivoActual.current !== id || version !== versionIdioma.current) return
@@ -893,6 +891,8 @@ export function useAsistente({ item, onClose: onCloseProp, onDone, onNavigate, p
       })
       setAudioWarning(null)
       detalles.olvidarPorIdioma()
+      // Un plan bloqueado puede dejar de estarlo con el idioma (la norma del castellano lo cuenta): se vuelve a pedir.
+      if (seasonPlan?.status !== 'valid') void loadSeasonPlan(undefined, idiomasDelServidor(r.idiomas_audio))
     } catch {
       if (objetivoActual.current !== id || version !== versionIdioma.current) return
       setAudioWarning('No se pudo recalcular el nombre con ese idioma; se queda lo que había. Vuelve a elegirlo.')
@@ -1006,8 +1006,16 @@ export function useAsistente({ item, onClose: onCloseProp, onDone, onNavigate, p
 
   // Un pack no guarda sus campos antes de comprobar: si su Source no es el del plan, se le pasa, porque de él sale el
   // tipo de la copia.
-  const runChecks = (source = fields.source) =>
-    comprobar(targetIsSeason && source && source !== seasonPlan?.source ? { source } : undefined)
+  const runChecks = (source = fields.source) => {
+    const idiomas = idiomasElegidos()
+    const ajustes = { ...(targetIsSeason && source && source !== seasonPlan?.source ? { source } : {}),
+      ...(idiomas ? { idiomas } : {}) }
+    return comprobar(Object.keys(ajustes).length ? ajustes : undefined)
+  }
+  // Los idiomas elegidos para las pistas de audio sin idioma, por posición: los del pack o los de «Ver pistas».
+  const idiomasElegidos = () => targetIsSeason
+    ? idiomasParaServidor(targetId == null ? undefined : idiomasPorTemporada.get(targetId))
+    : idiomasDePistas(remuxPreview?.tracks, remuxEdits)
 
   // El tipo elegido en el Resumen cuando no se sabe: es el Source, el mismo que el del paso 1 (y el del nombre).
   const elegirTipo = async (source: string) => {
@@ -1027,7 +1035,7 @@ export function useAsistente({ item, onClose: onCloseProp, onDone, onNavigate, p
     if (step !== 2 || targetId == null || esTanda(seleccion) || !otrosTrackers) return
     let vigente = true
     for (const tracker of otrosTrackers.split(',')) {
-      fetchReglasTracker(targetId, tracker)
+      fetchReglasTracker(targetId, tracker, idiomasElegidos())
         .then(r => { if (vigente) setReglas(m => new Map(m).set(tracker, r)) })
         .catch(() => { /* sin respuesta no se sabe: no deja subir a ese tracker */ })
     }

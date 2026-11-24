@@ -32,7 +32,12 @@ LANG_MAP: dict[str, str] = {
     # distinguirlo: el código ISO a secas ("cat") es el mismo para los dos.
     "val": "VAL", "valencian": "VAL", "valenciano": "VAL", "valencia": "VAL",
     "ca-valencia": "VAL", "cat-valencia": "VAL", "ca-valencia-es": "VAL",
+    # zxx (ISO 639-2): etiquetada a propósito como sin diálogo (Flow, 2024). Es un dato válido; no va al nombre.
+    "zxx": "ZXX",
 }
+
+# El código de una pista sin diálogo (zxx). Nunca se junta con UND: zxx es un dato, UND es que falta.
+SIN_DIALOGO = "ZXX"
 
 _CHANNELS_MAP = {1: "Mono", 2: "2.0", 3: "3.0", 4: "3.1", 5: "5.0", 6: "5.1", 7: "6.1", 8: "7.1"}
 
@@ -172,8 +177,8 @@ def format_channels(channels) -> Optional[str]:
     return _CHANNELS_MAP.get(int(m.group()))
 
 
-# Lo que no es ningún idioma: sin etiquetar, sin contenido o varios a la vez.
-_SIN_IDIOMA = {"", "und", "mis", "zxx", "mul"}
+# und o vacía (y mis/mul, que tampoco dicen cuál): falta el dato, la pista está mal etiquetada y bloquea (UND).
+_SIN_IDIOMA = {"", "und", "mis", "mul"}
 
 # Palabras del nombre de la pista que dicen el idioma cuando la etiqueta no.
 _IDIOMA_POR_TITULO = (
@@ -251,17 +256,30 @@ def format_language(lang: Optional[str]) -> Optional[str]:
 def _split_languages(raw: Optional[str]) -> list[str]:
     """Radarr/Sonarr give languages as one string, e.g. 'spa / eng' or
     'jpn/spa/spa'. Return a de-duplicated, ESP-first list of eMuwarez codes."""
-    if not raw:
-        return []
-    parts = re.split(r"[\s/,;]+", str(raw))
-    langs: list[str] = []
-    for p in parts:
-        code = format_language(p)
-        # UND no es un idioma del tracker: no entra en ningún nombre.
-        if code and code != "UND" and code not in langs:
-            langs.append(code)
+    # Ni UND ni ZXX son idiomas del tracker: no entran en ningún nombre.
+    langs = [c for c in _codigos(raw) if c not in ("UND", SIN_DIALOGO)]
     langs.sort(key=lambda c: (0 if c == "ESP" else 1))
     return langs
+
+
+def _codigos(raw: Optional[str]) -> list[str]:
+    """Los códigos de una lista de idiomas, sin repetir y en su orden, con UND y ZXX."""
+    langs: list[str] = []
+    for p in re.split(r"[\s/,;]+", str(raw or "")):
+        code = format_language(p)
+        if code and code not in langs:
+            langs.append(code)
+    return langs
+
+
+def audio_sin_idioma(languages: Optional[str]) -> bool:
+    """Si una lista de idiomas de audio trae alguna pista sin idioma (UND)."""
+    return "UND" in _codigos(languages)
+
+
+def solo_sin_dialogo(languages: Optional[str]) -> bool:
+    """Si todo el audio es sin diálogo (zxx): no hay nada que doblar."""
+    return _codigos(languages) == [SIN_DIALOGO]
 
 
 def has_castellano(languages: Optional[str]) -> Optional[int]:

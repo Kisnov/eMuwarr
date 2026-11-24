@@ -729,8 +729,10 @@ def build_editable_nomenclature_fields(
             "title_options": title_options,
             # Set when the source had to be estimated from MediaInfo.
             "source_warning": source_warning,
-            "audio_warning": (aviso_pistas_sin_idioma(report["pistas_sin_idioma"])
+            "audio_warning": (aviso_pistas_sin_idioma(report["pistas_sin_idioma"], local_path)
                               if report.get("pistas_sin_idioma") else None),
+            # Una pista sin idioma que bloquea hasta elegirla: solo en un MKV, el único que la app etiqueta.
+            "audio_sin_idioma": bool(report.get("pistas_sin_idioma")) and local_path.lower().endswith(".mkv"),
             # Name vs Radarr/Sonarr vs MediaInfo-bitrate cross-check for the
             # Source field's alert icon.
             "source_comparison": source_comparison,

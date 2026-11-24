@@ -141,8 +141,13 @@ export interface ReglasDeTracker {
   variante: string | null
 }
 
-export async function fetchReglasTracker(itemId: number, tracker: string): Promise<ReglasDeTracker> {
-  return api.get<ReglasDeTracker>(`/library/${itemId}/upload/reglas?tracker=${encodeURIComponent(tracker)}`)
+// `idiomas`: los elegidos en «Ver pistas» para las pistas de audio sin idioma, por posición.
+export async function fetchReglasTracker(
+  itemId: number, tracker: string, idiomas?: Record<number, string>,
+): Promise<ReglasDeTracker> {
+  const qs = new URLSearchParams({ tracker })
+  if (idiomas) qs.set('idiomas', JSON.stringify(idiomas))
+  return api.get<ReglasDeTracker>(`/library/${itemId}/upload/reglas?${qs}`)
 }
 
 // Qué trackers con clave admiten un elemento y, de una temporada, cada capítulo (web/schemas.py::ElegibilidadSubida).
@@ -365,7 +370,7 @@ export async function runUploadChecks(
   // Temporada: el Proveedor elegido (utils/origenProveedor.ts::proveedorParaServidor), el mismo que la vista previa y la cola.
   provider?: string,
   // Temporada: lo editado a mano en el asistente (Source, Tag, Título e idiomas de las pistas sin idioma), para que el
-  // `nombre` del pack sea el que saldrá. Sin nada, no viaja nada.
+  // `nombre` del pack sea el que saldrá. Un fichero suelto, los idiomas de «Ver pistas». Sin nada, no viaja nada.
   ajustes?: AjustesComprobacion,
   // De quién son las normas de idioma (emu, nobs, mnv). Sin él, eMuwarez.
   tracker?: string,

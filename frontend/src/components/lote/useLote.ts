@@ -78,7 +78,7 @@ export async function analizarPelicula(id: number): Promise<AnalisisElemento> {
 
   const fields = campos ?? r.fields
   return {
-    nombre, bloqueo: null, avisos, sinIdioma: !!r.audio_warning, campos,
+    nombre, bloqueo: null, avisos, sinIdioma: !!r.audio_sin_idioma, campos,
     tuya: { resolution: fields.resolution, source: fields.source },
   }
 }
