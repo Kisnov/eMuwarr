@@ -219,7 +219,7 @@ function AccionDeFila({ etiqueta, tono, clase, onClick, children }: {
 // Va memorizada: con el progreso real llegando cada medio segundo, solo tiene que repintarse la fila cuya subida
 // cambió. Para que el memo sirva, todas las props son valores o funciones con identidad estable (nada de objetos o
 // flechas hechos en cada pintado del padre): por eso el chip de reintentos son dos valores y `onOpen` recibe el id.
-const JobRow = memo(function JobRow({ job, instances, seeding, onOpen, indent, enGrupo, intentosAnteriores, desplegada, onToggleCadena, onCancel, onRetry, onDelete, onFiltrarLote }: {
+const JobRow = memo(function JobRow({ job, instances, seeding, onOpen, indent, enGrupo, otrosTrackers, trackersAbiertos, otroFallido, onToggleTrackers, intentosAnteriores, desplegada, onToggleCadena, onCancel, onRetry, onDelete, onFiltrarLote }: {
   job: UploadJob
   seeding: SeedingEstado
   instances: InstanceSafeResponse[]
@@ -227,6 +227,11 @@ const JobRow = memo(function JobRow({ job, instances, seeding, onOpen, indent, e
   indent?: boolean
   // El mismo elemento subido a varios trackers: la primera fila lleva el título; las otras, solo su tracker.
   enGrupo?: 'primera' | 'otra'
+  // En la primera: los otros trackers («N.O.B.S · eMuwarez»), si se ven sus filas y si alguna no terminó bien.
+  otrosTrackers?: string
+  trackersAbiertos?: boolean
+  otroFallido?: boolean
+  onToggleTrackers?: (elementoId: number, abiertos: boolean) => void
   // Cuántos intentos anteriores tiene la cadena y si están desplegados (solo en la fila del último intento).
   intentosAnteriores?: number
   desplegada?: boolean
@@ -252,6 +257,7 @@ const JobRow = memo(function JobRow({ job, instances, seeding, onOpen, indent, e
   const loteId = !indent && job.lote_id && (job.lote_total ?? 0) > 1 ? job.lote_id : null
   const loteTip = useTooltip(loteId ? 'Ver solo las subidas de este lote' : null)
   const otra = enGrupo === 'otra'
+  const trackersTip = useTooltip(otrosTrackers ? (trackersAbiertos ? 'Ocultar las subidas a los otros trackers' : 'Ver las subidas a los otros trackers') : null)
   return (
     // Por debajo de 760 px la fila es una tarjeta (subidas.css): título y la acción que toca, el estado, y en gris
     // tipo · origen · fecha y los chips. Las clases sub-col-* y sub-meta dicen qué va en cada línea.
@@ -286,6 +292,19 @@ const JobRow = memo(function JobRow({ job, instances, seeding, onOpen, indent, e
           {/* Aparte del título: en la tarjeta de móvil bajan a la última línea. */}
           <div className="sub-chips">
             {!otra && <ChipTracker tracker={job.tracker} nombre={job.tracker_nombre} siempre={enGrupo === 'primera'} />}
+            {otrosTrackers && onToggleTrackers && (
+              <button
+                type="button"
+                className={`sub-reintentos-chip sub-toggle-trackers${otroFallido ? ' sub-toggle-trackers-fallido' : ''}`}
+                aria-expanded={!!trackersAbiertos}
+                onClick={() => onToggleTrackers(job.library_item_id!, !!trackersAbiertos)}
+                {...trackersTip.triggerProps}
+              >
+                + {otrosTrackers}
+                <IconoDesplegar abierto={!!trackersAbiertos} size={10} />
+                {trackersTip.tooltipNode}
+              </button>
+            )}
             {loteId && onFiltrarLote && (
               <button
                 type="button"
@@ -446,6 +465,11 @@ export function UploadsPage({ onNavigate }: { onNavigate?: (page: string) => voi
   // Retry chains: which terminal (latest-attempt) job ids currently have
   // their older attempts expanded below them.
   const [expandedChains, setExpandedChains] = useState<Set<number>>(new Set())
+  // Plegado elegido a mano de las subidas a otros trackers, por elemento de la biblioteca.
+  const [trackersElegidos, setTrackersElegidos] = useState<Map<number, boolean>>(new Map())
+  const toggleTrackers = useCallback((elementoId: number, abiertos: boolean) => {
+    setTrackersElegidos(prev => new Map(prev).set(elementoId, !abiertos))
+  }, [])
 
   // Guards against out-of-order responses: the 2.5s background poll (below)
   // and an explicit load() (e.g. right after deleting a job) can both be
@@ -829,7 +853,7 @@ export function UploadsPage({ onNavigate }: { onNavigate?: (page: string) => voi
     : selectedJob
 
   // La fila del último intento de una cadena y, si está desplegada, sus intentos anteriores.
-  const pintarCadena = (job: UploadJob, enGrupo?: 'primera' | 'otra', loteArriba?: string | null) => {
+  const pintarCadena = (job: UploadJob, enGrupo?: 'primera' | 'otra', loteArriba?: string | null, otras?: UploadJob[], trackersAbiertos?: boolean) => {
     const ancestors = ancestorsOf(job)
     const expanded = expandedChains.has(job.id!)
     return [
@@ -840,6 +864,10 @@ export function UploadsPage({ onNavigate }: { onNavigate?: (page: string) => voi
         seeding={seeding}
         onOpen={openUpload}
         enGrupo={enGrupo}
+        otrosTrackers={otras?.map(o => o.tracker_nombre).join(' · ')}
+        trackersAbiertos={trackersAbiertos}
+        otroFallido={otras?.some(o => RETRYABLE_STATUSES.has(o.status))}
+        onToggleTrackers={otras ? toggleTrackers : undefined}
         intentosAnteriores={ancestors.length > 0 ? ancestors.length : undefined}
         desplegada={expanded}
         onToggleCadena={toggleChain}
@@ -855,9 +883,16 @@ export function UploadsPage({ onNavigate }: { onNavigate?: (page: string) => voi
       )) : []),
     ]
   }
-  // Un elemento: la cadena de cada tracker, una debajo de otra.
-  const pintarGrupo = (grupo: UploadJob[]) => grupo.flatMap((j, i) =>
-    pintarCadena(j, grupo.length > 1 ? (i ? 'otra' : 'primera') : undefined, grupo[0].lote_id))
+  // Un elemento: la cadena de cada tracker, una debajo de otra; las de los otros trackers, si el grupo está abierto.
+  const pintarGrupo = (grupo: UploadJob[]) => {
+    const [primera, ...otras] = grupo
+    if (!otras.length) return pintarCadena(primera)
+    const abiertos = trackersElegidos.get(primera.library_item_id!) ?? otras.some(o => o.status !== 'completed')
+    return [
+      ...pintarCadena(primera, 'primera', null, otras, abiertos),
+      ...(abiertos ? otras.flatMap(o => pintarCadena(o, 'otra', primera.lote_id)) : []),
+    ]
+  }
   const scrollRef = useRef<HTMLDivElement>(null)
   const theadRef = useRef<HTMLTableSectionElement>(null)
 
