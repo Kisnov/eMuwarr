@@ -123,9 +123,11 @@ def _sincronizar(conn: sqlite3.Connection, ahora: Optional[datetime], tracker: T
         set_json_state(conn, f"{tracker.id}.{ESTADO}",
                        {"leido_at": ahora.astimezone().isoformat(timespec="seconds"), "usuario": usuario})
         conn.commit()
-    except Exception:
+    except Exception as exc:
         conn.rollback()   # a medias no: se queda la lectura anterior entera
-        raise
+        # Como fallo de este tracker: los demás se leen igual.
+        logger.exception("No se pudieron guardar tus subidas de %s", tracker.nombre)
+        return "failed", f"No se pudieron guardar: {texto_de_error(exc)}"
     sin_seeders = sum(1 for f in filas if f[4] == 0)
     return "completed", f"{len(filas)} subidas, {sin_seeders} sin seeders"
 

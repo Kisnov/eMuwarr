@@ -19,13 +19,13 @@ const seEnsena = (perfil: EmuPerfil) => !!(perfil.username || perfil.error)
 // Con otros trackers con clave, una franja más por cada uno, debajo de la de eMuwarez.
 export function CuentaEmu() {
   const { perfil } = usePerfilEmu()
-  const otros = perfil?.otros?.filter(seEnsena) ?? []
-  if (!perfil || !seEnsena(perfil)) return null
-  if (!otros.length) return <Cuenta perfil={perfil} />
+  // La de cada tracker que tiene algo que enseñar, aunque la de eMuwarez no lo tenga.
+  const bandas = perfil ? [perfil, ...(perfil.otros ?? [])].filter(seEnsena) : []
+  if (!bandas.length) return null
+  if (bandas.length === 1) return <Cuenta perfil={bandas[0]} />
   return (
     <div className="cuenta-emu-lista">
-      <Cuenta perfil={perfil} />
-      {otros.map(o => <Cuenta key={o.tracker} perfil={o} />)}
+      {bandas.map(b => <Cuenta key={b.tracker ?? 'emu'} perfil={b} />)}
     </div>
   )
 }

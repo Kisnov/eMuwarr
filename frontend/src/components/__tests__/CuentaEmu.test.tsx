@@ -53,4 +53,11 @@ describe('CuentaEmu', () => {
     expect(franjas[1].querySelector('.sub-tracker-chip')!.textContent).toBe('N.O.B.S')
     expect(franjas[1].querySelector('.cuenta-emu-enlaces a')!.getAttribute('href')).toBe('https://nobs.rawsmoke.net/users/Gabi/uploads')
   })
+
+  it('sin nada que enseñar de eMuwarez, la de otro tracker sale igual', async () => {
+    contexto.perfil = { ...PERFIL, username: null, error: null,
+      otros: [{ ...PERFIL, tracker: 'nobs', nombre: 'N.O.B.S', url: 'https://nobs.rawsmoke.net', username: 'Gabi' }] }
+    await montar(<CuentaEmu />)
+    expect([...document.querySelectorAll('.cuenta-emu')].map(f => f.getAttribute('aria-label'))).toEqual(['Tu cuenta en N.O.B.S'])
+  })
 })

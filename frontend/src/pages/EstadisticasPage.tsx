@@ -103,7 +103,12 @@ export function EstadisticasPage() {
   useEffect(() => {
     if (!seVe) return
     let vigente = true
-    fetchTrackersParaSubir().then(t => { if (vigente) setTrackers(t) }, () => { /* sin lista: solo eMuwarez */ })
+    fetchTrackersParaSubir().then(t => {
+      if (!vigente) return
+      setTrackers(t)
+      // El elegido ya no tiene clave: vuelve a eMuwarez (sin selector no se podría cambiar).
+      setTracker(actual => (t.some(x => x.id === actual.id) ? actual : EMU))
+    }, () => { /* sin lista: solo eMuwarez */ })
     return () => { vigente = false }
   }, [seVe])
 
@@ -124,6 +129,8 @@ export function EstadisticasPage() {
   const sinMostrar = resultado === null || (enCurso && resultado.error !== null)
   const puntos = resultado?.puntos ?? []
   const diasMostrados = resultado?.dias ?? dias
+  // Lo que se ve es del tracker de las cifras que hay, no del recién elegido mientras llegan las suyas.
+  const mostrado = trackers.find(t => t.id === resultado?.tracker) ?? tracker
   // Sin hover (una pantalla táctil) el gráfico se lee con el dedo, no con el ratón.
   const [tactil] = useState(() => window.matchMedia?.('(hover: none)').matches ?? false)
 
@@ -181,13 +188,13 @@ export function EstadisticasPage() {
         </>
       ) : (
         <div className={enCurso ? 'est-cargando' : undefined} aria-busy={enCurso}>
-          {resultado.ritmos && <TarjetasDeRitmo puntos={puntos} ritmos={resultado.ritmos} nombre={tracker.nombre} />}
+          {resultado.ritmos && <TarjetasDeRitmo puntos={puntos} ritmos={resultado.ritmos} nombre={mostrado.nombre} />}
           {/* Los objetivos son los de tu cuenta de eMuwarez. */}
-          {tracker.id === 'emu' && <ObjetivosCuenta visible={seVe} ultimo={puntos[puntos.length - 1]} ritmos={resultado.ritmos} />}
+          {mostrado.id === 'emu' && <ObjetivosCuenta visible={seVe} ultimo={puntos[puntos.length - 1]} ritmos={resultado.ritmos} />}
           {/* Los H&R casi nunca cambian y lo normal es 0: un aviso cuando hay alguno, no un gráfico. */}
           {(puntos[puntos.length - 1]?.hit_and_runs ?? 0) > 0 && (
             <p className="est-nota est-aviso" role="status">
-              <IconoAviso /> Tienes {formatNumero(puntos[puntos.length - 1].hit_and_runs!)} H&amp;R en {tracker.nombre}: siembra esos
+              <IconoAviso /> Tienes {formatNumero(puntos[puntos.length - 1].hit_and_runs!)} H&amp;R en {mostrado.nombre}: siembra esos
               torrents hasta cumplir el tiempo mínimo antes de que se acumulen.
             </p>
           )}

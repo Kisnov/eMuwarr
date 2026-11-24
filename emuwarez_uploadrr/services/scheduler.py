@@ -302,9 +302,9 @@ def _run_emu_cuenta(conn: sqlite3.Connection) -> tuple[str, str]:
     # eMuwarez y luego cada otro tracker con clave: el fallo de uno no para a los demás.
     from .emu_perfil import perfiles
     perfil = perfiles(conn)
-    if not perfil["configured"]:
+    todos = [p for p in (perfil, *perfil["otros"]) if p["configured"]]
+    if not todos:
         return "skipped", "Sin API key de eMuwarez en Configuración"
-    todos = [perfil, *perfil["otros"]]
     textos = [p["error"] or f"Ratio {p['ratio']} · bonus {p['seedbonus']}" for p in todos]
     if len(todos) > 1:
         textos = [f"{p['nombre']}: {texto}" for p, texto in zip(todos, textos)]

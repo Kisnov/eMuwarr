@@ -217,8 +217,8 @@ def test_si_falla_al_escribir_se_deshace_entera(conn, tracker, monkeypatch):
         raise sqlite3.OperationalError("disco lleno")
 
     monkeypatch.setattr(mis_torrents, "set_json_state", falla)
-    with pytest.raises(sqlite3.OperationalError):
-        sincronizar(conn, AHORA)
+    estado, texto = sincronizar(conn, AHORA)
+    assert estado == "failed" and "disco lleno" in texto  # el fallo de este tracker no corta a los demás
     conn.commit()   # lo que haría después el planificador: no debe confirmar nada a medias
     assert [t["torrent_id"] for t in resumen(conn)["torrents"]] == [1, 2]
 
