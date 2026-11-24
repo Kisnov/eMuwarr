@@ -42,7 +42,7 @@ export const FIELD_INFO = {
   audio: 'Se lee con MediaInfo del archivo real (por pista).',
   subs: 'Se genera con MediaInfo del archivo real: «SUBS» si tiene pistas de subtítulos.',
   tag: 'Por defecto, el grupo de release del archivo (columna Grupo de Biblioteca); si no lo tiene, el de Ajustes. Puedes elegir otro de los guardados.',
-  idioma_pista_pack: 'Esta pista de audio no trae idioma, así que el nombre del pack no la incluye. El idioma que elijas vale para todos los capítulos: entra en el nombre del pack, en el de cada capítulo y se escribe en la pista al subir.',
+  idioma_pista_pack: 'Esta pista de audio no trae idioma, así que el nombre del pack no la incluye. El idioma que elijas vale para todos los capítulos: entra en el nombre del pack, en el de cada capítulo y se escribe en la pista al subir. Sin elegirlo no se puede subir; «Sin diálogo (zxx)» si la pista no tiene diálogo.',
 }
 
 // Same value as the torrent name, just also used as the .mkv container's own

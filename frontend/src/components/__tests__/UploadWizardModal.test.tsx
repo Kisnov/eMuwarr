@@ -267,7 +267,7 @@ describe('película', () => {
     await pulsar(boton('Continuar'))
     await esperar(() => texto().includes('✓ Todo listo para subir'))
     await esperar(() => texto().includes('N.O.B.S: ✗ N.O.B.S no lo admite'))
-    expect(subidas.fetchReglasTracker).toHaveBeenCalledWith(10, 'nobs')
+    expect(subidas.fetchReglasTracker).toHaveBeenCalledWith(10, 'nobs', undefined)
     const casilla = [...document.querySelectorAll<HTMLLabelElement>('.asist-marcas label')]
       .find(l => l.textContent?.includes('N.O.B.S'))!.querySelector('input')!
     await pulsar(casilla)
@@ -576,7 +576,8 @@ describe('pack de temporada', () => {
     await pulsar(boton('Continuar'))
     await esperar(() => texto().includes('✓ Todo listo para subir'))
     expect(nom.saveNomenclatureFields).not.toHaveBeenCalled()
-    expect(subidas.runUploadChecks).toHaveBeenCalledWith(20, undefined, undefined)
+    // Las comprobaciones cuentan el idioma elegido: sin él, la pista sin idioma bloquearía.
+    expect(subidas.runUploadChecks).toHaveBeenCalledWith(20, undefined, undefined, { idiomas: { 1: 'spa' } })
     expect(texto()).toContain('2 capítulos en una carpeta')
 
     await pulsar(boton('Subir a eMuwarez'))
@@ -645,6 +646,23 @@ describe('pack de temporada', () => {
       await esperar(() => texto().includes('Castellano del capítulo nuevo'))
       expect(temporada.getSeasonEpisodeRemuxPreview).toHaveBeenLastCalledWith(20, { 1: 'spa' })
     })
+  })
+
+  it('un plan bloqueado que pasa con el idioma elegido se vuelve a pedir con él', async () => {
+    m(temporada.previewSeasonPack)
+      .mockResolvedValueOnce(plan({ status: 'blocked', errors: ['El capítulo 1 no tiene castellano.'] }))
+      .mockResolvedValueOnce(plan())
+    m(temporada.getSeasonPackAudio).mockResolvedValue({
+      audio_summary: 'Castellano DD 5.1', custom: false, audio_warning: null, pistas_sin_idioma: [],
+      idiomas_audio: { 1: 'spa' },
+    } as never)
+    await abrir(TEMPORADA, { preselect: { season: 1 } })
+    await pulsar(await esperar(() => boton('Continuar')))
+    await esperar(() => texto().includes('El capítulo 1 no tiene castellano.'))
+    await elegir(campo('Pista de audio 1'), 'spa')
+    await esperar(() => texto().includes('✓ 2 capítulo(s) listos'))
+    expect(temporada.previewSeasonPack).toHaveBeenLastCalledWith(20, undefined, { 1: 'spa' })
+    await esperar(() => !boton('Continuar')!.disabled)
   })
 
   it('un plan bloqueado por proveedores distintos deja elegir uno y lo vuelve a pedir', async () => {

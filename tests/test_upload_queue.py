@@ -17,6 +17,9 @@ def _biblioteca_en_tmp(tmp_path, monkeypatch):
     """Las bibliotecas de estos tests viven en tmp_path, no en /data."""
     from emuwarez_uploadrr.services import uploadrr_contract
     monkeypatch.setattr(uploadrr_contract, "DEFAULT_ALLOWED_ROOTS", [str(tmp_path)])
+    # Sus MKV son de mentira y mkvmerge no los lee: para el idioma, una pista en castellano.
+    from emuwarez_uploadrr.services import mkv_remux
+    monkeypatch.setattr(mkv_remux, "idiomas_de_las_pistas", lambda ruta, **k: ["ESP"])
 
 
 @pytest.fixture
