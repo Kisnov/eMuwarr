@@ -48,9 +48,8 @@ descripción y el cliente.
      - Queda: que las sincronizaciones de peticiones, «Tus subidas» y el perfil reciban el tracker como parámetro;
        usar el catálogo de cada tracker en las comprobaciones de duplicados de «Subir por lotes» (hoy, el de eMuwarez
        solo si se sube a eMuwarez) y de «Subir también a…» (hoy solo mira las subidas hechas con eMuwarr), y en
-       Biblioteca si hace falta; que el catálogo lea la URL de cada tracker de sus ajustes (`trackers.url_de`; hoy lee
-       `Tracker.url`), y la URL de eMuwarez en Configuración (la de N.O.B.S y Milnueve ya se cambia; la de eMuwarez es
-       `EMU_BASE_URL`).
+       Biblioteca si hace falta; y la URL de eMuwarez en Configuración (la de N.O.B.S y Milnueve ya se cambia, y la
+       usan la subida y el catálogo con `trackers.url_de`; la de eMuwarez es `EMU_BASE_URL`).
   2. **Fase B: NOBS (nobs.rawsmoke.net) y Milnueve (tracker.milnueve.cc).** Los dos son UNIT3D y ya se sube a ellos con
      otras herramientas: se puede empezar (Gabriel les avisa). El primero valida la abstracción. Decidido el 22/11:
      - **Nomenclatura: la de eMuwarez, sin más.** Los dos son nuevos y cada uno sube como quiere; sus guías (formato
