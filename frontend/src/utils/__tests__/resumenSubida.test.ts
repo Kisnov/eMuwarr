@@ -106,7 +106,7 @@ describe('petición', () => {
 })
 
 describe('lo que ya hay en eMuwarez', () => {
-  it('sin ninguna respuesta no hay nada que decir; una que falla invalida la tabla entera', () => {
+  it('sin respuesta o sin comparaciones no hay nada que decir', () => {
     expect(resumirComparaciones(null)).toEqual({ estado: 'error' })
     expect(resumirComparaciones(juntas([]))).toEqual({ estado: 'error' })
   })
