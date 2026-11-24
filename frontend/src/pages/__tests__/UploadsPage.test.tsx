@@ -13,6 +13,7 @@ vi.mock('../../api/uploads', () => ({
   retryUploadJobQueued: vi.fn(), cancelUploadJob: vi.fn(), getUploadJobLogs: vi.fn(), deleteUploadJob: vi.fn(),
   getLote: vi.fn(), cancelarLote: vi.fn(), reintentarLote: vi.fn(), borrarLote: vi.fn(),
   contarSinTrailer: vi.fn(), marcarTrailerAMano: vi.fn(), fetchTrackersParaSubir: vi.fn(async () => []),
+  getSubirTambien: vi.fn(async () => ({ trackers: [], subidas: [] })),
 }))
 vi.mock('../../api/instances', () => ({ getInstances: vi.fn(async () => []) }))
 vi.mock('../../api/seeding', () => ({ getSeeding: vi.fn(async () => null) }))
@@ -23,7 +24,7 @@ vi.mock('../../api/eventos', () => ({
 import { suscribirse } from '../../api/eventos'
 import {
   borrarLote, cancelarLote, cancelUploadJob, contarSinTrailer, countUploads, deleteUploadJob, fetchTrackersParaSubir, getLote,
-  getUploadJob, getUploads, reintentarLote, retryUploadJobQueued,
+  getSubirTambien, getUploadJob, getUploads, reintentarLote, retryUploadJobQueued,
 } from '../../api/uploads'
 import { ApiClientError } from '../../api/client'
 import { SeccionVisible } from '../../context/SeccionVisible'
@@ -664,5 +665,21 @@ describe('«Subir también a…»', () => {
     await act(async () => { fijarVisible(true) })
     await esperar(() => boton('Subir también a…'))
     expect(fetchTrackersParaSubir).toHaveBeenCalledTimes(2)
+  })
+
+  it('la fila que se puede subir a otro tracker lleva su botón, que abre el modal con ella marcada', async () => {
+    vi.mocked(fetchTrackersParaSubir).mockImplementation(async () => [{ id: 'emu', nombre: 'eMuwarez' }, NOBS])
+    vi.mocked(getSubirTambien).mockResolvedValue({ trackers: [NOBS], subidas: [
+      { job_id: SUELTA.id!, title: 'Película suelta', nombre: 'P.mkv', result_url: null, finished_at: null,
+        origen: { id: 'emu', nombre: 'eMuwarez' }, trackers: [NOBS] },
+    ] })
+    await pagina()
+    const enFila = (titulo: string) => filaDe(titulo).querySelector('[aria-label="Subir también a otro tracker"]')
+    await esperar(() => enFila('Película suelta'))
+    expect(enFila('Serie - S01E01')).toBeNull()
+
+    await pulsar(enFila('Película suelta') as HTMLElement)
+
+    await esperar(() => boton('Subir 1 subida'))
   })
 })
