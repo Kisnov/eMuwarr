@@ -87,10 +87,11 @@ def _motivo_catalogo(conn: sqlite3.Connection, job: dict, tracker_id: str) -> st
     """Si el catálogo local de `tracker_id` ya tiene lo de `job` igual o mejor, por qué no subirlo; si no, o sin
     catálogo, None."""
     tracker = trackers.obtener(tracker_id)
-    # La calidad del nombre con que se subió: la de la biblioteca puede haber cambiado después.
+    # Lo del nombre con que se subió: el fichero de la biblioteca puede haber cambiado después.
     nombre = json.loads(job.get("nomenclature_snapshot_json") or "{}")
     comparacion = emu_catalog.get_item_comparison(conn, job["library_item_id"], tracker=tracker,
-                                                  resolution=nombre.get("resolution"), source=nombre.get("source"))
+                                                  resolution=nombre.get("resolution"), source=nombre.get("source"),
+                                                  codec=nombre.get("video_codec"), audio=nombre.get("audio_summary"))
     if (comparacion.get("conclusion") or {}).get("ya_lo_tiene"):
         return emu_catalog.motivo_ya_lo_tiene(tracker)
     return None

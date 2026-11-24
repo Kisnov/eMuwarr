@@ -314,6 +314,19 @@ def test_compara_la_calidad_con_que_se_subio(db_conn, tmp_path):
     assert st.ofrecidos(db_conn, get_upload_job(emu, conn=db_conn))[0] == []
 
 
+def test_compara_el_audio_con_que_se_subio(db_conn, tmp_path):
+    _clave(db_conn, "nobs")
+    iid, emu, _ruta = _emu_completada(db_conn, tmp_path, nomenclature_snapshot_json=json.dumps(
+        {"resolution": "1080p", "source": "WEB-DL", "audio_summary": "DUAL AC3 5.1"}))
+    _en_el_catalogo(db_conn, iid, "nobs", "1080p")
+    db_conn.execute("UPDATE emu_catalog SET has_spanish = 0")  # el suyo, sin castellano
+    db_conn.execute("UPDATE library_items SET audio_languages = 'English' WHERE id = ?", (iid,))  # Radarr la cambió
+    db_conn.commit()
+
+    from emuwarez_uploadrr.services.upload_execution import get_upload_job
+    assert [t.id for t in st.ofrecidos(db_conn, get_upload_job(emu, conn=db_conn))[0]] == ["nobs"]
+
+
 def test_un_trump_si_se_ofrece(db_conn, tmp_path):
     _clave(db_conn, "nobs")
     iid, emu, _ruta = _emu_completada(db_conn, tmp_path)

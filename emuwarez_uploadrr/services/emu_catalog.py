@@ -711,11 +711,12 @@ def motivo_ya_lo_tiene(tracker: Tracker) -> str:
 
 
 def get_item_comparison(conn: sqlite3.Connection, item_id: int, *,
-                        resolution: Optional[str] = None, source: Optional[str] = None, tracker: Tracker = EMU) -> dict:
+                        resolution: Optional[str] = None, source: Optional[str] = None, codec: Optional[str] = None,
+                        audio: Optional[str] = None, tracker: Tracker = EMU) -> dict:
     """Your copy vs every `tracker` torrent that matches this movie/season, for
     the detail-card comparison table. Movies match by tmdb_id, seasons by
     (series tvdb_id, season_number). `resolution` y `source`, si vienen, sustituyen a los de tu copia: son los
-    que el asistente de subida va a poner en el nombre. `synced_at`: cuándo acabó la última lectura de su catálogo."""
+    que el asistente de subida va a poner en el nombre; `codec` y `audio` (el resumen de audio del nombre), igual. `synced_at`: cuándo acabó la última lectura de su catálogo."""
     item = conn.execute("SELECT * FROM library_items WHERE id = ?", (item_id,)).fetchone()
     if not item:
         return {"available": False, "message": "Elemento no encontrado", "matches": []}
@@ -771,6 +772,10 @@ def get_item_comparison(conn: sqlite3.Connection, item_id: int, *,
         mine["resolution"] = resolution
     if source:
         mine["source"] = source
+    if codec:
+        mine["codec"] = _norm_codec(codec) or codec
+    if audio:
+        mine["has_es"] = _episode_lang_has_es(audio)
     matches = [{"name": r["name"], "resolution": r["resolution"], "source": r["source"],
                 "codec": r["codec"], "has_spanish": r["has_spanish"], "size": r["size"],
                 "release_group": grupo_del_nombre(r["name"]),
