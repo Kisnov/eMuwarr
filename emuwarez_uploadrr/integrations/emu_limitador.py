@@ -121,9 +121,9 @@ class Limitador:
                                "vale solo dentro de este proceso", exc)
             return None
 
-    def _reservar(self, huella: str, api_key: Optional[str], interactiva: bool) -> float:
+    def _reservar(self, huella: str, api_key: Optional[str], interactiva: bool, tracker: str) -> float:
         espera = self._compartido(lambda d: limitador_compartido.reservar(
-            d, "EMU", api_key, self._prioridad(interactiva), capacidad=self.capacidad,
+            d, tracker, api_key, self._prioridad(interactiva), capacidad=self.capacidad,
             reserva=self.reserva_interactiva, ventana=self.ventana, reloj=self._reloj))
         if espera is not None:
             return espera
@@ -136,15 +136,16 @@ class Limitador:
 
     # -- lo que usan los conectores -----------------------------------------
 
-    def esperar_turno(self, api_key: Optional[str], *, interactiva: bool = False) -> float:
+    def esperar_turno(self, api_key: Optional[str], *, interactiva: bool = False, tracker: str = "EMU") -> float:
         """Espera a que haya hueco para una petición con esta clave y la apunta. Devuelve lo que ha esperado.
+        `tracker` es su nombre en el fichero compartido (EMU, NOBS, MNV): el mismo que usa Uploadrr-EMU.
 
         Una consulta interactiva que tendría que esperar más de `espera_maxima_interactiva` lanza IntegrationError
         (sin URL ni clave) en vez de esperar; un recorrido largo espera lo que haga falta."""
         huella = limitador_compartido.huella(api_key)
         ahora = inicio = self._reloj()
         while True:
-            espera = self._reservar(huella, api_key, interactiva)
+            espera = self._reservar(huella, api_key, interactiva, tracker)
             if espera <= 0:
                 break
             if interactiva and (ahora - inicio) + espera > self.espera_maxima_interactiva:
@@ -161,11 +162,11 @@ class Limitador:
             logger.debug("eMuwarez: espera de %.1f s por el límite de peticiones", esperado)
         return esperado
 
-    def penalizar(self, api_key: Optional[str], segundos: float = EMU_ESPERA_429) -> None:
+    def penalizar(self, api_key: Optional[str], segundos: float = EMU_ESPERA_429, tracker: str = "EMU") -> None:
         """eMuwarez ha respondido 429: nadie más usa esta clave hasta dentro de `segundos`. Nunca lanza."""
         try:
             if self._compartido(lambda d: limitador_compartido.penalizar(
-                    d, "EMU", api_key, segundos, ventana=self.ventana, reloj=self._reloj)) is None:
+                    d, tracker, api_key, segundos, ventana=self.ventana, reloj=self._reloj)) is None:
                 with self._cerrojo:
                     ahora = self._reloj()
                     estado = self._estado(limitador_compartido.huella(api_key), ahora)
@@ -185,9 +186,9 @@ def directorio_compartido() -> Path:
 LIMITADOR = Limitador(directorio=directorio_compartido)
 
 
-def esperar_turno(api_key: Optional[str], *, interactiva: bool = False) -> float:
-    return LIMITADOR.esperar_turno(api_key, interactiva=interactiva)
+def esperar_turno(api_key: Optional[str], *, interactiva: bool = False, tracker: str = "EMU") -> float:
+    return LIMITADOR.esperar_turno(api_key, interactiva=interactiva, tracker=tracker)
 
 
-def penalizar(api_key: Optional[str], segundos: float = EMU_ESPERA_429) -> None:
-    LIMITADOR.penalizar(api_key, segundos)
+def penalizar(api_key: Optional[str], segundos: float = EMU_ESPERA_429, tracker: str = "EMU") -> None:
+    LIMITADOR.penalizar(api_key, segundos, tracker)
