@@ -301,7 +301,8 @@ def test_el_catalogo_largo_se_reparte_en_minutos_y_deja_sitio_al_perfil(monkeypa
     limite = lim.capacidad - lim.reserva_interactiva
     paginas = limite + 5
     monkeypatch.setattr(emu, "request_json", lambda method, url, **kw: {"data": [{"id": 1}] * 100})
-    emu.emu_fetch_all_torrents(CLAVE, max_pages=paginas)
+    with pytest.raises(IntegrationError):  # todas llenas: no ve el final
+        emu.emu_fetch_all_torrents(CLAVE, max_pages=paginas)
     assert sum(lim.reloj.dormidas) == pytest.approx(60.0)  # la página limite+1 espera al minuto siguiente
     monkeypatch.setattr(emu, "request_json", lambda method, url, **kw: {"username": "yo"})
     antes = len(lim.reloj.dormidas)

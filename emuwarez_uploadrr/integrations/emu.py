@@ -287,6 +287,9 @@ def emu_fetch_all_torrents(
         if len(items) < per_page:
             break
         page += 1
+    # Acabar las páginas permitidas sin ver el final no es el catálogo entero: guardarlo borraría lo que falta.
+    if page > max_pages and not reached_known:
+        raise IntegrationError(f"El catálogo tiene más de {max_pages} páginas: no se guarda una lectura a medias")
     return all_items
 
 
