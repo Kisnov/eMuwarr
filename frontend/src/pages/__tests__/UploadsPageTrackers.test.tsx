@@ -178,6 +178,16 @@ describe('el mismo elemento en varios trackers', () => {
     expect(subtitulo()).toBe('4 subidas de 2 elementos')
   })
 
+  it('lo desplegado a mano sigue desplegado al cambiar el orden', async () => {
+    await pagina([
+      trabajo({ id: 2, ...IMITATION, created_at: '2026-11-20T10:00:00' }),
+      trabajo({ id: 1, ...IMITATION, ...NOBS, created_at: '2026-11-20T09:00:00' }),
+    ])
+    await abrirTrackers()
+    await elegir(document.querySelector<HTMLSelectElement>('select[aria-label="Ordenar subidas"]')!, 'created_asc')
+    expect(filas()).toEqual(['The Imitation Game', '  eMuwarez'])
+  })
+
   it('la búsqueda deja el grupo entero', async () => {
     await pagina([
       trabajo({ id: 3, ...SHUTTER, created_at: '2026-11-20T11:00:00' }),

@@ -231,7 +231,7 @@ const JobRow = memo(function JobRow({ job, instances, seeding, onOpen, indent, e
   otrosTrackers?: string
   trackersAbiertos?: boolean
   otroFallido?: boolean
-  onToggleTrackers?: (jobId: number, abiertos: boolean) => void
+  onToggleTrackers?: (elementoId: number, abiertos: boolean) => void
   // Cuántos intentos anteriores tiene la cadena y si están desplegados (solo en la fila del último intento).
   intentosAnteriores?: number
   desplegada?: boolean
@@ -297,7 +297,7 @@ const JobRow = memo(function JobRow({ job, instances, seeding, onOpen, indent, e
                 type="button"
                 className={`sub-reintentos-chip sub-toggle-trackers${otroFallido ? ' sub-toggle-trackers-fallido' : ''}`}
                 aria-expanded={!!trackersAbiertos}
-                onClick={() => onToggleTrackers(job.id!, !!trackersAbiertos)}
+                onClick={() => onToggleTrackers(job.library_item_id!, !!trackersAbiertos)}
                 {...trackersTip.triggerProps}
               >
                 + {otrosTrackers}
@@ -465,11 +465,10 @@ export function UploadsPage({ onNavigate }: { onNavigate?: (page: string) => voi
   // Retry chains: which terminal (latest-attempt) job ids currently have
   // their older attempts expanded below them.
   const [expandedChains, setExpandedChains] = useState<Set<number>>(new Set())
-  // Las subidas del mismo elemento a otros trackers van plegadas bajo la primera, salvo que alguna no haya terminado
-  // bien. Aquí, lo elegido a mano, por la primera subida del grupo.
+  // Plegado elegido a mano de las subidas a otros trackers, por elemento de la biblioteca.
   const [trackersElegidos, setTrackersElegidos] = useState<Map<number, boolean>>(new Map())
-  const toggleTrackers = useCallback((jobId: number, abiertos: boolean) => {
-    setTrackersElegidos(prev => new Map(prev).set(jobId, !abiertos))
+  const toggleTrackers = useCallback((elementoId: number, abiertos: boolean) => {
+    setTrackersElegidos(prev => new Map(prev).set(elementoId, !abiertos))
   }, [])
 
   // Guards against out-of-order responses: the 2.5s background poll (below)
@@ -888,7 +887,7 @@ export function UploadsPage({ onNavigate }: { onNavigate?: (page: string) => voi
   const pintarGrupo = (grupo: UploadJob[]) => {
     const [primera, ...otras] = grupo
     if (!otras.length) return pintarCadena(primera)
-    const abiertos = trackersElegidos.get(primera.id!) ?? otras.some(o => o.status !== 'completed')
+    const abiertos = trackersElegidos.get(primera.library_item_id!) ?? otras.some(o => o.status !== 'completed')
     return [
       ...pintarCadena(primera, 'primera', null, otras, abiertos),
       ...(abiertos ? otras.flatMap(o => pintarCadena(o, 'otra', primera.lote_id)) : []),
