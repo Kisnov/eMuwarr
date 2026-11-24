@@ -10,8 +10,8 @@ the same table under its `tracker`: the library columns (`emu_in_catalog`, `emu_
 "is it already on X" is read from the table by tracker (filas_del_catalogo, get_item_comparison).
 
 eMuwarez has no language field, so "has Spanish" is parsed from the torrent name
-(same nomenclature the tracker uses). Language comparison is deliberately
-conservative — see _compute_aportes.
+(same nomenclature the tracker uses). What your copy adds (`emu_aportes`) comes from
+conclusion_duplicados, the same rule as the detail card — see _aportes.
 """
 from __future__ import annotations
 
@@ -322,47 +322,6 @@ def _match_src_rank(m: dict) -> int:
     return max(_src_rank(m.get("source")), _name_src_rank(m.get("name")))
 
 
-def _compute_aportes(mine: dict, matches: list[dict]) -> list[dict]:
-    """mine: {resolution, source, codec, has_es, size}. Returns list of
-    {dim, detail} describing what your copy adds over eMuwarez's best. Only
-    called when matches is non-empty."""
-    aportes: list[dict] = []
-    res, src = mine.get("resolution"), mine.get("source")
-    my_res_rank = _res_rank(res)
-    my_src_rank = _src_rank(src)
-    my_tier = _codec_tier(mine.get("codec"))
-
-    best_res_rank = max((_res_rank(m["resolution"]) for m in matches), default=0)
-    if my_res_rank > best_res_rank and res:
-        # A strictly higher resolution than anything on eMuwarez.
-        aportes.append({"dim": "resolucion", "detail": res})
-    elif my_res_rank == best_res_rank and my_res_rank > 0:
-        # Same top resolution — does your source improve on theirs at it?
-        at_res = [m for m in matches if _res_rank(m["resolution"]) == my_res_rank]
-        best_src_rank = max((_match_src_rank(m) for m in at_res), default=0)
-        if my_src_rank > best_src_rank and src:
-            aportes.append({"dim": "source", "detail": src})
-        elif my_src_rank == best_src_rank and my_src_rank > 0:
-            # Same res + source — a more efficient codec (smaller for equal quality).
-            combo = [m for m in at_res if _match_src_rank(m) == my_src_rank]
-            best_tier = max((_codec_tier(m["codec"]) for m in combo), default=0)
-            # Only a genuinely efficient codec (HEVC/AV1, tier >= 2) is an
-            # "aporte" — H.264 winning over an unparsed name is not meaningful.
-            if my_tier > best_tier and my_tier >= 2:
-                sizes = [m["size"] for m in combo if m["size"]]
-                saving = (min(sizes) - mine["size"]) if (sizes and mine.get("size")) else None
-                detail = mine.get("codec") or "códec más eficiente"
-                if saving and saving > 0:
-                    detail += f" (−{_fmt_size(saving)})"
-                aportes.append({"dim": "codec", "detail": detail})
-
-    # Language (conservative): you have Spanish and EVERY match is explicitly
-    # non-Spanish (no match is Spanish and none is unknown).
-    if matches and all(_aporta_audio(mine, m) for m in matches):
-        aportes.append({"dim": "idioma", "detail": "ESP"})
-    return aportes
-
-
 def _aporta_audio(mine: dict, row: dict) -> bool:
     """Tienes audio en castellano y ese torrent dice expresamente que no (desconocido no cuenta)."""
     return bool(mine.get("has_es")) and row["has_spanish"] == 0
@@ -385,14 +344,52 @@ def grupo_del_nombre(name: Optional[str]) -> Optional[str]:
 def _veredicto(mine: dict, match: dict) -> Optional[str]:
     """Tu copia frente a un torrent del catálogo: "mejor", "igual" o "peor". Resolución, luego source, luego códec;
     solo cuenta lo que se sabe de los dos lados (None si no hay nada que comparar)."""
-    pares = ((_res_rank(mine.get("resolution")), _res_rank(match.get("resolution"))),
-             (_src_rank(mine.get("source")), _match_src_rank(match)),
-             (_codec_tier(mine.get("codec")), _codec_tier(match.get("codec"))))
-    comparables = [(mio, suyo) for mio, suyo in pares if mio and suyo]
-    for mio, suyo in comparables:
+    return _decide(mine, match)[0]
+
+
+def _decide(mine: dict, match: dict) -> tuple[Optional[str], Optional[str]]:
+    """El veredicto de _veredicto y la dimensión que lo decide (None si salen iguales)."""
+    pares = (("resolucion", _res_rank(mine.get("resolution")), _res_rank(match.get("resolution"))),
+             ("source", _src_rank(mine.get("source")), _match_src_rank(match)),
+             ("codec", _codec_tier(mine.get("codec")), _codec_tier(match.get("codec"))))
+    comparables = [(dim, mio, suyo) for dim, mio, suyo in pares if mio and suyo]
+    for dim, mio, suyo in comparables:
         if mio != suyo:
-            return "mejor" if mio > suyo else "peor"
-    return "igual" if comparables else None
+            return ("mejor" if mio > suyo else "peor"), dim
+    return ("igual" if comparables else None), None
+
+
+def _comparados(mine: dict, rows: list[dict], itype: str) -> list[dict]:
+    """Tu copia frente a cada torrent del catálogo: lo que lee conclusion_duplicados."""
+    return [{"name": r["name"], "resolution": r["resolution"], "source": r["source"],
+             "codec": r["codec"], "has_spanish": r["has_spanish"], "size": r["size"],
+             "release_group": grupo_del_nombre(r["name"]),
+             "aporta_audio": _aporta_audio(mine, r),
+             # Un capítulo suelto no es el pack de la temporada: no se le compara.
+             "veredicto": None if itype == "season" and _parse_episode_number(r["name"]) is not None
+             else _veredicto(mine, r)}
+            for r in rows]
+
+
+def _aportes(mine: dict, matches: list[dict]) -> list[dict]:
+    """Lo que tu copia mejora ({dim, detail}), solo si conclusion_duplicados dice que es un trump."""
+    conclusion = conclusion_duplicados(matches)
+    if not conclusion or conclusion["nivel"] != "trump":
+        return []
+    veredictos = [m["veredicto"] for m in matches]
+    aportes: list[dict] = []
+    if "mejor" in veredictos and "igual" not in veredictos and "peor" not in veredictos:
+        # La dimensión frente al torrent más parecido: la última en decidir.
+        decididos = [(_decide(mine, m)[1], m) for m in matches if m["veredicto"] == "mejor"]
+        dim = max((d for d, _ in decididos), key=("resolucion", "source", "codec").index)
+        detail = mine[{"resolucion": "resolution", "source": "source", "codec": "codec"}[dim]]
+        sizes = [m["size"] for d, m in decididos if d == "codec" and m["size"]]
+        if dim == "codec" and sizes and mine.get("size") and min(sizes) > mine["size"]:
+            detail += f" (−{_fmt_size(min(sizes) - mine['size'])})"
+        aportes.append({"dim": dim, "detail": detail})
+    if all(m["aporta_audio"] for m in matches):
+        aportes.append({"dim": "idioma", "detail": "ESP"})
+    return aportes
 
 
 def _temporada_en_castellano(eps: list[dict]) -> bool:
@@ -476,7 +473,7 @@ def _compute_and_store_item_status(conn: sqlite3.Connection) -> int:
         mine = {"resolution": m["resolution"], "source": m["source"],
                 "codec": _norm_codec(m["video_codec"] or "") or m["video_codec"],
                 "has_es": _episode_lang_has_es(m["audio_languages"]), "size": m["size_bytes"]}
-        save(m["id"], 1, _compute_aportes(mine, matches))
+        save(m["id"], 1, _aportes(mine, _comparados(mine, matches, "movie")))
 
     # Seasons (aggregate their episodes) — series' tvdb_id + id come from the join.
     seasons = conn.execute(
@@ -506,7 +503,7 @@ def _compute_and_store_item_status(conn: sqlite3.Connection) -> int:
             "has_es": _temporada_en_castellano(eps),
             "size": sum(e["size_bytes"] or 0 for e in eps) or None,
         }
-        aportes = _compute_aportes(mine, matches) if matches else []
+        aportes = _aportes(mine, _comparados(mine, matches, "season"))
         save(s["id"], 1 if matches else 0, aportes)
         # Accumulate into the parent series' rollup. A numberless season is
         # never counted; season 0 (specials) counts unless "Ignorar especiales".
@@ -545,7 +542,7 @@ def _compute_and_store_item_status(conn: sqlite3.Connection) -> int:
         mine = {"resolution": e["resolution"], "source": e["source"],
                 "codec": _norm_codec(e["video_codec"] or "") or e["video_codec"],
                 "has_es": _episode_lang_has_es(e["audio_languages"]), "size": e["size_bytes"]}
-        save(e["id"], 1, _compute_aportes(mine, matches))
+        save(e["id"], 1, _aportes(mine, _comparados(mine, matches, "episode")))
 
     # Series rollup: 0 = no seasons on eMuwarez, 1 = all seasons on eMuwarez,
     # 2 = partial (some seasons on, some off) — so a mixed series is no longer
@@ -771,14 +768,7 @@ def get_item_comparison(conn: sqlite3.Connection, item_id: int, *,
         mine["resolution"] = resolution
     if source:
         mine["source"] = source
-    matches = [{"name": r["name"], "resolution": r["resolution"], "source": r["source"],
-                "codec": r["codec"], "has_spanish": r["has_spanish"], "size": r["size"],
-                "release_group": grupo_del_nombre(r["name"]),
-                "aporta_audio": _aporta_audio(mine, r),
-                # Un capítulo suelto no es el pack de la temporada: no se le compara.
-                "veredicto": None if itype == "season" and _parse_episode_number(r["name"]) is not None
-                else _veredicto(mine, r)}
-               for r in rows]
+    matches = _comparados(mine, rows, itype)
     result = {
         "available": True,
         "message": None,
@@ -789,7 +779,7 @@ def get_item_comparison(conn: sqlite3.Connection, item_id: int, *,
         "mine_available": mine.get("size") is not None,
         "matches": matches,
         "in_catalog": 1 if matches else 0,
-        "aportes": _compute_aportes(mine, rows) if matches else [],
+        "aportes": _aportes(mine, matches),
         "conclusion": conclusion_duplicados(matches, tracker),
     }
     if itype == "season":
