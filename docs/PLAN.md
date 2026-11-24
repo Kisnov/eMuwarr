@@ -49,9 +49,10 @@ descripción y el cliente.
        una sola y está en el servidor (`emu_catalog.conclusion_duplicados`, en cada comparación): el asistente, el
        lote, «Subir también» y la ficha de Biblioteca enseñan lo que dice, el navegador no la aplica. Cuenta la
        calidad y el audio: castellano que no tiene ninguno de los torrents es una mejora, aunque la calidad sea igual
-       o peor. Las columnas de Biblioteca (`emu_aportes`: su filtro «Aportas», el Panel y las peticiones) siguen
-       saliendo de `_compute_aportes`, con la misma regla del audio. Lo que un tracker ya tiene igual o
-       mejor se salta solo para ese (en el lote, si lo tienen todos llega desmarcado y marcarlo a mano lo sube a
+       o peor. La columna de Biblioteca `emu_aportes` (su filtro «Aportas», el Panel y las peticiones) sale de la
+       misma regla (`_aportes`): solo tiene algo si la conclusión es un trump (o, en una temporada que eMuwarez
+       solo tiene en capítulos sueltos, si los tienes todos: el pack). Lo que un tracker ya tiene igual o mejor se
+       salta solo para ese (en el lote, si lo tienen todos llega desmarcado y marcarlo a mano lo sube a
        todos), y un tracker sin catálogo leído no frena nada, solo se avisa. Biblioteca no: su chip y su filtro salen
        de `emu_in_catalog`, una columna de eMuwarez, y decir lo de los otros pediría una columna por tracker.
      - Queda: que las sincronizaciones de peticiones, «Tus subidas» y el perfil reciban el tracker como parámetro;
