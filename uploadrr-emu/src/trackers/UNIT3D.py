@@ -73,8 +73,9 @@ class Unit3d:
         self.config = config
         self.type = "unit3d"
         self.timeout = httpx.Timeout(45.0)
-        # La URL de sus ajustes en la app (`TRACKERS.<X>.url`); sin ella, la de la clase.
-        self.domain = (config["TRACKERS"].get(self.tracker, {}).get("url") or self.domain).rstrip("/")
+        # La URL de sus ajustes en la app (`TRACKERS.<X>.url`); sin ella, la de la clase. La de eMuwarez es fija.
+        url = config["TRACKERS"].get(self.tracker, {}).get("url") if self.tracker != "EMU" else None
+        self.domain = (url or self.domain).rstrip("/")
         # Solo los usan los otros trackers: EMU va por src/utils/cliente_unit3d.py.
         self.upload_url = f"{self.domain}/api/torrents/upload"
         self.search_url = f"{self.domain}/api/torrents/filter"

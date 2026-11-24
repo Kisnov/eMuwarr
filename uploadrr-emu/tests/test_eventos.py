@@ -314,6 +314,11 @@ def test_la_url_de_los_ajustes_gana_a_la_del_tracker(flujo):
     assert f"Torrent URL: {flujo.tracker.url}/torrents/42" in salida
 
 
+def test_la_url_de_emuwarez_no_se_cambia_desde_el_config(flujo):
+    flujo.config["TRACKERS"]["EMU"] = {**flujo.config["TRACKERS"].get("EMU", {}), "url": "https://otro.example"}
+    assert EMU(flujo.config).domain == EMU.domain.rstrip("/")
+
+
 # --base-desde: la subida a N.O.B.S de algo que ya está en eMuwarez, cuando el tmp/<nombre> de entonces ya no está
 
 

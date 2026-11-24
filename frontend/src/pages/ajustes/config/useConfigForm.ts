@@ -31,11 +31,15 @@ const ERROR_URL_QBIT = 'La URL de qBittorrent debe empezar por http:// o https:/
 const ERROR_URL_PUBLICA = 'La URL pública debe empezar por http:// o https://, incluir un host válido y no llevar usuario ni contraseña'
 const ERROR_URL_QUI = 'La URL del proxy de qui debe empezar por http:// o https:// e incluir un host válido'
 
+// Los grupos de `tags` marcados en `marcados`, con su escritura actual: el backend compara sin distinguir mayúsculas.
+export const marcadosEn = (marcados: string[], tags: string[]) =>
+  tags.filter(t => marcados.some(g => g.trim().toLowerCase() === t.trim().toLowerCase()))
+
 // Las marcas guardadas de los grupos que existen, igual que las compara el formulario (ver prAGuardar).
 function marcasDe(s: SettingsData, cual: 'pr' | 'anon'): string[] {
   const tags = s.upload_tags?.length ? s.upload_tags : [s.default_release_tag]
   const marcados = (cual === 'pr' ? s.upload_tags_personal_release : s.upload_tags_anonimos) ?? []
-  return marcados.filter(g => tags.includes(g))
+  return marcadosEn(marcados, tags)
 }
 
 // Marca o desmarca un grupo en una lista de marcas.
@@ -50,7 +54,7 @@ const urlsDe = (s: SettingsData): Record<string, string> => ({ nobs: s.nobs_url 
 function marcasTrackersDe(s: SettingsData, tags: string[]): Record<string, MarcasTracker> {
   return Object.fromEntries(OTROS_TRACKERS.map(({ id }) => {
     const m = s.marcas_por_tracker?.[id]
-    return [id, m ? { personal_release: m.personal_release.filter(g => tags.includes(g)), anonimos: m.anonimos.filter(g => tags.includes(g)) } : null]
+    return [id, m ? { personal_release: marcadosEn(m.personal_release, tags), anonimos: marcadosEn(m.anonimos, tags) } : null]
   }))
 }
 
@@ -128,10 +132,10 @@ export function useConfigForm() {
   const borrador = nuevoTag.trim()
   const tagsAGuardar = borrador && !tags.includes(borrador) ? [...tags, borrador] : tags
   // Solo los de grupos que siguen en la lista: quitar un grupo quita también sus marcas.
-  const prAGuardar = gruposPR.filter(g => tags.includes(g))
-  const anonAGuardar = gruposAnon.filter(g => tags.includes(g))
+  const prAGuardar = marcadosEn(gruposPR, tags)
+  const anonAGuardar = marcadosEn(gruposAnon, tags)
   const marcasAGuardar = Object.fromEntries(Object.entries(marcasTrackers).map(([id, m]) => [id, m && {
-    personal_release: m.personal_release.filter(g => tags.includes(g)), anonimos: m.anonimos.filter(g => tags.includes(g)),
+    personal_release: marcadosEn(m.personal_release, tags), anonimos: marcadosEn(m.anonimos, tags),
   }]))
   const currentSig = configSignature({
     tags: tagsAGuardar, gruposPR: prAGuardar, gruposAnon: anonAGuardar, providerOrder, region, emuUsername,
