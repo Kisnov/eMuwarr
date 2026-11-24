@@ -658,11 +658,36 @@ def catalogo_leido(conn: sqlite3.Connection, tracker: Tracker) -> Optional[str]:
     return get_state(conn, _clave(SYNC_COMPLETED_STATE_KEY, tracker))
 
 
-def ya_lo_tiene(comparacion: dict) -> bool:
-    """Lo que el Resumen llama duplicado o peor (frontend/src/utils/resumenSubida.ts::conclusionDuplicados): algún
-    torrent con tu misma calidad, o todo lo comparable mejor que tu copia."""
-    veredictos = [m["veredicto"] for m in comparacion["matches"] if m["veredicto"]]
-    return "igual" in veredictos or (bool(veredictos) and "mejor" not in veredictos)
+def conclusion_duplicados(matches: list[dict], tracker: Tracker = EMU) -> Optional[dict]:
+    """La conclusión de «En <tracker> ya hay», de los veredictos de tu copia frente a cada torrent: `nivel`
+    (duplicado, trump, mixto, peor o sin-comparar), `clase` (el veredicto con que se pinta), `texto` y `ya_lo_tiene`
+    (duplicado o peor: el lote lo salta para ese tracker y «Subir también» no lo ofrece). None sin torrents. No es un
+    permiso: cada tracker tiene sus reglas de trumps y solo ellas deciden si una subida se acepta."""
+    if not matches:
+        return None
+    veredictos = [m["veredicto"] for m in matches]
+    mejor, igual, peor = (veredictos.count(v) for v in ("mejor", "igual", "peor"))
+    # Si algún torrent no se pudo comparar, lo que sigue solo vale para los que sí.
+    parcial = None in veredictos
+    nota = " Alguna comparación falta: la conclusión es parcial." if parcial else ""
+
+    def dicho(nivel: str, clase: Optional[str], texto: str) -> dict:
+        return {"nivel": nivel, "clase": clase, "texto": texto, "ya_lo_tiene": nivel in ("duplicado", "peor")}
+
+    if mejor + igual + peor == 0:
+        return dicho("sin-comparar", None,
+                     "No se pudo comparar la calidad con lo que ya hay: revisa a mano si sería un duplicado.")
+    if igual:
+        hay = "hay 1 torrent" if igual == 1 else f"hay {igual} torrents"
+        return dicho("duplicado", "igual", f"Ya {hay} con tu misma calidad: la subida sería un duplicado.")
+    if mejor and not peor:
+        cuales = "el torrent que hay" if mejor == 1 else f"los {mejor} torrents que hay"
+        return dicho("trump", "mejor",
+                     f"Tu copia mejora {cuales}: puede ser un trump. Revisa las reglas de trumps antes de subir.{nota}")
+    if mejor:
+        return dicho("mixto", "igual", f"Tu copia mejora {mejor} y empeora {peor} de lo que hay: no es un trump claro.{nota}")
+    lo = "comparado" if parcial else "que ya hay"
+    return dicho("peor", "peor", f"Tu copia es peor que todo lo {lo}: {tracker.nombre} probablemente la rechace.{nota}")
 
 
 def motivo_ya_lo_tiene(tracker: Tracker) -> str:
@@ -748,6 +773,7 @@ def get_item_comparison(conn: sqlite3.Connection, item_id: int, *,
         "matches": matches,
         "in_catalog": 1 if matches else 0,
         "aportes": _compute_aportes(mine, rows) if matches else [],
+        "conclusion": conclusion_duplicados(matches, tracker),
     }
     if itype == "season":
         # Distinguish "there is a season pack" from "only loose episodes". When
@@ -762,6 +788,16 @@ def get_item_comparison(conn: sqlite3.Connection, item_id: int, *,
         result["only_episodes"] = bool(cat_ep_nums) and not has_pack
         result["have_all_episodes"] = bool(cat_ep_nums) and cat_ep_nums.issubset(my_ep_nums)
     return result
+
+
+def get_items_comparison(conn: sqlite3.Connection, item_ids: list[int], *, resolution: Optional[str] = None,
+                         source: Optional[str] = None, tracker: Tracker = EMU) -> dict:
+    """La comparación de cada elemento (una tanda del asistente, una fila del lote) y la conclusión de todos sus
+    torrents juntos."""
+    comparaciones = [get_item_comparison(conn, i, resolution=resolution, source=source, tracker=tracker)
+                     for i in item_ids]
+    return {"comparaciones": comparaciones,
+            "conclusion": conclusion_duplicados([m for c in comparaciones for m in c["matches"]], tracker)}
 
 
 def _safe_json(raw):

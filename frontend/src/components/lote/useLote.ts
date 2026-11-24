@@ -3,13 +3,13 @@
 // película o temporada lo que el catálogo local de cada tracker elegido ya tiene de lo mismo (el nombre de un pack lo
 // dan sus comprobaciones, `nombre` en runUploadChecks).
 import { useEffect, useRef, useState } from 'react'
-import { getEmuComparison, getLibrary, suggestProvider } from '../../api/library'
+import { getEmuComparisons, getLibrary, suggestProvider, type NivelDuplicado } from '../../api/library'
 import { getNomenclatureFields, previewNomenclatureFields, type NomenclatureFields } from '../../api/nomenclature'
 import { fetchSettings } from '../../api/settings'
 import { fetchReglasTracker, type ReglasDeTracker, type TrackerParaSubir } from '../../api/uploads'
 import type { LibraryItemResponse } from '../../types/api'
 import { expandirEntradas, razonNoSubible, type EntradaLote } from '../../utils/lote'
-import { conclusionDuplicados, resumirComparaciones, type NivelDuplicado } from '../../utils/resumenSubida'
+import { resumirComparaciones } from '../../utils/resumenSubida'
 import { PROVIDER_SOURCES } from '../asistente/constantes'
 
 export interface AnalisisElemento {
@@ -27,9 +27,9 @@ export interface AnalisisElemento {
   tuya?: { resolution?: string | null; source?: string | null }
 }
 
-// Lo que ya hay en el catálogo local de un tracker: el nivel de `conclusionDuplicados` (null: nada con lo que
-// comparar) y la frase.
-export interface YaHayEnTracker { nivel: NivelDuplicado | null; texto: string }
+// Lo que ya hay en el catálogo local de un tracker, como lo concluye el servidor: el nivel (null: nada con lo que
+// comparar), la frase y si ya lo tiene (igual o mejor: se salta para ese).
+export interface YaHayEnTracker { nivel: NivelDuplicado | null; texto: string; yaLoTiene: boolean }
 
 const mensaje = (e: unknown, defecto: string) => (e instanceof Error && e.message ? e.message : defecto)
 
@@ -85,9 +85,12 @@ export async function analizarPelicula(id: number): Promise<AnalisisElemento> {
 
 /** Lo que ya hay en `tracker` de lo mismo; `tuya`, lo que irá en el nombre (como el Resumen del asistente). */
 async function enTracker(id: number, tuya: AnalisisElemento['tuya'], tracker: TrackerParaSubir): Promise<YaHayEnTracker> {
-  const yaHay = resumirComparaciones([await getEmuComparison(id, tuya, tracker.id).catch(() => null)])
-  const conclusion = yaHay.estado === 'listo' ? conclusionDuplicados(yaHay.filas, tracker.nombre) : null
-  return { nivel: conclusion?.nivel ?? null, texto: conclusion?.texto ?? textoSinConclusion(yaHay.estado, tracker.nombre) }
+  const yaHay = resumirComparaciones(await getEmuComparisons([id], tuya, tracker.id).catch(() => null))
+  const conclusion = yaHay.estado === 'listo' ? yaHay.conclusion : null
+  return {
+    nivel: conclusion?.nivel ?? null, texto: conclusion?.texto ?? textoSinConclusion(yaHay.estado, tracker.nombre),
+    yaLoTiene: !!conclusion?.ya_lo_tiene,
+  }
 }
 
 // Una temporada (un pack): su nombre, su bloqueo y su proveedor salen de sus comprobaciones (el plan del pack), y lo

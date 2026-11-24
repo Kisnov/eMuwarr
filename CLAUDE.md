@@ -149,8 +149,10 @@ came in from `Kisnov/Uploadrr-EMU` with `git subtree add`, history kept; that re
   One 1/hour and 1/day throttle covers the whole run; another tracker's failure goes to `error_otros` and doesn't undo
   eMuwarez's. `library_items.emu_in_catalog`/`emu_aportes` stay eMuwarez's; «is it on X» is
   `filas_del_catalogo(..., tracker)` / `get_item_comparison(..., tracker)` (`?tracker=` on
-  `/library/{id}/emu-comparison`), used by the wizard's «En <tracker> ya hay» panels, the batch Resumen (a tracker
-  that already has it is skipped for that one: `omitir`) and «Subir también a…» (`emu_catalog.ya_lo_tiene`).
+  `/library/{id}/emu-comparison`; `/library/emu-comparisons?ids=…` for several, with one conclusion for all), used by
+  the wizard's «En <tracker> ya hay» panels, the batch Resumen (a tracker that already has it is skipped for that
+  one: `omitir`) and «Subir también a…». The duplicate/trump rule lives only in `emu_catalog.conclusion_duplicados`
+  (each comparison carries its `conclusion`: level, class, sentence, `ya_lo_tiene`); the frontend only shows it.
 - One UNIT3D client: every eMuwarez request, the app's (`emu.cliente`) and Uploadrr-EMU's (`Unit3d._cliente`), goes through
   `integrations/cliente_unit3d.py`. It builds URL and headers (`User-Agent: emuwarr/<version>`; `_lanzar_uploadrr` passes the
   version as `EMUWARR_VERSION`), sends the key only to the tracker's own origin and takes a slot in the limiter first. The key goes

@@ -91,7 +91,7 @@ def _motivo_catalogo(conn: sqlite3.Connection, job: dict, tracker_id: str) -> st
     nombre = json.loads(job.get("nomenclature_snapshot_json") or "{}")
     comparacion = emu_catalog.get_item_comparison(conn, job["library_item_id"], tracker=tracker,
                                                   resolution=nombre.get("resolution"), source=nombre.get("source"))
-    if emu_catalog.ya_lo_tiene(comparacion):
+    if (comparacion.get("conclusion") or {}).get("ya_lo_tiene"):
         return emu_catalog.motivo_ya_lo_tiene(tracker)
     return None
 

@@ -9,7 +9,7 @@ import { ApiClientError } from '../../api/client'
 import { queueLote, type LoteEncolado } from '../../api/uploads'
 import type { LibraryItemResponse } from '../../types/api'
 import {
-  CLAVE_ABRIR_LOTE, MAX_ELEMENTOS_LOTE, marcadaPorDefecto, nombresRepetidos, razonNoSubible, type EntradaLote,
+  CLAVE_ABRIR_LOTE, MAX_ELEMENTOS_LOTE, nombresRepetidos, razonNoSubible, type EntradaLote,
 } from '../../utils/lote'
 import type { ProveedoresElegidos } from '../../utils/origenProveedor'
 import { useComprobacionesTanda } from '../asistente/useComprobaciones'
@@ -120,7 +120,7 @@ export function SubidaPorLotesModal({ entradas, onClose, onDone, onNavigate }: {
     const enTrackers = destinos.map(t => ({ ...t, en: yaHay.get(`${t.id}:${id}`) }))
     const pendiente = !contenido || !a || (!a.bloqueo && enTrackers.some(t => !t.en))
     // Los que ya lo tienen igual o mejor se saltan; si son todos, llega desmarcada (marcada a mano, va a todos).
-    const yaLoTienen = enTrackers.filter(t => t.en && !marcadaPorDefecto(t.en.nivel))
+    const yaLoTienen = enTrackers.filter(t => t.en?.yaLoTiene)
     // Los que no lo admiten tampoco cuentan: si el resto ya lo tiene, no va a ninguno.
     const admiten = destinos.filter(t => reglas.get(`${t.id}:${id}`)?.permitido !== false)
     const todos = yaLoTienen.length > 0 && admiten.every(t => yaLoTienen.some(y => y.id === t.id))

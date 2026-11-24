@@ -1,7 +1,7 @@
 // Los textos del paso Resumen del asistente de subida: lo que se va a mandar a eMuwarez, dicho con las
 // mismas palabras en una película, un pack y una tanda. Funciones puras: el estado y las peticiones están en
 // components/asistente/useResumen.ts.
-import type { EmuComparison } from '../api/library'
+import type { ConclusionDuplicados, EmuComparaciones } from '../api/library'
 import type { UploadCheck } from '../api/uploads'
 import { formatBytes, formatNumero } from './format'
 import { MODOS_PISTAS, normalizarModo, tocaElFichero, type ModoPistas } from './modoPistas'
@@ -11,12 +11,15 @@ export type Veredicto = 'mejor' | 'igual' | 'peor'
 export interface FilaYaHay { clave: string; nombre: string; calidad: string; veredicto: Veredicto | null }
 
 // Lo que el catálogo local sabe de lo que se sube. `sinNada`: cuántos de los `total` elementos no están;
-// `sincronizado`: cuándo acabó la última lectura de ese catálogo.
+// `sincronizado`: cuándo acabó la última lectura de ese catálogo; `conclusion`, la del servidor.
 export type YaHay =
   | { estado: 'cargando' }
   | { estado: 'error' }
   | { estado: 'sin-catalogo' }
-  | { estado: 'listo'; filas: FilaYaHay[]; sinNada: number; total: number; sincronizado: string | null }
+  | {
+    estado: 'listo'; filas: FilaYaHay[]; sinNada: number; total: number; sincronizado: string | null
+    conclusion: ConclusionDuplicados | null
+  }
 
 const plural = (n: number, uno: string, varios: string) => `${formatNumero(n)} ${n === 1 ? uno : varios}`
 
@@ -90,10 +93,10 @@ export function textoPeticion(c: {
 
 const calidad = (r: string | null, s: string | null) => unidos([r, s]).replace(' · ', ' ')
 
-// De las comparaciones con el catálogo local (una por elemento; null si falló esa petición) a lo que enseña la tabla.
-export function resumirComparaciones(comparaciones: (EmuComparison | null)[]): YaHay {
-  if (comparaciones.length === 0 || comparaciones.some(c => c == null)) return { estado: 'error' }
-  const disponibles = (comparaciones as EmuComparison[]).filter(c => c.available)
+// De las comparaciones con el catálogo local (null si falló la petición) a lo que enseña la tabla.
+export function resumirComparaciones(r: EmuComparaciones | null): YaHay {
+  if (!r || r.comparaciones.length === 0) return { estado: 'error' }
+  const disponibles = r.comparaciones.filter(c => c.available)
   if (disponibles.length === 0) return { estado: 'sin-catalogo' }
   const filas: FilaYaHay[] = disponibles.flatMap((c, i) => c.matches.map((m, j) => ({
     clave: `${i}-${j}`, nombre: m.name, calidad: calidad(m.resolution, m.source), veredicto: m.veredicto ?? null,
@@ -101,32 +104,6 @@ export function resumirComparaciones(comparaciones: (EmuComparison | null)[]): Y
   return {
     estado: 'listo', filas, total: disponibles.length,
     sinNada: disponibles.filter(c => c.matches.length === 0).length,
-    sincronizado: disponibles[0].synced_at ?? null,
+    sincronizado: disponibles[0].synced_at ?? null, conclusion: r.conclusion,
   }
-}
-
-export type NivelDuplicado = 'duplicado' | 'trump' | 'mixto' | 'peor' | 'sin-comparar'
-
-// La conclusión de la tabla «En <tracker> ya hay», en una frase: qué dicen los veredictos de lo tuyo frente a cada torrent.
-// No es un permiso: cada tracker tiene sus reglas de trumps y solo ellas deciden si una subida se acepta.
-export function conclusionDuplicados(filas: FilaYaHay[], tracker = 'eMuwarez'): { nivel: NivelDuplicado; clase: Veredicto | null; texto: string } | null {
-  if (filas.length === 0) return null
-  const cuenta = (v: Veredicto) => filas.filter(f => f.veredicto === v).length
-  const mejor = cuenta('mejor'), igual = cuenta('igual'), peor = cuenta('peor')
-  // Si algún torrent no se pudo comparar, lo que sigue solo vale para los que sí.
-  const parcial = filas.some(f => f.veredicto === null)
-  const nota = parcial ? ' Alguna comparación falta: la conclusión es parcial.' : ''
-  if (mejor + igual + peor === 0) {
-    return { nivel: 'sin-comparar', clase: null, texto: 'No se pudo comparar la calidad con lo que ya hay: revisa a mano si sería un duplicado.' }
-  }
-  if (igual > 0) {
-    return { nivel: 'duplicado', clase: 'igual', texto: `Ya ${igual === 1 ? 'hay 1 torrent' : `hay ${formatNumero(igual)} torrents`} con tu misma calidad: la subida sería un duplicado.` }
-  }
-  if (mejor > 0 && peor === 0) {
-    return { nivel: 'trump', clase: 'mejor', texto: `Tu copia mejora ${mejor === 1 ? 'el torrent que hay' : `los ${formatNumero(mejor)} torrents que hay`}: puede ser un trump. Revisa las reglas de trumps antes de subir.${nota}` }
-  }
-  if (mejor > 0) {
-    return { nivel: 'mixto', clase: 'igual', texto: `Tu copia mejora ${formatNumero(mejor)} y empeora ${formatNumero(peor)} de lo que hay: no es un trump claro.${nota}` }
-  }
-  return { nivel: 'peor', clase: 'peor', texto: `Tu copia es peor que todo lo ${parcial ? 'comparado' : 'que ya hay'}: ${tracker} probablemente la rechace.${nota}` }
 }

@@ -45,8 +45,9 @@ descripción y el cliente.
        Las columnas de la biblioteca (`emu_in_catalog`/`emu_aportes`) siguen siendo de eMuwarez. Falta probar en el
        NAS la primera lectura de N.O.B.S y Milnueve: los nombres de sus categorías de series
        (`emu_catalog._CATEGORIAS_SERIE`) salen de sus formularios, no de lo que devuelve su API.
-     - «Subir por lotes» y «Subir también a…» miran el catálogo de cada tracker, con la conclusión del Resumen
-       (`conclusionDuplicados`; su copia en Python, `emu_catalog.ya_lo_tiene`): lo que un tracker ya tiene igual o
+     - «Subir por lotes» y «Subir también a…» miran el catálogo de cada tracker. La regla de duplicados y trumps es
+       una sola y está en el servidor (`emu_catalog.conclusion_duplicados`, en cada comparación): el asistente, el
+       lote y «Subir también» enseñan lo que dice, el navegador no la aplica. Lo que un tracker ya tiene igual o
        mejor se salta solo para ese (en el lote, si lo tienen todos llega desmarcado y marcarlo a mano lo sube a
        todos), y un tracker sin catálogo leído no frena nada, solo se avisa. Biblioteca no: su chip y su filtro salen
        de `emu_in_catalog`, una columna de eMuwarez, y decir lo de los otros pediría una columna por tracker.
