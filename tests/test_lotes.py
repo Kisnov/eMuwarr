@@ -802,6 +802,19 @@ def test_lo_que_ya_tienen_todos_no_escribe_nada(db_conn, tmp_path, sin_comprobac
     assert r["lote_id"] is None
 
 
+def test_si_el_unico_que_lo_admite_ya_lo_tiene_no_escribe_nada(db_conn, tmp_path, sin_comprobaciones, monkeypatch):
+    from emuwarez_uploadrr.services import nomenclature
+    monkeypatch.setattr(nomenclature, "save_manual_nomenclature_fields", lambda *a, **k: pytest.fail("guardó campos"))
+    _clave(db_conn, "nobs")
+    sin_idiomas = _peli(db_conn, tmp_path)  # eMuwarez la admite y N.O.B.S no
+
+    r = lotes.encolar_lote(db_conn, [_el(sin_idiomas, campos={"title": "X"}, omitir=["emu"])], ["emu", "nobs"])
+
+    assert [(x["tracker"], x["status"]) for x in r["resultados"]] == [("emu", "blocked"), ("nobs", "blocked")]
+    assert r["resultados"][1]["errors"][0].startswith("N.O.B.S no lo admite")
+    assert r["lote_id"] is None
+
+
 def test_lo_que_se_salta_por_el_elemento_se_salta_para_cada_tracker(db_conn, tmp_path, sin_comprobaciones):
     _clave(db_conn, "nobs")
     serie = _item(db_conn, "series", "Serie")

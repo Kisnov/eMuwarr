@@ -866,11 +866,13 @@ describe('a varios trackers', () => {
     })
 
     it('sin Milnueve marcado, se comprueba con las de eMuwarez y se salta', async () => {
-      m(subidas.runUploadChecks).mockImplementation(async (id, scope) => (scope === 'environment' ? ENTORNO
-        : id === 15 ? { ready: false, checks: [{ id: 'spanish', label: 'No tiene castellano', status: 'fail' as const, message: '' }] } : LISTO))
+      // Milnueve la admite; con las de eMuwarez, falla el castellano.
+      m(subidas.runUploadChecks).mockImplementation(async (id, scope, ...resto) => (scope === 'environment' ? ENTORNO
+        : id === 15 && resto[2] !== 'mnv' ? { ready: false, checks: [{ id: 'spanish', label: 'No tiene castellano', status: 'fail' as const, message: '' }] } : LISTO))
       await abrir([DUNE, CATALAN])
       await esperar(() => !casillaPaso1('Catalana').disabled)
       await alResumen(2)
+      expect(fila(15).textContent).not.toContain('No tiene castellano')
       await pulsar(casillaTracker('Milnueve'))
       await esperar(() => fila(15).textContent?.includes('No tiene castellano'))
       expect(llamadas('content').filter(c => c[0] === 15).map(c => c[4])).toEqual(['mnv', undefined])
