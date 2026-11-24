@@ -70,6 +70,16 @@ def test_emu_get_user_no_ensena_la_url(monkeypatch, estado):
     assert "secreta" not in str(exc.value) and exc.value.status == estado
 
 
+def test_emu_get_user_de_otro_tracker_dice_su_nombre(monkeypatch):
+    def falso(method, url, **kw):
+        raise IntegrationError("HTTP 401", status=401)
+
+    monkeypatch.setattr(emu, "request_json", falso)
+    with pytest.raises(IntegrationError) as exc:
+        emu.emu_get_user("k", "https://nobs.rawsmoke.net", tracker="NOBS", nombre="N.O.B.S")
+    assert str(exc.value).startswith("N.O.B.S ha rechazado")
+
+
 def test_emu_get_user_rechaza_una_respuesta_sin_usuario(monkeypatch):
     monkeypatch.setattr(emu, "request_json", lambda method, url, **kw: {"message": "Unauthenticated."})
     with pytest.raises(IntegrationError, match="formato"):

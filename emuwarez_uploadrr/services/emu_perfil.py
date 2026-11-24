@@ -84,7 +84,7 @@ def _pedir(conn: sqlite3.Connection, clave: str, guardado: dict[str, Any], track
     nuevo = {**guardado, "intento_at": datetime.now(timezone.utc).isoformat(), "huella": _huella(clave)}
     cambios = None
     try:
-        datos = emu_get_user(clave, tracker.url, tracker=tracker.uploadrr)
+        datos = emu_get_user(clave, tracker.url, tracker=tracker.uploadrr, nombre=tracker.nombre)
     except IntegrationError as exc:
         logger.warning("No se pudo leer el perfil de %s: %s", tracker.nombre, texto_de_error(exc))
         nuevo["error"] = texto_de_error(exc)

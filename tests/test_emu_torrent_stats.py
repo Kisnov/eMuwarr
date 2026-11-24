@@ -163,3 +163,22 @@ def test_una_subida_a_otro_tracker_se_pide_a_ese_tracker_con_su_clave(conn, monk
     conn.commit()
     assert estadisticas_de_la_subida(conn, job)["disponible"] is True
     assert pedidos == [("clave-nobs", 55, "https://nobs.rawsmoke.net", "NOBS")]
+
+
+def test_la_misma_clave_y_el_mismo_id_en_dos_trackers_no_comparten_cache(conn, monkeypatch):
+    pedidos = []
+
+    def falso(api_key, torrent_id, base_url=None, **kw):
+        pedidos.append(kw["tracker"])
+        return dict(TORRENTE["attributes"])
+
+    monkeypatch.setattr(ets, "emu_get_torrent", falso)
+    set_setting(conn, "emu.api_key", "misma")
+    set_setting(conn, "nobs.api_key", "misma")
+    emu = _subida(conn, ficha="https://emu-warez.com/torrents/55")
+    nobs = conn.execute("INSERT INTO upload_jobs (title, path, status, result_tracker, tracker) "
+                        "VALUES ('Peli', '/x', 'completed', 'https://nobs.rawsmoke.net/torrents/55', 'nobs')").lastrowid
+    conn.commit()
+    estadisticas_de_la_subida(conn, emu)
+    estadisticas_de_la_subida(conn, nobs)
+    assert pedidos == ["EMU", "NOBS"]

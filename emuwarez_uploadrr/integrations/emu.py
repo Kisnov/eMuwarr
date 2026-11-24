@@ -137,7 +137,7 @@ def emu_get_request_detail(
 
 
 def emu_get_torrent(api_key: str, torrent_id: int, base_url: str | None = None, *,
-                    tracker: str = "EMU") -> dict[str, Any]:
+                    tracker: str = "EMU", nombre: str = "eMuwarez") -> dict[str, Any]:
     """Un torrent (/api/torrents/{id}) con sus contadores del tracker: seeders, leechers, times_completed...
     UNIT3D los da en `attributes` (con o sin el envoltorio `data`); devuelve ese diccionario, o la respuesta entera
     si viene plana."""
@@ -145,19 +145,20 @@ def emu_get_torrent(api_key: str, torrent_id: int, base_url: str | None = None, 
     try:
         return cliente_unit3d.atributos_torrent(data)
     except ValueError:
-        raise IntegrationError("eMuwarez ha devuelto el torrent en un formato que no se reconoce") from None
+        raise IntegrationError(f"{nombre} ha devuelto el torrent en un formato que no se reconoce") from None
 
 
-def emu_get_user(api_key: str, base_url: str | None = None, *, tracker: str = "EMU") -> dict[str, Any]:
+def emu_get_user(api_key: str, base_url: str | None = None, *, tracker: str = "EMU",
+                 nombre: str = "eMuwarez") -> dict[str, Any]:
     """Tu cuenta (/api/user): usuario, grupo, subido, bajado, ratio, buffer, seeding, leeching, bonus y H&R."""
     try:
         data = _pedir(api_key, base_url, "/api/user", interactiva=True, tracker=tracker)
     except IntegrationError as exc:
         if exc.status in _MENSAJE_POR_ESTADO:
-            raise IntegrationError(_MENSAJE_POR_ESTADO[exc.status].format("eMuwarez"), status=exc.status) from None
+            raise IntegrationError(_MENSAJE_POR_ESTADO[exc.status].format(nombre), status=exc.status) from None
         raise
     if not isinstance(data, dict) or not data.get("username"):
-        raise IntegrationError("eMuwarez ha devuelto tu perfil en un formato que no se reconoce")
+        raise IntegrationError(f"{nombre} ha devuelto tu perfil en un formato que no se reconoce")
     return data
 
 

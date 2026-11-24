@@ -32,7 +32,7 @@ MENSAJE_SIN_APROBAR = ("{} aún no enseña este torrent: estará pendiente de mo
                        "Las cifras salen cuando lo aprueben.")
 
 _lock = threading.Lock()
-_cache: dict[tuple[str, int], tuple[float, dict[str, Any]]] = {}
+_cache: dict[tuple[str, str, int], tuple[float, dict[str, Any]]] = {}
 
 
 def id_de_la_ficha(url: Optional[str]) -> Optional[int]:
@@ -74,14 +74,14 @@ def estadisticas_de_la_subida(conn: sqlite3.Connection, job_id: int, *, refresca
         return {**base, "mensaje": f"Falta la API key de {tracker.nombre} en Configuración."}
     base["configurado"] = True
     huella = hashlib.sha256(clave.encode()).hexdigest()
-    llave = (huella, torrent_id)
+    llave = (tracker.id, huella, torrent_id)  # la misma clave puede valer en dos trackers
     ahora = time.monotonic()
     with _lock:
         guardado = _cache.get(llave)
         if guardado and not refrescar and ahora - guardado[0] < (TTL_CACHE if guardado[1].get("disponible") else TTL_FALLO):
             return {**base, **guardado[1]}
     try:
-        atributos = emu_get_torrent(clave, torrent_id, tracker.url, tracker=tracker.uploadrr)
+        atributos = emu_get_torrent(clave, torrent_id, tracker.url, tracker=tracker.uploadrr, nombre=tracker.nombre)
         resultado = {"disponible": True, "actualizado": datetime.now(timezone.utc).isoformat(), **_resumir(atributos)}
     except IntegrationError as exc:
         if exc.status == 404:
