@@ -124,3 +124,11 @@ def test_la_ruta_de_varias_comparaciones(client, auth_headers):
     assert r.json() == {"comparaciones": [{"available": False, "message": "Elemento no encontrado", "matches": []}],
                         "conclusion": None}
     assert client.get("/api/library/emu-comparisons?ids=1&tracker=x", headers=auth_headers).status_code == 422
+
+
+def test_un_pack_va_en_castellano_si_lo_van_todos_sus_capitulos():
+    from emuwarez_uploadrr.services.emu_catalog import _temporada_en_castellano
+    cap = lambda audio, size=1: {"audio_languages": audio, "size_bytes": size}  # noqa: E731
+    assert _temporada_en_castellano([cap("spa"), cap("spa"), cap(None, size=None)]) is True  # el que falta no cuenta
+    assert _temporada_en_castellano([cap("spa"), cap("jpn")]) is False
+    assert _temporada_en_castellano([cap(None, size=None)]) is False

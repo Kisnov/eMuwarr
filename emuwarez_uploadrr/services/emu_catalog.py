@@ -395,6 +395,12 @@ def _veredicto(mine: dict, match: dict) -> Optional[str]:
     return "igual" if comparables else None
 
 
+def _temporada_en_castellano(eps: list[dict]) -> bool:
+    """Si el pack va en castellano: todos los capítulos con fichero, no uno solo."""
+    con_fichero = [e for e in eps if e["size_bytes"]]
+    return bool(con_fichero) and all(_episode_lang_has_es(e["audio_languages"]) for e in con_fichero)
+
+
 def _episode_lang_has_es(langs: Optional[str]) -> bool:
     if not langs:
         return False
@@ -497,7 +503,7 @@ def _compute_and_store_item_status(conn: sqlite3.Connection) -> int:
             "resolution": _mode([e["resolution"] for e in eps]),
             "source": _mode([e["source"] for e in eps]),
             "codec": _best_codec([e["video_codec"] for e in eps]),
-            "has_es": any(_episode_lang_has_es(e["audio_languages"]) for e in eps),
+            "has_es": _temporada_en_castellano(eps),
             "size": sum(e["size_bytes"] or 0 for e in eps) or None,
         }
         aportes = _compute_aportes(mine, matches) if matches else []
@@ -683,7 +689,7 @@ def conclusion_duplicados(matches: list[dict], tracker: Tracker = EMU) -> Option
     if all(m["aporta_audio"] for m in matches):
         aunque = f", aunque tu copia empeora {peor} de lo que hay" if peor else ""
         return dicho("trump", "mejor", f"Aportas audio ESP que no tiene ninguno{aunque}: puede ser un trump. "
-                                       f"Revisa las reglas de trumps antes de subir.{nota}")
+                                       "Revisa las reglas de trumps antes de subir.")
     if mejor + igual + peor == 0:
         return dicho("sin-comparar", None,
                      "No se pudo comparar la calidad con lo que ya hay: revisa a mano si sería un duplicado.")
@@ -745,7 +751,7 @@ def get_item_comparison(conn: sqlite3.Connection, item_id: int, *,
             "resolution": _mode([e["resolution"] for e in eps]),
             "source": _mode([e["source"] for e in eps]),
             "codec": _best_codec([e["video_codec"] for e in eps]),
-            "has_es": any(_episode_lang_has_es(e["audio_languages"]) for e in eps),
+            "has_es": _temporada_en_castellano(eps),
             "size": sum(e["size_bytes"] or 0 for e in eps) or None,
             "release_groups": sorted({e["release_group"] for e in eps if e["release_group"]}, key=str.casefold),
         }

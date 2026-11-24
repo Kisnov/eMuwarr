@@ -210,6 +210,8 @@ export interface EmuMatch {
   release_group?: string | null
   // Tu copia frente a este torrent; null si no hay nada que comparar.
   veredicto?: 'mejor' | 'igual' | 'peor' | null
+  // Tienes castellano y este torrent dice que no lo tiene.
+  aporta_audio?: boolean
 }
 
 export interface EmuComparison {
@@ -226,7 +228,7 @@ export interface EmuComparison {
   // pack), and whether you have every episode (so you could contribute the pack).
   only_episodes?: boolean
   have_all_episodes?: boolean
-  // Lo que concluye el servidor de los veredictos (emu_catalog.conclusion_duplicados); null sin torrents.
+  // Lo que concluye el servidor de la calidad y el audio (emu_catalog.conclusion_duplicados); null sin torrents.
   conclusion?: ConclusionDuplicados | null
 }
 
