@@ -219,7 +219,7 @@ function AccionDeFila({ etiqueta, tono, clase, onClick, children }: {
 // Va memorizada: con el progreso real llegando cada medio segundo, solo tiene que repintarse la fila cuya subida
 // cambió. Para que el memo sirva, todas las props son valores o funciones con identidad estable (nada de objetos o
 // flechas hechos en cada pintado del padre): por eso el chip de reintentos son dos valores y `onOpen` recibe el id.
-const JobRow = memo(function JobRow({ job, instances, seeding, onOpen, indent, enGrupo, otrosTrackers, trackersAbiertos, otroFallido, onToggleTrackers, intentosAnteriores, desplegada, onToggleCadena, onCancel, onRetry, onDelete, onFiltrarLote, onSubirTambien }: {
+const JobRow = memo(function JobRow({ job, instances, seeding, onOpen, indent, enGrupo, otrosTrackers, trackersAbiertos, otroFallido, onToggleTrackers, intentosAnteriores, desplegada, onToggleCadena, onCancel, onRetry, onDelete, onFiltrarLote, subirTambienId, onSubirTambien }: {
   job: UploadJob
   seeding: SeedingEstado
   instances: InstanceSafeResponse[]
@@ -241,7 +241,8 @@ const JobRow = memo(function JobRow({ job, instances, seeding, onOpen, indent, e
   onRetry: (job: UploadJob) => void
   // Pulsar el chip «Lote · N»: ver solo las subidas de ese lote.
   onFiltrarLote?: (loteId: string) => void
-  // Solo si se puede subir también a otro tracker.
+  // La subida del elemento que se puede subir también a otro tracker (puede ser otra fila del grupo).
+  subirTambienId?: number
   onSubirTambien?: (jobId: number) => void
 }) {
   const canCancel = CANCELLABLE_STATUSES.has(job.status)
@@ -378,8 +379,8 @@ const JobRow = memo(function JobRow({ job, instances, seeding, onOpen, indent, e
       <td className="col-actions">
         <div className="sub-acciones-fila">
           <RellenarPeticion job={job} compacto />
-          {onSubirTambien && (
-            <AccionDeFila etiqueta="Subir también a otro tracker" onClick={() => onSubirTambien(job.id!)}><IconoSubida size={14} /></AccionDeFila>
+          {subirTambienId != null && onSubirTambien && (
+            <AccionDeFila etiqueta="Subir también a otro tracker" onClick={() => onSubirTambien(subirTambienId)}><IconoSubida size={14} /></AccionDeFila>
           )}
           {canRetry && (
             <AccionDeFila etiqueta="Reintentar" onClick={() => onRetry(job)}><RetryButtonIcon /></AccionDeFila>
@@ -443,17 +444,16 @@ export function UploadsPage({ onNavigate }: { onNavigate?: (page: string) => voi
     fetchTrackersParaSubir().then(t => { if (vigente) setHayOtrosTrackers(t.some(x => x.id !== 'emu')) }, () => {})
     return () => { vigente = false }
   }, [subidasALaVista])
-  // Las subidas que llevan el botón de la fila: se vuelve a preguntar cuando cambia cuántas hay completadas.
+  // Las subidas que llevan el botón de la fila: se vuelve a preguntar cuando aparece, desaparece o cambia de estado
+  // alguna subida (encolar, borrar, terminar), no con cada tic de progreso.
   const [paraSubirTambien, setParaSubirTambien] = useState<Set<number>>(new Set())
-  const completadas = useMemo(() => jobs.filter(j => j.status === 'completed').length, [jobs])
-  // Al cerrar el modal también: lo encolado ya no se ofrece, aunque aún no haya terminado.
-  const [cerradoSubirTambien, setCerradoSubirTambien] = useState(0)
+  const estados = useMemo(() => jobs.map(j => `${j.id}:${j.status}`).join(','), [jobs])
   useEffect(() => {
     if (!subidasALaVista || !hayOtrosTrackers) return
     let vigente = true
     getSubirTambien().then(d => { if (vigente) setParaSubirTambien(new Set(d.subidas.map(s => s.job_id))) }, () => {})
     return () => { vigente = false }
-  }, [subidasALaVista, hayOtrosTrackers, completadas, cerradoSubirTambien])
+  }, [subidasALaVista, hayOtrosTrackers, estados])
   // Cuántas se piden (las más recientes), cuántas hay en total con el filtro de estado, y si ya llegó la primera
   // respuesta (hasta entonces «no está en la lista» no quiere decir nada).
   const [limite, setLimite] = useState(PAGINA)
@@ -892,7 +892,9 @@ export function UploadsPage({ onNavigate }: { onNavigate?: (page: string) => voi
         onCancel={alCancelar}
         onDelete={setDeleteJob}
         onRetry={alReintentar}
-        onSubirTambien={job.id != null && paraSubirTambien.has(job.id) ? abrirSubirTambien : undefined}
+        // En la fila que se ve del elemento, aunque la que vale de origen sea otra del grupo.
+        subirTambienId={enGrupo === 'otra' ? undefined : [job, ...(otras ?? [])].find(j => j.id != null && paraSubirTambien.has(j.id))?.id}
+        onSubirTambien={abrirSubirTambien}
         // Con la lista ya filtrada por ese lote, el banner lo dice: la chapa en cada fila sobra.
         // Y debajo de otra del mismo lote, también.
         onFiltrarLote={job.lote_id === loteFiltro || (enGrupo === 'otra' && job.lote_id === loteArriba) ? undefined : setLoteFiltro}
@@ -1000,7 +1002,7 @@ export function UploadsPage({ onNavigate }: { onNavigate?: (page: string) => voi
         </div>
       </div>
       {subirTambien && (
-        <SubirTambienModal inicial={subirTambien.inicial} onClose={() => { setSubirTambien(null); setCerradoSubirTambien(n => n + 1) }}
+        <SubirTambienModal inicial={subirTambien.inicial} onClose={() => setSubirTambien(null)}
           onEncolado={loteId => { if (loteId) verLote(loteId); else load({ silent: true }) }} />
       )}
 
