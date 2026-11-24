@@ -476,7 +476,8 @@ def test_con_otro_nombre_de_ahora_sube_con_el_de_la_fuente(db_conn, pipeline, tm
     """Si la nomenclatura cambió después, la copia sube el mismo fichero con el nombre que ya tiene en la otra."""
     # Las huellas van con el nombre de entonces.
     huellas = json.dumps({"Peli.2022.mkv": uq._huella_de(str(pipeline.origen))})
-    iid, emu = _subida_a_emu_hecha(db_conn, pipeline, huellas_preparacion_json=huellas)
+    iid, emu = _subida_a_emu_hecha(db_conn, pipeline, huellas_preparacion_json=huellas,
+                                   nomenclature_snapshot_json=json.dumps({"proposed_title": "Peli 2022"}))
     viejo = tmp_path / "subidas" / "Peli.2022.mkv"
     os.rename(pipeline.destino, viejo)
     db_conn.execute("UPDATE upload_jobs SET prepared_path = ? WHERE id = ?", (str(viejo), emu))
@@ -488,6 +489,7 @@ def test_con_otro_nombre_de_ahora_sube_con_el_de_la_fuente(db_conn, pipeline, tm
     fila = _fila(db_conn, nobs)
     assert fila["status"] != "failed", _logs(db_conn, nobs)
     assert fila["prepared_path"] == str(viejo) and pipeline.preparados == []
+    assert json.loads(fila["nomenclature_snapshot_json"]) == {"proposed_title": "Peli 2022"}
 
 
 def test_sin_fichero_en_la_fuente_no_se_sube(db_conn, pipeline):

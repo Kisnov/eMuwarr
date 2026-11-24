@@ -1556,6 +1556,10 @@ def _paso_preparar(t: _Trabajo) -> bool:
             return False
         t.destino_uploadrr = fuente["prepared_path"]
         t.ficheros = ficheros = _con_nombres_de_la_fuente(t.destino_uploadrr, ficheros, is_season)
+        if fuente.get("nomenclature_snapshot_json"):  # el tráiler se busca en el tmp de Uploadrr por este nombre
+            conn.execute("UPDATE upload_jobs SET nomenclature_snapshot_json = ? WHERE id = ?",
+                         (fuente["nomenclature_snapshot_json"], job_id))
+            conn.commit()
     # La ruta se apunta ANTES de crearla: así un borrado de otra subida la ve en uso.
     with ENLACES:
         otra = _subida_que_lo_usa(conn, t.destino_uploadrr, job_id)
