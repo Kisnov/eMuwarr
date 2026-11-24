@@ -1,0 +1,58 @@
+name: Fusionar Dependabot
+
+# Fusiona un PR de Dependabot cuando pasan todos sus checks y todas sus subidas son parches, o menores fuera de 0.x.
+# Docker (su imagen no se construye en estos PR) y el resto esperan a la revisión semanal. workflow_run para esperar
+# al CI y a zizmor; no hace checkout ni ejecuta nada del PR. La fusión con github.token no lanza los workflows del
+# push: :dev se construye con el siguiente push a dev.
+on:
+  workflow_run:  # zizmor: ignore[dangerous-triggers] no hay checkout ni código del PR
+    workflows: [CI, zizmor]
+    types: [completed]
+
+permissions: {}
+
+# Si CI y zizmor acaban a la vez, el segundo encuentra el PR ya fusionado.
+concurrency:
+  group: fusionar-dependabot-${{ github.event.workflow_run.head_branch }}
+
+jobs:
+  fusionar:
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'pull_request' &&
+      startsWith(github.event.workflow_run.head_branch, 'dependabot/') &&
+      !startsWith(github.event.workflow_run.head_branch, 'dependabot/docker/')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      checks: read
+      contents: write
+      pull-requests: write
+      statuses: read
+    steps:
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          pr="$(gh api "repos/$GH_REPO/commits/$SHA/pulls" --jq "[.[] | select(.state == \"open\" and .user.login == \"dependabot[bot]\" and .base.ref == \"dev\" and .head.sha == \"$SHA\" and .head.repo.full_name == \"$GH_REPO\")][0].number // empty")"
+          if [ -z "$pr" ]; then
+            echo "::notice::$SHA no es la cabeza de un PR abierto de Dependabot hacia dev."
+            exit 0
+          fi
+          # Dependabot anota cada dependencia en el mensaje del commit (lo mismo que lee dependabot/fetch-metadata).
+          if ! gh api "repos/$GH_REPO/commits/$SHA" --jq .commit.message | awk '
+              /^- dependency-name:/ { n++ }
+              /^  dependency-version:/ { v = $2 }
+              /^  update-type: version-update:semver-patch$/ { ok++ }
+              /^  update-type: version-update:semver-minor$/ && v !~ /^0\./ { ok++ }
+              END { exit !(n > 0 && n == ok) }'; then
+            echo "::notice::#$pr tiene una versión mayor, una menor de 0.x o una sin tipo: se queda para la revisión semanal."
+            exit 0
+          fi
+          # Sale con error si algún check falló o sigue en marcha; el workflow que acabe el último lo vuelve a mirar.
+          if ! gh pr checks "$pr" > /dev/null; then
+            echo "::notice::#$pr aún tiene checks en marcha o fallidos."
+            exit 0
+          fi
+          gh pr merge "$pr" --merge --match-head-commit "$SHA"

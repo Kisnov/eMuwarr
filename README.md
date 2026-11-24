@@ -339,6 +339,8 @@ mencionarlo en la descripción).
 Dependabot propone cada semana las versiones nuevas de pip (la app y `uploadrr-emu/`), npm, la imagen base del `Dockerfile` y las GitHub
 Actions, cuando llevan 7 días publicadas: las menores y los parches juntos en un PR por ecosistema, y cada versión
 mayor en el suyo. Las de seguridad no esperan esos 7 días: llegan en cuanto un aviso tiene versión corregida.
+*Fusionar Dependabot* fusiona solo los PR de parches y menores (salvo las de paquetes 0.x) cuando pasan todos sus
+checks; los mayores y los de la imagen base esperan a una revisión a mano.
 
 `CLAUDE.md` recoge las reglas de arquitectura y el
 contrato con Uploadrr-EMU (argumentos, claves de `config.yaml` y líneas de salida que se leen): si cambias uno de
