@@ -15,6 +15,7 @@ Antes de encolar se mira en qBittorrent que el torrent de origen está entero co
 el nuevo torrent no tendría de dónde sembrarse."""
 from __future__ import annotations
 
+import json
 import os
 import sqlite3
 
@@ -86,7 +87,11 @@ def _motivo_catalogo(conn: sqlite3.Connection, job: dict, tracker_id: str) -> st
     """Si el catálogo local de `tracker_id` ya tiene lo de `job` igual o mejor, por qué no subirlo; si no, o sin
     catálogo, None."""
     tracker = trackers.obtener(tracker_id)
-    if emu_catalog.ya_lo_tiene(emu_catalog.get_item_comparison(conn, job["library_item_id"], tracker=tracker)):
+    # La calidad del nombre con que se subió: la de la biblioteca puede haber cambiado después.
+    nombre = json.loads(job.get("nomenclature_snapshot_json") or "{}")
+    comparacion = emu_catalog.get_item_comparison(conn, job["library_item_id"], tracker=tracker,
+                                                  resolution=nombre.get("resolution"), source=nombre.get("source"))
+    if emu_catalog.ya_lo_tiene(comparacion):
         return emu_catalog.motivo_ya_lo_tiene(tracker)
     return None
 

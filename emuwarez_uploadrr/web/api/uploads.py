@@ -470,7 +470,8 @@ def candidatas_subir_tambien(current_user: dict = Depends(require_auth)):
     with _get_conn() as conn:
         destinos = subir_tambien.destinos(conn)
         filas = subir_tambien.candidatas(conn)
-        avisos = subir_tambien.sin_catalogo(conn, destinos)
+        # Solo de los que se ofrecen en alguna fila.
+        avisos = subir_tambien.sin_catalogo(conn, [t for t in destinos if any(t in f["trackers"] for f in filas)])
     return SubirTambienCandidatas(
         trackers=[_tracker_para_subir(t) for t in destinos], avisos=avisos,
         subidas=[SubirTambienCandidata(

@@ -256,6 +256,18 @@ def test_lo_que_el_catalogo_de_otro_tracker_ya_tiene_no_se_ofrece(db_conn, monke
         ("nobs", "blocked", ya), ("mnv", "queued", None)]
 
 
+def test_compara_la_calidad_con_que_se_subio(db_conn, tmp_path):
+    _clave(db_conn, "nobs")
+    iid, emu, _ruta = _emu_completada(
+        db_conn, tmp_path, nomenclature_snapshot_json=json.dumps({"resolution": "1080p", "source": "WEB-DL"}))
+    _en_el_catalogo(db_conn, iid, "nobs", "1080p")
+    db_conn.execute("UPDATE library_items SET resolution = '2160p' WHERE id = ?", (iid,))  # Radarr la mejoró después
+    db_conn.commit()
+
+    from emuwarez_uploadrr.services.upload_execution import get_upload_job
+    assert st.ofrecidos(db_conn, get_upload_job(emu, conn=db_conn))[0] == []
+
+
 def test_un_trump_si_se_ofrece(db_conn, tmp_path):
     _clave(db_conn, "nobs")
     iid, emu, _ruta = _emu_completada(db_conn, tmp_path)

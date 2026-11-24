@@ -619,19 +619,19 @@ def _encolar_uno(conn: sqlite3.Connection, el: dict, lote_id: str, vistos: set[i
             if t not in parados and (motivo := _racha_de_fallos(_del_tracker(puntas, t))):
                 parados[t] = texto_de_parada(motivo)
                 logger.warning("Lote %s: %s en %s; no se encola el resto para él", lote_id, parados[t], t)
-        if len(parados) == len(tracker_ids):
-            return _saltados_por_el_freno(item_id, tracker_ids, parados)
+        # Más los trackers que ya lo tienen (`omitir`): si no queda ninguno, tampoco se escribe nada.
+        saltos = {**{t: motivo_ya_lo_tiene(trackers.obtener(t)) for t in el.get("omitir", ()) if t in tracker_ids},
+                  **parados}
+        if len(saltos) == len(tracker_ids):
+            return _saltados_por_el_freno(item_id, tracker_ids, saltos)
         if campos and tipo != "season":
             preview = update_nomenclature_fields_preview(item_id, campos, conn=conn)
             save_manual_nomenclature_fields(item_id, campos, preview, conn=conn)
         resultados: list[dict] = []
         # En el orden dado: cada uno espera al anterior del mismo contenido y reutiliza su preparación.
         for tracker in tracker_ids:
-            if tracker in parados:
-                resultados += _bloqueado(item_id, [tracker], parados[tracker])
-                continue
-            if tracker in el.get("omitir", ()):
-                resultados += _bloqueado(item_id, [tracker], motivo_ya_lo_tiene(trackers.obtener(tracker)))
+            if tracker in saltos:
+                resultados += _bloqueado(item_id, [tracker], saltos[tracker])
                 continue
             try:
                 resultado = queue_upload_for_item(

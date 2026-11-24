@@ -790,6 +790,18 @@ def test_lo_que_un_tracker_ya_tiene_se_salta_solo_para_ese(db_conn, tmp_path, si
     assert [f[0] for f in db_conn.execute("SELECT tracker FROM upload_jobs")] == ["nobs"]
 
 
+def test_lo_que_ya_tienen_todos_no_escribe_nada(db_conn, tmp_path, sin_comprobaciones, monkeypatch):
+    from emuwarez_uploadrr.services import nomenclature
+    monkeypatch.setattr(nomenclature, "save_manual_nomenclature_fields", lambda *a, **k: pytest.fail("guardó campos"))
+    _clave(db_conn, "nobs")
+    peli = _con_castellano(db_conn, _peli(db_conn, tmp_path))
+
+    r = lotes.encolar_lote(db_conn, [_el(peli, campos={"title": "X"}, omitir=["emu", "nobs"])], ["emu", "nobs"])
+
+    assert [(x["tracker"], x["status"]) for x in r["resultados"]] == [("emu", "blocked"), ("nobs", "blocked")]
+    assert r["lote_id"] is None
+
+
 def test_lo_que_se_salta_por_el_elemento_se_salta_para_cada_tracker(db_conn, tmp_path, sin_comprobaciones):
     _clave(db_conn, "nobs")
     serie = _item(db_conn, "series", "Serie")

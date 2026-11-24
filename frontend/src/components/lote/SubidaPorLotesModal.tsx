@@ -90,6 +90,7 @@ export function SubidaPorLotesModal({ entradas, onClose, onDone, onNavigate }: {
     })
     comprobaciones.olvidar()
     analisis.olvidar()
+    yaHay.olvidar()
     setElegidas(new Map())
   }
 
@@ -120,7 +121,9 @@ export function SubidaPorLotesModal({ entradas, onClose, onDone, onNavigate }: {
     const pendiente = !contenido || !a || (!a.bloqueo && enTrackers.some(t => !t.en))
     // Los que ya lo tienen igual o mejor se saltan; si son todos, llega desmarcada (marcada a mano, va a todos).
     const yaLoTienen = enTrackers.filter(t => t.en && !marcadaPorDefecto(t.en.nivel))
-    const todos = yaLoTienen.length > 0 && yaLoTienen.length === destinos.length
+    // Los que no lo admiten tampoco cuentan: si el resto ya lo tiene, no va a ninguno.
+    const admiten = destinos.filter(t => reglas.get(`${t.id}:${id}`)?.permitido !== false)
+    const todos = yaLoTienen.length > 0 && admiten.every(t => yaLoTienen.some(y => y.id === t.id))
     const omitir = todos ? [] : yaLoTienen
     const porDefecto = !!a && !a.sinIdioma && !todos
     // Los otros trackers que no lo admiten o ya lo tienen: se salta solo para ellos.
@@ -234,7 +237,7 @@ export function SubidaPorLotesModal({ entradas, onClose, onDone, onNavigate }: {
           onElegirTracker={elegirTracker}
           destinoSubida={destinoSubida}
           onIncluir={(id, incluir) => setElegidas(prev => new Map(prev).set(id, incluir))}
-          onRepetir={() => { comprobaciones.repetir(); analisis.repetir(); setRechazo(null); setFalloEnvio(null) }}
+          onRepetir={() => { comprobaciones.repetir(); analisis.repetir(); yaHay.olvidar(); setRechazo(null); setFalloEnvio(null) }}
           onVolver={() => { setPaso('contenido'); setRechazo(null); setFalloEnvio(null) }}
           onSubir={subir}
         />

@@ -146,6 +146,7 @@ export function useYaHayLote({ activo, analisis, trackers }: {
 }) {
   const [yaHay, setYaHay] = useState<ReadonlyMap<string, YaHayEnTracker>>(() => new Map())
   const pedidos = useRef(new Set<string>())
+  const vuelta = useRef(0)
   const claveTrackers = trackers.map(t => t.id).join(',')
   useEffect(() => {
     if (!activo) return
@@ -154,12 +155,15 @@ export function useYaHayLote({ activo, analisis, trackers }: {
         const clave = `${t.id}:${id}`
         if (a.bloqueo || pedidos.current.has(clave)) continue
         pedidos.current.add(clave)
-        enTracker(id, a.tuya, t).then(r => setYaHay(m => new Map(m).set(clave, r)))
+        const v = vuelta.current
+        enTracker(id, a.tuya, t).then(r => { if (v === vuelta.current) setYaHay(m => new Map(m).set(clave, r)) })
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- se pide al cambiar lo que se mira, no con cada pintado
   }, [activo, analisis, claveTrackers])
-  return yaHay
+  // Otra selección o «Volver a comprobar»: se vuelve a mirar todo (lo que llegue de antes se descarta).
+  const olvidar = () => { vuelta.current += 1; pedidos.current = new Set(); setYaHay(new Map()) }
+  return { get: (clave: string) => yaHay.get(clave), olvidar }
 }
 
 /**

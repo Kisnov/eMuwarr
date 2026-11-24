@@ -720,6 +720,15 @@ describe('a varios trackers', () => {
     expect(m(subidas.queueLote).mock.calls[0][0][0].omitir).toBeUndefined()
   })
 
+  it('si uno lo tiene y el otro no lo admite, llega desmarcado', async () => {
+    m(biblioteca.getEmuComparison).mockImplementation(async (_id, _tuya, tracker) => (tracker === 'emu' ? IGUAL : SIN_NADA))
+    await abrir([ALIEN])
+    await alResumen(1)
+    await pulsar(casillaTracker('N.O.B.S'))
+    await esperar(() => fila(12).textContent?.includes('No va a N.O.B.S'))
+    expect(incluir('Alien').checked).toBe(false)
+  })
+
   it('sin eMuwarez, las comprobaciones se rehacen con las normas del primero que queda', async () => {
     await abrir([DUNE])
     await alResumen(1)
