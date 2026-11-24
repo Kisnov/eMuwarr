@@ -229,6 +229,16 @@ def test_cada_tracker_con_clave_se_lee_con_lo_suyo_y_su_fallo_es_suyo(conn, monk
         ("emu", "Kisnov-EMU"), ("nobs", "Kisnov-NOBS")]
 
 
+def test_el_usuario_de_otro_tracker_sigue_a_su_clave(conn, monkeypatch):
+    """Con la clave de otra cuenta de N.O.B.S, «Tus subidas» pasa a contar por el usuario nuevo."""
+    set_setting(conn, "nobs.api_key", "clave-nobs")
+    set_setting(conn, "nobs.username", "CuentaVieja")
+    conn.commit()
+    monkeypatch.setattr(emu_perfil, "emu_get_user", lambda *_a, **kw: {**USUARIO, "username": f"Kisnov-{kw['tracker']}"})
+    emu_perfil.perfiles(conn)
+    assert get_setting_canonical(conn, "nobs.username") == "Kisnov-NOBS"
+
+
 def test_el_endpoint_trae_los_otros(client, auth_headers, conn, llamadas):
     set_setting(conn, "nobs.api_key", "clave-nobs")
     conn.commit()

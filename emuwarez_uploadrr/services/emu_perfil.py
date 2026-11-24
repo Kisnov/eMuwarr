@@ -90,8 +90,9 @@ def _pedir(conn: sqlite3.Connection, clave: str, guardado: dict[str, Any], track
         nuevo["error"] = texto_de_error(exc)
     else:
         nuevo.update(perfil={campo: datos.get(campo) for campo in CAMPOS}, leido_at=nuevo["intento_at"], error=None)
-        # «Mis peticiones» y «Tus subidas» cuentan por este nombre: si no está en Ajustes, se pone el de la cuenta.
-        if not ajuste_de_tracker(conn, "username", tracker.id):
+        # «Mis peticiones» y «Tus subidas» cuentan por este nombre: si no está en Ajustes, se pone el de la cuenta. El de
+        # los otros no se edita en Ajustes: sigue siempre a su clave.
+        if tracker is not EMU or not ajuste_de_tracker(conn, "username", tracker.id):
             set_setting(conn, tracker.clave("username"), str(datos["username"]))
         guardar_instantanea(conn, datos, tracker=tracker)
         # Los avisos de la cuenta son los de eMuwarez.
