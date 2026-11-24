@@ -757,9 +757,14 @@ def sync_instance(
                                texto_de_error(exc, instance.api_key))
                 _marcar_serie_vista(conn, instance.id, series.get("id"), visto)
 
+    elif instance.type == "carpeta":
+        from .carpeta import escanear
+        imported, missing = escanear(conn, instance, visto=visto, tiene_filas=tiene_filas,
+                                     on_progress=on_progress, on_total=on_total)
+
     # Solo se llega aquí tras recorrer los listados: uno que falla lanza y no se borra nada.
     donde = "instance_id = ? AND (last_seen_at IS NULL OR last_seen_at != ?)"
-    if not include_episodes:
+    if not include_episodes and instance.type != "carpeta":  # la carpeta siempre escribe sus capítulos
         # Sin capítulos no se recorren temporadas ni capítulos: no haberlos visto no dice que ya no estén.
         donde += " AND item_type IN ('movie', 'series')"
     borrados, peticiones = borrar_biblioteca(conn, donde, (instance.id, visto))

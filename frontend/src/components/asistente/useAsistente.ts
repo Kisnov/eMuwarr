@@ -12,8 +12,8 @@ import {
   applyTrackRemux,
 } from '../../api/nomenclature'
 import {
-  queueUpload, getExistingJobForItem, runUploadChecks, fetchTrackersParaSubir, fetchReglasTracker, fetchElegibilidad,
-  type OpcionesTracker, type TrackerParaSubir, type ReglasDeTracker, type ElegibilidadSubida, type ReglasConNombre,
+  queueUpload, getExistingJobForItem, runUploadChecks, fetchReglasTracker, fetchElegibilidad,
+  type OpcionesTracker, type ReglasDeTracker, type ElegibilidadSubida, type ReglasConNombre,
 } from '../../api/uploads'
 import { nuevoLoteId } from '../../utils/lote'
 import { getLibrary, getMediaInfoReport, suggestProvider } from '../../api/library'
@@ -42,6 +42,7 @@ import { destinosDeEntrada } from '../../utils/elegibilidad'
 import { PROVIDER_SOURCES } from './constantes'
 import { mergeRemuxTracks } from './RemuxTable'
 import { useComprobaciones, useComprobacionesTanda } from './useComprobaciones'
+import { useDestinos } from './useDestinos'
 import { useDetallesTemporada } from './useDetallesTemporada'
 import { useNombresTanda } from './useNombresTanda'
 
@@ -170,21 +171,18 @@ export function useAsistente({ item, onClose: onCloseProp, onDone, onNavigate, p
       setModoPistasAjuste(s.remux_track_mode)
       setGruposPersonalRelease(s.upload_tags_personal_release ?? [])
       setGruposAnonimos(s.upload_tags_anonimos ?? [])
+      plantilla.current = s.descripcion_plantilla ?? ''
+      setDescripcion(d => d || plantilla.current)
     }).catch(() => { /* quedan los de siempre */ })
   }, [])
-  // Los trackers a los que se puede subir (eMuwarez y los que tienen clave) y los elegidos: eMuwarez de entrada.
-  const [trackersParaSubir, setTrackersParaSubir] = useState<TrackerParaSubir[]>([])
-  const [trackersElegidos, setTrackersElegidos] = useState<string[]>(['emu'])
-  useEffect(() => {
-    fetchTrackersParaSubir().then(setTrackersParaSubir).catch(() => { /* solo eMuwarez, como siempre */ })
-  }, [])
+  const { trackersParaSubir, trackersElegidos, setTrackersElegidos, elegirTracker, destinos, destinoSubida } = useDestinos()
   // Con más de un tracker, qué admite cada uno (el pack, cada capítulo, la película): el paso «Contenido» deja elegir
   // lo que admite alguno, no solo eMuwarez, y el Resumen marca de entrada los que lo admiten. Solo con eMuwarez no se
   // pide: todo sigue con su regla, como siempre.
   const [elegibilidad, setElegibilidad] = useState<ElegibilidadSubida | null>(null)
   const variosTrackers = trackersParaSubir.length > 1
   useEffect(() => {
-    // Una serie se sube en tanda de temporadas, que va a eMuwarez.
+    // Una serie se sube en tanda de temporadas: lo que un tracker no admite lo salta el servidor al encolar.
     if (!variosTrackers || isSeries) return
     let vigente = true
     fetchElegibilidad(item.id)
@@ -202,17 +200,25 @@ export function useAsistente({ item, onClose: onCloseProp, onDone, onNavigate, p
   // Una película o un capítulo abierto solo: los destinos de entrada en cuanto se sabe qué trackers lo admiten.
   useEffect(() => {
     if (!needsSelection && elegibilidad) setTrackersElegidos(destinosDeEntrada(elegibilidad.trackers))
-  }, [needsSelection, elegibilidad])
-  const elegirTracker = (id: string, si: boolean) =>
-    setTrackersElegidos(t => si ? [...new Set([...t, id])] : t.filter(x => x !== id))
-  // Los elegidos, en el orden de la lista (eMuwarez primero). Sin lista (no se pudo leer), eMuwarez, como siempre.
-  const destinos = trackersParaSubir.length
-    ? trackersParaSubir.filter(t => trackersElegidos.includes(t.id))
-    : [{ id: 'emu', nombre: 'eMuwarez' }]
-  // «eMuwarez», «eMuwarez y N.O.B.S»: lo que dicen el botón y la confirmación.
-  const destinoSubida = destinos.length > 1
-    ? `${destinos.slice(0, -1).map(t => t.nombre).join(', ')} y ${destinos[destinos.length - 1].nombre}`
-    : destinos[0]?.nombre ?? ''
+  }, [needsSelection, elegibilidad, setTrackersElegidos])
+  // La descripción propia (BBCode) del Resumen: la misma para todos los trackers, salvo los que tengan la suya.
+  const [descripcion, setDescripcion] = useState('')
+  // La plantilla de Configuración: con ella empieza la de cada contenido.
+  const plantilla = useRef('')
+  const [descripcionPorTracker, setDescripcionPorTracker] = useState<Record<string, string>>({})
+  // Marcar «otra para X» la empieza con la común; desmarcarla vuelve a la común.
+  const descripcionPropia = (id: string, si: boolean) => setDescripcionPorTracker(d => {
+    const { [id]: _quitada, ...resto } = d
+    return si ? { ...resto, [id]: descripcion } : resto
+  })
+  // Escribirla cuenta como un cambio: cerrar el asistente pide confirmación antes de perderla.
+  const escribirDescripcion = (texto: string) => { editado.current = true; setDescripcion(texto) }
+  const editarDescripcionDe = (id: string, texto: string) => {
+    editado.current = true
+    setDescripcionPorTracker(d => ({ ...d, [id]: texto }))
+  }
+  // La propia de un tracker solo cuenta mientras se ve: con un solo destino, el Resumen enseña solo la común.
+  const descripcionDe = (id: string) => (destinos.length > 1 ? descripcionPorTracker[id] : undefined) ?? descripcion
   const opcionesTag = Array.from(new Set([fields.tag, initialTag, ...(gruposDeSubida.length ? gruposDeSubida : ['EMUWAREZ'])].filter(Boolean))) as string[]
   const [titleWarning, setTitleWarning] = useState<string | null>(null)
   const [titleOptions, setTitleOptions] = useState<{ value: string; kind: string; label: string }[]>([])
@@ -364,7 +370,7 @@ export function useAsistente({ item, onClose: onCloseProp, onDone, onNavigate, p
     batchEnvChecks, batchContentChecks, batchChecksLoading, batchChecksIndex, batchViewId, setBatchViewId,
     batchChecksError, repetir: repetirComprobacionesTanda, mergedChecksFor, olvidar: olvidarComprobacionesTanda,
   } = useComprobacionesTanda({
-    step, batchQueue, batchPhase, proveedorElegido,
+    step, batchQueue, batchPhase, proveedorElegido, tracker: trackerPrincipal,
     // Un pack da su nombre con lo editado a mano (no los capítulos, que lo calculan useNombresTanda).
     ajustesDe: id => batchIsEpisodes ? sourceEditado(id) : ajustesDeLaTanda(id),
   })
@@ -418,9 +424,9 @@ export function useAsistente({ item, onClose: onCloseProp, onDone, onNavigate, p
       setBatchPhase('idle'); setBatchResults([])
       camposDe.current = null
       cargadoPara.current = null
-      // Los destinos de entrada de lo elegido: si eMuwarez no lo admite, los que sí (una tanda va a eMuwarez).
+      // Los destinos de entrada de lo elegido: si eMuwarez no lo admite, los que sí; una tanda, eMuwarez.
       const reglasNuevas = esTanda(nueva) ? undefined : reglasDe(nueva.objetivo)
-      if (reglasNuevas) setTrackersElegidos(destinosDeEntrada(reglasNuevas))
+      setTrackersElegidos(reglasNuevas ? destinosDeEntrada(reglasNuevas) : ['emu'])
     }
     setStep(1)
   }
@@ -598,13 +604,14 @@ export function useAsistente({ item, onClose: onCloseProp, onDone, onNavigate, p
   // it's in flight (real work per episode — build_nomenclature_proposal()).
   // `proveedor`: el elegido a mano para salir de un plan bloqueado por
   // proveedores distintos; si no, el que ya se eligió para esta temporada.
-  const loadSeasonPlan = useCallback(async (proveedor?: string) => {
+  // `idiomas`: los recién confirmados, que el estado aún no tiene.
+  const loadSeasonPlan = useCallback(async (proveedor?: string, idiomas?: IdiomasPorPosicion) => {
     if (targetId == null) return
     if (proveedor) elegirProveedor(targetId, proveedor)
     const yaElegido = proveedorElegido.has(targetId)
     const proveedorPedido = proveedor ?? proveedorParaServidor(proveedorElegido, targetId)
     // Lo ya elegido para esta temporada (al volver a ella desde el desplegable).
-    const idiomasPedidos = idiomasPorTemporada.get(targetId)
+    const idiomasPedidos = idiomas ?? idiomasPorTemporada.get(targetId)
     const pedido = ++planPedido.current
     setSeasonPlanLoading(true); setSeasonPlanError(null)
     buildingPlanFor.current = targetId
@@ -714,6 +721,8 @@ export function useAsistente({ item, onClose: onCloseProp, onDone, onNavigate, p
     // anterior sin decírtelo.
     setRemuxPreview(null); setRemuxError(null); setRemuxEdits({}); setRemuxLoading(false)
     setSeasonPlan(null); setSeasonPlanError(null)
+    // Ni la descripción: las notas de un capítulo no son las del siguiente.
+    setDescripcion(plantilla.current); setDescripcionPorTracker({})
   }, [targetId])
 
   const detalles = useDetallesTemporada({
@@ -882,6 +891,8 @@ export function useAsistente({ item, onClose: onCloseProp, onDone, onNavigate, p
       })
       setAudioWarning(null)
       detalles.olvidarPorIdioma()
+      // Un plan bloqueado puede dejar de estarlo con el idioma (la norma del castellano lo cuenta): se vuelve a pedir.
+      if (seasonPlan?.status !== 'valid') void loadSeasonPlan(undefined, idiomasDelServidor(r.idiomas_audio))
     } catch {
       if (objetivoActual.current !== id || version !== versionIdioma.current) return
       setAudioWarning('No se pudo recalcular el nombre con ese idioma; se queda lo que había. Vuelve a elegirlo.')
@@ -1077,7 +1088,8 @@ export function useAsistente({ item, onClose: onCloseProp, onDone, onNavigate, p
           undefined,
           opcionesTracker,
           // eMuwarez no lo manda: es lo de siempre.
-          ...(tracker === 'emu' ? [] : [tracker]),
+          tracker === 'emu' ? undefined : tracker,
+          descripcionDe(tracker),
         )
         if (r.status !== 'queued' || !r.job?.id) {
           setUploadMsg(`✗ No se pudo encolar la subida a ${nombre} (estado: ${r.status}). ${(r.errors || []).join(' ')}${yaEnCola()}`)
@@ -1092,6 +1104,25 @@ export function useAsistente({ item, onClose: onCloseProp, onDone, onNavigate, p
       setUploadMsg(`✗ ${e instanceof Error ? e.message : 'Error encolando la subida'}${yaEnCola()}`)
     } finally {
       setUploading(false)
+    }
+  }
+
+  // Una subida de la tanda por cada tracker elegido, en su orden, con lo que salió de cada una en `results` (con el
+  // nombre del tracker si son varios). Lo que un tracker no admite lo salta el servidor con su motivo.
+  const encolarEnCadaTracker = async (
+    seasonId: number, title: string, results: typeof batchResults,
+    encolar: (tracker: string[]) => ReturnType<typeof queueUpload>,
+  ) => {
+    for (const { id, nombre } of destinos) {
+      const titulo = destinos.length > 1 ? `${title} (${nombre})` : title
+      try {
+        const r = await encolar(id === 'emu' ? [] : [id])
+        results.push(r.status !== 'queued' || !r.job?.id
+          ? { seasonId, title: titulo, status: 'failed', reason: (r.errors || []).join(' ') || 'No se pudo encolar' }
+          : { seasonId, title: titulo, status: 'queued' })
+      } catch (e: unknown) {
+        results.push({ seasonId, title: titulo, status: 'failed', reason: e instanceof Error ? e.message : 'Error inesperado' })
+      }
     }
   }
 
@@ -1128,18 +1159,13 @@ export function useAsistente({ item, onClose: onCloseProp, onDone, onNavigate, p
         // Ya comprobado al entrar en el paso 2: el contenido de cada
         // temporada una vez, y el entorno una sola vez para toda la tanda. Si
         // por lo que sea no está cacheado, se hace la pasada completa.
-        const checksResult = mergedChecksFor(seasonId) ?? await runUploadChecks(seasonId, undefined, proveedorParaServidor(proveedorElegido, seasonId))
+        const checksResult = mergedChecksFor(seasonId) ?? await runUploadChecks(seasonId, undefined, proveedorParaServidor(proveedorElegido, seasonId), undefined, trackerPrincipal)
         if (!checksResult.ready) {
           const reason = checksResult.checks.find(c => c.status === 'fail')?.message || 'Alguna comprobación falló'
           results.push({ seasonId, title, status: 'failed', reason })
           continue
         }
-        const r = await queueUpload(seasonId, undefined, checksResult, null, ajustesDeTemporada(overridesMap.get(seasonId), proveedorElegido, seasonId, idiomasPorTemporada.get(seasonId)), s && peticionCubre(preselect, s) ? requestId : undefined, loteId, opcionesTracker)
-        if (r.status !== 'queued' || !r.job?.id) {
-          results.push({ seasonId, title, status: 'failed', reason: (r.errors || []).join(' ') || 'No se pudo encolar' })
-        } else {
-          results.push({ seasonId, title, status: 'queued' })
-        }
+        await encolarEnCadaTracker(seasonId, title, results, tracker => queueUpload(seasonId, undefined, checksResult, null, ajustesDeTemporada(overridesMap.get(seasonId), proveedorElegido, seasonId, idiomasPorTemporada.get(seasonId)), s && peticionCubre(preselect, s) ? requestId : undefined, loteId, opcionesTracker, tracker[0], plantilla.current))
       } catch (e: unknown) {
         results.push({ seasonId, title, status: 'failed', reason: e instanceof Error ? e.message : 'Error inesperado' })
       }
@@ -1198,18 +1224,13 @@ export function useAsistente({ item, onClose: onCloseProp, onDone, onNavigate, p
         }
         // Igual que las temporadas: se reutiliza lo comprobado al entrar en
         // el paso 2 en vez de repetir las 4 de entorno por cada capítulo.
-        const checksResult = mergedChecksFor(episodeId) ?? await runUploadChecks(episodeId)
+        const checksResult = mergedChecksFor(episodeId) ?? await runUploadChecks(episodeId, undefined, undefined, undefined, trackerPrincipal)
         if (!checksResult.ready) {
           const reason = checksResult.checks.find(c => c.status === 'fail')?.message || 'Alguna comprobación falló'
           results.push({ seasonId: episodeId, title, status: 'failed', reason })
           continue
         }
-        const r = await queueUpload(episodeId, undefined, checksResult, null, undefined, ep && peticionCubre(preselect, ep) ? requestId : undefined, loteId, opcionesTracker)
-        if (r.status !== 'queued' || !r.job?.id) {
-          results.push({ seasonId: episodeId, title, status: 'failed', reason: (r.errors || []).join(' ') || 'No se pudo encolar' })
-        } else {
-          results.push({ seasonId: episodeId, title, status: 'queued' })
-        }
+        await encolarEnCadaTracker(episodeId, title, results, tracker => queueUpload(episodeId, undefined, checksResult, null, undefined, ep && peticionCubre(preselect, ep) ? requestId : undefined, loteId, opcionesTracker, tracker[0], plantilla.current))
       } catch (e: unknown) {
         results.push({ seasonId: episodeId, title, status: 'failed', reason: e instanceof Error ? e.message : 'Error inesperado' })
       }
@@ -1244,6 +1265,7 @@ export function useAsistente({ item, onClose: onCloseProp, onDone, onNavigate, p
     checks, checksLoading, checksError, liveChecks, runChecks, elegirTipo, canUpload, uploading, uploadMsg, doUpload,
     anonimoMarcado, personalReleaseMarcado, elegirAnonimo, elegirPersonalRelease, opcionesTracker,
     trackersParaSubir, trackersElegidos, elegirTracker, destinoSubida, reglas, reglasDe,
+    descripcion, escribirDescripcion, descripcionPorTracker, descripcionPropia, editarDescripcionDe,
     batchQueue, batchIsEpisodes, batchItemTitle, batchPhase, batchIndex, batchResults,
     batchViewId, setBatchViewId, batchEnvChecks, batchContentChecks, batchChecksLoading, batchChecksIndex,
     batchChecksError, repetirComprobacionesTanda, uploadAllSeasons, uploadAllEpisodes, nombresTanda,

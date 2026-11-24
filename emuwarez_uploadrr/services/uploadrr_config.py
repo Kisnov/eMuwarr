@@ -101,16 +101,34 @@ def stage_keep_quiet_off(lines: list[str]) -> tuple[list[str], str]:
     return staged, set_block_key(staged, "AUTO", "keep_quiet", "false")
 
 
-# La firma de serie de las descripciones (SIGNATURES en la config de ejemplo de Uploadrr-EMU), antes y ahora.
-FIRMA_ANTERIOR = "https://i.ibb.co/5gt00Zv4/uploadrr-signature.webp"
-FIRMA_ACTUAL = "https://i.ibb.co/3yXzn45j/emuwarr-firma-animada.webp"
+# Las imágenes de las firmas de serie de las descripciones (SIGNATURES en la config de ejemplo de Uploadrr-EMU). Viven en
+# docs/firma/ y se enlazan fijadas al commit que las añadió: la descripción de un torrent ya subido no cambia nunca, así
+# que su URL tiene que seguir viva aunque el fichero se mueva. Antes estaban en imgbb, que va detrás de Cloudflare, y en
+# España los bloqueos de LaLiga lo tiran en días de partido.
+_FIRMAS = "https://raw.githubusercontent.com/Kisnov/eMuwarr/59ea09279dad6e04523e1cd7c8de6fa03e681c22/docs/firma/"
+FIRMA_ACTUAL = _FIRMAS + "emuwarr-firma-animada.webp"
+FIRMA_ANONIMA = _FIRMAS + "anonima.png"
+# Cada imagen de serie anterior y la que la sustituye.
+FIRMAS_ANTERIORES = {
+    "https://i.ibb.co/5gt00Zv4/uploadrr-signature.webp": FIRMA_ACTUAL,
+    "https://i.ibb.co/3yXzn45j/emuwarr-firma-animada.webp": FIRMA_ACTUAL,
+    "https://i.ibb.co/n0jF73x/hacker.png": FIRMA_ANONIMA,
+}
 
 
 def stage_firma_actual(lines: list[str]) -> tuple[list[str], str]:
-    """Cambia la firma de serie anterior por la actual: una instalación ya hecha conserva su config.yaml y no
-    recibe la del ejemplo nuevo. Una firma que el usuario haya puesto a mano no se toca."""
-    staged = [linea.replace(FIRMA_ANTERIOR, FIRMA_ACTUAL) for linea in lines]
+    """Cambia las imágenes de serie anteriores de las firmas por las actuales: una instalación ya hecha conserva su
+    config.yaml y no recibe las del ejemplo nuevo. Una firma que el usuario haya puesto a mano no se toca."""
+    staged = list(lines)
+    for anterior, actual in FIRMAS_ANTERIORES.items():
+        staged = [linea.replace(anterior, actual) for linea in staged]
     return staged, "firma actualizada" if staged != lines else "firma sin cambios"
+
+
+def stage_sin_firma(lines: list[str]) -> tuple[list[str], str]:
+    """Stage SIGNATURES.use_global_sigs a null (ninguna firma): la de serie nombra a eMuwarez y no va a otros trackers."""
+    staged = list(lines)
+    return staged, set_block_key(staged, "SIGNATURES", "use_global_sigs", "null")
 
 
 def stage_anon_off(lines: list[str]) -> tuple[list[str], str]:

@@ -76,7 +76,7 @@ def _limpiar_cola(conn: sqlite3.Connection, instance_id: int) -> None:
 
 def collect_arr_health(conn: sqlite3.Connection) -> dict[str, Any]:
     """Collect health summary from all enabled instances."""
-    instances = list_instances(conn, enabled_only=True)
+    instances = list_instances(conn, enabled_only=True, solo_arr=True)
     instance_results = []
     summary = {"radarr": 0, "sonarr": 0, "ok": 0, "warning": 0, "error": 0}
 
@@ -156,7 +156,7 @@ def refresh_arr_queue_diagnostics(
     instance_id: Optional[int] = None,
 ) -> dict[str, Any]:
     """Read queue from ARR instances and update library_items with queue status."""
-    instances = list_instances(conn, enabled_only=True)
+    instances = list_instances(conn, enabled_only=True, solo_arr=True)
     if instance_id is not None:
         instances = [i for i in instances if i.id == instance_id]
 
@@ -200,7 +200,7 @@ def refresh_arr_history_diagnostics(
     page_size: int = 100,
 ) -> dict[str, Any]:
     """Read history from ARR instances and update library_items with history status."""
-    instances = list_instances(conn, enabled_only=True)
+    instances = list_instances(conn, enabled_only=True, solo_arr=True)
     if instance_id is not None:
         instances = [i for i in instances if i.id == instance_id]
 

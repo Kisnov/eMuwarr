@@ -16,6 +16,8 @@ from typing import Any, Optional
 class InstanceType(str, Enum):
     RADARR = "radarr"
     SONARR = "sonarr"
+    # Carpeta manual: vídeos que no vienen de Radarr/Sonarr; su `url` es la ruta (services/library/carpeta.py).
+    CARPETA = "carpeta"
 
 
 class MediaKind(str, Enum):

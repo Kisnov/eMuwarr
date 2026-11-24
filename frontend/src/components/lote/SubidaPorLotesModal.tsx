@@ -2,8 +2,8 @@
 // Panel (con la petición de cada fila y, si la petición es de un capítulo, ese capítulo), encoladas de una vez, con
 // el nombre que genere la nomenclatura para cada una (sin editar: para eso está el asistente). Una serie marcada
 // entra como sus temporadas. Paso 1, qué entra; paso 2, el resumen de cada una y las comprobaciones (las del entorno una sola
-// vez); «Subir N» manda el lote al servidor (POST /uploads/lote), que encola cada una en este orden y salta la que
-// no pueda con su motivo.
+// vez); «Subir N» manda el lote al servidor (POST /uploads/lote), que encola cada una en este orden, una por tracker
+// elegido, y salta la que no pueda (o la que un tracker no admite, solo para ese) con su motivo.
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { ApiClientError } from '../../api/client'
 import { queueLote, type LoteEncolado } from '../../api/uploads'
@@ -13,10 +13,11 @@ import {
 } from '../../utils/lote'
 import type { ProveedoresElegidos } from '../../utils/origenProveedor'
 import { useComprobacionesTanda } from '../asistente/useComprobaciones'
+import { useDestinos } from '../asistente/useDestinos'
 import { Modal } from '../Modal'
 import { PasoContenidoLote } from './PasoContenidoLote'
 import { PasoResumenLote, primerFallo, type FilaResumenLote } from './PasoResumenLote'
-import { useAnalisisLote, useExpansionLote, useSubidasEnParalelo } from './useLote'
+import { useAnalisisLote, useExpansionLote, useReglasLote, useSubidasEnParalelo } from './useLote'
 
 // Nadie elige proveedor en un lote: el de una película va en `campos`, y el de un pack lo decide su plan como en
 // el asistente sin tocar Proveedor (el nombre de los capítulos o TMDb). Con proveedores distintos el pack se salta.
@@ -65,10 +66,18 @@ export function SubidaPorLotesModal({ entradas, onClose, onDone, onNavigate }: {
   const [rechazo, setRechazo] = useState<string[] | null>(null)
   const [falloEnvio, setFalloEnvio] = useState<string | null>(null)
 
+  const { trackersParaSubir, trackersElegidos, elegirTracker, destinos, destinoSubida } = useDestinos()
+  // Las comprobaciones van con las normas del primero de los elegidos, como en el asistente; las de los demás, aparte.
+  const principal = destinos[0]?.id ?? 'emu'
   const comprobaciones = useComprobacionesTanda({
     step: paso === 'resumen' ? 2 : 1, batchQueue: cola, batchPhase: fase, proveedorElegido: SIN_ELECCION, minimo: 1,
+    tracker: principal,
   })
   const analisis = useAnalisisLote({ activo: paso === 'resumen' && fase === 'idle', elementos: enCola })
+  const reglas = useReglasLote({
+    activo: paso === 'resumen' && fase === 'idle', ids: cola, trackers: destinos.slice(1).map(t => t.id),
+  })
+  const nombreTracker = (id: string) => trackersParaSubir.find(t => t.id === id)?.nombre ?? id
   const paralelo = useSubidasEnParalelo()
 
   // Otra selección en el paso 1: lo comprobado y lo elegido para la anterior ya no vale.
@@ -107,9 +116,15 @@ export function SubidaPorLotesModal({ entradas, onClose, onDone, onNavigate }: {
       ? (item.item_type === 'season' && CONFLICTO_PROVEEDOR.test(fallo) ? `${fallo} Súbela suelta para elegirlo.` : fallo)
       : a?.bloqueo ?? (repetidos.has(id) ? 'Otro elemento del lote saldría con el mismo nombre.' : null)
     const pendiente = !contenido || !a
-    const porDefecto = !!a && !a.sinIdioma && marcadaPorDefecto(a.nivel)
+    // Lo que ya hay en eMuwarez solo desmarca si se sube a eMuwarez.
+    const porDefecto = !!a && !a.sinIdioma && (principal !== 'emu' || marcadaPorDefecto(a.nivel))
+    // Los otros trackers que no lo admiten: se salta solo para ellos.
+    const noLoAdmiten = destinos.slice(1).flatMap(t => {
+      const r = reglas.get(`${t.id}:${id}`)
+      return r && !r.permitido ? [`${t.nombre}: ${r.motivo}`] : []
+    })
     return {
-      item, contenido, analisis: a, nombre: nombreDe(item), salto, pendiente,
+      item, contenido, analisis: a, nombre: nombreDe(item), salto, pendiente, noLoAdmiten,
       incluida: !pendiente && !salto && (elegidas.get(id) ?? porDefecto),
     }
   })
@@ -129,7 +144,7 @@ export function SubidaPorLotesModal({ entradas, onClose, onDone, onNavigate }: {
     if (elementosLote.length === 0 || elementosLote.some(e => !e.checks)) return
     setFase('processing'); setRechazo(null); setFalloEnvio(null)
     try {
-      const r = await queueLote(elementosLote)
+      const r = await queueLote(elementosLote, ...(trackersParaSubir.length > 1 ? [destinos.map(t => t.id)] : []))
       setResultado(r)
       setFase('done')
       if (r.encolados > 0) onDone?.()
@@ -159,6 +174,8 @@ export function SubidaPorLotesModal({ entradas, onClose, onDone, onNavigate }: {
   }, [paso])
 
   const indiceActual = PASOS.findIndex(p => p.paso === paso)
+  // Un lote a varios trackers: cada saltada dice para cuál.
+  const varios = new Set(resultado?.resultados.map(r => r.tracker)).size > 1
   const titulo = (id: number) => elementos.find(e => e.id === id)?.title ?? `#${id}`
   return (
     <Modal titulo="Subir por lotes" onClose={cerrar} className="modal-wide asist-modal-ancho">
@@ -202,6 +219,10 @@ export function SubidaPorLotesModal({ entradas, onClose, onDone, onNavigate }: {
           enviando={fase === 'processing'}
           rechazo={rechazo}
           falloEnvio={falloEnvio}
+          trackersParaSubir={trackersParaSubir}
+          trackersElegidos={trackersElegidos}
+          onElegirTracker={elegirTracker}
+          destinoSubida={destinoSubida}
           onIncluir={(id, incluir) => setElegidas(prev => new Map(prev).set(id, incluir))}
           onRepetir={() => { comprobaciones.repetir(); analisis.repetir(); setRechazo(null); setFalloEnvio(null) }}
           onVolver={() => { setPaso('contenido'); setRechazo(null); setFalloEnvio(null) }}
@@ -217,8 +238,8 @@ export function SubidaPorLotesModal({ entradas, onClose, onDone, onNavigate }: {
           {resultado.saltados > 0 && (
             <div className="detail-card asist-tarjeta asist-mb-14">
               {resultado.resultados.filter(r => r.status !== 'queued').map(r => (
-                <p key={r.item_id} className="asist-bloqueo">
-                  ✗ {titulo(r.item_id)}: {r.errors.join(' ') || 'No se pudo encolar.'}
+                <p key={`${r.item_id}:${r.tracker}`} className="asist-bloqueo">
+                  ✗ {titulo(r.item_id)}{varios ? ` (${nombreTracker(r.tracker)})` : ''}: {r.errors.join(' ') || 'No se pudo encolar.'}
                 </p>
               ))}
               <p className="asist-nota-saltan">

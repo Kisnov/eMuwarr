@@ -212,6 +212,7 @@ def _job_to_detail(
         reenvio_qbit_at=j.get("reenvio_qbit_at"),
         puede_reenviar_qbit=puede_reenviar_qbit(j),
         copia_de_job_id=j.get("copia_de_job_id"),
+        descripcion=j.get("descripcion"),
         pendiente_moderacion=pendiente_moderacion,
         nomenclature_snapshot=_extract_json_dict(j, "nomenclature_snapshot_json"),
         remux_snapshot=_extract_json_dict(j, "remux_snapshot_json"),
@@ -373,6 +374,7 @@ def queue_upload(
             source_override=body.source, provider_override=body.provider, tag_override=body.tag,
             title_override=body.title, idiomas_audio=body.idiomas, lote_id=body.lote_id,
             anonimo=body.anonimo, personal_release=body.personal_release, tracker=tracker,
+            descripcion=body.descripcion,
         )
 
     job = result.get("job")
@@ -456,11 +458,13 @@ def count_uploads(
 
 @router.post("/uploads/lote", response_model=UploadLoteResponse)
 def encolar_lote(body: UploadLoteBody, current_user: dict = Depends(require_auth)):
-    """«Subir por lotes»: encola cada elemento en el orden dado, con la misma etiqueta de lote. El que no se puede
-    subir se salta con su motivo; si falta algo que haría fallar a todos (claves, Uploadrr-EMU), 409 y nada encolado."""
+    """«Subir por lotes»: encola cada elemento en el orden dado, una subida por tracker, con la misma etiqueta de lote.
+    El que no se puede subir (a un tracker) se salta con su motivo; si falta algo que haría fallar a todos (claves,
+    Uploadrr-EMU), 409 y nada encolado."""
     with db(_db_path()) as conn:
         try:
-            return UploadLoteResponse(**lotes.encolar_lote(conn, [e.model_dump() for e in body.elementos]))
+            return UploadLoteResponse(**lotes.encolar_lote(conn, [e.model_dump() for e in body.elementos],
+                                                           body.trackers))
         except lotes.LoteRechazado as e:
             raise HTTPException(status_code=409, detail=e.motivos) from e
 

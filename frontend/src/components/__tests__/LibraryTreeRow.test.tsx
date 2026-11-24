@@ -176,6 +176,40 @@ describe('las acciones', () => {
   })
 })
 
+// Carpeta manual: sin ficha de TMDb confirmada no se sube.
+describe('por identificar', () => {
+  const porIdentificar = elemento({ instance_type: 'carpeta', instance_name: 'Manual', tmdb_id: null, por_identificar: true })
+
+  it('en la tabla, Estado lleva la chapa «Por identificar», que pide identificarla sin abrir la ficha, y «Subir» se apaga', async () => {
+    const onAction = vi.fn()
+    const onSelect = vi.fn()
+    await montar(
+      <table><tbody>
+        <LibraryTreeRow item={porIdentificar} depth={0} instances={INSTANCIAS} onSelect={onSelect} onAction={onAction} />
+      </tbody></table>,
+    )
+    const chapa = celdas()[2].querySelector<HTMLButtonElement>('button.bib-chip-identificar')!
+    expect(chapa.textContent).toBe('Por identificar')
+    expect(chapa.className).toContain('status-pending')
+    chapa.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    expect(onAction).toHaveBeenCalledWith('identificar', porIdentificar)
+    expect(onSelect).not.toHaveBeenCalled()
+    expect(document.querySelector<HTMLButtonElement>('button[aria-label="Subir"]')!.disabled).toBe(true)
+  })
+
+  it('en la ficha la principal pasa a «Identificar» y «Subir» queda apagado', async () => {
+    const onAction = vi.fn()
+    await montar(<LibraryActionButtons item={porIdentificar} onAction={onAction} />)
+    const identificar = [...document.querySelectorAll('button')].find(b => b.textContent === 'Identificar')!
+    expect(identificar.className).toContain('btn-primary')
+    const subir = document.querySelector<HTMLButtonElement>('button[aria-label="Subir"]')!
+    expect(subir.disabled).toBe(true)
+    expect(subir.className).not.toContain('btn-primary')
+    identificar.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    expect(onAction).toHaveBeenCalledWith('identificar', porIdentificar)
+  })
+})
+
 describe('en la tabla de la ficha', () => {
   it('una temporada se distingue por su número, sin el nombre de la serie delante', async () => {
     await montar(

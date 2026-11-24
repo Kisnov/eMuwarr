@@ -24,6 +24,15 @@ from tests.test_subida_por_tracker import (  # noqa: F401 (fixtures)
 _FIXTURES_COMPARTIDAS = (db_conn, pipeline)
 
 
+@pytest.fixture(autouse=True)
+def _pistas_con_idioma(monkeypatch):
+    """Los MKV de estos tests son de mentira: para mkvmerge, una pista de audio en castellano."""
+    from emuwarez_uploadrr.services import mkv_remux
+    monkeypatch.setattr(mkv_remux, "check_mkvmerge_available", lambda: {"available": True, "path": "mkvmerge"})
+    monkeypatch.setattr(mkv_remux, "read_tracks_json", lambda ruta: {"ok": True, "data": {"tracks": [
+        {"id": 0, "type": "audio", "properties": {"language": "spa"}}]}})
+
+
 @pytest.fixture
 def sin_hilos(monkeypatch):
     """Los trabajos se crean pero no arrancan: aquí solo importa qué se encola."""
@@ -233,6 +242,17 @@ def test_un_archivo_que_siembra_con_audio_sin_idioma_no_se_copia(db_conn, monkey
     r = st.subir_tambien(db_conn, [emu], ["nobs"])
     assert r["encolados"] == 0
     assert "la pista de audio 2 no tiene idioma (und)" in str(r["resultados"])
+
+
+def test_un_archivo_que_siembra_y_no_se_lee_no_se_copia(db_conn, monkeypatch, tmp_path, sin_hilos):
+    from emuwarez_uploadrr.services import mkv_remux
+    monkeypatch.setattr(mkv_remux, "read_tracks_json", lambda ruta: {"ok": False, "error": "x"})
+    _clave(db_conn, "nobs")
+    _iid, emu, ruta = _emu_completada(db_conn, tmp_path)
+    _qbit(monkeypatch, db_conn, [_entero(ruta)])
+
+    r = st.subir_tambien(db_conn, [emu], ["nobs"])
+    assert r["encolados"] == 0 and "no se pudo comprobar el idioma de las pistas" in str(r["resultados"])
 
 
 def test_ya_subida_a_ese_tracker_no_se_vuelve_a_ofrecer(db_conn, monkeypatch, tmp_path, sin_hilos):

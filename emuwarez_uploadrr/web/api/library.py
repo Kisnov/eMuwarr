@@ -1,20 +1,22 @@
 """Real library, missing, and sync endpoints (Phase 4)."""
 from __future__ import annotations
 
+import sqlite3
 from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from ...integrations.base import texto_de_error
-from ..dependencies import require_auth
+from ..dependencies import get_db, require_auth
 from ..runtime import _db_path
 from emuwarez_uploadrr.services.nomenclature import infer_provider_from_item
 from emuwarez_uploadrr.services.library import content_display_title, episode_own_name
+from emuwarez_uploadrr.services.library.carpeta import por_identificar as fila_por_identificar, sugerencia_de
 
 
 
 from ..schemas import (
-    LibraryItemResponse, LibraryListResponse,
+    IdentificarRequest, IdentificarSugeridasRequest, LibraryItemResponse, LibraryListResponse,
     MissingItemResponse, MissingListResponse, PeticionDeLaFichaResponse,
     SyncRequest, SyncResponse,
 )
@@ -210,6 +212,9 @@ def _campos_de_fila(row: dict, conn=None, rollups: Optional[dict] = None) -> dic
         backdrop_url=row.get("backdrop_url"),
         emu_in_catalog=row.get("emu_in_catalog"),
         emu_aportes=_parse_aportes(row.get("emu_aportes")),
+        por_identificar=fila_por_identificar(row),
+        # La lista no lee raw_json: allí la pone library_list para las de la página.
+        sugerencia_tmdb=sugerencia_de(row) if "raw_json" in row else None,
     )
 
 
@@ -332,6 +337,8 @@ def library_list(
     release_group: Optional[list[str]] = Query(None),
     emu: Optional[list[Literal["candidate", "present"]]] = Query(None),
     aporte: Optional[Literal["yes", "no"]] = Query(None),
+    # Lo de las carpetas manuales sin ficha de TMDb confirmada.
+    por_identificar: bool = Query(False),
     sort: Optional[str] = Query(None),
     limit: int = Query(50, ge=1, le=20000),
     offset: int = Query(0, ge=0),
@@ -344,9 +351,9 @@ def library_list(
     filtra_lo_que_se_ve = any(por_lo_que_se_ve.values())
     # Filtrando en plano, lo que cumple sale agrupado bajo su serie. Con un Tipo
     # elegido sale ese tipo tal cual, y sin filtros, en plano sigue saliendo todo.
-    agrupa = parent_id is None and not _valores(item_type) and any(_valores(v) for v in (
+    agrupa = parent_id is None and not _valores(item_type) and (por_identificar or any(_valores(v) for v in (
         origin, instance_id, status, request_status, nomenclature, search, spanish,
-        *por_lo_que_se_ve.values()))
+        *por_lo_que_se_ve.values())))
     recorta_despues = filtra_lo_que_se_ve or agrupa
     with _get_conn() as conn:
         ignora_especiales = _ignore_specials(conn)
@@ -360,7 +367,7 @@ def library_list(
 
         filtros_sql = dict(
             status=status, nomenclature=nomenclature, origin=origin, instance_id=instance_id, search=search,
-            spanish=spanish)
+            spanish=spanish, por_identificar=por_identificar)
         archivos = contar_archivos(conn)
         if agrupa and not filtra_lo_que_se_ve:
             # Todo en SQL: solo se leen y se montan las filas de la página.
@@ -410,6 +417,10 @@ def library_list(
         heredadas = peticiones_heredadas(conn, [it.id for it in items if it.item_type in ("season", "episode")])
         for it in items:
             it.peticion_heredada = heredadas.get(it.id)
+        from emuwarez_uploadrr.services.library.carpeta import sugerencias
+        propuestas = sugerencias(conn, [it.id for it in items if it.por_identificar])
+        for it in items:
+            it.sugerencia_tmdb = it.sugerencia_tmdb or propuestas.get(it.id)
     return LibraryListResponse(
         items=items,
         total=total,
@@ -429,6 +440,73 @@ def library_filter_options(current_user: dict = Depends(require_auth)) -> dict:
     from ...services.library import valores_de_filtro
     with _get_conn() as conn:
         return valores_de_filtro(conn)
+
+
+# ---------------------------------------------------------------------------
+# Carpeta manual: identificar en TMDb (services/library/carpeta.py)
+# ---------------------------------------------------------------------------
+
+def _error_de_identificar(exc: Exception) -> HTTPException:
+    from ...integrations.base import IntegrationError
+    from ...services.library import SyncAlreadyRunning
+    if isinstance(exc, SyncAlreadyRunning):
+        return HTTPException(status_code=429, detail="Hay una sincronización de biblioteca en marcha: "
+                                                     "confírmala cuando termine")
+    if isinstance(exc, LookupError):
+        return HTTPException(status_code=404, detail=texto_de_error(exc))
+    if isinstance(exc, (ValueError, IntegrationError)):
+        return HTTPException(status_code=400, detail=texto_de_error(exc))
+    raise exc
+
+
+@router.post("/library/identificar-sugeridas")
+def library_identificar_sugeridas(
+    body: Optional[IdentificarSugeridasRequest] = None,
+    current_user: dict = Depends(require_auth),
+    conn: sqlite3.Connection = Depends(get_db),
+) -> dict:
+    """Confirma la ficha de TMDb que propuso el escaneo en cada película o serie por identificar que la tenga."""
+    from ...services.library.carpeta import identificar_sugeridas
+    try:
+        hechas = identificar_sugeridas(conn, body.instance_id if body else None)
+    except Exception as exc:
+        raise _error_de_identificar(exc)
+    return {"ok": True, "confirmadas": hechas,
+            "message": f"{hechas} ficha{'s' if hechas != 1 else ''} confirmada{'s' if hechas != 1 else ''}"}
+
+
+@router.get("/library/{item_id}/tmdb-candidatos")
+def library_tmdb_candidatos(
+    item_id: int,
+    q: Optional[str] = Query(None, max_length=200),
+    anio: Optional[int] = Query(None, ge=1870, le=2100),
+    tipo: Optional[Literal["movie", "tv"]] = Query(None),
+    current_user: dict = Depends(require_auth),
+    conn: sqlite3.Connection = Depends(get_db),
+) -> dict:
+    """Lo que TMDb tiene para una película o serie de una carpeta manual; sin `q`, lo que leyó guessit del nombre."""
+    from ...services.library.carpeta import candidatos
+    try:
+        return candidatos(conn, item_id, consulta=q, anio=anio, tipo=tipo)
+    except Exception as exc:
+        raise _error_de_identificar(exc)
+
+
+@router.post("/library/{item_id}/identificar")
+def library_identificar(
+    item_id: int,
+    body: IdentificarRequest,
+    current_user: dict = Depends(require_auth),
+    conn: sqlite3.Connection = Depends(get_db),
+) -> dict:
+    """Confirma la ficha de TMDb de una película o serie de una carpeta manual (una temporada o un capítulo, la de su
+    serie)."""
+    from ...services.library.carpeta import identificar
+    try:
+        principal = identificar(conn, item_id, body.tmdb_id, body.tipo)
+    except Exception as exc:
+        raise _error_de_identificar(exc)
+    return {"ok": True, "item_id": principal, "message": "Ficha de TMDb confirmada"}
 
 
 @router.get("/library/emu-sync-status")

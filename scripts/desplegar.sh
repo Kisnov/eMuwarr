@@ -162,6 +162,7 @@ echo "Construyendo (registro en $REGISTRO)…"
 if ! git -c core.autocrlf=false archive HEAD | docker build --pull \
     --build-arg "APP_COMMIT=$COMMIT" \
     --build-arg "APP_BUILD_DATE=$FECHA" \
+    --build-arg "APT_UPGRADE_DATE=${FECHA%%T*}" \
     -t "$IMAGEN:$COMMIT" - > "$REGISTRO" 2>&1; then
   echo "La construcción ha fallado. Últimas líneas:" >&2
   tail -30 "$REGISTRO" >&2

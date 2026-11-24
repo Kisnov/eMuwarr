@@ -6,6 +6,7 @@ import { useEffect, useState } from 'react'
 import { getEmuComparison, getLibrary, suggestProvider } from '../../api/library'
 import { getNomenclatureFields, previewNomenclatureFields, type NomenclatureFields } from '../../api/nomenclature'
 import { fetchSettings } from '../../api/settings'
+import { fetchReglasTracker, type ReglasDeTracker } from '../../api/uploads'
 import type { LibraryItemResponse } from '../../types/api'
 import { expandirEntradas, razonNoSubible, type EntradaLote } from '../../utils/lote'
 import { conclusionDuplicados, resumirComparaciones, type NivelDuplicado } from '../../utils/resumenSubida'
@@ -133,6 +134,32 @@ export function useAnalisisLote({ activo, elementos }: { activo: boolean; elemen
   // Mientras no estén todas, «Subir» no se habilita aunque el efecto aún no haya arrancado.
   const completo = elementos.every(e => analisis.has(e.id))
   return { analisis, analizando: analizando || (activo && !completo), olvidar, repetir }
+}
+
+/**
+ * Las normas de idioma de cada tracker de `trackers` (los elegidos menos el primero, cuyas normas van en las
+ * comprobaciones) para cada elemento, por `tracker:id`, mientras `activo`. Sin red; lo ya pedido se guarda.
+ */
+export function useReglasLote({ activo, ids, trackers }: {
+  activo: boolean; ids: readonly number[]; trackers: readonly string[]
+}) {
+  const [reglas, setReglas] = useState<ReadonlyMap<string, ReglasDeTracker>>(() => new Map())
+  const clave = `${ids.join(',')}|${trackers.join(',')}`
+  useEffect(() => {
+    if (!activo) return
+    let vivo = true
+    for (const tracker of trackers) {
+      for (const id of ids) {
+        if (reglas.has(`${tracker}:${id}`)) continue
+        fetchReglasTracker(id, tracker)
+          .then(r => { if (vivo) setReglas(m => new Map(m).set(`${tracker}:${id}`, r)) })
+          .catch(() => { /* sin respuesta no se dice nada: el servidor las mira al encolar */ })
+      }
+    }
+    return () => { vivo = false }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- se pide al cambiar lo que se mira, no con cada resultado
+  }, [activo, clave])
+  return reglas
 }
 
 /** «Subidas en paralelo» de Ajustes, para decir de cuántas en cuántas irá el lote; null si no se pudo leer. */

@@ -59,9 +59,12 @@ export async function queueUpload(
   opciones?: OpcionesTracker,
   // El id del tracker (emu, nobs, mnv). Sin él, eMuwarez. Una subida por tracker: para varios, una llamada por cada uno.
   tracker?: string,
+  // La descripción propia (BBCode) de esta subida; vacía, solo la que genera Uploadrr-EMU.
+  descripcion?: string,
 ): Promise<UploadQueueResult> {
   return api.post<UploadQueueResult>(`/library/${itemId}/upload/queue`, {
     ...(tracker ? { tracker } : {}),
+    ...(descripcion?.trim() ? { descripcion } : {}),
     request_item_id: requestItemId ?? null,
     ...(loteId ? { lote_id: loteId } : {}),
     anonimo: opciones?.anonimo ?? null,
@@ -172,9 +175,10 @@ export interface ElementoLote {
   provider?: string | null
 }
 
-// Lo que hizo el servidor con cada elemento, en el orden mandado (web/schemas.py::UploadLoteResultado).
+// Lo que hizo el servidor con cada elemento y tracker, en el orden mandado (web/schemas.py::UploadLoteResultado).
 export interface ResultadoElementoLote {
   item_id: number
+  tracker: string
   status: 'queued' | 'blocked'
   job_id: number | null
   errors: string[]
@@ -190,9 +194,10 @@ export interface LoteEncolado {
 
 // Encola varias subidas como un lote, en este orden (el de la cola). El que no se puede subir se salta con su
 // motivo y el resto sigue. Si falta algo que haría fallar a todos (claves, Uploadrr-EMU), 409 con los motivos en
-// `detail` (una lista) y nada encolado.
-export async function queueLote(elementos: ElementoLote[]): Promise<LoteEncolado> {
-  return api.post<LoteEncolado>('/uploads/lote', { elementos })
+// `detail` (una lista) y nada encolado. `trackers`: a cuáles, en orden (una subida por elemento y tracker; las
+// comprobaciones son las del primero). Sin ellos, eMuwarez.
+export async function queueLote(elementos: ElementoLote[], trackers?: string[]): Promise<LoteEncolado> {
+  return api.post<LoteEncolado>('/uploads/lote', { elementos, ...(trackers ? { trackers } : {}) })
 }
 
 export interface UploadsQuery {

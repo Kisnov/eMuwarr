@@ -7,6 +7,7 @@ import { peticionCubre } from '../../utils/seleccionSubida'
 import {
   conclusionDuplicados, textoCategoria, textoCopia, textoFicheros, textoPistas, tipoDeEnlace, type FilaYaHay, type YaHay,
 } from '../../utils/resumenSubida'
+import { CasillasTrackers } from './piezas'
 import { mergeRemuxTracks } from './RemuxTable'
 import type { Asistente } from './useAsistente'
 import { useResumen } from './useResumen'
@@ -19,9 +20,11 @@ export function ResumenSubida({ a }: { a: Asistente }) {
     preview, seasonDisplayTitle, seasonPlan, fields, remuxPreview, remuxEdits, modoPistasAjuste,
     checks, batchContentChecks, nombresTanda, requestId, preselect,
     anonimoMarcado, personalReleaseMarcado, elegirAnonimo, elegirPersonalRelease, opcionesTracker, uploading,
-    sources, elegirTipo, trackersParaSubir, trackersElegidos, elegirTracker, reglas, reglasDe,
+    sources, elegirTipo, trackersParaSubir, trackersElegidos, elegirTracker, reglas, reglasDe, batchChecksLoading,
+    descripcion, escribirDescripcion, descripcionPorTracker, descripcionPropia, editarDescripcionDe,
   } = a
   const esTanda = batchQueue.length > 1
+  const destinosElegidos = trackersParaSubir.filter(t => trackersElegidos.includes(t.id))
   // Si eMuwarez no lo admite (sus normas de idioma), se dice junto a su casilla: sale desmarcada de entrada.
   const emuNoLoAdmite = esTanda ? undefined : reglasDe(targetId)?.find(r => r.tracker === 'emu' && !r.permitido)
   const ids = esTanda ? batchQueue : targetId != null ? [targetId] : []
@@ -100,25 +103,22 @@ export function ResumenSubida({ a }: { a: Asistente }) {
               </dd>
             </>
           )}
-          {/* Solo con otro tracker con clave, y solo para una subida suelta: una tanda sigue yendo a eMuwarez. */}
-          {!esTanda && trackersParaSubir.length > 1 && (
+          {/* Solo con otro tracker con clave. Cambiar el primero rehace las comprobaciones de la tanda: no mientras se hacen. */}
+          {trackersParaSubir.length > 1 && (
             <>
               <dt>Trackers</dt>
               <dd>
-                <span className="asist-marcas">
-                  {trackersParaSubir.map(t => (
-                    <label key={t.id} className="asist-casilla">
-                      <input type="checkbox" checked={trackersElegidos.includes(t.id)} disabled={uploading}
-                        onChange={e => elegirTracker(t.id, e.target.checked)} />
-                      {t.nombre}
-                    </label>
-                  ))}
-                </span>
+                <CasillasTrackers trackers={trackersParaSubir} elegidos={trackersElegidos} onElegir={elegirTracker}
+                  disabled={uploading || (esTanda && batchChecksLoading)} />
                 {emuNoLoAdmite && (
                   <span className="asist-dato-nota asist-aviso-dato">eMuwarez: ✗ no lo admite. {emuNoLoAdmite.motivo}</span>
                 )}
                 {/* Las normas de idioma de cada otro tracker (las de eMuwarez van en las comprobaciones). */}
-                {trackersParaSubir.filter(t => t.id !== 'emu').map(t => {
+                {esTanda ? (
+                  <span className="asist-dato-nota">
+                    Las comprobaciones son las del primero; lo que otro no admita se salta solo para él.
+                  </span>
+                ) : trackersParaSubir.filter(t => t.id !== 'emu').map(t => {
                   const r = reglas.get(t.id)
                   return (
                     <span key={t.id} className={`asist-dato-nota${r && !r.permitido ? ' asist-aviso-dato' : ''}`}>
@@ -131,6 +131,35 @@ export function ResumenSubida({ a }: { a: Asistente }) {
                     ? 'Elige al menos uno.'
                     : 'Una subida por tracker, una detrás de otra, con el mismo fichero y el mismo nombre.'}
                 </span>
+              </dd>
+            </>
+          )}
+          {/* Una subida suelta: la tanda no lleva descripción propia. */}
+          {!esTanda && (
+            <>
+              <dt>Descripción</dt>
+              <dd>
+                <textarea className="form-input asist-descripcion" rows={4} value={descripcion} disabled={uploading}
+                  maxLength={30000} aria-label="Descripción propia (BBCode)" placeholder="[b]Notas del encode[/b]…"
+                  onChange={e => escribirDescripcion(e.target.value)} />
+                <span className="asist-dato-nota">
+                  BBCode opcional: va tras el tráiler y antes de las capturas y la firma
+                  {destinosElegidos.length > 1 ? ', la misma en todos los trackers.' : '.'}
+                </span>
+                {destinosElegidos.length > 1 && destinosElegidos.map(t => (
+                  <span key={t.id} className="asist-descripcion-tracker">
+                    <label className="asist-casilla">
+                      <input type="checkbox" checked={t.id in descripcionPorTracker} disabled={uploading}
+                        onChange={e => descripcionPropia(t.id, e.target.checked)} />
+                      Otra para {t.nombre}
+                    </label>
+                    {t.id in descripcionPorTracker && (
+                      <textarea className="form-input asist-descripcion" rows={4} value={descripcionPorTracker[t.id]}
+                        disabled={uploading} maxLength={30000} aria-label={`Descripción para ${t.nombre}`}
+                        onChange={e => editarDescripcionDe(t.id, e.target.value)} />
+                    )}
+                  </span>
+                ))}
               </dd>
             </>
           )}

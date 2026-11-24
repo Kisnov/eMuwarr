@@ -62,7 +62,7 @@ const CONFIRMATION_TOKEN = 'INICIAR_UPLOADRR'
 const COLUMNAS = 9
 // Lo que mide una fila antes de pintarla (FilasVirtuales la corrige con la media de las que va midiendo).
 const ALTO_FILA = 65
-const claveDeSubida = (job: UploadJob) => job.id!
+const claveDeGrupo = (grupo: UploadJob[]) => grupo[0].id!
 
 // Only real upload states — a job now only exists once the user uploads, so
 // the preparatory "ready"/"blocked" states no longer appear here. 'preparing'
@@ -219,12 +219,14 @@ function AccionDeFila({ etiqueta, tono, clase, onClick, children }: {
 // Va memorizada: con el progreso real llegando cada medio segundo, solo tiene que repintarse la fila cuya subida
 // cambió. Para que el memo sirva, todas las props son valores o funciones con identidad estable (nada de objetos o
 // flechas hechos en cada pintado del padre): por eso el chip de reintentos son dos valores y `onOpen` recibe el id.
-const JobRow = memo(function JobRow({ job, instances, seeding, onOpen, indent, intentosAnteriores, desplegada, onToggleCadena, onCancel, onRetry, onDelete, onFiltrarLote }: {
+const JobRow = memo(function JobRow({ job, instances, seeding, onOpen, indent, enGrupo, intentosAnteriores, desplegada, onToggleCadena, onCancel, onRetry, onDelete, onFiltrarLote }: {
   job: UploadJob
   seeding: SeedingEstado
   instances: InstanceSafeResponse[]
   onOpen: (jobId: number) => void
   indent?: boolean
+  // El mismo elemento subido a varios trackers: la primera fila lleva el título; las otras, solo su tracker.
+  enGrupo?: 'primera' | 'otra'
   // Cuántos intentos anteriores tiene la cadena y si están desplegados (solo en la fila del último intento).
   intentosAnteriores?: number
   desplegada?: boolean
@@ -249,13 +251,14 @@ const JobRow = memo(function JobRow({ job, instances, seeding, onOpen, indent, i
   // intentos anteriores, que van debajo de la fila que ya lo lleva.
   const loteId = !indent && job.lote_id && (job.lote_total ?? 0) > 1 ? job.lote_id : null
   const loteTip = useTooltip(loteId ? 'Ver solo las subidas de este lote' : null)
+  const otra = enGrupo === 'otra'
   return (
     // Por debajo de 760 px la fila es una tarjeta (subidas.css): título y la acción que toca, el estado, y en gris
     // tipo · origen · fecha y los chips. Las clases sub-col-* y sub-meta dicen qué va en cada línea.
-    <tr className={indent ? 'sub-tarjeta sub-fila-antigua' : 'sub-tarjeta'}>
+    <tr className={indent ? 'sub-tarjeta sub-fila-antigua' : otra ? 'sub-tarjeta sub-fila-tracker' : 'sub-tarjeta'}>
       <td className="sub-celda-titulo">
-        <div className={`sub-titulo-fila${indent ? ' sub-titulo-fila-antigua' : ''}`}>
-          <div className="poster-thumb sub-poster">
+        <div className={`sub-titulo-fila${indent ? ' sub-titulo-fila-antigua' : otra ? ' sub-titulo-fila-tracker' : ''}`}>
+          {!otra && <div className="poster-thumb sub-poster">
             {job.poster_url ? (
               <img
                 src={posterUrl(job.poster_url, 'w92')}
@@ -270,17 +273,19 @@ const JobRow = memo(function JobRow({ job, instances, seeding, onOpen, indent, i
                 <IconoTipo serie={job.media_type === 'series' || job.media_type === 'episode'} />
               </span>
             )}
-          </div>
+          </div>}
           <div className="sub-titulo-texto">
             {indent && <span className="sub-muted sub-no-encoge">↳</span>}
-            <HoverTitle as="span" className="lib-title-link sub-titulo" href={`/uploads/${job.id}`} onClick={abrir} tip="Ver progreso / detalle">
-              {job.title || '—'}
+            <HoverTitle as="span" className={otra ? 'lib-title-link sub-titulo sub-tracker-chip' : 'lib-title-link sub-titulo'}
+              href={`/uploads/${job.id}`} onClick={abrir} tip="Ver progreso / detalle"
+              aria-label={otra ? `${job.title} en ${job.tracker_nombre}` : undefined}>
+              {otra ? job.tracker_nombre : job.title || '—'}
             </HoverTitle>
-            {job.year ? <span className="sub-muted sub-t11 sub-no-encoge sub-anio">({job.year})</span> : null}
+            {!otra && job.year ? <span className="sub-muted sub-t11 sub-no-encoge sub-anio">({job.year})</span> : null}
           </div>
           {/* Aparte del título: en la tarjeta de móvil bajan a la última línea. */}
           <div className="sub-chips">
-            <ChipTracker tracker={job.tracker} nombre={job.tracker_nombre} />
+            {!otra && <ChipTracker tracker={job.tracker} nombre={job.tracker_nombre} siempre={enGrupo === 'primera'} />}
             {loteId && onFiltrarLote && (
               <button
                 type="button"
@@ -322,6 +327,7 @@ const JobRow = memo(function JobRow({ job, instances, seeding, onOpen, indent, i
           </div>
         </div>
       </td>
+      {otra ? <><td className="sub-sec" /><td className="sub-sec" /></> : <>
       <td className="sub-nowrap sub-sec sub-meta sub-col-tipo">
         {job.media_type
           ? <PlainValue icon={<TypeValueIcon />}>{UPLOAD_TYPE_LABEL[job.media_type] ?? job.media_type}</PlainValue>
@@ -336,6 +342,7 @@ const JobRow = memo(function JobRow({ job, instances, seeding, onOpen, indent, i
           )
           : <span className="sub-muted">—</span>}
       </td>
+      </>}
       <td className="col-prioridad-baja sub-nowrap">
         <GruposDeRelease grupos={job.release_groups ?? []} junto />
       </td>
@@ -734,7 +741,7 @@ export function UploadsPage({ onNavigate }: { onNavigate?: (page: string) => voi
   }, [])
 
   // Client-side filter + sort over the loaded jobs (status stays server-side).
-  const visibleJobs = useMemo(() => {
+  const grupos = useMemo(() => {
     const q = search.trim().toLowerCase()
     const out = jobs.filter(j => {
       if (HIDDEN_STATES.has(j.status)) return false
@@ -744,7 +751,7 @@ export function UploadsPage({ onNavigate }: { onNavigate?: (page: string) => voi
       return titleOk && typeOk
     })
     const dt = (s?: string | null) => (s ? new Date(s).getTime() : 0)
-    out.sort((a, b) => {
+    const comparar = (a: UploadJob, b: UploadJob) => {
       switch (sortBy) {
         case 'created_asc': return dt(a.created_at) - dt(b.created_at)
         case 'title': return (a.title || '').localeCompare(b.title || '')
@@ -752,9 +759,19 @@ export function UploadsPage({ onNavigate }: { onNavigate?: (page: string) => voi
         case 'duration_desc': return (b.duration_seconds ?? -1) - (a.duration_seconds ?? -1)
         default: return dt(b.created_at) - dt(a.created_at) // created_desc
       }
-    })
-    return out
+    }
+    // Hay una cadena por elemento y tracker: las puntas del mismo elemento son sus subidas a cada tracker y van juntas,
+    // en el orden elegido; el grupo va donde va la primera. Dos del mismo tracker (un filtro de estado deja ver un
+    // intento anterior como punta) no se juntan.
+    const porElemento = new Map<number, UploadJob[]>()
+    for (const j of out.sort(comparar)) {
+      const grupo = j.library_item_id != null ? porElemento.get(j.library_item_id) : undefined
+      if (grupo && !grupo.some(o => o.tracker === j.tracker)) grupo.push(j)
+      else porElemento.set(grupo || j.library_item_id == null ? -j.id! : j.library_item_id, [j])
+    }
+    return [...porElemento.values()]
   }, [jobs, search, sortBy, typeFilter, hasNewerRetry])
+  const subidasVisibles = grupos.reduce((n, g) => n + g.length, 0)
 
   // La de la lista o, si es más antigua que las cargadas (enlace /uploads/123, notificación, Panel), la pedida por su id.
   const [jobSuelto, setJobSuelto] = useState<UploadJob | null>(null)
@@ -812,7 +829,7 @@ export function UploadsPage({ onNavigate }: { onNavigate?: (page: string) => voi
     : selectedJob
 
   // La fila del último intento de una cadena y, si está desplegada, sus intentos anteriores.
-  const pintarCadena = (job: UploadJob) => {
+  const pintarCadena = (job: UploadJob, enGrupo?: 'primera' | 'otra', loteArriba?: string | null) => {
     const ancestors = ancestorsOf(job)
     const expanded = expandedChains.has(job.id!)
     return [
@@ -822,6 +839,7 @@ export function UploadsPage({ onNavigate }: { onNavigate?: (page: string) => voi
         instances={instances}
         seeding={seeding}
         onOpen={openUpload}
+        enGrupo={enGrupo}
         intentosAnteriores={ancestors.length > 0 ? ancestors.length : undefined}
         desplegada={expanded}
         onToggleCadena={toggleChain}
@@ -829,13 +847,17 @@ export function UploadsPage({ onNavigate }: { onNavigate?: (page: string) => voi
         onDelete={setDeleteJob}
         onRetry={alReintentar}
         // Con la lista ya filtrada por ese lote, el banner lo dice: la chapa en cada fila sobra.
-        onFiltrarLote={job.lote_id === loteFiltro ? undefined : setLoteFiltro}
+        // Y debajo de otra del mismo lote, también.
+        onFiltrarLote={job.lote_id === loteFiltro || (enGrupo === 'otra' && job.lote_id === loteArriba) ? undefined : setLoteFiltro}
       />,
       ...(expanded ? ancestors.map(a => (
         <JobRow key={a.id} job={a} instances={instances} seeding={seeding} indent onOpen={openUpload} onCancel={alCancelar} onRetry={alReintentar} onDelete={setDeleteJob} />
       )) : []),
     ]
   }
+  // Un elemento: la cadena de cada tracker, una debajo de otra.
+  const pintarGrupo = (grupo: UploadJob[]) => grupo.flatMap((j, i) =>
+    pintarCadena(j, grupo.length > 1 ? (i ? 'otra' : 'primera') : undefined, grupo[0].lote_id))
   const scrollRef = useRef<HTMLDivElement>(null)
   const theadRef = useRef<HTMLTableSectionElement>(null)
 
@@ -911,7 +933,7 @@ export function UploadsPage({ onNavigate }: { onNavigate?: (page: string) => voi
         <div>
           <h1 className="page-title">Subidas</h1>
           <div className="page-subtitle">
-            {visibleJobs.length} subidas{total != null && jobs.length < total ? ` · ${jobs.length} de ${total} cargadas` : ''}
+            {subidasVisibles} subidas{grupos.length < subidasVisibles ? ` de ${grupos.length} ${grupos.length === 1 ? 'elemento' : 'elementos'}` : ''}{total != null && jobs.length < total ? ` · ${jobs.length} de ${total} cargadas` : ''}
           </div>
         </div>
         <div className="sub-fila">
@@ -998,7 +1020,7 @@ export function UploadsPage({ onNavigate }: { onNavigate?: (page: string) => voi
                   <th className="col-actions sub-th-acciones">Acciones</th>
                 </tr>
               </thead>
-              {visibleJobs.length === 0 && loteVacio && (
+              {grupos.length === 0 && loteVacio && (
                 <FilaVacia
                   columnas={COLUMNAS}
                   icon={<IconoSubida />}
@@ -1007,7 +1029,7 @@ export function UploadsPage({ onNavigate }: { onNavigate?: (page: string) => voi
                   action={<button className="btn btn-primary btn-sm" onClick={() => setLoteFiltro(null)}>Quitar filtro del lote</button>}
                 />
               )}
-              {visibleJobs.length === 0 && filtrando && !loteVacio && (
+              {grupos.length === 0 && filtrando && !loteVacio && (
                 <FilaVacia
                   columnas={COLUMNAS}
                   icon={<IconoSubida />}
@@ -1024,19 +1046,19 @@ export function UploadsPage({ onNavigate }: { onNavigate?: (page: string) => voi
                 />
               )}
               {/* Pasadas las UMBRAL_VIRTUAL subidas solo se pintan las que se ven: cada elemento es la fila del último
-                  intento con sus intentos anteriores desplegados, en su propio <tbody>. */}
-              {visibleJobs.length > UMBRAL_VIRTUAL ? (
+                  intento de cada tracker con sus intentos anteriores desplegados, en su propio <tbody>. */}
+              {grupos.length > UMBRAL_VIRTUAL ? (
                 <FilasVirtuales
-                  items={visibleJobs}
-                  clave={claveDeSubida}
+                  items={grupos}
+                  clave={claveDeGrupo}
                   alturaEstimada={ALTO_FILA}
                   columnas={COLUMNAS}
                   contenedor={scrollRef}
                   cabecera={theadRef}
-                  pintar={pintarCadena}
+                  pintar={pintarGrupo}
                 />
               ) : (
-                <tbody>{visibleJobs.flatMap(j => pintarCadena(j))}</tbody>
+                <tbody>{grupos.flatMap(pintarGrupo)}</tbody>
               )}
             </table>
           </div>

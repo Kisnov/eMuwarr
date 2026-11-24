@@ -139,6 +139,15 @@
   padding-left: 24px;
 }
 
+/* La subida del mismo elemento a otro tracker: bajo el título (póster y hueco), sin raya que la separe de la de arriba. */
+.sub-titulo-fila-tracker {
+  padding-left: 38px;
+}
+
+.data-table tr:not(.sub-fila-antigua):has(+ tr.sub-fila-tracker) > td {
+  border-bottom-color: transparent;
+}
+
 /* Chip «Lote · N» junto al título: un botón que filtra la lista por ese lote. */
 .sub-lote-chip {
   flex-shrink: 0;
@@ -708,6 +717,10 @@ input.sub-confirmar.sub-confirmar-ok:not([type="checkbox"]):not([type="radio"]):
     padding-left: 28px;
   }
 
+  .sub-scroll .data-table tr.sub-tarjeta:not(.sub-fila-antigua):has(+ tr.sub-fila-tracker) {
+    border-bottom-color: transparent;
+  }
+
   .sub-scroll .data-table tr.sub-tarjeta > td {
     display: none;
     padding: 0;
@@ -803,6 +816,11 @@ input.sub-confirmar.sub-confirmar-ok:not([type="checkbox"]):not([type="radio"]):
   .sub-scroll .data-table tr.sub-tarjeta > td.sub-meta:not(.sub-col-tipo)::before {
     content: "·";
     margin-right: 8px;
+  }
+
+  /* Sin tipo ni origen delante (son los de la tarjeta de arriba), la fecha va sola. */
+  .sub-scroll .data-table tr.sub-tarjeta.sub-fila-tracker > td.sub-meta.sub-fecha::before {
+    content: none;
   }
 
   .sub-tarjeta .sub-meta .vicon {

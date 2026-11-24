@@ -20,6 +20,12 @@ def _mkv(*audio: dict) -> dict:
     ]}}
 
 
+@pytest.fixture(autouse=True)
+def _con_mkvmerge(monkeypatch):
+    """mkvmerge disponible, sin depender de la máquina: los tests que lo quieren ausente lo dicen."""
+    monkeypatch.setattr(mkv_remux, "check_mkvmerge_available", lambda: {"available": True, "path": "mkvmerge"})
+
+
 @pytest.fixture
 def pistas(monkeypatch):
     """Lo que `mkvmerge -J` devuelve para cualquier fichero: se fija con pistas(...)."""
@@ -83,6 +89,18 @@ def test_lo_elegido_solo_va_a_las_pistas_sin_idioma(pistas):
     assert mkv_remux.idiomas_de_las_pistas("a.mkv", idiomas={"1": "spa", "2": "spa"}) == ["ENG", "ESP", "UND"]
     assert mkv_remux.idiomas_de_las_pistas("a.mkv", overrides={"3": {"language": "zxx"}}) == ["ENG", "UND", "ZXX"]
     assert mkv_remux.idiomas_de_las_pistas("a.mp4") is None
+
+
+def test_con_idiomas_elegidos_lee_el_fichero_de_ver_pistas(tmp_path, monkeypatch):
+    """Sin el original, el preparado: el mismo que lee «Ver pistas» (path_mapping.ruta_de_lectura)."""
+    leidas = []
+    monkeypatch.setattr(mkv_remux, "read_tracks_json",
+                        lambda ruta: leidas.append(ruta) or _mkv({"language": "und"}))
+    preparado = tmp_path / "Peli.mkv"
+    preparado.write_bytes(b"x")
+    item = {"path": "/biblioteca/ya/no/esta.mkv", "prepared_path": str(preparado), "audio_languages": "UND"}
+    assert con_idiomas_elegidos(item, idiomas={"1": "spa"})["audio_languages"] == "ESP"
+    assert leidas == [str(preparado)]
 
 
 def test_zxx_se_ofrece_en_ver_pistas():
@@ -221,6 +239,20 @@ def test_un_pack_custom_con_un_capitulo_sin_dialogo_no_lleva_zxx(monkeypatch):
     assert season_pack._aggregate_pack_audio(entradas) == ("ESP DD 5.1", True)
 
 
+def test_un_mkv_que_no_se_lee_no_se_da_por_bueno(tmp_path, monkeypatch):
+    from emuwarez_uploadrr.services.upload_queue import _sin_idioma_preparado
+    monkeypatch.setattr(mkv_remux, "read_tracks_json", lambda ruta: {"ok": False, "error": "x"})
+    (tmp_path / "a.mkv").write_bytes(b"x")
+    (tmp_path / "b.mp4").write_bytes(b"x")
+    assert _sin_idioma_preparado(str(tmp_path / "a.mkv")) == (str(tmp_path / "a.mkv"), None)
+    assert _sin_idioma_preparado(str(tmp_path / "b.mp4")) is None
+    # Un preparado que ya no está no es «no se lee»: eso lo dice quien lo busca.
+    assert _sin_idioma_preparado(str(tmp_path / "no.mkv")) is None
+    # Sin mkvmerge no se puede mirar, como en la integridad: no se para.
+    monkeypatch.setattr(mkv_remux, "check_mkvmerge_available", lambda: {"available": False})
+    assert _sin_idioma_preparado(str(tmp_path / "a.mkv")) is None
+
+
 def test_antes_de_lanzar_un_mp4_no_se_para(tmp_path):
     from emuwarez_uploadrr.services.upload_queue import _sin_idioma_preparado
     (tmp_path / "a.mp4").write_bytes(b"x")
@@ -245,15 +277,23 @@ def test_una_pelicula_sin_dialogo_se_puede_subir(db_conn, tmp_path, pistas):
 
 # --- El nombre de una película sin diálogo ---------------------------------------------------------------------
 
-def _informe(tmp_path, *audio: dict) -> dict:
-    f = tmp_path / "flow.mkv"
+def _informe(tmp_path, *audio: dict, nombre: str = "flow.mkv", idiomas: dict | None = None) -> dict:
+    f = tmp_path / nombre
     f.write_text("fake")
     info = {"media": {"track": [{"@type": "General"},
                                 {"@type": "Video", "Format": "AVC", "Width": "1920", "Height": "1080"},
                                 *[{"@type": "Audio", **a} for a in audio]]}}
     with patch.object(svc, "mediainfo_available", return_value=True), \
             patch.object(svc.media_probe, "run_mediainfo_json", return_value=info):
-        return svc.build_mediainfo_report(str(f))
+        return svc.build_mediainfo_report(str(f), idiomas_audio=idiomas)
+
+
+def test_lo_elegido_solo_cuenta_en_un_mkv(tmp_path):
+    # En un MP4 (también un capítulo de un pack) no se escribe: el nombre no lo puede decir.
+    und = {"Format": "AC-3", "Channels": "6"}
+    assert _informe(tmp_path, und, idiomas={1: "spa"})["audio_summary"] == "ESP DD 5.1"
+    mp4 = _informe(tmp_path, und, nombre="e01.mp4", idiomas={1: "spa"})
+    assert mp4["pistas_sin_idioma"] == [1] and mp4["audio_summary"] is None
 
 
 def test_sin_dialogo_lleva_codec_y_canales_sin_idioma(tmp_path):
