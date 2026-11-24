@@ -301,22 +301,10 @@ def test_la_subida_a_nobs_tras_la_de_emu_reutiliza_capturas_y_torrent(flujo, mon
     assert len(Qbit.anadidos) == 1 and _codigos(eventos, "cliente")[0]["ok"] is True
 
 
-def test_la_url_de_los_ajustes_gana_a_la_del_tracker(flujo):
-    """`TRACKERS.<X>.url` (la URL de ese tracker en Configuración de la app): se busca, se sube y se enlaza ahí."""
-    flujo.config["TRACKERS"]["NOBS"] = {"api_key": TOKEN, "anon": False, "url": flujo.tracker.url + "/"}
-    flujo.tracker_que_acepta()
-
-    codigo, salida = _correr(flujo, flujo.crear_video(PELICULA), ["-tk", "NOBS", *ARGV_PELICULA[2:]])
-
-    assert codigo == 0, salida
-    assert NOBS.domain == "https://nobs.rawsmoke.net"  # la de la clase no cambia
-    assert len(flujo.tracker.bodies) == 1
-    assert f"Torrent URL: {flujo.tracker.url}/torrents/42" in salida
-
-
-def test_la_url_de_emuwarez_no_se_cambia_desde_el_config(flujo):
-    flujo.config["TRACKERS"]["EMU"] = {**flujo.config["TRACKERS"].get("EMU", {}), "url": "https://otro.example"}
-    assert EMU(flujo.config).domain == EMU.domain.rstrip("/")
+@pytest.mark.parametrize("clase", [EMU, NOBS])
+def test_la_url_de_ningun_tracker_se_cambia_desde_el_config(flujo, clase):
+    flujo.config["TRACKERS"][clase.tracker] = {**flujo.config["TRACKERS"].get(clase.tracker, {}), "url": "https://otro.example"}
+    assert clase(flujo.config).domain == clase.domain
 
 
 # --base-desde: la subida a N.O.B.S de algo que ya está en eMuwarez, cuando el tmp/<nombre> de entonces ya no está

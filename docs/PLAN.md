@@ -30,8 +30,9 @@ descripción y el cliente.
   el limitador de llamadas compartido entre la app y Uploadrr-EMU, y un config de Uploadrr-EMU por subida.
 - **Por orden:**
   1. **Fase A:** el tracker pasa a ser un dato. Base de datos (cada subida, petición, catálogo y estadística lleva su
-     tracker), ajustes por tracker (URL, clave, usuario, grupos, anónimo), cola y Panel. eMuwarez queda como el primer
-     adaptador, sin cambiar lo que ve hoy quien solo usa eMuwarez.
+     tracker), ajustes por tracker (clave, usuario, grupos, anónimo), cola y Panel. Las URL de los tres son fijas, en
+     `services/trackers.py` y la clase de Uploadrr-EMU: una errata no puede mandar la clave a otro sitio. eMuwarez
+     queda como el primer adaptador, sin cambiar lo que ve hoy quien solo usa eMuwarez.
      - Ya está la base (esquema 60): `services/trackers.py` con eMuwarez (`emu`) y la columna `tracker` en las
        subidas, peticiones, catálogo, «Tus subidas» y el historial del perfil; las claves de peticiones, «Tus subidas»
        y el perfil incluyen el tracker. Las sincronizaciones de eMuwarez (peticiones, catálogo, «Tus subidas», perfil)
@@ -54,9 +55,7 @@ descripción y el cliente.
        mejor se salta solo para ese (en el lote, si lo tienen todos llega desmarcado y marcarlo a mano lo sube a
        todos), y un tracker sin catálogo leído no frena nada, solo se avisa. Biblioteca no: su chip y su filtro salen
        de `emu_in_catalog`, una columna de eMuwarez, y decir lo de los otros pediría una columna por tracker.
-     - Queda: que las sincronizaciones de peticiones, «Tus subidas» y el perfil reciban el tracker como parámetro;
-       y la URL de eMuwarez en Configuración (la de N.O.B.S y Milnueve ya se cambia, y la usan la subida y el catálogo
-       con `trackers.url_de`; la de eMuwarez es `EMU_BASE_URL`).
+     - Queda: que las sincronizaciones de peticiones, «Tus subidas» y el perfil reciban el tracker como parámetro.
   2. **Fase B: NOBS (nobs.rawsmoke.net) y Milnueve (tracker.milnueve.cc).** Los dos son UNIT3D y ya se sube a ellos con
      otras herramientas: se puede empezar (Gabriel les avisa). El primero valida la abstracción. Decidido el 22/11:
      - **Nomenclatura: la de eMuwarez, sin más.** Los dos son nuevos y cada uno sube como quiere; sus guías (formato

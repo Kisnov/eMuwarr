@@ -30,7 +30,7 @@ from ..integrations.base import IntegrationError, texto_de_error
 from .tasks import start_task, finish_task
 from .upload_states import ACTIVE_JOB_STATUSES
 from .eventos import EVENTO_SYNC_EMPEZADA, EVENTO_SYNC_TERMINADA, publicar
-from .trackers import EMU, TRACKERS, Tracker, tiene_clave, url_de
+from .trackers import EMU, TRACKERS, Tracker, tiene_clave
 from .settings import ajuste_de_tracker
 
 logger = logging.getLogger("emuwarez.emu")
@@ -992,7 +992,6 @@ def sync_emu_catalog(conn: sqlite3.Connection, *, force: bool = False, mode: str
         api_key = ajuste_de_tracker(conn, "api_key", tracker.id)
         if not api_key:
             raise IntegrationError(f"No hay API key de {nombre} configurada")
-        url = url_de(conn, tracker)
 
         # Fail fast (and clearly) if eMuwarez itself is unreachable, instead of only
         # discovering it mid-download — this is a single cheap request (perPage=1)
@@ -1001,7 +1000,7 @@ def sync_emu_catalog(conn: sqlite3.Connection, *, force: bool = False, mode: str
         _set_progress(phase=f"Comprobando conexión con {nombre}…", page=0, total_pages=None, eta_seconds=None)
         try:
             # primer paso del recorrido: espera su turno
-            emu.emu_test_connection(api_key, url, interactiva=False, tracker=tracker.uploadrr)
+            emu.emu_test_connection(api_key, tracker.url, interactiva=False, tracker=tracker.uploadrr)
         except IntegrationError as exc:
             raise IntegrationError(f"No se pudo conectar con {nombre}: {texto_de_error(exc)}") from exc
 
@@ -1044,7 +1043,7 @@ def sync_emu_catalog(conn: sqlite3.Connection, *, force: bool = False, mode: str
                           total_pages=tp, torrents=items_so_far, eta_seconds=eta)
 
         torrents = emu.emu_fetch_all_torrents(
-            api_key, url, progress=_on_page,
+            api_key, tracker.url, progress=_on_page,
             stop_after_id=known_max_id if incremental else None, tracker=tracker.uploadrr,
         )
         rows = _index_catalog(torrents)

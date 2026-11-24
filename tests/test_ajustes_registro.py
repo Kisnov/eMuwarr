@@ -166,8 +166,6 @@ def test_cada_ajuste_sencillo_se_guarda_en_su_clave_y_se_lee(client, auth_header
     if a.tipo == STR:
         if campo in ("qbit_url", "qbit_public_url"):  # estos solo admiten una URL http(s)
             enviado, valor = f"  http://{valor}  ", f"http://{valor}"
-        elif campo in ("nobs_url", "mnv_url"):  # y estos solo https
-            enviado, valor = f"  https://{valor}  ", f"https://{valor}"
         else:
             enviado = f"  {valor}  "
     else:
@@ -261,14 +259,3 @@ def test_ningun_si_no_del_registro_se_lee_a_mano():
     assert not sueltas, (
         "\nLectura de sí/no a mano de un ajuste del registro; usa "
         "services.settings.leer_ajuste(conn, <campo>):\n  " + "\n  ".join(sueltas))
-
-
-@pytest.mark.parametrize("url", ["https://nobs.example/?", "https://nobs.example/?a=1", "https://nobs.example/#",
-                                 "http://nobs.example", "https://u@nobs.example"])
-def test_la_url_de_un_tracker_no_admite_consulta_vacia_ni_http(url):
-    assert reg.error_de_url_tracker("N.O.B.S", url)
-
-
-def test_la_url_de_un_tracker_vacia_o_https_limpia_vale():
-    assert reg.error_de_url_tracker("N.O.B.S", "") is None
-    assert reg.error_de_url_tracker("N.O.B.S", " https://nobs.example/ ") is None

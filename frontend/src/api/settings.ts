@@ -41,8 +41,6 @@ export interface SettingsData {
   nobs_api_key_masked: string | null
   mnv_api_key_configured: boolean
   mnv_api_key_masked: string | null
-  nobs_url: string
-  mnv_url: string
   marcas_por_tracker?: Record<string, MarcasTracker>
   emu_username: string | null
   uploadrr_path: string | null
@@ -100,8 +98,6 @@ export interface SettingsUpdatePayload {
   emu_api_key?: string
   nobs_api_key?: string
   mnv_api_key?: string
-  nobs_url?: string
-  mnv_url?: string
   marcas_por_tracker?: Record<string, MarcasTracker>
   emu_username?: string
   uploadrr_path?: string

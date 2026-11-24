@@ -19,7 +19,7 @@ from pydantic import BaseModel, Field, field_validator
 from ..dependencies import require_auth
 from ..runtime import _db_path
 from ...services.settings import escribir_ajuste, estado_secreto, leer_ajuste, set_setting
-from ...services.ajustes_registro import AJUSTES, SECRET, error_de, error_de_url_publica, error_de_url_tracker
+from ...services.ajustes_registro import AJUSTES, SECRET, error_de, error_de_url_publica
 from ...services.uploadrr_contract import DEFAULT_ALLOWED_ROOTS
 from ...services.source_assistant import EMU_PROVIDERS
 from ...services.notification_center import EVENT_TYPES, channel_events
@@ -27,7 +27,7 @@ from ...services.mkv_remux import modo_pistas, reordena
 from ...services.opciones_tracker import (
     grupos_anonimos, grupos_personal_release, guardar_grupos, guardar_marcas_propias, marcas_propias,
 )
-from ...services.trackers import EMU, MNV, NOBS, TRACKERS
+from ...services.trackers import EMU, TRACKERS
 from ...services.integration_tests import test_tmdb_connection, test_emuwarez_connection
 from ...database import get_setting_canonical
 
@@ -83,8 +83,6 @@ class SettingsResponse(BaseModel):
     nobs_api_key_masked: Optional[str] = None
     mnv_api_key_configured: bool = False
     mnv_api_key_masked: Optional[str] = None
-    nobs_url: str = NOBS.url
-    mnv_url: str = MNV.url
     # Las marcas de los grupos en cada otro tracker ({id: {personal_release, anonimos}}); None: las de eMuwarez.
     marcas_por_tracker: dict[str, Optional[MarcasTracker]] = {}
     # qBittorrent (torrent client used by Uploadrr)
@@ -165,8 +163,6 @@ class SettingsUpdateRequest(BaseModel):
     emu_api_key: Optional[str] = None
     nobs_api_key: Optional[str] = None
     mnv_api_key: Optional[str] = None
-    nobs_url: Optional[str] = None
-    mnv_url: Optional[str] = None
     # Los trackers que llegan cambian sus marcas; None: vuelven a las de eMuwarez.
     marcas_por_tracker: Optional[dict[str, Optional[MarcasTracker]]] = None
     # qBittorrent
@@ -404,11 +400,6 @@ def update_settings(
     # con una clave dentro.
     if body.qbit_public_url is not None:
         error = error_de_url_publica(body.qbit_public_url)
-        if error:
-            errors.append(error)
-
-    for t in (NOBS, MNV):
-        error = error_de_url_tracker(t.nombre, getattr(body, f"{t.id}_url"))
         if error:
             errors.append(error)
 
