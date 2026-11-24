@@ -343,15 +343,21 @@ def grupo_del_nombre(name: Optional[str]) -> Optional[str]:
 
 def _decide(mine: dict, match: dict) -> tuple[Optional[str], Optional[str]]:
     """Tu copia frente a un torrent del catálogo: "mejor", "igual" o "peor", y la dimensión que lo decide. Resolución,
-    luego source, luego códec; solo cuenta lo que se sabe de los dos lados (None si no hay nada que comparar)."""
-    pares = (("resolucion", _res_rank(mine.get("resolution")), _res_rank(match.get("resolution"))),
-             ("source", _src_rank(mine.get("source")), _match_src_rank(match)),
-             ("codec", _codec_tier(mine.get("codec")), _codec_tier(match.get("codec"))))
-    comparables = [(dim, mio, suyo) for dim, mio, suyo in pares if mio and suyo]
-    for dim, mio, suyo in comparables:
-        if mio != suyo:
-            return ("mejor" if mio > suyo else "peor"), dim
-    return ("igual" if comparables else None), None
+    luego source, luego códec; solo cuenta lo que se sabe de los dos lados (None si no hay nada que comparar). Un
+    nombre sin source o sin códec, obligatorios en la nomenclatura de los trackers privados, pierde frente a tu copia
+    si ella lo dice."""
+    pares = (("resolucion", _res_rank(mine.get("resolution")), _res_rank(match.get("resolution")), False),
+             ("source", _src_rank(mine.get("source")), _match_src_rank(match), not match.get("source")),
+             ("codec", _codec_tier(mine.get("codec")), _codec_tier(match.get("codec")), not match.get("codec")))
+    comparado = False
+    for dim, mio, suyo, falta in pares:
+        if mio and not suyo and falta:
+            return "mejor", dim
+        if mio and suyo:
+            if mio != suyo:
+                return ("mejor" if mio > suyo else "peor"), dim
+            comparado = True
+    return ("igual" if comparado else None), None
 
 
 def _comparados(mine: dict, rows: list[dict], itype: str) -> list[dict]:

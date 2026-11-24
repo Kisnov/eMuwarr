@@ -43,13 +43,14 @@ def _guardado_y_ficha(conn, item):
     return ficha
 
 
-def test_un_codec_que_el_torrent_no_dice_no_es_un_aporte_sino_un_duplicado(db_conn):
+def test_un_codec_que_el_torrent_no_dice_es_un_aporte(db_conn):
+    """El códec es obligatorio en el nombre: el que no lo dice se mejora subiéndolo con él."""
     item = _peli(db_conn, codec="HEVC")
     _torrent(db_conn, "Peli (2020) 1080p WEB-DL")
 
     ficha = _guardado_y_ficha(db_conn, item)
 
-    assert ficha["conclusion"]["nivel"] == "duplicado" and ficha["aportes"] == []
+    assert ficha["conclusion"]["nivel"] == "trump" and ficha["aportes"] == [{"dim": "codec", "detail": "H.265"}]
 
 
 def test_audio_esp_que_no_tiene_ninguno_es_un_aporte(db_conn):
