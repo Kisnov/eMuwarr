@@ -55,7 +55,11 @@ descripción y el cliente.
        salta solo para ese (en el lote, si lo tienen todos llega desmarcado y marcarlo a mano lo sube a
        todos), y un tracker sin catálogo leído no frena nada, solo se avisa. Biblioteca no: su chip y su filtro salen
        de `emu_in_catalog`, una columna de eMuwarez, y decir lo de los otros pediría una columna por tracker.
-     - Queda: que las sincronizaciones de peticiones, «Tus subidas» y el perfil reciban el tracker como parámetro;
+     - Ya están las peticiones por tracker: cada sincronización lee eMuwarez y luego cada otro tracker con clave, con
+       su URL, su cupo y su tabla de ids (de los otros, solo las categorías de vídeo a las que se sube). El fallo de uno
+       no frena a los demás ni borra sus peticiones, y solo un recorrido completo borra las que ya no están, del suyo.
+       Su preparación mira el catálogo local y las normas de idioma de ese tracker, no las columnas de eMuwarez.
+     - Queda: que las sincronizaciones de «Tus subidas» y el perfil reciban el tracker como parámetro;
        y la URL de eMuwarez en Configuración (la de N.O.B.S y Milnueve ya se cambia, y la usan la subida y el catálogo
        con `trackers.url_de`; la de eMuwarez es `EMU_BASE_URL`).
   2. **Fase B: NOBS (nobs.rawsmoke.net) y Milnueve (tracker.milnueve.cc).** Los dos son UNIT3D y ya se sube a ellos con
@@ -151,8 +155,7 @@ descripción y el cliente.
   anónimo → 401 JSON, comprobado el 18/11).
 - **Por resolver en la fase A:** de dónde salen los ids de cada tracker (su formulario de subida o el staff; los de
   NOBS y Milnueve están en `docs/trackers-ids.md`), una nomenclatura por tracker (para NOBS y Milnueve vale la de
-  eMuwarez; el fichero es el mismo para todos, ver la fase B), etiqueta/categoría de qBittorrent por tracker, peticiones por tracker sin pasar del límite de
-  cada API (el catálogo ya va por tracker), y si la app cambia de nombre (hoy «eMuwarr» es de eMuwarez).
+  eMuwarez; el fichero es el mismo para todos, ver la fase B), etiqueta/categoría de qBittorrent por tracker, y si la app cambia de nombre (hoy «eMuwarr» es de eMuwarez).
 
 ## Por probar en el NAS (`:dev`)
 

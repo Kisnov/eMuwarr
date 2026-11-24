@@ -139,8 +139,11 @@ export function getReclamadaInfo(reclamada: string | null | undefined): { label:
   return null
 }
 
-export function getReadinessLabel(status: string): string {
-  return READINESS_STATUS_LABELS[status] ?? status
+// `tracker`: el de la petición, que sustituye a eMuwarez en «Ya existe en eMuwarez» y «Ya llena en eMuwarez».
+export function getReadinessLabel(status: string, tracker = 'eMuwarez'): string {
+  // Los otros trackers admiten también latino o catalán: lo que falla es el idioma, no solo el castellano.
+  if (status === 'no_castellano' && tracker !== 'eMuwarez') return 'Idioma no admitido'
+  return (READINESS_STATUS_LABELS[status] ?? status).replace('eMuwarez', tracker)
 }
 
 export function getReadinessActionLabel(action: string): string {

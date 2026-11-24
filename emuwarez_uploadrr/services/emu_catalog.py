@@ -650,13 +650,14 @@ def filas_del_catalogo(conn: sqlite3.Connection, item: dict, tracker: Tracker = 
     return []
 
 
-def catalogo_cubre(conn: sqlite3.Connection, item_id: int, resolucion: Optional[str], tipo: Optional[str]) -> bool:
-    """Si eMuwarez ya tiene un torrent de ese contenido con la resolución y el tipo pedidos (None = da igual)."""
+def catalogo_cubre(conn: sqlite3.Connection, item_id: int, resolucion: Optional[str], tipo: Optional[str],
+                   tracker: Tracker = EMU) -> bool:
+    """Si `tracker` ya tiene un torrent de ese contenido con la resolución y el tipo pedidos (None = da igual)."""
     item = conn.execute("SELECT * FROM library_items WHERE id = ?", (item_id,)).fetchone()
     if not item:
         return False
     item = dict(item)
-    filas = filas_del_catalogo(conn, item)
+    filas = filas_del_catalogo(conn, item, tracker)
     if item["item_type"] in ("season", "series"):
         # Un capítulo suelto no cubre una temporada entera.
         filas = [r for r in filas if _parse_episode_number(r["name"] or "") is None]

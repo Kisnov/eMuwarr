@@ -244,9 +244,14 @@ def test_sincronizar_las_peticiones_de_emuwarez_no_borra_las_de_otro_tracker(mon
 
     fila = {"id": 1, "name": "Pedida", "category_id": 1, "tmdb": 550, "status": "unfilled", "bounty": "10.00",
             "created": "2025-01-01T00:00:00+00:00"}
-    monkeypatch.setattr(reqs.emu, "emu_fetch_all_pages", lambda *a, **kw: ([fila], 1))
+    def leer(*_a, **kw):
+        if kw["tracker"] != "EMU":
+            raise reqs.IntegrationError("N.O.B.S no responde")
+        return [fila], 1
+    monkeypatch.setattr(reqs.emu, "emu_fetch_all_pages", leer)
     with db() as conn:
         set_setting(conn, "emu.api_key", "clave")
+        set_setting(conn, "nobs.api_key", "clave-nobs")  # sin clave, las suyas se borran
         conn.execute("INSERT INTO request_items (tracker, emu_id, title) VALUES ('nobs', '99', 'Ajena')")
         conn.commit()
         reqs.sync_emu_requests(conn, force=True)
