@@ -28,6 +28,7 @@ from .compatibility import (
     parse_source,
     reclamada_por,
 )
+from .trackers import EMU, POR_DEFECTO, obtener
 
 
 def _now_utc() -> str:
@@ -117,13 +118,13 @@ _STATUS_RANK: dict[str, int] = {
 }
 
 # Por qué una petición que no está abierta para ti no es «lista para subir». La reclamada por ti no está aquí:
-# esa sí se puede subir. Si no se sabe quién la reclamó, se trata como de otro.
+# esa sí se puede subir. Si no se sabe quién la reclamó, se trata como de otro. `{}` es el tracker de la petición.
 _ESTADO_EMU_BLOQUEA = {
-    ("Reclamado", "otro"): ("claimed", "petición reclamada por otro usuario en eMuwarez"),
+    ("Reclamado", "otro"): ("claimed", "petición reclamada por otro usuario en {}"),
     ("Reclamado", "desconocido"): (
-        "claimed_unknown", "petición reclamada en eMuwarez; no se sabe por quién y se trata como de otro"),
-    ("Pendiente", None): ("pending_approval", "petición pendiente de aprobación en eMuwarez"),
-    ("Llena", None): ("filled", "petición ya llena en eMuwarez"),
+        "claimed_unknown", "petición reclamada en {}; no se sabe por quién y se trata como de otro"),
+    ("Pendiente", None): ("pending_approval", "petición pendiente de aprobación en {}"),
+    ("Llena", None): ("filled", "petición ya llena en {}"),
 }
 
 
@@ -162,6 +163,7 @@ def _evaluate_readiness(
     history_event = lib.get("arr_history_event_type") or ""
     has_history_error = history_status == "error" or "Fail" in history_event or bool(history_error)
     upload_status = lib.get("local_status") or ""
+    tracker = obtener(req.get("tracker") or POR_DEFECTO).nombre
 
     # Already uploaded/uploading
     if upload_status in ("Subiendo", "uploading"):
@@ -174,15 +176,15 @@ def _evaluate_readiness(
     if estado:
         quien = reclamada_por(req, mi_usuario) if estado == "Reclamado" else None
         status, motivo = _ESTADO_EMU_BLOQUEA[(estado, quien)]
-        return {"status": status, "action": "none", "blockers": [motivo], "reasons": reasons}
+        return {"status": status, "action": "none", "blockers": [motivo.format(tracker)], "reasons": reasons}
     if reclamada_por(req, mi_usuario) == "ti":
         reasons.append("petición reclamada por ti")
 
-    # Ya está en eMuwarez y tu copia no aporta nada (ni resolución, ni fuente, ni idioma): sería un duplicado.
-    # Pero una petición está abierta porque falta SU variante: si eMuwarez no la tiene, no es un duplicado.
+    # Ya está en el tracker y tu copia no aporta nada (ni resolución, ni fuente, ni idioma): sería un duplicado.
+    # Pero una petición está abierta porque falta SU variante: si el tracker no la tiene, no es un duplicado.
     if (lib.get("emu_in_catalog") == 1 and not json.loads(lib.get("emu_aportes") or "[]")
             and variante_en_emuwarez):
-        blockers.append("ya existe en eMuwarez")
+        blockers.append(f"ya existe en {tracker}")
         return {"status": "already_exists", "action": "ignore_already_exists", "blockers": blockers, "reasons": reasons}
 
     # Queue states
@@ -233,7 +235,7 @@ def _evaluate_readiness(
     # (la misma regla que la comprobación «Tiene castellano» de la subida y las cifras de la biblioteca). Solo bloquea
     # lo confirmado sin castellano en ninguno de los dos; si aún no se ha leído, lo decide la comprobación previa.
     if lib.get("has_spanish_ok") == 0:
-        blockers.append("sin castellano: ni el audio ni los subtítulos están en castellano")
+        blockers.append(lib.get("motivo_idioma") or "sin castellano: ni el audio ni los subtítulos están en castellano")
         return {"status": "no_castellano", "action": "review_arr", "blockers": blockers, "reasons": reasons}
 
     # Nomenclature
@@ -340,10 +342,12 @@ def build_request_candidates(
     if not raw_matches:
         return []
 
-    from .emu_catalog import catalogo_cubre
+    from .emu_catalog import catalogo_cubre, get_item_comparison
+    from .reglas_tracker import reglas_para_subir
     from .requests import _scoped_library_id, clasificar_peticion, mi_usuario_emu
 
     mi_usuario = mi_usuario_emu(conn) or ""
+    tracker = obtener(req.get("tracker") or POR_DEFECTO)
 
     candidates = []
     for rank, m in enumerate(raw_matches[:10], start=1):
@@ -351,6 +355,15 @@ def build_request_candidates(
         # La temporada o el capítulo pedidos se puntúan con sus propios datos, no con el resumen de la serie.
         destino = _scoped_library_id(conn, lib, req)
         pedida = dict(conn.execute(_LEER_FILA_PEDIDA, (destino,)).fetchone())
+        if tracker is not EMU:
+            # Las columnas de la biblioteca son de eMuwarez: lo que ya hay sale del catálogo local de ese tracker
+            # (igual o mejor que tu copia = está y no aportas), y el idioma, de sus normas.
+            conclusion = get_item_comparison(conn, destino, tracker=tracker).get("conclusion")
+            pedida.update(emu_in_catalog=int(bool(conclusion and conclusion["ya_lo_tiene"])), emu_aportes="[]")
+            if pedida["has_spanish_ok"] == 0:
+                fila = dict(conn.execute("SELECT * FROM library_items WHERE id = ?", (destino,)).fetchone())
+                reglas = reglas_para_subir(conn, fila, tracker.id)
+                pedida.update(has_spanish_ok=int(reglas.permitido), motivo_idioma=reglas.motivo)
         if req.get("req_scope") in ("season", "episode") and pedida["item_type"] != req["req_scope"]:
             # Lo pedido no está en la biblioteca, solo su serie o su temporada: no hay nada que preparar.
             pedida.update(local_status="Faltante", emu_in_catalog=None)
@@ -364,7 +377,7 @@ def build_request_candidates(
         if lib.get("emu_in_catalog") == 1 and not json.loads(lib.get("emu_aportes") or "[]"):
             pide_res = req.get("requested_resolution") if parse_resolution(req.get("requested_resolution")) else None
             pide_tipo = req.get("requested_source") if parse_source(req.get("requested_source")) else None
-            variante = not (pide_res or pide_tipo) or catalogo_cubre(conn, destino, pide_res, pide_tipo)
+            variante = not (pide_res or pide_tipo) or catalogo_cubre(conn, destino, pide_res, pide_tipo, tracker)
         scored = score_request_candidate(req, lib, cls, variante, mi_usuario)
         scored["candidate_rank"] = rank
         scored["library_item_id"] = lib["id"]

@@ -244,7 +244,7 @@ function OriginCell({ item, instances, size = 13, alwaysChip = true }: {
   return <ValueChip linkable={!!deepLink}>{inner}</ValueChip>
 }
 
-function ReadinessBadge({ status }: { status: string | null | undefined }) {
+function ReadinessBadge({ status, tracker }: { status: string | null | undefined; tracker: string }) {
   if (!status) return <span className="pet-muted-11">—</span>
   const color =
     status === 'ready_to_upload' ? 'var(--color-available-soft)' :
@@ -256,7 +256,7 @@ function ReadinessBadge({ status }: { status: string | null | undefined }) {
     status === 'spec_mismatch' || status === 'no_castellano' ? 'var(--color-warning)' :
     status.includes('error') || status.includes('missing') || status === 'blocked' ? 'var(--color-missing)' :
     'var(--text-secondary)'
-  return <span className="pet-estado-11" style={{ color }}>{getReadinessLabel(status)}</span>
+  return <span className="pet-estado-11" style={{ color }}>{getReadinessLabel(status, tracker)}</span>
 }
 
 function CandidatesPanel({ requestId }: { requestId: number }) {
@@ -388,8 +388,9 @@ function RequestDetailPage({ item, readiness, instances, onBack, onShowCandidate
   const malId = item.mal_id || m?.local_mal_id || null
   const hasSeason = item.req_scope === 'season' || item.req_scope === 'episode'
   const temporadaLabel = hasSeason ? String(item.req_season ?? '?') : 'Todas'
+  const tracker = item.tracker_nombre ?? 'eMuwarez'
   const consultarTip = useTooltip(item.url
-    ? 'Abrir la petición en eMuwarez (reclamarla, marcarla como llena, ver el ID del torrent…)'
+    ? `Abrir la petición en ${tracker} (reclamarla, marcarla como llena, ver el ID del torrent…)`
     : 'Todavía no tenemos la URL exacta de esta petición: abre el listado general de peticiones en eMuwarez')
   // Sin el contenido en la biblioteca el botón no hace nada, y el motivo va escrito a su lado: en un tooltip no llegaba
   // ni al dedo ni a un botón deshabilitado, que no recibe el ratón.
@@ -415,7 +416,7 @@ function RequestDetailPage({ item, readiness, instances, onBack, onShowCandidate
             rel="noreferrer"
             {...consultarTip.triggerProps}
           >
-            <ExternalLinkButtonIcon /> Consultar en eMuwarez
+            <ExternalLinkButtonIcon /> Consultar en {tracker}
             {consultarTip.tooltipNode}
           </a>
           <button
@@ -620,7 +621,7 @@ function RequestDetailPage({ item, readiness, instances, onBack, onShowCandidate
         <details className="cmp-readiness pet-preparacion">
           <summary>Preparación de subida (avanzado)</summary>
           <div className="pet-mt-8">
-            <div className="detail-row"><span>Estado</span><ReadinessBadge status={readiness.status} /></div>
+            <div className="detail-row"><span>Estado</span><ReadinessBadge status={readiness.status} tracker={tracker} /></div>
             <div className="detail-row"><span>Acción</span><span className="pet-accion">{readiness.recommended_action ? getReadinessActionLabel(readiness.recommended_action) : '—'}</span></div>
             <div className="detail-row"><span>Compat. score</span><span>{readiness.compatibility_score?.toFixed(0) ?? '—'}/100</span></div>
             <div className="detail-row"><span>Readiness score</span><span>{readiness.upload_readiness_score?.toFixed(0) ?? '—'}/100</span></div>
