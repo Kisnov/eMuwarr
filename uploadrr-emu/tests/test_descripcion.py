@@ -108,7 +108,7 @@ def test_la_descripcion_de_emu_lleva_trailer_logo_texto_capturas_y_firma(tmp_pat
         "[center][youtube]abc[/youtube][/center]"
         "[center][img=300]https://logo.png[/img][/center]"
         "Notas [code]log[/code] [spoiler]oculto[/spoiler]"
-        f"\n[center][url={CAPTURA['web_url']}][img=500]{CAPTURA['raw_url']}[/img][/url] [/center]"
+        f"\n[center][url={CAPTURA['raw_url']}][img=500]{CAPTURA['raw_url']}[/img][/url] [/center]"
         "\n[FIRMA]"
     )
 
