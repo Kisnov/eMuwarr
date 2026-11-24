@@ -22,20 +22,27 @@ from ..models import RequestItem
 
 logger = logging.getLogger("emuwarez.emu")
 
-# La tabla de ids de eMuwarez es la de Uploadrr-EMU: la de la imagen o, en el repo, la de uploadrr-emu/.
-_CANDIDATAS_IDS = [Path(c) / "data" / "trackers" / "EMU.json"
-                   for c in (DEFAULT_UPLOADRR_PATH, Path(__file__).resolve().parents[2] / "uploadrr-emu")]
-RUTA_IDS_EMU = next((r for r in _CANDIDATAS_IDS if r.is_file()), _CANDIDATAS_IDS[0])
+# La tabla de ids de cada tracker es la de Uploadrr-EMU: la de la imagen o, en el repo, la de uploadrr-emu/.
+def _ruta_ids(tracker: str) -> Path:
+    candidatas = [Path(c) / "data" / "trackers" / f"{tracker}.json"
+                  for c in (DEFAULT_UPLOADRR_PATH, Path(__file__).resolve().parents[2] / "uploadrr-emu")]
+    return next((r for r in candidatas if r.is_file()), candidatas[0])
 
 
-def _cargar_etiquetas(ruta: Path) -> Optional[dict[str, dict[int, str]]]:
-    """id -> etiqueta por sección (las entradas sin `label` no se enseñan); None y un aviso si no se puede leer."""
+RUTA_IDS_EMU = _ruta_ids("EMU")
+
+
+def _cargar_etiquetas(ruta: Path, nombre: str = "eMuwarez") -> Optional[dict[str, dict[int, str]]]:
+    """id -> etiqueta por sección (las entradas sin `label` no se enseñan) y, en `subibles`, las categorías con token;
+    None y un aviso si no se puede leer."""
     try:
         tabla = json.loads(ruta.read_text(encoding="utf-8"))
-        return {s: {e["id"]: e["label"] for e in tabla[s] if "label" in e} for s in ("categories", "types", "resolutions")}
+        etiquetas = {s: {e["id"]: e["label"] for e in tabla[s] if "label" in e}
+                     for s in ("categories", "types", "resolutions")}
+        return {**etiquetas, "subibles": {e["id"]: e.get("label") for e in tabla["categories"] if e.get("tokens")}}
     except (OSError, ValueError, KeyError, TypeError) as exc:
-        logger.warning("No se puede leer la tabla de ids de eMuwarez (%s): las peticiones llevarán el id, no el nombre",
-                       exc)
+        logger.warning("No se puede leer la tabla de ids de %s (%s): las peticiones llevarán el id, no el nombre",
+                       nombre, exc)
         return None
 
 
@@ -44,14 +51,31 @@ _ETIQUETAS = _cargar_etiquetas(RUTA_IDS_EMU)
 EMU_CATEGORIAS = (_ETIQUETAS or {}).get("categories", {})
 EMU_TIPOS = (_ETIQUETAS or {}).get("types", {})
 EMU_RESOLUCIONES = (_ETIQUETAS or {}).get("resolutions", {})
+# Las de los otros UNIT3D (N.O.B.S, Milnueve), por su nombre en Uploadrr-EMU.
+_ETIQUETAS_OTROS = {t: _cargar_etiquetas(_ruta_ids(t), t) for t in ("NOBS", "MNV")}
 
 
-def _etiqueta(tabla: dict[int, str], nombre: str, valor: Any) -> Optional[str]:
+def _etiquetas_de(tracker: str) -> Optional[dict[str, dict[int, str]]]:
+    return _ETIQUETAS if tracker == "EMU" else _ETIQUETAS_OTROS[tracker]
+
+
+def _categorias_de_peticiones(tracker: str) -> list[int]:
+    """Las categorías cuyas peticiones se leen: en eMuwarez las que tienen nombre; en otro, las de vídeo a las que se
+    sube (las que tienen token: fuera libros, juegos o música)."""
+    if tracker == "EMU":
+        return list(EMU_CATEGORIAS)
+    # Sin su tabla no se sabe cuáles son de vídeo: sin filtro llegarían también libros, juegos y música.
+    if _etiquetas_de(tracker) is None:
+        raise IntegrationError(f"No se puede leer la tabla de ids de {tracker}: no se leen sus peticiones")
+    return list(_etiquetas_de(tracker)["subibles"])
+
+
+def _etiqueta(etiquetas: Optional[dict], seccion: str, nombre: str, valor: Any) -> Optional[str]:
     """Sin tabla, «Categoría 4» en vez de nada."""
     n = _entero(valor)
     if n is None:
         return None
-    return tabla.get(n) if _ETIQUETAS is not None else f"{nombre} {n}"
+    return etiquetas[seccion].get(n) if etiquetas is not None else f"{nombre} {n}"
 
 
 # ---------------------------------------------------------------------------
@@ -92,14 +116,15 @@ def emu_get_requests(
     base_url: str | None = None,
     page: int = 1,
     per_page: int = 100,
+    tracker: str = "EMU",
 ) -> dict[str, Any]:
-    """Una página de las peticiones abiertas (sin llenar o reclamadas) de las
-    categorías de EMU_CATEGORIAS; el filtro lo aplica el servidor.
+    """Una página de las peticiones abiertas (sin llenar o reclamadas) de `tracker`, de las categorías de
+    _categorias_de_peticiones; el filtro lo aplica el servidor.
 
     Devuelve la respuesta entera: data[] y meta.last_page / meta.total.
     """
     return _pedir_pagina(api_key, base_url, "/api/requests/filter", {
-        "page": page, "perPage": per_page, "filled": 0, "category_id[]": list(EMU_CATEGORIAS)})
+        "page": page, "perPage": per_page, "filled": 0, "category_id[]": _categorias_de_peticiones(tracker)}, tracker)
 
 
 def emu_get_request_detail(
@@ -129,7 +154,7 @@ def emu_get_user(api_key: str, base_url: str | None = None, *, tracker: str = "E
         data = _pedir(api_key, base_url, "/api/user", interactiva=True, tracker=tracker)
     except IntegrationError as exc:
         if exc.status in _MENSAJE_POR_ESTADO:
-            raise IntegrationError(_MENSAJE_POR_ESTADO[exc.status], status=exc.status) from None
+            raise IntegrationError(_MENSAJE_POR_ESTADO[exc.status].format("eMuwarez"), status=exc.status) from None
         raise
     if not isinstance(data, dict) or not data.get("username"):
         raise IntegrationError("eMuwarez ha devuelto tu perfil en un formato que no se reconoce")
@@ -137,11 +162,12 @@ def emu_get_user(api_key: str, base_url: str | None = None, *, tracker: str = "E
 
 
 def emu_fetch_all_pages(
-    api_key: str, base_url: str | None = None, progress=None
+    api_key: str, base_url: str | None = None, progress=None, tracker: str = "EMU", nombre: str = "eMuwarez",
 ) -> tuple[list[dict[str, Any]], Optional[int]]:
-    """Recorre las peticiones abiertas página a página, al ritmo del limitador compartido (emu_limitador).
+    """Recorre las peticiones abiertas página a página, al ritmo del limitador compartido (emu_limitador), con el cupo
+    de `tracker` (EMU, NOBS, MNV); `nombre` es el que sale en los errores.
 
-    Devuelve (filas, total). `total` es el meta.total de eMuwarez, o None si no
+    Devuelve (filas, total). `total` es el meta.total del tracker, o None si no
     vino o cambió durante el recorrido: entonces no se puede dar por completo.
     Lanza IntegrationError si el recorrido no puede terminar.
 
@@ -152,19 +178,19 @@ def emu_fetch_all_pages(
     pagina = ultima = 1
     while pagina <= ultima:
         try:
-            data = emu_get_requests(api_key, base_url=base_url, page=pagina)
+            data = emu_get_requests(api_key, base_url=base_url, page=pagina, tracker=tracker)
         except IntegrationError as exc:
             if exc.status in _MENSAJE_POR_ESTADO:
-                raise IntegrationError(_MENSAJE_POR_ESTADO[exc.status], status=exc.status) from None
+                raise IntegrationError(_MENSAJE_POR_ESTADO[exc.status].format(nombre), status=exc.status) from None
             raise
         if not isinstance(data, dict) or not isinstance(data.get("data"), list):
-            raise IntegrationError("eMuwarez ha devuelto las peticiones en un formato que no se reconoce")
+            raise IntegrationError(f"{nombre} ha devuelto las peticiones en un formato que no se reconoce")
         filas.extend(data["data"])
         meta = data["meta"] if isinstance(data.get("meta"), dict) else {}
         ultima = _entero(meta.get("last_page")) or 1
         if ultima > EMU_PETICIONES_MAX_PAGINAS:
             raise IntegrationError(
-                f"eMuwarez tiene más de {EMU_PETICIONES_MAX_PAGINAS} páginas de peticiones abiertas; no se sincronizan")
+                f"{nombre} tiene más de {EMU_PETICIONES_MAX_PAGINAS} páginas de peticiones abiertas; no se sincronizan")
         totales.add(_entero(meta.get("total")))
         if progress:
             try:
@@ -187,9 +213,9 @@ _RECHAZO_DE_ORDEN = (400, 422, 500)
 
 # Lo que se enseña en vez del texto de request_json, que lleva la URL.
 _MENSAJE_POR_ESTADO = {
-    401: "eMuwarez ha rechazado la API key (¿ratio por debajo de 1?)",
-    403: "eMuwarez ha rechazado la API key (¿ratio por debajo de 1?)",
-    429: "eMuwarez ha limitado las peticiones; prueba en unos minutos",
+    401: "{} ha rechazado la API key (¿ratio por debajo de 1?)",
+    403: "{} ha rechazado la API key (¿ratio por debajo de 1?)",
+    429: "{} ha limitado las peticiones; prueba en unos minutos",
 }
 
 
@@ -314,8 +340,10 @@ def _id_externo(value: Any) -> Optional[str]:
 _ESPECIALES = re.compile(r"\b(?:especiales?|specials?)\b", re.I)
 
 
-def normalize_request(raw: dict[str, Any]) -> RequestItem:
-    """Una fila plana de /api/requests/filter. Sea cual sea el campo que falte, no falla."""
+def normalize_request(raw: dict[str, Any], tracker: str = "EMU", base_url: str | None = None) -> RequestItem:
+    """Una fila plana de /api/requests/filter de `tracker`, con los nombres de su tabla y el enlace a su web
+    (`base_url`). Sea cual sea el campo que falte, no falla."""
+    etiquetas = _etiquetas_de(tracker)
     emu_id = str(raw.get("id", ""))
     imdb = _entero(raw.get("imdb"))
     usuario = raw.get("user")
@@ -329,9 +357,9 @@ def normalize_request(raw: dict[str, Any]) -> RequestItem:
         id=None,
         emu_id=emu_id,
         title=titulo,
-        category=_etiqueta(EMU_CATEGORIAS, "Categoría", raw.get("category_id")),
-        requested_source=_etiqueta(EMU_TIPOS, "Tipo", raw.get("type_id")),
-        requested_resolution=_etiqueta(EMU_RESOLUCIONES, "Resolución", raw.get("resolution_id")),
+        category=_etiqueta(etiquetas, "categories", "Categoría", raw.get("category_id")),
+        requested_source=_etiqueta(etiquetas, "types", "Tipo", raw.get("type_id")),
+        requested_resolution=_etiqueta(etiquetas, "resolutions", "Resolución", raw.get("resolution_id")),
         emu_status=raw.get("status"),
         points=_entero(raw.get("bounty")),
         created_at=raw.get("created"),
@@ -339,7 +367,7 @@ def normalize_request(raw: dict[str, Any]) -> RequestItem:
         imdb_id=f"tt{imdb:07d}" if imdb else None,
         tvdb_id=_id_externo(raw.get("tvdb")),
         mal_id=_id_externo(raw.get("mal")),
-        url=f"{EMU_BASE_URL}/requests/{emu_id}",
+        url=f"{normalize_base_url(base_url or EMU_BASE_URL)}/requests/{emu_id}",
         author=autor,
         author_visible=autor is not None,
         req_scope="episode" if capitulo else "season" if temporada is not None else None,
@@ -349,5 +377,7 @@ def normalize_request(raw: dict[str, Any]) -> RequestItem:
     )
 
 
-def normalize_requests(raw_items: Iterable[dict[str, Any]]) -> list[RequestItem]:
-    return [normalize_request(item) for item in raw_items if isinstance(item, dict) and item.get("id") is not None]
+def normalize_requests(raw_items: Iterable[dict[str, Any]], tracker: str = "EMU",
+                       base_url: str | None = None) -> list[RequestItem]:
+    return [normalize_request(item, tracker, base_url) for item in raw_items
+            if isinstance(item, dict) and item.get("id") is not None]
