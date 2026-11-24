@@ -355,12 +355,13 @@ def test_los_pasos_dicen_a_que_tracker_se_sube():
     assert subida["subpasos"][-1]["nombre"] == "Subida a eMuwarez"
 
 
-def test_una_subida_a_nobs_no_se_da_por_pendiente_de_moderacion_en_emuwarez():
+def test_la_moderacion_de_una_subida_sale_de_la_lectura_de_su_tracker():
     from datetime import datetime, timedelta, timezone
 
     from emuwarez_uploadrr.services.mis_torrents import pendiente_de_moderacion
     ayer = (datetime.now(timezone.utc) - timedelta(days=1)).isoformat()
     lectura = (datetime.now(timezone.utc), frozenset())
     job = {"status": "completed", "result_torrent_id": "7", "finished_at": ayer, "anonimo": 0}
-    assert pendiente_de_moderacion({**job, "tracker": "emu"}, lectura) is True
-    assert pendiente_de_moderacion({**job, "tracker": "nobs"}, lectura) is False
+    assert pendiente_de_moderacion({**job, "tracker": "emu"}, {"emu": lectura}) is True
+    assert pendiente_de_moderacion({**job, "tracker": "nobs"}, {"emu": lectura}) is False
+    assert pendiente_de_moderacion({**job, "tracker": "nobs"}, {"nobs": lectura}) is True

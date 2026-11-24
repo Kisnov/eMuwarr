@@ -59,8 +59,11 @@ descripción y el cliente.
        su URL, su cupo y su tabla de ids (de los otros, solo las categorías de vídeo a las que se sube). El fallo de uno
        no frena a los demás ni borra sus peticiones, y solo un recorrido completo borra las que ya no están, del suyo.
        Su preparación mira el catálogo local y las normas de idioma de ese tracker, no las columnas de eMuwarez.
-     - Queda: que las sincronizaciones de «Tus subidas» y el perfil reciban el tracker como parámetro;
-       y la URL de eMuwarez en Configuración (la de N.O.B.S y Milnueve ya se cambia, y la usan la subida y el catálogo
+     - «Tus subidas» y el perfil también leen cada tracker con clave, con su clave y su cupo: Estadísticas tiene unas
+       «Tus subidas» por tracker y un selector para la evolución de la cuenta, el Panel una franja por tracker, y la
+       moderación de una subida sale de la lectura de su tracker. Los avisos de la cuenta y los objetivos siguen
+       siendo de eMuwarez.
+     - Queda: la URL de eMuwarez en Configuración (la de N.O.B.S y Milnueve ya se cambia, y la usan la subida y el catálogo
        con `trackers.url_de`; la de eMuwarez es `EMU_BASE_URL`).
   2. **Fase B: NOBS (nobs.rawsmoke.net) y Milnueve (tracker.milnueve.cc).** Los dos son UNIT3D y ya se sube a ellos con
      otras herramientas: se puede empezar (Gabriel les avisa). El primero valida la abstracción. Decidido el 22/11:

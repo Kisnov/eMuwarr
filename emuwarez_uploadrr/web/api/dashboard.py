@@ -90,18 +90,18 @@ def dashboard_recommendations(
 
 @router.get("/emu-perfil", response_model=EmuPerfilResponse)
 def dashboard_emu_perfil(current_user: dict = Depends(require_auth)) -> EmuPerfilResponse:
-    """Tu cuenta de eMuwarez; se vuelve a leer del tracker como mucho una vez por hora."""
-    from emuwarez_uploadrr.services.emu_perfil import perfil_emu
+    """Tu cuenta de eMuwarez y la de cada otro tracker con clave; se vuelven a leer como mucho una vez por hora."""
+    from emuwarez_uploadrr.services.emu_perfil import perfiles
     with _get_conn() as conn:
-        return EmuPerfilResponse(**perfil_emu(conn))
+        return EmuPerfilResponse(**perfiles(conn))
 
 
 @router.post("/emu-perfil/actualizar", response_model=EmuPerfilResponse)
 def dashboard_emu_perfil_actualizar(current_user: dict = Depends(require_auth)) -> EmuPerfilResponse:
-    """«Actualizar»: la vuelve a leer si la última vez fue hace más de un minuto."""
-    from emuwarez_uploadrr.services.emu_perfil import perfil_emu
+    """«Actualizar»: las vuelve a leer si la última vez fue hace más de un minuto."""
+    from emuwarez_uploadrr.services.emu_perfil import perfiles
     with _get_conn() as conn:
-        return EmuPerfilResponse(**perfil_emu(conn, actualizar=True))
+        return EmuPerfilResponse(**perfiles(conn, actualizar=True))
 
 
 @router.get("/library-activity", response_model=LibraryListResponse)

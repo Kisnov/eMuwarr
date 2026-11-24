@@ -14,6 +14,7 @@ from emuwarez_uploadrr.integrations.base import IntegrationError
 from emuwarez_uploadrr.services import mis_torrents, scheduler
 from emuwarez_uploadrr.services.mis_torrents import resumen, sincronizar
 from emuwarez_uploadrr.services.settings import set_setting
+from emuwarez_uploadrr.services.trackers import TRACKERS
 
 AHORA = datetime(2026, 11, 18, 12, 0)
 
@@ -41,7 +42,7 @@ def tracker(monkeypatch):
     """Lo que devuelve eMuwarez en la próxima lectura, y con qué se pidió."""
     estado = {"torrents": [], "pedido": None}
 
-    def leer(api_key, **kwargs):
+    def leer(api_key, base_url=None, **kwargs):
         estado["pedido"] = kwargs
         if isinstance(estado["torrents"], Exception):
             raise estado["torrents"]
@@ -216,8 +217,8 @@ def test_si_falla_al_escribir_se_deshace_entera(conn, tracker, monkeypatch):
         raise sqlite3.OperationalError("disco lleno")
 
     monkeypatch.setattr(mis_torrents, "set_json_state", falla)
-    with pytest.raises(sqlite3.OperationalError):
-        sincronizar(conn, AHORA)
+    estado, texto = sincronizar(conn, AHORA)
+    assert estado == "failed" and "disco lleno" in texto  # el fallo de este tracker no corta a los demás
     conn.commit()   # lo que haría después el planificador: no debe confirmar nada a medias
     assert [t["torrent_id"] for t in resumen(conn)["torrents"]] == [1, 2]
 
@@ -281,27 +282,27 @@ def _subida(torrent_id=18532, *, terminada="2026-11-19T10:22:17+00:00", estado="
     ({**_subida(), "finished_at": None}, False),
 ], ids=["pendiente", "aprobada", "despues-de-leer", "anonima", "fallida", "sin-id", "sin-fecha"])
 def test_pendiente_de_moderacion(subida, pendiente):
-    assert mis_torrents.pendiente_de_moderacion(subida, (LEIDA, frozenset({18434}))) is pendiente
+    assert mis_torrents.pendiente_de_moderacion(subida, {"emu": (LEIDA, frozenset({18434}))}) is pendiente
 
 
 def test_sin_lectura_nada_esta_pendiente():
-    assert mis_torrents.pendiente_de_moderacion(_subida(), None) is False
+    assert mis_torrents.pendiente_de_moderacion(_subida(), {}) is False
 
 
 def test_un_titulo_con_menos_a_no_la_hace_anonima():
     comando = 'upload.py "/x/Peli -a 2020.mkv" -tk EMU -mt "Peli -a 2020"'
-    assert mis_torrents.pendiente_de_moderacion(_subida(comando=comando), (LEIDA, frozenset())) is True
+    assert mis_torrents.pendiente_de_moderacion(_subida(comando=comando), {"emu": (LEIDA, frozenset())}) is True
 
 
 def test_la_lectura_para_moderacion_es_la_de_tu_usuario(conn, tracker):
-    assert mis_torrents.lectura_para_moderacion(conn) is None
+    assert mis_torrents.lectura_para_moderacion(conn) == {}
     tracker["torrents"] = [_torrent(18434, 3)]
     sincronizar(conn, AHORA)
-    leido_at, ids = mis_torrents.lectura_para_moderacion(conn)
+    leido_at, ids = mis_torrents.lectura_para_moderacion(conn)["emu"]
     assert ids == {18434} and leido_at.tzinfo is not None
     set_setting(conn, "emu.username", "Otro")
     conn.commit()
-    assert mis_torrents.lectura_para_moderacion(conn) is None
+    assert mis_torrents.lectura_para_moderacion(conn) == {}
 
 
 def test_la_lista_de_subidas_marca_la_pendiente(client, auth_headers, conn, tracker):
@@ -318,3 +319,68 @@ def test_la_lista_de_subidas_marca_la_pendiente(client, auth_headers, conn, trac
     lista = {j["id"]: j["pendiente_moderacion"] for j in client.get("/api/uploads", headers=auth_headers).json()}
     assert lista == {filas[0]: False, filas[1]: True}
     assert client.get(f"/api/uploads/{filas[1]}", headers=auth_headers).json()["pendiente_moderacion"] is True
+
+
+# --- Varios trackers: cada uno con su clave, su URL y su cupo ----------------------------------------------------------
+
+@pytest.fixture
+def varios(conn, monkeypatch):
+    """N.O.B.S y Milnueve con clave y usuario; lo que devuelve cada uno, y con qué se pidió."""
+    for t in ("nobs", "mnv"):
+        set_setting(conn, f"{t}.api_key", f"clave-{t}")
+        set_setting(conn, f"{t}.username", "Kisnov")
+    conn.commit()
+    estado = {"EMU": [_torrent(1, 10)], "NOBS": [_torrent(1, 2), _torrent(2, 0, seeders=0)], "MNV": [_torrent(9, 1)],
+              "pedidos": []}
+
+    def leer(api_key, base_url=None, **kwargs):
+        estado["pedidos"].append((api_key, base_url, kwargs["tracker"], kwargs["uploader"]))
+        if isinstance(estado[kwargs["tracker"]], Exception):
+            raise estado[kwargs["tracker"]]
+        return estado[kwargs["tracker"]]
+
+    monkeypatch.setattr(mis_torrents, "emu_fetch_all_torrents", leer)
+    return estado
+
+
+def test_lee_cada_tracker_con_clave_con_lo_suyo(conn, varios):
+    assert sincronizar(conn, AHORA) == ("completed", "eMuwarez: 1 subidas, 0 sin seeders · N.O.B.S: 2 subidas, "
+                                                     "1 sin seeders · Milnueve: 1 subidas, 0 sin seeders")
+    assert varios["pedidos"] == [("clave", "https://emu-warez.com", "EMU", "Kisnov"),
+                                 ("clave-nobs", "https://nobs.rawsmoke.net", "NOBS", "Kisnov"),
+                                 ("clave-mnv", "https://tracker.milnueve.cc", "MNV", "Kisnov")]
+    nobs = resumen(conn, TRACKERS["nobs"])
+    assert nobs["url"] == "https://nobs.rawsmoke.net" and nobs["totales"]["subidas"] == 2
+    assert [f["torrent_id"] for f in resumen(conn)["torrents"]] == [1] and resumen(conn)["totales"]["completados"] == 10
+
+
+def test_el_fallo_de_un_tracker_no_para_a_los_demas_ni_borra_lo_suyo(conn, varios):
+    sincronizar(conn, AHORA)
+    varios["NOBS"] = IntegrationError("N.O.B.S no responde")
+    varios["MNV"] = [_torrent(9, 5)]
+    estado, texto = sincronizar(conn, AHORA + timedelta(hours=6))
+    assert estado == "failed" and "N.O.B.S: N.O.B.S no responde" in texto and "Milnueve: 1 subidas" in texto
+    assert resumen(conn, TRACKERS["nobs"])["totales"]["subidas"] == 2
+    assert resumen(conn, TRACKERS["mnv"])["torrents"][0]["completados"] == 5
+
+
+def test_un_tracker_sin_usuario_se_salta(conn, varios):
+    set_setting(conn, "mnv.username", "")
+    conn.commit()
+    estado, texto = sincronizar(conn, AHORA)
+    assert estado == "completed" and "Milnueve: Aún no se sabe tu usuario de Milnueve" in texto
+    assert [p[2] for p in varios["pedidos"]] == ["EMU", "NOBS"]
+
+
+def test_la_lectura_para_moderacion_es_por_tracker(conn, varios):
+    sincronizar(conn, AHORA)
+    lecturas = mis_torrents.lectura_para_moderacion(conn)
+    assert {t: ids for t, (_, ids) in lecturas.items()} == {"emu": {1}, "nobs": {1, 2}, "mnv": {9}}
+
+
+def test_el_endpoint_da_las_de_cada_tracker(client, auth_headers, conn, varios):
+    sincronizar(conn)
+    cuerpo = client.get("/api/estadisticas/mis-subidas?tracker=nobs", headers=auth_headers).json()
+    assert cuerpo["url"] == "https://nobs.rawsmoke.net" and cuerpo["totales"]["subidas"] == 2
+    assert client.get("/api/estadisticas/mis-subidas", headers=auth_headers).json()["url"] == "https://emu-warez.com"
+    assert client.get("/api/estadisticas/mis-subidas?tracker=otro", headers=auth_headers).status_code == 422

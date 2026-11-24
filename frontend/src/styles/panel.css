@@ -29,6 +29,9 @@
 }
 .panel-cabecera .page-title { grid-area: titulo; flex-shrink: 0; white-space: nowrap; margin: 0; }
 .panel-cabecera .cuenta-emu { grid-area: cuenta; margin-top: 12px; }
+/* Con otros trackers con clave, una franja por tracker, una debajo de otra. */
+.panel-cabecera .cuenta-emu-lista { grid-area: cuenta; margin-top: 12px; display: grid; gap: 8px; min-width: 0; }
+.panel-cabecera .cuenta-emu-lista .cuenta-emu { grid-area: auto; margin-top: 0; }
 /* «Sincronizar todo» y, a su izquierda, cuándo fue y cuándo toca (dos líneas cortas, alineadas a la derecha). */
 .panel-sincronizar {
   grid-area: sincronizar;
