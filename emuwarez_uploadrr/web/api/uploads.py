@@ -479,13 +479,16 @@ def candidatas_subir_tambien(current_user: dict = Depends(require_auth)):
     with _get_conn() as conn:
         destinos = subir_tambien.destinos(conn)
         filas = subir_tambien.candidatas(conn)
+        # Solo de los que se ofrecen en alguna fila.
+        avisos = subir_tambien.sin_catalogo(conn, [t for t in destinos if any(t in f["trackers"] for f in filas)])
     return SubirTambienCandidatas(
-        trackers=[_tracker_para_subir(t) for t in destinos],
+        trackers=[_tracker_para_subir(t) for t in destinos], avisos=avisos,
         subidas=[SubirTambienCandidata(
             job_id=f["job"]["id"], title=f["job"].get("title"),
             nombre=os.path.basename(f["job"]["prepared_path"]), result_url=f["job"].get("result_url"),
             origen=_tracker_para_subir(f["origen"]),
             finished_at=f["job"].get("finished_at"), trackers=[_tracker_para_subir(t) for t in f["trackers"]],
+            ya_lo_tienen=f["ya_lo_tienen"],
         ) for f in filas],
     )
 
@@ -574,10 +577,11 @@ def get_upload(job_id: int, current_user: dict = Depends(require_auth)):
         display_title = content_display_title(conn, row) if row else None
         lote_total = contar_por_lote(conn, [job["lote_id"]]).get(job["lote_id"]) if job.get("lote_id") else None
         pendiente = pendiente_de_moderacion(job, lectura_para_moderacion(conn))
-        ofrecidos = subir_tambien.ofrecidos(conn, job)
+        ofrecidos, avisos = subir_tambien.ofrecidos(conn, job)
     detalle = _con_ficha(job, row, display_title=display_title, queue_position=queue_position, queue_total=queue_total,
                          lote_total=lote_total, pendiente_moderacion=pendiente)
     detalle.subir_tambien_a = [TrackerParaSubir(id=t.id, nombre=t.nombre) for t in ofrecidos]
+    detalle.subir_tambien_avisos = avisos
     return detalle
 
 

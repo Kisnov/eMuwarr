@@ -1,6 +1,6 @@
 // Lo que el Resumen pide fuera del asistente: si el catálogo local ya tiene lo que se sube y qué petición cubre.
 import { useEffect, useState } from 'react'
-import { getEmuComparison, getLibraryItem } from '../../api/library'
+import { getEmuComparisons, getLibraryItem } from '../../api/library'
 import { getRequestDetail } from '../../api/requests'
 import type { TrackerParaSubir } from '../../api/uploads'
 import { resumirComparaciones, textoPeticion, type PeticionResumen, type YaHay } from '../../utils/resumenSubida'
@@ -26,7 +26,7 @@ export function useResumen({ ids, trackers, tuya, requestId, cubiertos, alcance 
     if (ids.length === 0) return
     let vivo = true
     setYaHay(new Map())
-    Promise.all(trackers.map(t => Promise.all(ids.map(id => getEmuComparison(id, tuya, t.id).catch(() => null)))))
+    Promise.all(trackers.map(t => getEmuComparisons(ids, tuya, t.id).catch(() => null)))
       .then(porTracker => {
         if (vivo) setYaHay(new Map(trackers.map((t, i) => [t.id, resumirComparaciones(porTracker[i])])))
       })

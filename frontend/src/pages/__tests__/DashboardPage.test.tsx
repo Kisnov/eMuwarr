@@ -17,7 +17,7 @@ vi.mock('../../api/nomenclature', () => ({ getNomenclatureFields: vi.fn(), previ
 vi.mock('../../api/settings', () => ({ fetchSettings: vi.fn() }))
 vi.mock('../../api/maintenance', () => ({ getVersionInfo: vi.fn() }))
 vi.mock('../../api/library', () => ({
-  getLibraryItem: vi.fn(), getLibrary: vi.fn(), getEmuComparison: vi.fn(), suggestProvider: vi.fn(),
+  getLibraryItem: vi.fn(), getLibrary: vi.fn(), getEmuComparisons: vi.fn(), suggestProvider: vi.fn(),
 }))
 vi.mock('../../api/eventos', () => ({
   suscribirse: vi.fn(() => () => {}), canalVivo: vi.fn(() => true), observarCanal: vi.fn(() => () => {}),
@@ -41,7 +41,7 @@ vi.mock('../../components/RequestFormModal', () => ({
 
 import type { DashboardRecommendationItem } from '../../api/dashboard'
 import { getDashboardRecommendations, getDashboardSummary } from '../../api/dashboard'
-import { getEmuComparison, getLibrary, getLibraryItem } from '../../api/library'
+import { getEmuComparisons, getLibrary, getLibraryItem } from '../../api/library'
 import { getNomenclatureFields } from '../../api/nomenclature'
 import { getVersionInfo } from '../../api/maintenance'
 import { fetchSettings } from '../../api/settings'
@@ -796,7 +796,7 @@ describe('«Subir seleccionadas» en «Listo para subir»', () => {
     vi.mocked(getNomenclatureFields).mockImplementation(async id => ({
       fields: { source: 'BluRay', provider: null }, torrent_name: `Nombre ${id}`, internal_mkv_title: '', blocked: false,
     }) as never)
-    vi.mocked(getEmuComparison).mockResolvedValue({ available: true, message: null, matches: [] })
+    vi.mocked(getEmuComparisons).mockResolvedValue({ comparaciones: [{ available: true, message: null, matches: [] }], conclusion: null })
     vi.mocked(queueLote).mockImplementation(async elementos => ({
       lote_id: '0123456789ab', encolados: elementos.length, saltados: 0,
       resultados: elementos.map((e, i) => ({ item_id: e.item_id, tracker: 'emu', status: 'queued' as const, job_id: 100 + i, errors: [] })),

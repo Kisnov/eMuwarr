@@ -7,7 +7,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 vi.mock('../client', () => ({ api: { get: vi.fn(), post: vi.fn() } }))
 
 import { api } from '../client'
-import { getEmuComparison } from '../library'
+import { getEmuComparison, getEmuComparisons } from '../library'
 
 const get = vi.mocked(api.get)
 
@@ -30,5 +30,12 @@ describe('getEmuComparison', () => {
   it('lo que falta no se manda', async () => {
     await getEmuComparison(7, { resolution: null, source: 'BluRay' })
     expect(get).toHaveBeenCalledWith('/library/7/emu-comparison?source=BluRay')
+  })
+})
+
+describe('getEmuComparisons', () => {
+  it('manda cada id, lo tuyo y el tracker', async () => {
+    await getEmuComparisons([7, 8], { resolution: '1080p' }, 'nobs')
+    expect(get).toHaveBeenCalledWith('/library/emu-comparisons?ids=7&ids=8&resolution=1080p&tracker=nobs')
   })
 })

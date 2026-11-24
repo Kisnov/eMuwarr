@@ -358,9 +358,14 @@ def _compute_aportes(mine: dict, matches: list[dict]) -> list[dict]:
 
     # Language (conservative): you have Spanish and EVERY match is explicitly
     # non-Spanish (no match is Spanish and none is unknown).
-    if mine.get("has_es") and matches and all(m["has_spanish"] == 0 for m in matches):
+    if matches and all(_aporta_audio(mine, m) for m in matches):
         aportes.append({"dim": "idioma", "detail": "ESP"})
     return aportes
+
+
+def _aporta_audio(mine: dict, row: dict) -> bool:
+    """Tienes audio en castellano y ese torrent dice expresamente que no (desconocido no cuenta)."""
+    return bool(mine.get("has_es")) and row["has_spanish"] == 0
 
 
 # Lo que acaba un nombre de eMuwarez tras el último guion es el grupo de release («Peli (2020) 1080p WEB-DL x265-Ryodan»);
@@ -388,6 +393,12 @@ def _veredicto(mine: dict, match: dict) -> Optional[str]:
         if mio != suyo:
             return "mejor" if mio > suyo else "peor"
     return "igual" if comparables else None
+
+
+def _temporada_en_castellano(eps: list[dict]) -> bool:
+    """Si el pack va en castellano: todos los capítulos con fichero, no uno solo."""
+    con_fichero = [e for e in eps if e["size_bytes"]]
+    return bool(con_fichero) and all(_episode_lang_has_es(e["audio_languages"]) for e in con_fichero)
 
 
 def _episode_lang_has_es(langs: Optional[str]) -> bool:
@@ -492,7 +503,7 @@ def _compute_and_store_item_status(conn: sqlite3.Connection) -> int:
             "resolution": _mode([e["resolution"] for e in eps]),
             "source": _mode([e["source"] for e in eps]),
             "codec": _best_codec([e["video_codec"] for e in eps]),
-            "has_es": any(_episode_lang_has_es(e["audio_languages"]) for e in eps),
+            "has_es": _temporada_en_castellano(eps),
             "size": sum(e["size_bytes"] or 0 for e in eps) or None,
         }
         aportes = _compute_aportes(mine, matches) if matches else []
@@ -653,12 +664,59 @@ def catalogo_cubre(conn: sqlite3.Connection, item_id: int, resolucion: Optional[
 
 # --- Per-item comparison detail (for the detail card) ------------------------
 
+def catalogo_leido(conn: sqlite3.Connection, tracker: Tracker) -> Optional[str]:
+    """Cuándo acabó la última lectura entera del catálogo local de `tracker`; None si no se ha leído nunca."""
+    return get_state(conn, _clave(SYNC_COMPLETED_STATE_KEY, tracker))
+
+
+def conclusion_duplicados(matches: list[dict], tracker: Tracker = EMU) -> Optional[dict]:
+    """La conclusión de «En <tracker> ya hay», de lo que aporta tu copia frente a cada torrent (`veredicto` de
+    calidad y `aporta_audio`): `nivel` (duplicado, trump, mixto, peor o sin-comparar), `clase` (el veredicto con que se
+    pinta), `texto` y `ya_lo_tiene` (duplicado o peor: el lote lo salta para ese tracker y «Subir también» no lo
+    ofrece). None sin torrents. Audio en castellano que no tiene ninguno es una mejora aunque la calidad no lo sea. No
+    es un permiso: cada tracker tiene sus reglas de trumps y solo ellas deciden si una subida se acepta."""
+    if not matches:
+        return None
+    veredictos = [m["veredicto"] for m in matches]
+    mejor, igual, peor = (veredictos.count(v) for v in ("mejor", "igual", "peor"))
+    # Si algún torrent no se pudo comparar, lo que sigue solo vale para los que sí.
+    parcial = None in veredictos
+    nota = " Alguna comparación falta: la conclusión es parcial." if parcial else ""
+
+    def dicho(nivel: str, clase: Optional[str], texto: str) -> dict:
+        return {"nivel": nivel, "clase": clase, "texto": texto, "ya_lo_tiene": nivel in ("duplicado", "peor")}
+
+    if all(m["aporta_audio"] for m in matches):
+        aunque = f", aunque tu copia empeora {peor} de lo que hay" if peor else ""
+        return dicho("trump", "mejor", f"Aportas audio ESP que no tiene ninguno{aunque}: puede ser un trump. "
+                                       "Revisa las reglas de trumps antes de subir.")
+    if mejor + igual + peor == 0:
+        return dicho("sin-comparar", None,
+                     "No se pudo comparar la calidad con lo que ya hay: revisa a mano si sería un duplicado.")
+    if igual:
+        hay = "hay 1 torrent" if igual == 1 else f"hay {igual} torrents"
+        return dicho("duplicado", "igual", f"Ya {hay} con tu misma calidad: la subida sería un duplicado.")
+    if mejor and not peor:
+        cuales = "el torrent que hay" if mejor == 1 else f"los {mejor} torrents que hay"
+        return dicho("trump", "mejor",
+                     f"Tu copia mejora {cuales}: puede ser un trump. Revisa las reglas de trumps antes de subir.{nota}")
+    if mejor:
+        return dicho("mixto", "igual", f"Tu copia mejora {mejor} y empeora {peor} de lo que hay: no es un trump claro.{nota}")
+    lo = "comparado" if parcial else "que ya hay"
+    return dicho("peor", "peor", f"Tu copia es peor que todo lo {lo}: {tracker.nombre} probablemente la rechace.{nota}")
+
+
+def motivo_ya_lo_tiene(tracker: Tracker) -> str:
+    return f"Ya hay uno igual o mejor en {tracker.nombre} (catálogo local)."
+
+
 def get_item_comparison(conn: sqlite3.Connection, item_id: int, *,
-                        resolution: Optional[str] = None, source: Optional[str] = None, tracker: Tracker = EMU) -> dict:
+                        resolution: Optional[str] = None, source: Optional[str] = None, codec: Optional[str] = None,
+                        audio: Optional[str] = None, tracker: Tracker = EMU) -> dict:
     """Your copy vs every `tracker` torrent that matches this movie/season, for
     the detail-card comparison table. Movies match by tmdb_id, seasons by
     (series tvdb_id, season_number). `resolution` y `source`, si vienen, sustituyen a los de tu copia: son los
-    que el asistente de subida va a poner en el nombre. `synced_at`: cuándo acabó la última lectura de su catálogo."""
+    que el asistente de subida va a poner en el nombre; `codec` y `audio` (el resumen de audio del nombre), igual. `synced_at`: cuándo acabó la última lectura de su catálogo."""
     item = conn.execute("SELECT * FROM library_items WHERE id = ?", (item_id,)).fetchone()
     if not item:
         return {"available": False, "message": "Elemento no encontrado", "matches": []}
@@ -672,7 +730,7 @@ def get_item_comparison(conn: sqlite3.Connection, item_id: int, *,
     # attempt-started throttle timestamp), so a never-finished sync (stuck,
     # crashed, or still running) reads as "not yet synced" instead of
     # confidently claiming "contenido único" for every single item.
-    synced_at = get_state(conn, _clave(SYNC_COMPLETED_STATE_KEY, tracker))
+    synced_at = catalogo_leido(conn, tracker)
     if not synced_at:
         mensaje = ("Sincroniza con eMuwarez para ver la comparación." if tracker is EMU
                    else f"El catálogo de {tracker.nombre} se lee al sincronizar el de eMuwarez.")
@@ -694,7 +752,7 @@ def get_item_comparison(conn: sqlite3.Connection, item_id: int, *,
             "resolution": _mode([e["resolution"] for e in eps]),
             "source": _mode([e["source"] for e in eps]),
             "codec": _best_codec([e["video_codec"] for e in eps]),
-            "has_es": any(_episode_lang_has_es(e["audio_languages"]) for e in eps),
+            "has_es": _temporada_en_castellano(eps),
             "size": sum(e["size_bytes"] or 0 for e in eps) or None,
             "release_groups": sorted({e["release_group"] for e in eps if e["release_group"]}, key=str.casefold),
         }
@@ -714,9 +772,14 @@ def get_item_comparison(conn: sqlite3.Connection, item_id: int, *,
         mine["resolution"] = resolution
     if source:
         mine["source"] = source
+    if codec:
+        mine["codec"] = _norm_codec(codec) or codec
+    if audio:
+        mine["has_es"] = _episode_lang_has_es(audio)
     matches = [{"name": r["name"], "resolution": r["resolution"], "source": r["source"],
                 "codec": r["codec"], "has_spanish": r["has_spanish"], "size": r["size"],
                 "release_group": grupo_del_nombre(r["name"]),
+                "aporta_audio": _aporta_audio(mine, r),
                 # Un capítulo suelto no es el pack de la temporada: no se le compara.
                 "veredicto": None if itype == "season" and _parse_episode_number(r["name"]) is not None
                 else _veredicto(mine, r)}
@@ -732,6 +795,7 @@ def get_item_comparison(conn: sqlite3.Connection, item_id: int, *,
         "matches": matches,
         "in_catalog": 1 if matches else 0,
         "aportes": _compute_aportes(mine, rows) if matches else [],
+        "conclusion": conclusion_duplicados(matches, tracker),
     }
     if itype == "season":
         # Distinguish "there is a season pack" from "only loose episodes". When
@@ -746,6 +810,16 @@ def get_item_comparison(conn: sqlite3.Connection, item_id: int, *,
         result["only_episodes"] = bool(cat_ep_nums) and not has_pack
         result["have_all_episodes"] = bool(cat_ep_nums) and cat_ep_nums.issubset(my_ep_nums)
     return result
+
+
+def get_items_comparison(conn: sqlite3.Connection, item_ids: list[int], *, resolution: Optional[str] = None,
+                         source: Optional[str] = None, tracker: Tracker = EMU) -> dict:
+    """La comparación de cada elemento (una tanda del asistente, una fila del lote) y la conclusión de todos sus
+    torrents juntos."""
+    comparaciones = [get_item_comparison(conn, i, resolution=resolution, source=source, tracker=tracker)
+                     for i in item_ids]
+    return {"comparaciones": comparaciones,
+            "conclusion": conclusion_duplicados([m for c in comparaciones for m in c["matches"]], tracker)}
 
 
 def _safe_json(raw):

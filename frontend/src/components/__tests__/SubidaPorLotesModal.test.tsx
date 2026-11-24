@@ -13,7 +13,7 @@ vi.mock('../../api/uploads', () => ({
   fetchReglasTracker: vi.fn(),
 }))
 vi.mock('../../api/nomenclature', () => ({ getNomenclatureFields: vi.fn(), previewNomenclatureFields: vi.fn() }))
-vi.mock('../../api/library', () => ({ getEmuComparison: vi.fn(), getLibrary: vi.fn(), suggestProvider: vi.fn() }))
+vi.mock('../../api/library', () => ({ getEmuComparisons: vi.fn(), getLibrary: vi.fn(), suggestProvider: vi.fn() }))
 vi.mock('../../api/settings', () => ({ fetchSettings: vi.fn() }))
 vi.mock('../../api/eventos', () => ({ seguirProgreso: vi.fn(() => () => {}) }))
 
@@ -22,7 +22,7 @@ import * as nom from '../../api/nomenclature'
 import * as biblioteca from '../../api/library'
 import { fetchSettings } from '../../api/settings'
 import { ApiClientError } from '../../api/client'
-import type { EmuComparison } from '../../api/library'
+import type { EmuComparaciones } from '../../api/library'
 import type { LibraryItemResponse } from '../../types/api'
 import type { EntradaLote } from '../../utils/lote'
 import { SubidaPorLotesModal } from '../lote/SubidaPorLotesModal'
@@ -45,7 +45,15 @@ const CAMPOS = {
 }
 const ENTORNO = { ready: true, checks: [{ id: 'emuwarez', label: 'eMuwarez responde', status: 'ok' as const, message: '' }] }
 const LISTO = { ready: true, checks: [{ id: 'accesible', label: 'Fichero accesible', status: 'ok' as const, message: '' }] }
-const SIN_NADA: EmuComparison = { available: true, message: null, matches: [] }
+const SIN_NADA: EmuComparaciones = { comparaciones: [{ available: true, message: null, matches: [] }], conclusion: null }
+// Un torrent de la misma calidad y lo que concluye el servidor de él.
+const IGUAL: EmuComparaciones = {
+  comparaciones: [{
+    available: true, message: null,
+    matches: [{ name: 'Dune 1080p', resolution: '1080p', source: 'BluRay', codec: null, has_spanish: 1, size: null, veredicto: 'igual' }],
+  }],
+  conclusion: { nivel: 'duplicado', clase: 'igual', texto: 'Ya hay 1 torrent con tu misma calidad: la subida sería un duplicado.', ya_lo_tiene: true },
+}
 
 const nombreDe = (id: number) => `Peli ${id} (2021) 1080p BluRay x264-GRP`
 
@@ -80,7 +88,7 @@ beforeEach(() => {
   m(nom.getNomenclatureFields).mockImplementation(async id => ({
     fields: { ...CAMPOS }, torrent_name: nombreDe(id), internal_mkv_title: '', blocked: false,
   }))
-  m(biblioteca.getEmuComparison).mockResolvedValue(SIN_NADA)
+  m(biblioteca.getEmuComparisons).mockResolvedValue(SIN_NADA)
   m(fetchSettings).mockResolvedValue({ upload_max_concurrent: 1 } as never)
   m(subidas.queueLote).mockImplementation(async elementos => ({
     lote_id: '0123456789ab', encolados: elementos.length, saltados: 0,
@@ -182,16 +190,14 @@ describe('qué llega desmarcado o se salta', () => {
   })
 
   it('un duplicado en eMuwarez llega desmarcado con su veredicto', async () => {
-    m(biblioteca.getEmuComparison).mockImplementation(async id => (id === 12
-      ? { available: true, message: null, matches: [{ name: 'Alien 1080p', resolution: '1080p', source: 'BluRay', codec: null, has_spanish: 1, size: null, veredicto: 'igual' }] }
-      : SIN_NADA))
+    m(biblioteca.getEmuComparisons).mockImplementation(async ([id]) => (id === 12 ? IGUAL : SIN_NADA))
     await abrir([DUNE, ALIEN])
     await alResumen(2)
     expect(fila(12).textContent).toContain('la subida sería un duplicado')
     expect(incluir('Alien').checked).toBe(false)
     expect(incluir('Dune').checked).toBe(true)
     // Lo que compara es lo que irá en el nombre.
-    expect(biblioteca.getEmuComparison).toHaveBeenCalledWith(12, { resolution: '1080p', source: 'BluRay' })
+    expect(biblioteca.getEmuComparisons).toHaveBeenCalledWith([12], { resolution: '1080p', source: 'BluRay' }, 'emu')
   })
 
   it('dos películas que saldrían con el mismo nombre se saltan las dos', async () => {
@@ -229,6 +235,16 @@ describe('cuándo se habilita «Subir»', () => {
     expect(fila(12).textContent).toContain('Comprobando…')
     expect(botonSubir()!.disabled).toBe(true)
     await act(async () => { pendiente.resolver(LISTO) })
+    await esperar(() => botonSubir() && !botonSubir()!.disabled)
+  })
+
+  it('no mientras falta saber si un tracker ya lo tiene', async () => {
+    const pendiente = diferida<typeof SIN_NADA>()
+    m(biblioteca.getEmuComparisons).mockImplementation(async ([id]) => (id === 12 ? pendiente.promesa : SIN_NADA))
+    await abrir([DUNE, ALIEN])
+    await alResumen(2)
+    expect(botonSubir()!.disabled).toBe(true)
+    await act(async () => { pendiente.resolver(SIN_NADA) })
     await esperar(() => botonSubir() && !botonSubir()!.disabled)
   })
 
@@ -475,7 +491,7 @@ describe('series y temporadas', () => {
     // Ni su nomenclatura ni su proveedor se miran aparte: los dice el plan del pack.
     expect(nom.getNomenclatureFields).not.toHaveBeenCalled()
     expect(biblioteca.suggestProvider).not.toHaveBeenCalled()
-    expect(m(biblioteca.getEmuComparison).mock.calls).toEqual([[101, undefined]])
+    expect(m(biblioteca.getEmuComparisons).mock.calls).toEqual([[[101], undefined, 'emu']])
   })
 
   it('una temporada enseña los avisos de su plan, y con audio sin idioma llega desmarcada', async () => {
@@ -678,6 +694,54 @@ describe('a varios trackers', () => {
     await esperar(() => texto().includes('3 de 4 encoladas'))
     expect(m(subidas.queueLote).mock.calls[0][1]).toEqual(['emu', 'nobs'])
     expect(texto()).toContain(`✗ Alien (N.O.B.S): ${NOBS_NO.motivo}`)
+  })
+
+  it('lo que un tracker ya tiene se salta solo para ese, y sin su catálogo se dice', async () => {
+    m(biblioteca.getEmuComparisons).mockImplementation(async ([id], _tuya, tracker) => (
+      tracker !== 'nobs' ? SIN_NADA
+        : id === 11 ? IGUAL : {
+          comparaciones: [{ available: false, message: 'El catálogo de N.O.B.S se lee al sincronizar el de eMuwarez.', matches: [] }],
+          conclusion: null,
+        }))
+    await abrir([DUNE, HEAT])
+    await alResumen(2)
+    await pulsar(casillaTracker('N.O.B.S'))
+    await esperar(() => fila(11).textContent?.includes('No va a N.O.B.S'))
+    expect(texto()).toContain('En eMuwarez y N.O.B.S')
+    expect(fila(11).textContent).toContain('⚠ No va a N.O.B.S: ya hay uno igual o mejor')
+    expect(fila(11).textContent).toContain('eMuwarez: No hay nada igual en eMuwarez.')
+    expect(fila(11).textContent).toContain('N.O.B.S: Ya hay 1 torrent con tu misma calidad')
+    expect(incluir('Dune').checked).toBe(true)
+    expect(fila(13).textContent).toContain('Sin catálogo local de N.O.B.S: se lee al sincronizar el de eMuwarez.')
+    expect(fila(13).textContent).not.toContain('No va a')
+
+    await pulsar(boton('Subir (2) a eMuwarez y N.O.B.S'))
+    await esperar(() => m(subidas.queueLote).mock.calls.length)
+    expect(m(subidas.queueLote).mock.calls[0][0].map(e => e.omitir)).toEqual([['nobs'], undefined])
+  })
+
+  it('lo que tienen todos llega desmarcado y, marcado a mano, va a todos', async () => {
+    m(biblioteca.getEmuComparisons).mockResolvedValue(IGUAL)
+    await abrir([DUNE])
+    await alResumen(1)
+    await pulsar(casillaTracker('N.O.B.S'))
+    await esperar(() => fila(11).textContent?.includes('N.O.B.S: Ya hay'))
+    expect(incluir('Dune').checked).toBe(false)
+    expect(fila(11).textContent).not.toContain('No va a')
+
+    await pulsar(incluir('Dune'))
+    await pulsar(boton('Subir (1) a eMuwarez y N.O.B.S'))
+    await esperar(() => m(subidas.queueLote).mock.calls.length)
+    expect(m(subidas.queueLote).mock.calls[0][0][0].omitir).toBeUndefined()
+  })
+
+  it('si uno lo tiene y el otro no lo admite, llega desmarcado', async () => {
+    m(biblioteca.getEmuComparisons).mockImplementation(async (_ids, _tuya, tracker) => (tracker === 'emu' ? IGUAL : SIN_NADA))
+    await abrir([ALIEN])
+    await alResumen(1)
+    await pulsar(casillaTracker('N.O.B.S'))
+    await esperar(() => fila(12).textContent?.includes('No va a N.O.B.S'))
+    expect(incluir('Alien').checked).toBe(false)
   })
 
   it('sin eMuwarez, las comprobaciones se rehacen con las normas del primero que queda', async () => {

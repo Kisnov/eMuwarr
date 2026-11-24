@@ -263,13 +263,78 @@ def test_ya_subida_a_ese_tracker_no_se_vuelve_a_ofrecer(db_conn, monkeypatch, tm
     fallida = _trabajo(db_conn, iid, tracker="nobs", status="failed", stage="failed")
 
     from emuwarez_uploadrr.services.upload_execution import get_upload_job
-    assert [t.id for t in st.ofrecidos(db_conn, get_upload_job(emu, conn=db_conn))] == ["mnv"]
+    assert [t.id for t in st.ofrecidos(db_conn, get_upload_job(emu, conn=db_conn))[0]] == ["mnv"]
     r = st.subir_tambien(db_conn, [emu], ["nobs"])
     assert r["encolados"] == 0 and f"(#{fallida})" in r["resultados"][0]["motivo"]
     # Con una en marcha tampoco: la misma regla.
     db_conn.execute("UPDATE upload_jobs SET status = 'running' WHERE id = ?", (fallida,))
     db_conn.commit()
     assert st.subir_tambien(db_conn, [emu], ["nobs"])["encolados"] == 0
+
+
+def _en_el_catalogo(conn, iid, tracker_id, resolution):
+    """La película `iid` (1080p WEB-DL) y un torrent suyo en el catálogo local leído de `tracker_id`."""
+    from emuwarez_uploadrr.database import set_state
+    from emuwarez_uploadrr.services import emu_catalog
+    from emuwarez_uploadrr.services.trackers import obtener
+    conn.execute("UPDATE library_items SET tmdb_id = '7', resolution = '1080p', source = 'WEB-DL' WHERE id = ?", (iid,))
+    conn.execute("INSERT INTO emu_catalog (tracker, category, tmdb_id, resolution, source, name) "
+                 "VALUES (?, 'Películas', '7', ?, 'WEB-DL', ?)", (tracker_id, resolution, f"X {resolution} WEB-DL"))
+    set_state(conn, emu_catalog._clave(emu_catalog.SYNC_COMPLETED_STATE_KEY, obtener(tracker_id)), "2026-11-24T00:00:00")
+    conn.commit()
+
+
+def test_lo_que_el_catalogo_de_otro_tracker_ya_tiene_no_se_ofrece(db_conn, monkeypatch, tmp_path, sin_hilos):
+    _clave(db_conn, "nobs")
+    _clave(db_conn, "mnv")
+    iid, emu, ruta = _emu_completada(db_conn, tmp_path)
+    _qbit(monkeypatch, db_conn, [_entero(ruta)])
+    _en_el_catalogo(db_conn, iid, "nobs", "1080p")  # subida a mano: la misma calidad
+
+    from emuwarez_uploadrr.services.upload_execution import get_upload_job
+    libres, avisos = st.ofrecidos(db_conn, get_upload_job(emu, conn=db_conn))
+    ya = "Ya hay uno igual o mejor en N.O.B.S (catálogo local)."
+    assert [t.id for t in libres] == ["mnv"]
+    assert avisos == [ya, "Sin catálogo local de Milnueve: no se ha mirado si ya lo tiene."]
+    assert [([t.id for t in f["trackers"]], f["ya_lo_tienen"]) for f in st.candidatas(db_conn)] == [(["mnv"], [ya])]
+    r = st.subir_tambien(db_conn, [emu], ["nobs", "mnv"])
+    assert [(x["tracker"], x["status"], x["motivo"]) for x in r["resultados"]] == [
+        ("nobs", "blocked", ya), ("mnv", "queued", None)]
+
+
+def test_compara_la_calidad_con_que_se_subio(db_conn, tmp_path):
+    _clave(db_conn, "nobs")
+    iid, emu, _ruta = _emu_completada(
+        db_conn, tmp_path, nomenclature_snapshot_json=json.dumps({"resolution": "1080p", "source": "WEB-DL"}))
+    _en_el_catalogo(db_conn, iid, "nobs", "1080p")
+    db_conn.execute("UPDATE library_items SET resolution = '2160p' WHERE id = ?", (iid,))  # Radarr la mejoró después
+    db_conn.commit()
+
+    from emuwarez_uploadrr.services.upload_execution import get_upload_job
+    assert st.ofrecidos(db_conn, get_upload_job(emu, conn=db_conn))[0] == []
+
+
+def test_compara_el_audio_con_que_se_subio(db_conn, tmp_path):
+    _clave(db_conn, "nobs")
+    iid, emu, _ruta = _emu_completada(db_conn, tmp_path, nomenclature_snapshot_json=json.dumps(
+        {"resolution": "1080p", "source": "WEB-DL", "audio_summary": "DUAL AC3 5.1"}))
+    _en_el_catalogo(db_conn, iid, "nobs", "1080p")
+    db_conn.execute("UPDATE emu_catalog SET has_spanish = 0")  # el suyo, sin castellano
+    db_conn.execute("UPDATE library_items SET audio_languages = 'English' WHERE id = ?", (iid,))  # Radarr la cambió
+    db_conn.commit()
+
+    from emuwarez_uploadrr.services.upload_execution import get_upload_job
+    assert [t.id for t in st.ofrecidos(db_conn, get_upload_job(emu, conn=db_conn))[0]] == ["nobs"]
+
+
+def test_un_trump_si_se_ofrece(db_conn, tmp_path):
+    _clave(db_conn, "nobs")
+    iid, emu, _ruta = _emu_completada(db_conn, tmp_path)
+    _en_el_catalogo(db_conn, iid, "nobs", "720p")
+
+    from emuwarez_uploadrr.services.upload_execution import get_upload_job
+    libres, avisos = st.ofrecidos(db_conn, get_upload_job(emu, conn=db_conn))
+    assert ([t.id for t in libres], avisos) == (["nobs"], [])
 
 
 def test_sin_el_torrent_entero_en_qbittorrent_no_se_encola(db_conn, monkeypatch, tmp_path, sin_hilos):
@@ -298,7 +363,7 @@ def test_de_nobs_a_emuwarez_y_milnueve(db_conn, monkeypatch, tmp_path, sin_hilos
     _qbit(monkeypatch, db_conn, [_entero(ruta)])
 
     from emuwarez_uploadrr.services.upload_execution import get_upload_job
-    assert [t.id for t in st.ofrecidos(db_conn, get_upload_job(nobs, conn=db_conn))] == ["emu", "mnv"]
+    assert [t.id for t in st.ofrecidos(db_conn, get_upload_job(nobs, conn=db_conn))[0]] == ["emu", "mnv"]
     # Con todos marcados, su propio tracker no cuenta: ni se encola ni sale como saltada.
     r = st.subir_tambien(db_conn, [nobs], ["emu", "nobs", "mnv"])
 
@@ -322,7 +387,7 @@ def test_sin_la_clave_de_emuwarez_no_se_ofrece_ni_se_encola(db_conn, tmp_path, s
     _clave(db_conn, "mnv")
     _iid, nobs, _ruta = _emu_completada(db_conn, tmp_path, tracker="nobs")
     from emuwarez_uploadrr.services.upload_execution import get_upload_job
-    assert [t.id for t in st.ofrecidos(db_conn, get_upload_job(nobs, conn=db_conn))] == ["mnv"]
+    assert [t.id for t in st.ofrecidos(db_conn, get_upload_job(nobs, conn=db_conn))[0]] == ["mnv"]
     with pytest.raises(st.SubirTambienRechazado) as e:
         st.subir_tambien(db_conn, [nobs], ["emu"])
     assert "Falta la clave de API de eMuwarez" in e.value.args[0][0]
@@ -447,3 +512,7 @@ def test_la_api_ofrece_los_trackers_en_el_detalle_y_la_lista(client, auth_header
     datos = client.get("/api/uploads/subir-tambien", headers=auth_headers).json()
     assert datos["trackers"] == [{"id": "mnv", "nombre": "Milnueve"}]  # eMuwarez, sin su clave, no
     assert [(s["job_id"], s["nombre"], s["origen"]["id"]) for s in datos["subidas"]] == [(emu, "Peli.mkv", "emu")]
+    # Sin su catálogo leído se ofrece igual, con el aviso.
+    sin_catalogo = ["Sin catálogo local de Milnueve: no se ha mirado si ya lo tiene."]
+    assert datos["avisos"] == sin_catalogo
+    assert client.get(f"/api/uploads/{emu}", headers=auth_headers).json()["subir_tambien_avisos"] == sin_catalogo

@@ -45,11 +45,18 @@ descripción y el cliente.
        Las columnas de la biblioteca (`emu_in_catalog`/`emu_aportes`) siguen siendo de eMuwarez. Falta probar en el
        NAS la primera lectura de N.O.B.S y Milnueve: los nombres de sus categorías de series
        (`emu_catalog._CATEGORIAS_SERIE`) salen de sus formularios, no de lo que devuelve su API.
+     - «Subir por lotes» y «Subir también a…» miran el catálogo de cada tracker. La regla de duplicados y trumps es
+       una sola y está en el servidor (`emu_catalog.conclusion_duplicados`, en cada comparación): el asistente, el
+       lote, «Subir también» y la ficha de Biblioteca enseñan lo que dice, el navegador no la aplica. Cuenta la
+       calidad y el audio: castellano que no tiene ninguno de los torrents es una mejora, aunque la calidad sea igual
+       o peor. Las columnas de Biblioteca (`emu_aportes`: su filtro «Aportas», el Panel y las peticiones) siguen
+       saliendo de `_compute_aportes`, con la misma regla del audio. Lo que un tracker ya tiene igual o
+       mejor se salta solo para ese (en el lote, si lo tienen todos llega desmarcado y marcarlo a mano lo sube a
+       todos), y un tracker sin catálogo leído no frena nada, solo se avisa. Biblioteca no: su chip y su filtro salen
+       de `emu_in_catalog`, una columna de eMuwarez, y decir lo de los otros pediría una columna por tracker.
      - Queda: que las sincronizaciones de peticiones, «Tus subidas» y el perfil reciban el tracker como parámetro;
-       usar el catálogo de cada tracker en las comprobaciones de duplicados de «Subir por lotes» (hoy, el de eMuwarez
-       solo si se sube a eMuwarez) y de «Subir también a…» (hoy solo mira las subidas hechas con eMuwarr), y en
-       Biblioteca si hace falta; y la URL de eMuwarez en Configuración (la de N.O.B.S y Milnueve ya se cambia, y la
-       usan la subida y el catálogo con `trackers.url_de`; la de eMuwarez es `EMU_BASE_URL`).
+       y la URL de eMuwarez en Configuración (la de N.O.B.S y Milnueve ya se cambia, y la usan la subida y el catálogo
+       con `trackers.url_de`; la de eMuwarez es `EMU_BASE_URL`).
   2. **Fase B: NOBS (nobs.rawsmoke.net) y Milnueve (tracker.milnueve.cc).** Los dos son UNIT3D y ya se sube a ellos con
      otras herramientas: se puede empezar (Gabriel les avisa). El primero valida la abstracción. Decidido el 22/11:
      - **Nomenclatura: la de eMuwarez, sin más.** Los dos son nuevos y cada uno sube como quiere; sus guías (formato
