@@ -30,7 +30,7 @@ from ..integrations.base import IntegrationError, texto_de_error
 from .tasks import start_task, finish_task
 from .upload_states import ACTIVE_JOB_STATUSES
 from .eventos import EVENTO_SYNC_EMPEZADA, EVENTO_SYNC_TERMINADA, publicar
-from .trackers import EMU, TRACKERS, Tracker, tiene_clave
+from .trackers import EMU, TRACKERS, Tracker, tiene_clave, url_de
 from .settings import ajuste_de_tracker
 
 logger = logging.getLogger("emuwarez.emu")
@@ -716,11 +716,12 @@ def motivo_ya_lo_tiene(tracker: Tracker) -> str:
 
 
 def get_item_comparison(conn: sqlite3.Connection, item_id: int, *,
-                        resolution: Optional[str] = None, source: Optional[str] = None, tracker: Tracker = EMU) -> dict:
+                        resolution: Optional[str] = None, source: Optional[str] = None, codec: Optional[str] = None,
+                        audio: Optional[str] = None, tracker: Tracker = EMU) -> dict:
     """Your copy vs every `tracker` torrent that matches this movie/season, for
     the detail-card comparison table. Movies match by tmdb_id, seasons by
     (series tvdb_id, season_number). `resolution` y `source`, si vienen, sustituyen a los de tu copia: son los
-    que el asistente de subida va a poner en el nombre. `synced_at`: cuándo acabó la última lectura de su catálogo."""
+    que el asistente de subida va a poner en el nombre; `codec` y `audio` (el resumen de audio del nombre), igual. `synced_at`: cuándo acabó la última lectura de su catálogo."""
     item = conn.execute("SELECT * FROM library_items WHERE id = ?", (item_id,)).fetchone()
     if not item:
         return {"available": False, "message": "Elemento no encontrado", "matches": []}
@@ -776,6 +777,10 @@ def get_item_comparison(conn: sqlite3.Connection, item_id: int, *,
         mine["resolution"] = resolution
     if source:
         mine["source"] = source
+    if codec:
+        mine["codec"] = _norm_codec(codec) or codec
+    if audio:
+        mine["has_es"] = _episode_lang_has_es(audio)
     matches = _comparados(mine, rows, itype)
     result = {
         "available": True,
@@ -977,6 +982,7 @@ def sync_emu_catalog(conn: sqlite3.Connection, *, force: bool = False, mode: str
         api_key = ajuste_de_tracker(conn, "api_key", tracker.id)
         if not api_key:
             raise IntegrationError(f"No hay API key de {nombre} configurada")
+        url = url_de(conn, tracker)
 
         # Fail fast (and clearly) if eMuwarez itself is unreachable, instead of only
         # discovering it mid-download — this is a single cheap request (perPage=1)
@@ -985,7 +991,7 @@ def sync_emu_catalog(conn: sqlite3.Connection, *, force: bool = False, mode: str
         _set_progress(phase=f"Comprobando conexión con {nombre}…", page=0, total_pages=None, eta_seconds=None)
         try:
             # primer paso del recorrido: espera su turno
-            emu.emu_test_connection(api_key, tracker.url, interactiva=False, tracker=tracker.uploadrr)
+            emu.emu_test_connection(api_key, url, interactiva=False, tracker=tracker.uploadrr)
         except IntegrationError as exc:
             raise IntegrationError(f"No se pudo conectar con {nombre}: {texto_de_error(exc)}") from exc
 
@@ -1028,7 +1034,7 @@ def sync_emu_catalog(conn: sqlite3.Connection, *, force: bool = False, mode: str
                           total_pages=tp, torrents=items_so_far, eta_seconds=eta)
 
         torrents = emu.emu_fetch_all_torrents(
-            api_key, tracker.url, progress=_on_page,
+            api_key, url, progress=_on_page,
             stop_after_id=known_max_id if incremental else None, tracker=tracker.uploadrr,
         )
         rows = _index_catalog(torrents)

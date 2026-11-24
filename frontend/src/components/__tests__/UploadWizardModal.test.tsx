@@ -243,6 +243,35 @@ describe('película', () => {
       { anonimo: true, personalRelease: null }, undefined, '')
   })
 
+  it('las casillas siguen las marcas de cada tracker elegido; si no coinciden, cada subida lleva las del suyo', async () => {
+    m(subidas.fetchTrackersParaSubir).mockResolvedValue([{ id: 'emu', nombre: 'eMuwarez' }, { id: 'nobs', nombre: 'N.O.B.S' }])
+    m(fetchSettings).mockResolvedValue({
+      upload_tags: ['GRP'], upload_tags_personal_release: [], upload_tags_anonimos: [],
+      marcas_por_tracker: { nobs: { personal_release: [], anonimos: ['GRP'] } },
+    } as unknown as Awaited<ReturnType<typeof fetchSettings>>)
+    await abrir(PELICULA)
+    await esperar(() => texto().includes('Dune WEB-DL AMZN [GRP]'))
+    await pulsar(boton('Continuar'))
+    await esperar(() => texto().includes('✓ Todo listo para subir'))
+    const casilla = (nombre: string) => [...document.querySelectorAll<HTMLLabelElement>('.asist-marcas label')]
+      .find(l => l.textContent?.includes(nombre))!.querySelector('input')!
+    expect(casilla('Anónimo').checked).toBe(false)
+    expect(texto()).toContain('aquí cambia solo esta subida')
+
+    await pulsar(casilla('eMuwarez'))
+    await pulsar(casilla('N.O.B.S'))
+    expect(casilla('Anónimo').checked).toBe(true)  // solo N.O.B.S: sus marcas
+
+    await pulsar(casilla('eMuwarez'))
+    expect(casilla('Anónimo').indeterminate).toBe(true)
+    expect(casilla('Personal release').indeterminate).toBe(false)
+    expect(texto()).toContain('cada subida lleva lo que tenga marcado su grupo en Configuración para su tracker')
+    await pulsar(boton('Subir a eMuwarez y N.O.B.S'))
+    await esperar(() => onClose.mock.calls.length > 0)
+    expect(m(subidas.queueUpload).mock.calls.map(c => c[7])).toEqual(
+      [{ anonimo: null, personalRelease: null }, { anonimo: null, personalRelease: null }])
+  })
+
   it('con otro tracker con clave, se elige en el Resumen y sale una subida por tracker, eMuwarez primero', async () => {
     m(subidas.fetchTrackersParaSubir).mockResolvedValue([{ id: 'emu', nombre: 'eMuwarez' }, { id: 'nobs', nombre: 'N.O.B.S' }])
     await abrir(PELICULA)

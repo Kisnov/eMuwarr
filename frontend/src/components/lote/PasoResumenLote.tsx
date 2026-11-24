@@ -74,10 +74,11 @@ export function PasoResumenLote({
   const envReady = entorno?.ready === true
   const resumen = !comprobando && (completas || !!errorComprobando)
   const fallidas = filas.filter(f => f.contenido?.ready === false || f.analisis?.bloqueo).length
-  const puedeSubir = !comprobando && !errorComprobando && completas && envReady && !analizando && incluidas > 0 && !enviando
-    && !!destinoSubida
   const salta = filas.filter(f => f.salto).length
   const porComprobar = filas.filter(f => !f.salto && f.pendiente).length
+  // Con alguna aún por comprobar no se sube: quedaría fuera sin saber si era un duplicado.
+  const puedeSubir = !comprobando && !errorComprobando && completas && envReady && !analizando && incluidas > 0 && !enviando
+    && !!destinoSubida && porComprobar === 0
   return (
     <div className="modal-body">
       {/* Lo que va a pasar con el lote, de un vistazo y sin tener que leer la tabla fila a fila. */}

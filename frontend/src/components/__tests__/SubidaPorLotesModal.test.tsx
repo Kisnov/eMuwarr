@@ -238,6 +238,16 @@ describe('cuándo se habilita «Subir»', () => {
     await esperar(() => botonSubir() && !botonSubir()!.disabled)
   })
 
+  it('no mientras falta saber si un tracker ya lo tiene', async () => {
+    const pendiente = diferida<typeof SIN_NADA>()
+    m(biblioteca.getEmuComparisons).mockImplementation(async ([id]) => (id === 12 ? pendiente.promesa : SIN_NADA))
+    await abrir([DUNE, ALIEN])
+    await alResumen(2)
+    expect(botonSubir()!.disabled).toBe(true)
+    await act(async () => { pendiente.resolver(SIN_NADA) })
+    await esperar(() => botonSubir() && !botonSubir()!.disabled)
+  })
+
   it('no con el entorno fallido, y «Volver a comprobar» lo repite', async () => {
     const MAL = { ready: false, checks: [{ id: 'qbittorrent', label: 'qBittorrent', status: 'fail' as const, message: 'No responde' }] }
     m(subidas.runUploadChecks).mockImplementation(async (_id, scope) => (scope === 'environment' ? MAL : LISTO))
