@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { getDashboardSummary } from '../api/dashboard'
 import { getEstadisticasCuenta } from '../api/estadisticas'
+import { fetchTrackersParaSubir, type TrackerParaSubir } from '../api/uploads'
 import { EmptyState } from '../components/EmptyState'
 import { ErrorState } from '../components/ErrorState'
 import { GraficoLinea } from '../components/GraficoLinea'
@@ -44,7 +45,7 @@ function ratioProyectado(ultimo: PuntoCuenta | undefined, r: RitmosCuenta): numb
 }
 
 // Tu cuenta ahora y lo que crece: grupo, ritmos de la última semana y adónde va el ratio.
-function TarjetasDeRitmo({ puntos, ritmos }: { puntos: PuntoCuenta[]; ritmos: RitmosCuenta }) {
+function TarjetasDeRitmo({ puntos, ritmos, nombre }: { puntos: PuntoCuenta[]; ritmos: RitmosCuenta; nombre: string }) {
   const ultimo = puntos[puntos.length - 1]
   const proyectado = ratioProyectado(ultimo, ritmos)
   const semana = `De las lecturas de los últimos ${ritmos.dias} días: la mediana de lo que cambia entre una y la siguiente.`
@@ -53,11 +54,11 @@ function TarjetasDeRitmo({ puntos, ritmos }: { puntos: PuntoCuenta[]; ritmos: Ri
       <h2 className="est-grupo-titulo" id="est-grupo-ritmo">Tu cuenta, a este ritmo</h2>
       <div className="stat-cards-row" role="group" aria-labelledby="est-grupo-ritmo">
         <StatCard icon={ICON_GRUPO} label="Grupo" value={ultimo?.grupo ?? SIN_DATO}
-          info={`Tu grupo en eMuwarez en la última lectura${ultimo?.grupo ? `: ${ultimo.grupo}` : ''}. Si cambia, se ve en la tabla de abajo.`} />
+          info={`Tu grupo en ${nombre} en la última lectura${ultimo?.grupo ? `: ${ultimo.grupo}` : ''}. Si cambia, se ve en la tabla de abajo.`} />
         <StatCard icon={ICON_UPLOADS} label="Subido al día" value={celda(ritmos.subido_dia, bytes)} info={semana} />
         <StatCard icon={ICON_DESCARGA} label="Bajado al día" value={celda(ritmos.bajado_dia, bytes)} info={semana} />
         <StatCard icon={ICON_BONUS} label="Bonus por hora" value={celda(ritmos.bonus_hora, n => formatNumero(n, 1))}
-          info={`Estimado con lo que sube tu bonus entre lectura y lectura; los tramos en los que gastas no cuentan. eMuwarez no da la cifra exacta por la API. ${semana}`} />
+          info={`Estimado con lo que sube tu bonus entre lectura y lectura; los tramos en los que gastas no cuentan. ${nombre} no da la cifra exacta por la API. ${semana}`} />
         <StatCard icon={ICON_RATIO} label={`Ratio en ${DIAS_PROYECCION} días`} value={celda(proyectado, ratio)}
           info={`El ratio que tendrías dentro de ${DIAS_PROYECCION} días si subes y bajas al ritmo de la última semana.`} />
       </div>
@@ -65,7 +66,11 @@ function TarjetasDeRitmo({ puntos, ritmos }: { puntos: PuntoCuenta[]; ritmos: Ri
   )
 }
 
-type Resultado = { dias: number; puntos: PuntoCuenta[] | null; ritmos: RitmosCuenta | null; error: string | null }
+type Resultado = {
+  dias: number; tracker: string; puntos: PuntoCuenta[] | null; ritmos: RitmosCuenta | null; error: string | null
+}
+
+const EMU: TrackerParaSubir = { id: 'emu', nombre: 'eMuwarez' }
 
 // Arriba, las cifras de tu biblioteca y de tus peticiones (las tarjetas que tenía el Panel); debajo, la evolución de
 // tu cuenta de eMuwarez: una instantánea al día, que el servidor guarda al leer tu perfil (cada hora, con la tarea
@@ -79,6 +84,9 @@ export function EstadisticasPage() {
   const [intentoResumen, setIntentoResumen] = useState(0)
   const [resumenFallo, setResumenFallo] = useState(false)
   const [resultado, setResultado] = useState<Resultado | null>(null)
+  // eMuwarez y los demás trackers con clave: con más de uno, se elige de cuál es la evolución.
+  const [trackers, setTrackers] = useState<TrackerParaSubir[]>([EMU])
+  const [tracker, setTracker] = useState(EMU)
 
   // Si falla, se quedan las cifras de la vez anterior (o ninguna) y una nota lo dice: la evolución de la cuenta es lo que
   // da la página, así que no la tapa.
@@ -95,19 +103,34 @@ export function EstadisticasPage() {
   useEffect(() => {
     if (!seVe) return
     let vigente = true
-    getEstadisticasCuenta(dias).then(
-      r => { if (vigente) setResultado({ dias, puntos: r.puntos, ritmos: r.ritmos, error: null }) },
-      () => { if (vigente) setResultado({ dias, puntos: null, ritmos: null, error: 'No se pudo cargar la evolución de tu cuenta.' }) },
+    fetchTrackersParaSubir().then(t => {
+      if (!vigente) return
+      setTrackers(t)
+      // El elegido ya no tiene clave: vuelve a eMuwarez (sin selector no se podría cambiar).
+      setTracker(actual => (t.some(x => x.id === actual.id) ? actual : EMU))
+    }, () => { /* sin lista: solo eMuwarez */ })
+    return () => { vigente = false }
+  }, [seVe])
+
+  useEffect(() => {
+    if (!seVe) return
+    let vigente = true
+    const t = tracker.id
+    getEstadisticasCuenta(dias, t).then(
+      r => { if (vigente) setResultado({ dias, tracker: t, puntos: r.puntos, ritmos: r.ritmos, error: null }) },
+      () => { if (vigente) setResultado({ dias, tracker: t, puntos: null, ritmos: null, error: 'No se pudo cargar la evolución de tu cuenta.' }) },
     )
     return () => { vigente = false }
-  }, [seVe, dias, intento])
+  }, [seVe, dias, intento, tracker.id])
 
   // Al cambiar de rango se queda lo que había (atenuado) hasta que llegan los datos nuevos: si no, los gráficos
   // desaparecen, la página se acorta y el contenido salta. Tras un error o la primera carga no hay nada que conservar.
-  const enCurso = resultado !== null && resultado.dias !== dias
+  const enCurso = resultado !== null && (resultado.dias !== dias || resultado.tracker !== tracker.id)
   const sinMostrar = resultado === null || (enCurso && resultado.error !== null)
   const puntos = resultado?.puntos ?? []
   const diasMostrados = resultado?.dias ?? dias
+  // Lo que se ve es del tracker de las cifras que hay, no del recién elegido mientras llegan las suyas.
+  const mostrado = trackers.find(t => t.id === resultado?.tracker) ?? tracker
   // Sin hover (una pantalla táctil) el gráfico se lee con el dedo, no con el ratón.
   const [tactil] = useState(() => window.matchMedia?.('(hover: none)').matches ?? false)
 
@@ -126,6 +149,16 @@ export function EstadisticasPage() {
             </button>
           ))}
         </div>
+        {trackers.length > 1 && (
+          <div className="est-rangos" role="group" aria-label="Tracker de la evolución">
+            {trackers.map(t => (
+              <button key={t.id} type="button" className={`btn btn-sm ${t.id === tracker.id ? 'btn-primary' : 'btn-secondary'}`}
+                aria-pressed={t.id === tracker.id} onClick={() => setTracker(t)}>
+                {t.nombre}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Las tarjetas están desde el principio (con «—» hasta que llegan las cifras): si entraran después, empujarían
@@ -148,19 +181,20 @@ export function EstadisticasPage() {
           ) : (
             <EmptyState
               title="Todavía no hay datos"
-              body="Se empieza a guardar hoy: la primera instantánea sale en cuanto se lea tu perfil de eMuwarez, como mucho en una hora (hace falta su API key en Configuración)."
+              body={`Se empieza a guardar hoy: la primera instantánea sale en cuanto se lea tu perfil de ${tracker.nombre}, como mucho en una hora (hace falta su API key en Configuración).`}
             />
           )}
-          <ObjetivosCuenta visible={seVe} ultimo={undefined} ritmos={null} />
+          {tracker.id === 'emu' && <ObjetivosCuenta visible={seVe} ultimo={undefined} ritmos={null} />}
         </>
       ) : (
         <div className={enCurso ? 'est-cargando' : undefined} aria-busy={enCurso}>
-          {resultado.ritmos && <TarjetasDeRitmo puntos={puntos} ritmos={resultado.ritmos} />}
-          <ObjetivosCuenta visible={seVe} ultimo={puntos[puntos.length - 1]} ritmos={resultado.ritmos} />
+          {resultado.ritmos && <TarjetasDeRitmo puntos={puntos} ritmos={resultado.ritmos} nombre={mostrado.nombre} />}
+          {/* Los objetivos son los de tu cuenta de eMuwarez. */}
+          {mostrado.id === 'emu' && <ObjetivosCuenta visible={seVe} ultimo={puntos[puntos.length - 1]} ritmos={resultado.ritmos} />}
           {/* Los H&R casi nunca cambian y lo normal es 0: un aviso cuando hay alguno, no un gráfico. */}
           {(puntos[puntos.length - 1]?.hit_and_runs ?? 0) > 0 && (
             <p className="est-nota est-aviso" role="status">
-              <IconoAviso /> Tienes {formatNumero(puntos[puntos.length - 1].hit_and_runs!)} H&amp;R en eMuwarez: siembra esos
+              <IconoAviso /> Tienes {formatNumero(puntos[puntos.length - 1].hit_and_runs!)} H&amp;R en {mostrado.nombre}: siembra esos
               torrents hasta cumplir el tiempo mínimo antes de que se acumulen.
             </p>
           )}
@@ -228,7 +262,7 @@ export function EstadisticasPage() {
         </div>
       )}
 
-      <MisSubidasEmu visible={seVe} />
+      {trackers.map(t => <MisSubidasEmu key={t.id} visible={seVe} tracker={t} />)}
     </div>
   )
 }

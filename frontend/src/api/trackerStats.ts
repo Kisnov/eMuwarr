@@ -1,12 +1,12 @@
 import { api } from './client'
 
-// Mirror de services/emu_torrent_stats.py: lo que eMuwarez dice del torrent de una subida completada.
+// Mirror de services/emu_torrent_stats.py: lo que el tracker dice del torrent de una subida completada.
 export interface TrackerStats {
   aplica: boolean
   configurado: boolean
   disponible: boolean
   mensaje: string | null
-  // eMuwarez aún no enseña el torrent (pendiente de moderación o retirado): `mensaje` lo explica.
+  // El tracker aún no enseña el torrent (pendiente de moderación o retirado): `mensaje` lo explica.
   pendiente_moderacion?: boolean
   actualizado: string | null
   seeders?: number | null

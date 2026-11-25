@@ -1,9 +1,9 @@
 import { EMU_URL } from '../constants/emu'
 
-// Las páginas de tu cuenta en eMuwarez (rutas de UNIT3D). Mensajes y
+// Las páginas de tu cuenta en eMuwarez, u otro UNIT3D en `base` (rutas de UNIT3D). Mensajes y
 // notificaciones no están en la API: de ellos solo se puede dar el enlace.
-export function enlacesCuentaEmu(usuario: string) {
-  const perfil = `${EMU_URL}/users/${encodeURIComponent(usuario)}`
+export function enlacesCuentaEmu(usuario: string, base = EMU_URL) {
+  const perfil = `${base}/users/${encodeURIComponent(usuario)}`
   return {
     perfil,
     mensajes: `${perfil}/conversations`,

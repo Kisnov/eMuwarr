@@ -299,13 +299,16 @@ def _run_instance_watch(conn: sqlite3.Connection) -> tuple[str, str]:
 
 def _run_emu_cuenta(conn: sqlite3.Connection) -> tuple[str, str]:
     # Sin fila en task_runs, como vigilar-instancias: cada hora llenaría «Últimas tareas ejecutadas».
-    from .emu_perfil import perfil_emu
-    perfil = perfil_emu(conn)
-    if not perfil["configured"]:
+    # eMuwarez y luego cada otro tracker con clave: el fallo de uno no para a los demás.
+    from .emu_perfil import perfiles
+    perfil = perfiles(conn)
+    todos = [p for p in (perfil, *perfil["otros"]) if p["configured"]]
+    if not todos:
         return "skipped", "Sin API key de eMuwarez en Configuración"
-    if perfil["error"]:
-        return "failed", perfil["error"]
-    return "completed", f"Ratio {perfil['ratio']} · bonus {perfil['seedbonus']}"
+    textos = [p["error"] or f"Ratio {p['ratio']} · bonus {p['seedbonus']}" for p in todos]
+    if len(todos) > 1:
+        textos = [f"{p['nombre']}: {texto}" for p, texto in zip(todos, textos)]
+    return ("failed" if any(p["error"] for p in todos) else "completed"), " · ".join(textos)
 
 
 def _run_emu_mis_subidas(conn: sqlite3.Connection) -> tuple[str, str]:
