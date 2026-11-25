@@ -80,7 +80,6 @@ function MarcasTracker({ id, nombre, form }: { id: string; nombre: string; form:
 export function OtrosTrackersCard({ form }: { form: ConfigForm }) {
   const {
     settings, newNobsKey, setNewNobsKey, newMnvKey, setNewMnvKey, quitarNobs, setQuitarNobs, quitarMnv, setQuitarMnv,
-    urlsTrackers, setUrlsTrackers,
   } = form
   const claves = {
     nobs: { configurado: settings?.nobs_api_key_configured, enmascarado: settings?.nobs_api_key_masked, valor: newNobsKey,
@@ -98,12 +97,6 @@ export function OtrosTrackersCard({ form }: { form: ConfigForm }) {
         <fieldset key={id} className="aj-grupo-eventos">
           <legend className="aj-titulo-grupo">{nombre}</legend>
           <ClaveTracker nombre={nombre} {...claves[id]} />
-          <Campo etiqueta="URL" ayuda="Vacía, la de siempre. Solo si el tracker cambia de dirección.">
-            {c => (
-              <input {...c} type="url" className="form-input" value={urlsTrackers[id] ?? ''}
-                onChange={e => setUrlsTrackers(u => ({ ...u, [id]: e.target.value }))} placeholder={`URL de ${nombre}`} />
-            )}
-          </Campo>
           <MarcasTracker id={id} nombre={nombre} form={form} />
         </fieldset>
       ))}

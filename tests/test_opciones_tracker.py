@@ -168,23 +168,19 @@ def test_ajustes_ida_y_vuelta(client, auth_headers):
 
 def test_ajustes_de_los_otros_trackers(client, auth_headers):
     s = client.get("/api/settings", headers=auth_headers).json()
-    assert s["nobs_url"] == "https://nobs.rawsmoke.net" and s["mnv_url"] == "https://tracker.milnueve.cc"
     assert s["marcas_por_tracker"] == {"nobs": None, "mnv": None}
 
     r = client.put("/api/settings", json={
-        "nobs_url": " https://nobs.example ", "marcas_por_tracker": {"nobs": {"personal_release": [], "anonimos": ["A"]}},
+        "marcas_por_tracker": {"nobs": {"personal_release": [], "anonimos": ["A"]}},
     }, headers=auth_headers)
     assert r.status_code == 200, r.text
-    assert r.json()["nobs_url"] == "https://nobs.example"
     assert r.json()["marcas_por_tracker"] == {"nobs": {"personal_release": [], "anonimos": ["A"]}, "mnv": None}
 
-    r = client.put("/api/settings", json={"nobs_url": "", "marcas_por_tracker": {"nobs": None}}, headers=auth_headers)
-    assert r.json()["nobs_url"] == "https://nobs.rawsmoke.net" and r.json()["marcas_por_tracker"]["nobs"] is None
+    r = client.put("/api/settings", json={"marcas_por_tracker": {"nobs": None}}, headers=auth_headers)
+    assert r.json()["marcas_por_tracker"]["nobs"] is None
 
 
 @pytest.mark.parametrize("cuerpo", [
-    {"nobs_url": "http://nobs.example"}, {"mnv_url": "https://usuario:clave@mnv.example"}, {"mnv_url": "nobs"},
-    {"nobs_url": "https://nobs.example:44a"}, {"nobs_url": "https://nobs.example/?x=1"},
     {"marcas_por_tracker": {"emu": None}}, {"marcas_por_tracker": {"otro": None}},
     {"marcas_por_tracker": {"nobs": {"anonimos": ["A"]}}},
 ])

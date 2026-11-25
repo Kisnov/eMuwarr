@@ -30,8 +30,9 @@ descripción y el cliente.
   el limitador de llamadas compartido entre la app y Uploadrr-EMU, y un config de Uploadrr-EMU por subida.
 - **Por orden:**
   1. **Fase A:** el tracker pasa a ser un dato. Base de datos (cada subida, petición, catálogo y estadística lleva su
-     tracker), ajustes por tracker (URL, clave, usuario, grupos, anónimo), cola y Panel. eMuwarez queda como el primer
-     adaptador, sin cambiar lo que ve hoy quien solo usa eMuwarez.
+     tracker), ajustes por tracker (clave, usuario, grupos, anónimo), cola y Panel. Las URL de los tres son fijas, en
+     `services/trackers.py` y la clase de Uploadrr-EMU: una errata no puede mandar la clave a otro sitio. eMuwarez
+     queda como el primer adaptador, sin cambiar lo que ve hoy quien solo usa eMuwarez.
      - Ya está la base (esquema 60): `services/trackers.py` con eMuwarez (`emu`) y la columna `tracker` en las
        subidas, peticiones, catálogo, «Tus subidas» y el historial del perfil; las claves de peticiones, «Tus subidas»
        y el perfil incluyen el tracker. Las sincronizaciones de eMuwarez (peticiones, catálogo, «Tus subidas», perfil)
@@ -63,8 +64,6 @@ descripción y el cliente.
        «Tus subidas» por tracker y un selector para la evolución de la cuenta, el Panel una franja por tracker, y la
        moderación de una subida sale de la lectura de su tracker. Los avisos de la cuenta y los objetivos siguen
        siendo de eMuwarez.
-     - Queda: la URL de eMuwarez en Configuración (la de N.O.B.S y Milnueve ya se cambia, y la usan la subida y el catálogo
-       con `trackers.url_de`; la de eMuwarez es `EMU_BASE_URL`).
   2. **Fase B: NOBS (nobs.rawsmoke.net) y Milnueve (tracker.milnueve.cc).** Los dos son UNIT3D y ya se sube a ellos con
      otras herramientas: se puede empezar (Gabriel les avisa). El primero valida la abstracción. Decidido el 22/11:
      - **Nomenclatura: la de eMuwarez, sin más.** Los dos son nuevos y cada uno sube como quiere; sus guías (formato
@@ -158,7 +157,7 @@ descripción y el cliente.
   anónimo → 401 JSON, comprobado el 18/11).
 - **Por resolver en la fase A:** de dónde salen los ids de cada tracker (su formulario de subida o el staff; los de
   NOBS y Milnueve están en `docs/trackers-ids.md`), una nomenclatura por tracker (para NOBS y Milnueve vale la de
-  eMuwarez; el fichero es el mismo para todos, ver la fase B), etiqueta/categoría de qBittorrent por tracker, y si la app cambia de nombre (hoy «eMuwarr» es de eMuwarez).
+  eMuwarez; el fichero es el mismo para todos, ver la fase B), y si la app cambia de nombre (hoy «eMuwarr» es de eMuwarez).
 
 ## Por probar en el NAS (`:dev`)
 
@@ -191,6 +190,8 @@ Todo lo de interfaz se ha comprobado en Chromium (con emulación táctil), no en
 
 ## Descartado (para no volver a proponerlo)
 
+- Una etiqueta de qBittorrent por tracker: qBittorrent ya filtra por tracker (el dominio del anuncio), y con la
+  etiqueta general basta.
 - Que el filtro «Petición» de Biblioteca cuente la petición heredada: una serie pedida entera se sube en season
   packs, nunca por capítulos.
 - Detectar el toque real con `pointerType` para los objetivos táctiles.
