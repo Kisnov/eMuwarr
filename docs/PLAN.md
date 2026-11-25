@@ -60,6 +60,8 @@ descripción y el cliente.
        su URL, su cupo y su tabla de ids (de los otros, solo las categorías de vídeo a las que se sube). El fallo de uno
        no frena a los demás ni borra sus peticiones, y solo un recorrido completo borra las que ya no están, del suyo.
        Su preparación mira el catálogo local y las normas de idioma de ese tracker, no las columnas de eMuwarez.
+       Una subida solo se enlaza a una petición de su mismo tracker (la del asistente y la que un lote encuentra
+       sola), y desde una petición de otro tracker el asistente propone subir a ese tracker.
      - «Tus subidas» y el perfil también leen cada tracker con clave, con su clave y su cupo: Estadísticas tiene unas
        «Tus subidas» por tracker y un selector para la evolución de la cuenta, el Panel una franja por tracker, y la
        moderación de una subida sale de la lectura de su tracker. Los avisos de la cuenta y los objetivos siguen

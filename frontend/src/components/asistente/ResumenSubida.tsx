@@ -33,8 +33,13 @@ export function ResumenSubida({ a }: { a: Asistente }) {
   const filas = ids.map(fila)
   const objetivo = filas[0]
   const tipo = objetivo?.item_type ?? item.item_type
-  const cubiertos = esTanda
-    ? filas.filter(f => !f || peticionCubre(preselect, f)).length
+  // Una petición solo la cubre la subida a su tracker: sin él entre los destinos, nada queda enlazado.
+  const aSuTracker = !preselect?.tracker || destinos.some(d => d.id === preselect.tracker)
+  // En una tanda, además, solo los que ese tracker admite: lo demás va a otro y no la enlaza.
+  const vaASuTracker = (id: number) => !preselect?.tracker
+    || (reglasDe(id)?.some(r => r.tracker === preselect.tracker && r.permitido) ?? true)
+  const cubiertos = !aSuTracker ? 0 : esTanda
+    ? filas.filter(f => !f || (peticionCubre(preselect, f) && vaASuTracker(f.id))).length
     : requestId != null ? 1 : 0
 
   const { yaHayEn, peticion } = useResumen({

@@ -26,6 +26,8 @@ export interface DashboardRecommendationItem {
   title_slug: string | null
   missing_count: number | null
   rec_request_id: number | null
+  // El tracker de esa petición (emu, nobs, mnv): al que el asistente propone subir.
+  rec_request_tracker?: string | null
   // La recompensa de la petición (grupo 1); null en los grupos 2 y 3 o si eMuwarez no la dice.
   rec_points: number | null
   // Solo grupo 1: la fila a la que se refiere la petición (la temporada o el capítulo, no la serie que cruzó el

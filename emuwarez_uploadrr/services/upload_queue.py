@@ -346,6 +346,15 @@ def retirar_de_la_cola(job_id: int) -> None:
             _upload_concurrency_gate.retirar(job_id)
 
 
+def _peticion_de_su_tracker(conn, request_item_id: int | None, tracker: str) -> int | None:
+    """Una petición es de un tracker: la subida a otro no la cubre, y va sin enlazar (el asistente manda la misma a
+    cada tracker elegido)."""
+    if request_item_id is None:
+        return None
+    fila = conn.execute("SELECT tracker FROM request_items WHERE id = ?", (request_item_id,)).fetchone()
+    return None if fila and (fila["tracker"] or trackers.POR_DEFECTO) != tracker else request_item_id
+
+
 def _foto_de_la_peticion(conn, request_item_id: int | None) -> tuple[str | None, str | None]:
     """Título y enlace de la petición, tal como están al encolar. La fila se
     borra cuando la petición deja de estar abierta en eMuwarez: sin esta copia,
@@ -414,6 +423,7 @@ def queue_upload_for_item(
                 # Claves en texto: el trabajo lo guarda en JSON.
                 season_overrides["idiomas"] = {str(k): v for k, v in idiomas.items()}
 
+        request_item_id = _peticion_de_su_tracker(conn, request_item_id, tracker)
         request_title, request_url = _foto_de_la_peticion(conn, request_item_id)
         return _insert_and_start_queued_job(
             conn, item,
