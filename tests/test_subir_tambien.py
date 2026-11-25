@@ -492,6 +492,21 @@ def test_con_otro_nombre_de_ahora_sube_con_el_de_la_fuente(db_conn, pipeline, tm
     assert json.loads(fila["nomenclature_snapshot_json"]) == {"proposed_title": "Peli 2022"}
 
 
+def test_la_copia_publica_con_el_titulo_de_la_fuente(db_conn, tmp_path):
+    """El `-mt` (el nombre en el tracker) es el de la subida de origen, no el de la nomenclatura de ahora."""
+    from emuwarez_uploadrr.services.uploadrr_contract import RUNTIME_EMU
+    iid, emu, _ruta = _emu_completada(db_conn, tmp_path, uploadrr_command_json=json.dumps({"title": "Peli 2022 JAP"}))
+    nobs = _trabajo(db_conn, iid, tracker="nobs", copia_de_job_id=emu)
+    args = ["python", "upload.py", "/x", "-mt", "Peli 2026 JPN", "-tk", "NOBS"]
+
+    uq._marcar_lista(nobs, {"runtime_type": RUNTIME_EMU, "title": "Peli 2026 JPN", "command_args": args}, db_conn,
+                     tracker="nobs")
+
+    comando = json.loads(_fila(db_conn, nobs)["uploadrr_command_json"])
+    assert comando["title"] == "Peli 2022 JAP"
+    assert comando["command_args"][comando["command_args"].index("-mt") + 1] == "Peli 2022 JAP"
+
+
 def test_sin_fichero_en_la_fuente_no_se_sube(db_conn, pipeline):
     iid, emu = _subida_a_emu_hecha(db_conn, pipeline)
     db_conn.execute("UPDATE upload_jobs SET prepared_path = NULL WHERE id = ?", (emu,))

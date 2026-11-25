@@ -969,6 +969,25 @@ def _opciones_elegidas(job_id: int, conn) -> dict:
             "personal_release": None if fila[1] is None else bool(fila[1])}
 
 
+def _titulo_de_la_copia(job_id: int, conn) -> str | None:
+    """«Subir también a…»: el nombre con que se publicó la subida de origen (su `-mt`), aunque la nomenclatura haya
+    cambiado luego. None si no es una copia."""
+    fila = conn.execute(
+        "SELECT f.uploadrr_command_json, f.nomenclature_snapshot_json, f.prepared_path FROM upload_jobs j "
+        "JOIN upload_jobs f ON f.id = j.copia_de_job_id WHERE j.id = ?", (job_id,)).fetchone()
+    if not fila:
+        return None
+    for crudo, clave in ((fila[0], "title"), (fila[1], "proposed_torrent_name")):
+        try:
+            titulo = (json.loads(crudo or "null") or {}).get(clave)
+        except (ValueError, AttributeError):
+            titulo = None
+        if titulo:
+            return titulo
+    ruta = fila[2] or ""
+    return (os.path.splitext(os.path.basename(ruta))[0] if os.path.isfile(ruta) else os.path.basename(ruta)) or None
+
+
 def _marcar_lista(job_id: int, command_preview: dict, conn, *, grupo: str | None = None,
                   tracker: str = trackers.POR_DEFECTO) -> bool:
     """Deja el trabajo en 'ready' para arrancar Uploadrr.
@@ -988,12 +1007,18 @@ def _marcar_lista(job_id: int, command_preview: dict, conn, *, grupo: str | None
     from .uploadrr_contract import RUNTIME_EMU, render_command_preview
     opciones = opciones_de_subida(conn, grupo, tracker=tracker, **_opciones_elegidas(job_id, conn))
     command_preview = {**command_preview, **opciones}
+    titulo = _titulo_de_la_copia(job_id, conn)
+    if titulo:
+        command_preview["title"] = titulo
     if command_preview.get("runtime_type") == RUNTIME_EMU and isinstance(command_preview.get("command_args"), list):
         # La vista previa del comando (detalle de la subida) enseña las mismas banderas que se lanzarán.
-        extra = (["-a"] if opciones["anon"] else []) + (["-pr"] if opciones["personal_release"] else [])
-        if extra:
-            command_preview["command_args"] = [*command_preview["command_args"], *extra]
-            command_preview["command_preview"] = render_command_preview(command_preview["command_args"])
+        args = list(command_preview["command_args"])
+        if titulo and "-mt" in args[:-1]:
+            args[args.index("-mt") + 1] = titulo
+        args += (["-a"] if opciones["anon"] else []) + (["-pr"] if opciones["personal_release"] else [])
+        if args != command_preview["command_args"]:
+            command_preview["command_args"] = args
+            command_preview["command_preview"] = render_command_preview(args)
     return escribir_estado(
         job_id, salvo=("cancelled", "failed"), status="ready", stage="preflight",
         uploadrr_command_json=json.dumps(command_preview, ensure_ascii=False),
