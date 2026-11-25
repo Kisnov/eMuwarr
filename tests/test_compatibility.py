@@ -610,6 +610,11 @@ def test_reclamada_por_ti_por_otro_o_desconocido():
     assert reclamada_por(_reclamada("Gabriel"), "  ") == "desconocido"
     assert reclamada_por(_make_req(emu_status="unfilled"), "Gabriel") is None
     assert reclamada_por(_make_req(emu_status="filled"), "Gabriel") is None
+    # En otro tracker cuenta tu usuario de allí; el de eMuwarez suelto no dice quién eres allí.
+    assert reclamada_por(_reclamada("Gabi", tracker="nobs"), {"emu": "Gabriel", "nobs": "gabi"}) == "ti"
+    assert reclamada_por(_reclamada("Gabriel", tracker="nobs"), {"emu": "Gabriel", "nobs": "gabi"}) == "otro"
+    assert reclamada_por(_reclamada("Gabriel", tracker="nobs"), {"emu": "Gabriel", "nobs": ""}) == "desconocido"
+    assert reclamada_por(_reclamada("Gabriel", tracker="nobs"), "Gabriel") == "desconocido"
 
 
 def test_la_reclamada_por_ti_se_clasifica_por_lo_que_trae_y_las_demas_son_reclamado():

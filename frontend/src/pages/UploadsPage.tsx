@@ -858,6 +858,7 @@ export function UploadsPage({ onNavigate }: { onNavigate?: (page: string) => voi
   const recargarSubida = () => {
     load({ silent: true })
     recargarSuelta()
+    setVezSubirTambien(n => n + 1)
   }
   // Los avisos solo recargan la lista: la ficha suelta se pide otra vez cuando cambia (un reenvío que termina).
   useRefrescoPorAvisos(AVISOS_SUBIDA, recargarSuelta, {
@@ -870,9 +871,12 @@ export function UploadsPage({ onNavigate }: { onNavigate?: (page: string) => voi
   // merge just that field into the (still live-polled) list-derived job,
   // instead of replacing it outright and losing further progress updates.
   // Lo mismo con `subir_tambien_a` (los trackers a los que se puede subir también): solo lo trae el GET de una.
+  // Se vuelve a pedir cuando la subida se completa (solo entonces lo trae) y tras encolar una copia.
   const [selectedTitle, setSelectedTitle] = useState<{
     id: number; display_title: string | null; subir_tambien_a: UploadJob['subir_tambien_a']
   } | null>(null)
+  const [vezSubirTambien, setVezSubirTambien] = useState(0)
+  const completadaLaElegida = selectedJob?.status === 'completed'
   useEffect(() => {
     if (selectedJobId == null) { setSelectedTitle(null); return }
     let alive = true
@@ -880,7 +884,7 @@ export function UploadsPage({ onNavigate }: { onNavigate?: (page: string) => voi
       if (alive) setSelectedTitle({ id: selectedJobId, display_title: j.display_title ?? null, subir_tambien_a: j.subir_tambien_a })
     }).catch(() => {})
     return () => { alive = false }
-  }, [selectedJobId])
+  }, [selectedJobId, completadaLaElegida, vezSubirTambien])
   const selectedJobWithTitle = selectedJob && selectedTitle && selectedTitle.id === selectedJob.id
     ? { ...selectedJob, display_title: selectedTitle.display_title, subir_tambien_a: selectedTitle.subir_tambien_a }
     : selectedJob

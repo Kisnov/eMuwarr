@@ -318,6 +318,72 @@ def test_borrar_no_quita_el_enlace_que_siembra_otra_subida(biblioteca, monkeypat
     assert os.path.lexists(enlace)
 
 
+def test_borrar_la_completada_y_luego_la_fallida_de_otro_tracker_deja_el_enlace(biblioteca, monkeypatch, isolated_db):
+    """El orden de «Borrar lote»: la completada (id menor) y después la fallida que reutilizó su fichero."""
+    from emuwarez_uploadrr.database import connect, init_db
+    from emuwarez_uploadrr.services import carpeta_subida
+    from emuwarez_uploadrr.services.upload_execution import DELETE_CONFIRMATION_TOKEN, delete_upload_job
+
+    monkeypatch.setattr(carpeta_subida, "RAIZ_SUBIDAS", biblioteca["uploads"])
+    enlace = preparar_fichero_suelto(biblioteca["ficheros"][0], raiz=biblioteca["uploads"])["ruta"]
+    conn = connect()
+    init_db(conn)
+    completada = _subida(conn, "completed", enlace)
+    fallida = _subida(conn, "failed", enlace)
+    conn.commit()
+
+    assert delete_upload_job(completada, confirmation=DELETE_CONFIRMATION_TOKEN, conn=conn)["ok"]
+    # La fallida conserva su ruta: un reintento reutiliza el fichero en vez de rehacer el que se siembra.
+    assert conn.execute("SELECT prepared_path FROM upload_jobs WHERE id = ?", (fallida,)).fetchone()[0] == enlace
+    reintento = _subida(conn, "failed", enlace, retry_of=fallida)
+    conn.commit()
+    assert delete_upload_job(reintento, confirmation=DELETE_CONFIRMATION_TOKEN, conn=conn)["ok"]
+    assert os.path.lexists(enlace)
+
+
+def test_un_enlace_sembrado_que_ya_no_esta_en_disco_deja_de_apuntarse(biblioteca, monkeypatch, isolated_db):
+    from emuwarez_uploadrr.database import connect, get_json_state, init_db
+    from emuwarez_uploadrr.services import carpeta_subida
+    from emuwarez_uploadrr.services.upload_execution import DELETE_CONFIRMATION_TOKEN, delete_upload_job
+    from emuwarez_uploadrr.services.upload_execution.ciclo_de_vida import ENLACES_SEMBRADOS_SIN_FILA
+
+    monkeypatch.setattr(carpeta_subida, "RAIZ_SUBIDAS", biblioteca["uploads"])
+    enlace = preparar_fichero_suelto(biblioteca["ficheros"][0], raiz=biblioteca["uploads"])["ruta"]
+    conn = connect()
+    init_db(conn)
+    completada = _subida(conn, "completed", enlace)
+    fallida = _subida(conn, "failed", enlace)
+    otro = preparar_fichero_suelto(biblioteca["ficheros"][1], raiz=biblioteca["uploads"])["ruta"]
+    sola = _subida(conn, "completed", otro)  # nadie más apunta a su enlace: no se guarda
+    conn.commit()
+
+    for job in (completada, sola):
+        assert delete_upload_job(job, confirmation=DELETE_CONFIRMATION_TOKEN, conn=conn)["ok"]
+    assert get_json_state(conn, ENLACES_SEMBRADOS_SIN_FILA) == [enlace]
+    # Con la carpeta de subidas fuera de alcance (un montaje caído) no se da por borrado.
+    monkeypatch.setattr(carpeta_subida, "RAIZ_SUBIDAS", biblioteca["uploads"] + "-caida")
+    otra = _subida(conn, "completed", enlace)
+    _subida(conn, "failed", enlace)
+    conn.commit()
+    assert delete_upload_job(otra, confirmation=DELETE_CONFIRMATION_TOKEN, conn=conn)["ok"]
+    assert get_json_state(conn, ENLACES_SEMBRADOS_SIN_FILA) == [enlace]
+    monkeypatch.setattr(carpeta_subida, "RAIZ_SUBIDAS", biblioteca["uploads"])
+    # Tampoco si la carpeta está pero no deja mirar dentro (permisos).
+    from emuwarez_uploadrr.services.upload_execution import ciclo_de_vida
+
+    def sin_permiso(ruta):
+        raise PermissionError(13, "Permission denied", ruta)
+    otra = _subida(conn, "completed", enlace)
+    conn.commit()
+    with monkeypatch.context() as m:
+        m.setattr(ciclo_de_vida.os, "lstat", sin_permiso)
+        assert delete_upload_job(otra, confirmation=DELETE_CONFIRMATION_TOKEN, conn=conn)["ok"]
+    assert get_json_state(conn, ENLACES_SEMBRADOS_SIN_FILA) == [enlace]
+    os.unlink(enlace)  # el torrent se borró de qBittorrent con sus datos
+    assert delete_upload_job(fallida, confirmation=DELETE_CONFIRMATION_TOKEN, conn=conn)["ok"]
+    assert get_json_state(conn, ENLACES_SEMBRADOS_SIN_FILA) == []
+
+
 def test_borrar_no_quita_el_enlace_de_una_subida_en_marcha(biblioteca, monkeypatch, isolated_db):
     from emuwarez_uploadrr.database import connect, init_db
     from emuwarez_uploadrr.services import carpeta_subida

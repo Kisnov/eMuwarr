@@ -185,6 +185,25 @@ def test_catalogo_completo_hasta_una_pagina_corta(pedidas):
     assert [_partes(u)[2]["page"] for u in pedidas["urls"]] == ["1", "2"]
 
 
+def test_una_pagina_corta_no_es_la_ultima_si_el_tracker_dice_que_hay_mas(pedidas):
+    """Un tracker que limita `perPage` por debajo de lo pedido: todas sus páginas llegan cortas."""
+    pedidas["respuestas"] = [_pagina([5, 4], last_page=2, total=4), _pagina([3, 2], last_page=2, total=4)]
+    assert [t["id"] for t in emu.emu_fetch_all_torrents("KEY", per_page=100)] == [5, 4, 3, 2]
+    assert len(pedidas["urls"]) == 2
+
+
+def test_sin_last_page_una_pagina_corta_tampoco_es_la_ultima_si_el_total_dice_que_faltan(pedidas):
+    pedidas["respuestas"] = [{"data": [{"id": i} for i in ids], "meta": {"total": 3}} for ids in ([5, 4], [3])]
+    assert [t["id"] for t in emu.emu_fetch_all_torrents("KEY", per_page=100)] == [5, 4, 3]
+    assert len(pedidas["urls"]) == 2
+
+
+def test_el_incremental_sin_last_page_sigue_hasta_el_id_conocido_aunque_las_paginas_sean_cortas(pedidas):
+    pedidas["respuestas"] = [{"data": [{"id": i} for i in ids], "meta": {"total": 9000}} for ids in ([9, 8], [7, 6])]
+    assert [t["id"] for t in emu.emu_fetch_all_torrents("KEY", per_page=100, stop_after_id=6)] == [9, 8, 7]
+    assert len(pedidas["urls"]) == 2
+
+
 def test_un_catalogo_con_mas_paginas_de_las_permitidas_no_se_da_por_completo(pedidas):
     pedidas["respuestas"] = [_pagina([4, 3], last_page=3), _pagina([2, 1], last_page=3)]
     with pytest.raises(IntegrationError, match="más de 2 páginas"):
