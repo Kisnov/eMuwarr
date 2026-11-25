@@ -339,6 +339,17 @@ def retry_chain_ids(job_id: int, conn) -> list[int]:
     return ids
 
 
+def _ya_no_esta(ruta: str) -> bool:
+    """Solo si el sistema dice que no existe: un error de permisos o de E/S no es «borrado»."""
+    try:
+        os.lstat(ruta)
+    except FileNotFoundError:
+        return True
+    except OSError:
+        return False
+    return False
+
+
 # Estado: los enlaces de la carpeta de subidas que sembraba una subida ya borrada cuando otra aún apuntaba a ellos.
 ENLACES_SEMBRADOS_SIN_FILA = "enlaces_sembrados_sin_fila"
 
@@ -461,10 +472,10 @@ def delete_upload_job(job_id: int, confirmation: str | None = None, conn=None) -
                 f"AND id NOT IN ({marcas}) AND status != 'completed' AND torrent_subido = 0",
                 (*sembradas, *chain))} if sembradas else set()
             # Los que ya no están en disco (se borró el torrent con sus datos) dejan de apuntarse; con la carpeta de
-            # subidas fuera de alcance no se sabe, y se quedan.
+            # subidas fuera de alcance, o sin poder mirar, no se sabe, y se quedan.
             ahora = sin_fila | compartidas
             if os.path.isdir(carpeta_subida.RAIZ_SUBIDAS):
-                ahora = {r for r in ahora if os.path.lexists(r)}
+                ahora = {r for r in ahora if not _ya_no_esta(r)}
             if ahora != sin_fila:
                 set_json_state(conn, ENLACES_SEMBRADOS_SIN_FILA, sorted(ahora))
                 conn.commit()  # dentro del cerrojo: otro borrado a la vez lee la lista ya escrita

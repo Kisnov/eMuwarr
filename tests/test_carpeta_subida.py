@@ -368,6 +368,17 @@ def test_un_enlace_sembrado_que_ya_no_esta_en_disco_deja_de_apuntarse(biblioteca
     assert delete_upload_job(otra, confirmation=DELETE_CONFIRMATION_TOKEN, conn=conn)["ok"]
     assert get_json_state(conn, ENLACES_SEMBRADOS_SIN_FILA) == [enlace]
     monkeypatch.setattr(carpeta_subida, "RAIZ_SUBIDAS", biblioteca["uploads"])
+    # Tampoco si la carpeta está pero no deja mirar dentro (permisos).
+    from emuwarez_uploadrr.services.upload_execution import ciclo_de_vida
+
+    def sin_permiso(ruta):
+        raise PermissionError(13, "Permission denied", ruta)
+    otra = _subida(conn, "completed", enlace)
+    conn.commit()
+    with monkeypatch.context() as m:
+        m.setattr(ciclo_de_vida.os, "lstat", sin_permiso)
+        assert delete_upload_job(otra, confirmation=DELETE_CONFIRMATION_TOKEN, conn=conn)["ok"]
+    assert get_json_state(conn, ENLACES_SEMBRADOS_SIN_FILA) == [enlace]
     os.unlink(enlace)  # el torrent se borró de qBittorrent con sus datos
     assert delete_upload_job(fallida, confirmation=DELETE_CONFIRMATION_TOKEN, conn=conn)["ok"]
     assert get_json_state(conn, ENLACES_SEMBRADOS_SIN_FILA) == []
