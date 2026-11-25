@@ -893,7 +893,7 @@ export function UploadsPage({ onNavigate }: { onNavigate?: (page: string) => voi
         onDelete={setDeleteJob}
         onRetry={alReintentar}
         // En la fila que se ve del elemento, aunque la que vale de origen sea otra del grupo.
-        subirTambienId={enGrupo === 'otra' ? undefined : [job, ...(otras ?? [])].find(j => j.id != null && paraSubirTambien.has(j.id))?.id}
+        subirTambienId={enGrupo === 'otra' || !hayOtrosTrackers ? undefined : [job, ...(otras ?? [])].find(j => j.id != null && paraSubirTambien.has(j.id))?.id}
         onSubirTambien={abrirSubirTambien}
         // Con la lista ya filtrada por ese lote, el banner lo dice: la chapa en cada fila sobra.
         // Y debajo de otra del mismo lote, también.
