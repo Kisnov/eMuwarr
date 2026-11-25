@@ -111,6 +111,25 @@ describe('SubirTambienModal', () => {
     expect(encolado).toHaveBeenCalledWith('0123456789ab')
   })
 
+  it('abierto desde una fila: esa subida marcada y solo los trackers donde le falta', async () => {
+    vi.mocked(getSubirTambien).mockResolvedValue({
+      trackers: [EMU, NOBS, MNV],
+      subidas: [
+        { job_id: 1, title: 'Peli A', nombre: 'A.mkv', result_url: null, finished_at: null, origen: EMU, trackers: [MNV] },
+        { job_id: 2, title: 'Peli B', nombre: 'B.mkv', result_url: null, finished_at: null, origen: EMU, trackers: [NOBS, MNV] },
+      ],
+    })
+    vi.mocked(subirTambien).mockResolvedValue({ lote_id: null, encolados: 1, saltados: 0, resultados: [] })
+    await montar(<SubirTambienModal inicial={1} onClose={() => {}} onEncolado={() => {}} />)
+    await esperar(() => texto().includes('Peli A'))
+    expect(casilla('Peli A')!.checked).toBe(true)
+    expect(casilla('Peli B')!.checked).toBe(false)
+
+    await pulsar(boton('Subir 1 subida'))
+
+    expect(subirTambien).toHaveBeenCalledWith([1], ['mnv'])
+  })
+
   it('no deja marcar más subidas que un lote, enseña el tope y deja desmarcar', async () => {
     const subidas = Array.from({ length: MAX_ELEMENTOS_LOTE + 1 }, (_, i) => (
       { job_id: i + 1, title: `Peli ${i + 1}.`, nombre: `${i + 1}.mkv`, result_url: null, finished_at: null, origen: EMU,

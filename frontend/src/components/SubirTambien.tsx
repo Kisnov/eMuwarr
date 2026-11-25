@@ -67,14 +67,16 @@ export function SubirTambienBloque({ job, onEncolado }: { job: UploadJob; onEnco
 
 // En Subidas: elegir varias subidas completadas y los trackers (a su propio tracker no se sube). Solo lo elegido a
 // mano; cada par es una subida de la cola, todas en un lote, y van saliendo según «Subidas en paralelo».
-export function SubirTambienModal({ onClose, onEncolado }: {
+export function SubirTambienModal({ inicial, onClose, onEncolado }: {
+  // Abierto desde una fila: esa subida ya marcada, y solo los trackers donde le falta.
+  inicial?: number
   onClose: () => void
   // Con el lote creado (o null si solo hubo una), para filtrar la tabla por él.
   onEncolado: (loteId: string | null) => void
 }) {
   const [datos, setDatos] = useState<SubirTambienCandidatas | null>(null)
   const [fallo, setFallo] = useState<string | null>(null)
-  const [elegidas, setElegidas] = useState<Set<number>>(new Set())
+  const [elegidas, setElegidas] = useState<Set<number>>(new Set(inicial ? [inicial] : []))
   const [trackers, setTrackers] = useState<Set<string>>(new Set())
   const [enviando, setEnviando] = useState(false)
   const [mensajes, setMensajes] = useState<string[]>([])
@@ -82,11 +84,17 @@ export function SubirTambienModal({ onClose, onEncolado }: {
   useEffect(() => {
     let vigente = true
     getSubirTambien().then(
-      d => { if (vigente) { setDatos(d); setTrackers(new Set(d.trackers.map(t => t.id))) } },
+      d => {
+        if (!vigente) return
+        const deLaFila = d.subidas.find(s => s.job_id === inicial)
+        setDatos(d)
+        if (!deLaFila) setElegidas(new Set())  // ya no se ofrece: no queda marcada sin casilla
+        setTrackers(new Set((deLaFila?.trackers ?? d.trackers).map(t => t.id)))
+      },
       e => { if (vigente) setFallo(error(e, 'No se pudieron cargar las subidas.')) },
     )
     return () => { vigente = false }
-  }, [])
+  }, [inicial])
 
   const alternar = <T,>(conjunto: Set<T>, valor: T) => {
     const nuevo = new Set(conjunto)
