@@ -80,21 +80,28 @@ export function SubirTambienModal({ inicial, onClose, onEncolado }: {
   const [trackers, setTrackers] = useState<Set<string>>(new Set())
   const [enviando, setEnviando] = useState(false)
   const [mensajes, setMensajes] = useState<string[]>([])
+  // Tras encolar, la lista se pide otra vez: lo recién encolado ya no se ofrece.
+  const [vez, setVez] = useState(0)
 
   useEffect(() => {
     let vigente = true
     getSubirTambien().then(
       d => {
         if (!vigente) return
-        const deLaFila = d.subidas.find(s => s.job_id === inicial)
         setDatos(d)
+        if (vez > 0) {
+          // Un refresco: lo marcado mientras tanto se queda, salvo lo que ya no se ofrece.
+          setElegidas(e => new Set([...e].filter(id => d.subidas.some(s => s.job_id === id))))
+          return
+        }
+        const deLaFila = d.subidas.find(s => s.job_id === inicial)
         if (!deLaFila) setElegidas(new Set())  // ya no se ofrece: no queda marcada sin casilla
         setTrackers(new Set((deLaFila?.trackers ?? d.trackers).map(t => t.id)))
       },
-      e => { if (vigente) setFallo(error(e, 'No se pudieron cargar las subidas.')) },
+      e => { if (vigente && vez === 0) setFallo(error(e, 'No se pudieron cargar las subidas.')) },
     )
     return () => { vigente = false }
-  }, [inicial])
+  }, [inicial, vez])
 
   const alternar = <T,>(conjunto: Set<T>, valor: T) => {
     const nuevo = new Set(conjunto)
@@ -113,7 +120,11 @@ export function SubirTambienModal({ inicial, onClose, onEncolado }: {
     try {
       const r = await subirTambien([...elegidas], [...trackers])
       setMensajes(textoResultado(r, nombres))
-      if (r.encolados) onEncolado(r.lote_id)
+      if (r.encolados) {
+        setElegidas(new Set())
+        setVez(n => n + 1)
+        onEncolado(r.lote_id)
+      }
     } catch (e) {
       setMensajes([error(e, 'No se pudo encolar.')])
     } finally {

@@ -8,7 +8,7 @@
  */
 import { describe, it, expect } from 'vitest'
 import {
-  latestInChain, phaseLabel, formatSecondsHM, currentPhaseInfo,
+  latestInChain, puntasPorTracker, phaseLabel, formatSecondsHM, currentPhaseInfo,
   ACTIVE_JOB_STATUSES, statusLabel, queuedWaitText, fundirPorId, conservarIguales,
 } from '../uploadStatus'
 import type { UploadJob, UploadProgressPhase } from '../../types/api'
@@ -47,6 +47,14 @@ describe('la punta de una cadena de reintentos', () => {
   it('con dos cadenas distintas devuelve una punta, no una mezcla', () => {
     const jobs = [job({ id: 1 }), job({ id: 5 })]
     expect([1, 5]).toContain(latestInChain(jobs)?.id)
+  })
+
+  it('cada tracker tiene su punta: la subida a eMuwarez y la de N.O.B.S no son la misma cadena', () => {
+    const puntas = puntasPorTracker([
+      job({ id: 1 }), job({ id: 2, retry_of_job_id: 1 }),
+      job({ id: 3, tracker: 'nobs' }),
+    ])
+    expect([...puntas].map(([t, j]) => [t, j.id])).toEqual([['emu', 2], ['nobs', 3]])
   })
 })
 

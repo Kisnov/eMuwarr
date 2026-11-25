@@ -286,8 +286,11 @@ export function useConfigForm() {
       // Las API keys de imágenes ya NO viajan aquí: cada una se guarda desde
       // su propia tarjeta, en el momento, sin depender del Guardar global.
       const updated = await updateSettings(payload)
-      // Con otra clave, el servidor descarta el perfil guardado y lo pide ya: el Panel no espera a la hora.
-      if (payload.emu_api_key) actualizarPerfilEmu().catch(() => { /* lo intenta la próxima lectura */ })
+      // Con otra clave (o sin la de N.O.B.S o Milnueve), el servidor descarta el perfil guardado y lo pide ya: el
+      // Panel no espera a la hora.
+      if (payload.emu_api_key || payload.nobs_api_key || payload.mnv_api_key || quitar.some(k => k.endsWith('_api_key'))) {
+        actualizarPerfilEmu().catch(() => { /* lo intenta la próxima lectura */ })
+      }
       setSettings(updated)
       setTags(updated.upload_tags?.length ? updated.upload_tags : [updated.default_release_tag])
       setGruposPR(updated.upload_tags_personal_release ?? [])

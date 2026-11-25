@@ -110,6 +110,16 @@ export function latestInChain(jobs: UploadJob[]): UploadJob | null {
   return jobs.find(j => j.id != null && !referenced.has(j.id)) ?? jobs[jobs.length - 1]
 }
 
+// La punta de la cadena de cada tracker, por su id: los reintentos se encadenan dentro de un tracker.
+export function puntasPorTracker(jobs: UploadJob[]): Map<string, UploadJob> {
+  const puntas = new Map<string, UploadJob>()
+  for (const tracker of new Set(jobs.map(j => j.tracker ?? 'emu'))) {
+    const punta = latestInChain(jobs.filter(j => (j.tracker ?? 'emu') === tracker))
+    if (punta) puntas.set(tracker, punta)
+  }
+  return puntas
+}
+
 // Human labels for the computed progress_phase (the coarse string, not the %).
 const PHASE_LABEL: Record<string, string> = {
   staging: 'Generando nomenclatura',
