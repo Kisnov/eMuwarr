@@ -16,7 +16,7 @@ psutil==7.2.2
 pyimgbox==1.0.7
 pymediainfo==7.0.1
 pyoxipng==9.1.1
-pyotp==2.10.0
+pyotp==2.12.0
 pyyaml==6.0.3
 qbittorrent-api==2026.10.1
 requests==2.34.2

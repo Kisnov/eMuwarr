@@ -15,7 +15,7 @@
 .setup-muted { color: var(--text-muted); }
 .setup-t115 { font-size: 11.5px; }
 .setup-t13 { font-size: 13px; }
-.setup-pie { font-size: 11px; margin-top: 4px; }
+.setup-pie { font-size: 12px; margin-top: 4px; }
 
 /* Cabecera del paso */
 .setup-titulo-paso {

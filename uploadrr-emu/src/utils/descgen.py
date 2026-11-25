@@ -536,9 +536,9 @@ class DescGenerator:
                 if tracker in ("PTP", "TMG"):
                     await descfile.write(f"[img]{image['raw_url']}[/img]")
                 elif tracker == "TL":
-                    await descfile.write(f"[url={image['web_url']}][img]{image['img_url']}[/img][/url]")
+                    await descfile.write(f"[url={image['raw_url']}][img]{image['img_url']}[/img][/url]")
                 else:
-                    await descfile.write(f"[url={image['web_url']}]{img_tag}{image['raw_url']}[/img][/url] ")
+                    await descfile.write(f"[url={image['raw_url']}]{img_tag}{image['raw_url']}[/img][/url] ")
                 if inline_imgs and i % inline_imgs == inline_imgs - 1:
                     await descfile.write("\n")
             except (KeyError, TypeError):
@@ -556,7 +556,7 @@ class DescGenerator:
                 for i, image in enumerate(ep_images):
                     try:
                         img_tag = f"[img={img_size}]" if img_size else "[img]"
-                        await descfile.write(f"[url={image['web_url']}]{img_tag}{image['raw_url']}[/img][/url] ")
+                        await descfile.write(f"[url={image['raw_url']}]{img_tag}{image['raw_url']}[/img][/url] ")
                         if inline_imgs and i % inline_imgs == inline_imgs - 1:
                             await descfile.write("\n")
                     except (KeyError, TypeError):
