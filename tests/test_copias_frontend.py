@@ -293,3 +293,21 @@ def test_el_tope_de_un_lote_coincide():
     m = re.search(r"MAX_ELEMENTOS_LOTE\s*=\s*(\d+)", _texto("utils/lote.ts"))
     assert m, "no se encontró MAX_ELEMENTOS_LOTE en utils/lote.ts"
     assert int(m.group(1)) == MAX_ELEMENTOS_LOTE
+
+
+def test_los_trackers_que_no_son_emuwarez_coinciden():
+    """La lista de trackers vive en services/trackers.py; el frontend y los ajustes de la web la copian a mano. Al
+    añadir uno, aquí falla lo que falta por tocar."""
+    from emuwarez_uploadrr.services.trackers import EMU, TRACKERS
+    otros = {t.id: t.nombre for t in TRACKERS.values() if t is not EMU}
+
+    lista = re.search(r"OTROS_TRACKERS = \[(.*?)\] as const", _texto("pages/ajustes/config/useConfigForm.ts"), re.S)
+    assert lista, "useConfigForm.ts ya no declara OTROS_TRACKERS"
+    assert dict(re.findall(r"id: '([^']+)', nombre: '([^']+)'", lista.group(1))) == otros
+
+    api_web = (RAIZ / "emuwarez_uploadrr/web/api/settings.py").read_text("utf-8")
+    api_frontend = _texto("api/settings.ts")
+    for tracker in otros:
+        for campo in (f"{tracker}_api_key_configured", f"{tracker}_api_key_masked", f"{tracker}_api_key"):
+            assert re.search(rf"\b{campo}\b", api_web), f"web/api/settings.py no tiene {campo}"
+            assert re.search(rf"\b{campo}\b", api_frontend), f"api/settings.ts no tiene {campo}"

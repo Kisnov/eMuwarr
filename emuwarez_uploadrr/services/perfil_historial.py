@@ -1,6 +1,6 @@
 """Historial de tu cuenta en cada tracker: una instantánea al día, para dibujar su evolución en Estadísticas.
 
-Sale de lo que ya trae la lectura del perfil (emu_perfil, cada hora con la tarea «Leer tu cuenta de eMuwarez»): sin
+Sale de lo que ya trae la lectura del perfil (emu_perfil, cada hora con la tarea «Leer tu cuenta»): sin
 llamadas nuevas al tracker. El día es el local del servidor (TZ del contenedor, la misma que usan las tareas
 programadas): así «hoy» es el día del usuario y no el UTC. Cada lectura sobrescribe la fila del día, de modo que gana el
 último valor.

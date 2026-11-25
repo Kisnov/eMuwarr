@@ -8,7 +8,7 @@ import { useTooltip } from './Tooltip'
 // petición guardada, el estado en vivo de la ficha de biblioteca. Lo comparten
 // la tabla de Subidas y la ficha de la subida.
 export function PeticionDeSubida({ job }: { job: UploadJob }) {
-  const { triggerProps, tooltipNode } = useTooltip(job.request_url ? 'Abrir la petición en eMuwarez' : null)
+  const { triggerProps, tooltipNode } = useTooltip(job.request_url ? `Abrir la petición en ${job.tracker_nombre ?? 'eMuwarez'}` : null)
   if (!job.request_title) return <StatusBadge status={job.request_status || 'Sin petición'} type="request" />
   if (!job.request_url) return <PlainValue>{job.request_title}</PlainValue>
   return (

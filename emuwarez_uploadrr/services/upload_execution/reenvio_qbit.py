@@ -16,6 +16,7 @@ import threading
 from .. import seeding_qbit
 from ..eventos import EVENTO_SUBIDA_ESTADO, publicar
 from ..upload_states import RETRYABLE_STATUSES
+from ..trackers import EMU
 from ..uploadrr_contract import RUNTIME_EMU, get_runtime_settings
 from ..uploadrr_eventos import (
     EstadoEventos, SeguidorEventos, borrar_fichero, mensaje_de_fallo, preparar_fichero,
@@ -95,7 +96,7 @@ def reenviar_a_qbittorrent(job_id: int, *, conn=None, wait: bool = False) -> dic
     finally:
         if propia:
             conn.close()
-    hilo = threading.Thread(target=_reenviar, args=(job_id, torrent_id, cmd, secrets, tracker_del_trabajo(job).nombre),
+    hilo = threading.Thread(target=_reenviar, args=(job_id, torrent_id, cmd, secrets, tracker_del_trabajo(job)),
                             daemon=True)
     hilo.start()
     logger.info("Reenvío a qBittorrent (job %s, torrent %s)", job_id, torrent_id)
@@ -122,9 +123,10 @@ def _avisar_de_qbit(job_id: int, line: str, secrets: list[str]) -> None:
         logger.exception("Reenvío %s: no se pudo registrar lo que dijo qBittorrent", job_id)
 
 
-def _lanzar(job_id: int, torrent_id: str, cmd: dict, secrets: list[str], nombre: str = "eMuwarez") -> tuple[str, str]:
+def _lanzar(job_id: int, torrent_id: str, cmd: dict, secrets: list[str], destino=EMU) -> tuple[str, str]:
     """Prepara el config de la subida, lanza Uploadrr-EMU y espera. Devuelve (resultado, línea final del registro).
-    `nombre`: el del tracker de la subida."""
+    `destino`: el tracker de la subida."""
+    nombre = destino.nombre
     append_upload_log(job_id, "info", f"Reenvío a qBittorrent: se vuelve a añadir el torrent {torrent_id} de "
                       f"{nombre}, sin subir nada.", stream="system")
     append_upload_log(job_id, "info", f"Comando: {redact_secrets(cmd.get('command_preview', ''), secrets)}",
@@ -140,7 +142,8 @@ def _lanzar(job_id: int, torrent_id: str, cmd: dict, secrets: list[str], nombre:
             if efecto[0] == "qbit_ok":
                 append_upload_log(job_id, "info", QBIT_AÑADIDO, stream="system")
             elif efecto[0] == "qbit_fallo":
-                append_upload_log(job_id, "error", mensaje_qbit_fallo(efecto[1], reenvio=True), stream="system")
+                append_upload_log(job_id, "error", mensaje_qbit_fallo(efecto[1], reenvio=True, nombre=nombre),
+                                  stream="system")
 
     def _con_linea(linea: str) -> None:
         # Con eventos el texto solo se registra (ver _run_uploadrr_subprocess_body).
@@ -173,15 +176,15 @@ def _lanzar(job_id: int, torrent_id: str, cmd: dict, secrets: list[str], nombre:
             motivo = "murió sin dar un resultado" if r is None else "dijo que fue bien pero salió con error"
             return FALLIDO, (f"Reenvío a qBittorrent fallido (exit code {codigo}): Uploadrr-EMU {motivo}. "
                              f"La subida a {nombre} sigue igual.")
-        return FALLIDO, f"Reenvío a qBittorrent fallido: {mensaje_de_fallo(r)}. La subida a {nombre} sigue igual."
+        return FALLIDO, f"Reenvío a qBittorrent fallido: {mensaje_de_fallo(r, nombre, destino.uploadrr)}. La subida a {nombre} sigue igual."
     if codigo != 0:
         return FALLIDO, f"Reenvío a qBittorrent fallido (exit code {codigo}). La subida a {nombre} sigue igual."
     return OK, "Reenvío a qBittorrent hecho: qBittorrent ha comprobado los ficheros y lo siembra."
 
 
-def _reenviar(job_id: int, torrent_id: str, cmd: dict, secrets: list[str], nombre: str = "eMuwarez") -> None:
+def _reenviar(job_id: int, torrent_id: str, cmd: dict, secrets: list[str], destino=EMU) -> None:
     try:
-        resultado, final = _lanzar(job_id, torrent_id, cmd, secrets, nombre)
+        resultado, final = _lanzar(job_id, torrent_id, cmd, secrets, destino)
     except Exception as exc:
         resultado = FALLIDO
         final = f"Reenvío a qBittorrent fallido: {redact_secrets(texto_de_error(exc), secrets)}"

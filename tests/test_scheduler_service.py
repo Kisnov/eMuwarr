@@ -49,7 +49,7 @@ def test_emu_request_sync_is_daily_with_an_hourly_floor(db_conn):
     """Cada 24 h, que son ≤ 9 llamadas a la API por sincronización; el botón sigue valiendo."""
     tarea = {t["task_key"]: t for t in list_scheduled_tasks(db_conn)}[TASK_EMU_SYNC]
     assert (tarea["interval_minutes"], tarea["min_interval_minutes"], tarea["manual_allowed"]) == (1440, 60, 1)
-    assert tarea["name"] == "Sincronizar peticiones eMuwarez"
+    assert tarea["name"] == "Sincronizar peticiones"
     with pytest.raises(ValueError, match="mínimo"):
         set_task_interval(db_conn, TASK_EMU_SYNC, 30)
 
@@ -262,3 +262,15 @@ def test_full_catalog_sync_skipped_while_uploading_then_runs_next_tick(isolated_
         from emuwarez_uploadrr.services import emu_catalog
         emu_catalog._set_progress(active=False)
         conn.close()
+
+
+def test_el_nombre_de_una_tarea_ya_instalada_se_pone_al_dia_sin_tocar_cada_cuanto_corre(db_conn):
+    from emuwarez_uploadrr.services.scheduler import ensure_default_tasks
+    set_task_interval(db_conn, TASK_EMU_SYNC, 720)
+    db_conn.execute("UPDATE scheduled_tasks SET name = 'Sincronizar peticiones eMuwarez', description = 'vieja' "
+                    "WHERE task_key = ?", (TASK_EMU_SYNC,))
+    db_conn.commit()
+    ensure_default_tasks(db_conn)
+    tarea = {t["task_key"]: t for t in list_scheduled_tasks(db_conn)}[TASK_EMU_SYNC]
+    assert tarea["name"] == "Sincronizar peticiones" and "cada otro tracker con clave" in tarea["description"]
+    assert tarea["interval_minutes"] == 720

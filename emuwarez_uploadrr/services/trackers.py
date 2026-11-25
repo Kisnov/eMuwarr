@@ -47,6 +47,12 @@ def obtener(tracker_id: str) -> Tracker:
         raise ValueError(f"Tracker desconocido: {tracker_id!r}") from None
 
 
+def nombre_de(uploadrr: str) -> str:
+    """El nombre que ve el usuario del tracker con ese nombre en Uploadrr-EMU (EMU, NOBS, MNV); si no se conoce, el
+    mismo código."""
+    return next((t.nombre for t in TRACKERS.values() if t.uploadrr == uploadrr), uploadrr)
+
+
 def tiene_clave(conn, tracker: Tracker) -> bool:
     """Si su clave de API está puesta en Configuración (`<prefijo>.api_key`)."""
     from .settings import ajuste_de_tracker  # settings importa este módulo: aquí, no arriba
