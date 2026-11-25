@@ -70,7 +70,7 @@ export function estadoVisible(job: UploadJob, seeding: SeedingResponse | null): 
     case 'running':
     case 'preparing': {
       const info = currentPhaseInfo(job)
-      const fase = info?.label ?? phaseLabel(job.progress_phase)
+      const fase = info?.label ?? phaseLabel(job.progress_phase, job)
       const contador = progressCounter(job)
       return { tono: 'curso', simbolo: '●', titulo: 'Subiendo',
         resumen: `${fase}${info?.counterText ? ` (${info.counterText})` : ''}`, transcurrido: contador || undefined }
