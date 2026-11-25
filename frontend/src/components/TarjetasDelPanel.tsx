@@ -26,8 +26,8 @@ const ICON_MINE = svgIcon(<><path d="M22 2 11 13" /><path d="M22 2 15 22l-4-9-9-
 export const EXPLICACION = {
   available: 'Contenido cuyo archivo está presente en disco, listo para comparar o subir.',
   unique: 'Contenido disponible que aún no está en eMuwarez: las películas, las temporadas completas de series o documentales y sus capítulos. Son tus oportunidades de subida.',
-  requests: 'Total de peticiones activas descargadas de eMuwarez.',
-  uploads: 'Número de subidas a eMuwarez que has completado con Uploadrr.',
+  requests: 'Total de peticiones activas descargadas de tus trackers.',
+  uploads: 'Número de subidas que has completado con Uploadrr.',
 }
 
 // Las diez tarjetas que antes llenaban el pie del Panel. Las que también salen en la franja del Panel llevan su mismo
@@ -100,7 +100,7 @@ export function TarjetasDelPanel({ resumen }: { resumen: DashboardSummaryRespons
         />
       </div>
 
-      <h2 className="est-grupo-titulo" id="est-grupo-peticiones">Peticiones de eMuwarez</h2>
+      <h2 className="est-grupo-titulo" id="est-grupo-peticiones">Peticiones</h2>
       <div className="stat-cards-row" role="group" aria-labelledby="est-grupo-peticiones">
         <StatCard
           icon={ICON_REQUESTS}
@@ -126,13 +126,13 @@ export function TarjetasDelPanel({ resumen }: { resumen: DashboardSummaryRespons
           icon={ICON_RECLAIMED}
           label="Peticiones reclamadas"
           value={n(s.requests_reclaimed)}
-          info="Peticiones ya Reclamadas en eMuwarez, tuyas y de otros: es el total. En Peticiones, cada una dice si la reclamaste tú, la reclamó otro usuario o eMuwarez no indica quién."
+          info="Peticiones ya Reclamadas en su tracker, tuyas y de otros: es el total. En Peticiones, cada una dice si la reclamaste tú, la reclamó otro usuario o el tracker no indica quién."
         />
         <StatCard
           icon={ICON_MINE}
           label="Mis peticiones"
           value={n(s.requests_mine)}
-          info="Peticiones creadas por tu propio usuario de eMuwarez (según el nombre configurado en Ajustes)."
+          info="Peticiones creadas por tu propio usuario en cada tracker."
         />
       </div>
     </>

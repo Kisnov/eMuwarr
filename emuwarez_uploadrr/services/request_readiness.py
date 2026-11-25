@@ -136,7 +136,7 @@ def _evaluate_readiness(
     compat_reasons: list[str],
     readiness_reasons: list[str],
     variante_en_emuwarez: bool = True,
-    mi_usuario: Optional[str] = None,
+    mi_usuario: "dict[str, str] | str | None" = None,
 ) -> dict:
     """Apply readiness rules. Returns status, action, blockers, reasons.
 
@@ -261,7 +261,7 @@ def _evaluate_readiness(
 
 def score_request_candidate(
     req: dict, lib: dict, cls: Optional[dict] = None, variante_en_emuwarez: bool = True,
-    mi_usuario: Optional[str] = None,
+    mi_usuario: "dict[str, str] | str | None" = None,
 ) -> dict:
     """Score a single (request, library_item) pair. `cls`: su clasificación, si ya se calculó con lo que de verdad
     tiene lo pedido (los capítulos de una temporada); si no, se clasifica `lib` tal cual."""
@@ -345,9 +345,9 @@ def build_request_candidates(
 
     from .emu_catalog import catalogo_cubre, get_item_comparison
     from .reglas_tracker import reglas_para_subir
-    from .requests import _scoped_library_id, clasificar_peticion, mi_usuario_emu
+    from .requests import _scoped_library_id, clasificar_peticion, mis_usuarios
 
-    mi_usuario = mi_usuario_emu(conn) or ""
+    mi_usuario = mis_usuarios(conn)
     tracker = obtener(req.get("tracker") or POR_DEFECTO)
 
     candidates = []
