@@ -339,6 +339,10 @@ def retry_chain_ids(job_id: int, conn) -> list[int]:
     return ids
 
 
+# Estado: los enlaces de la carpeta de subidas que sembraba una subida ya borrada cuando otra aún apuntaba a ellos.
+ENLACES_SEMBRADOS_SIN_FILA = "enlaces_sembrados_sin_fila"
+
+
 def delete_upload_job(job_id: int, confirmation: str | None = None, conn=None) -> dict:
     """Permanently remove a job and everything registered about it (logs,
     artifacts) — never the real media file, which lives in Radarr/Sonarr's own
@@ -430,12 +434,17 @@ def delete_upload_job(job_id: int, confirmation: str | None = None, conn=None) -
         # lo dice `torrent_subido`) o todavía viva (se está preparando o
         # subiendo), sea de esta cadena o de otra: los intentos fallidos suelen
         # apuntar al mismo enlace.
+        from .. import carpeta_subida
         from ..carpeta_subida import ENLACES, borrar_de_subidas
+        from ...database import get_json_state, set_json_state
         marcas = ",".join("?" * len(chain))
         filas = conn.execute(
-            f"SELECT prepared_path, status FROM upload_jobs WHERE id IN ({marcas})", chain).fetchall()
+            f"SELECT prepared_path, status, torrent_subido FROM upload_jobs WHERE id IN ({marcas})", chain).fetchall()
         with ENLACES:
-            en_uso = {f["prepared_path"] for f in conn.execute(
+            # Más los que sembraba una subida ya borrada y otra subida aún apuntaba (la misma, a otro tracker):
+            # qBittorrent sigue sembrando de ahí aunque la fila que lo decía ya no esté.
+            sin_fila = set(get_json_state(conn, ENLACES_SEMBRADOS_SIN_FILA) or [])
+            en_uso = sin_fila | {f["prepared_path"] for f in conn.execute(
                 "SELECT prepared_path FROM upload_jobs WHERE prepared_path IS NOT NULL "
                 "AND (status NOT IN ('cancelled', 'failed') OR torrent_subido = 1)")}
             for fila in filas:
@@ -445,6 +454,20 @@ def delete_upload_job(job_id: int, confirmation: str | None = None, conn=None) -
                     "SELECT 1 FROM library_items WHERE path = ? OR prepared_path = ? LIMIT 1", (ruta, ruta)).fetchone()
                 if ruta not in en_uso and not propio:
                     borrar_de_subidas(ruta)
+            sembradas = [f["prepared_path"] for f in filas
+                         if f["prepared_path"] and (f["status"] == "completed" or f["torrent_subido"])]
+            compartidas = {f["prepared_path"] for f in conn.execute(
+                f"SELECT prepared_path FROM upload_jobs WHERE prepared_path IN ({','.join('?' * len(sembradas))}) "
+                f"AND id NOT IN ({marcas}) AND status != 'completed' AND torrent_subido = 0",
+                (*sembradas, *chain))} if sembradas else set()
+            # Los que ya no están en disco (se borró el torrent con sus datos) dejan de apuntarse; con la carpeta de
+            # subidas fuera de alcance no se sabe, y se quedan.
+            ahora = sin_fila | compartidas
+            if os.path.isdir(carpeta_subida.RAIZ_SUBIDAS):
+                ahora = {r for r in ahora if os.path.lexists(r)}
+            if ahora != sin_fila:
+                set_json_state(conn, ENLACES_SEMBRADOS_SIN_FILA, sorted(ahora))
+                conn.commit()  # dentro del cerrojo: otro borrado a la vez lee la lista ya escrita
         conn.execute(f"DELETE FROM upload_artifacts WHERE upload_job_id IN ({marcas})", chain)
         conn.execute(f"DELETE FROM upload_job_logs WHERE upload_job_id IN ({marcas})", chain)
         conn.execute(f"UPDATE filesystem_operations SET upload_job_id = NULL WHERE upload_job_id IN ({marcas})", chain)
