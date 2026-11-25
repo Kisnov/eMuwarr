@@ -321,6 +321,50 @@ def test_la_lista_de_subidas_marca_la_pendiente(client, auth_headers, conn, trac
     assert client.get(f"/api/uploads/{filas[1]}", headers=auth_headers).json()["pendiente_moderacion"] is True
 
 
+def test_una_lectura_corta_frente_al_total_del_tracker_no_se_guarda(conn, tracker, monkeypatch):
+    tracker["torrents"] = [_torrent(i, 1) for i in range(1, 101)]
+    sincronizar(conn, AHORA - timedelta(days=1))
+
+    def cortada(api_key, base_url=None, **kwargs):
+        kwargs["progress"](1, 4, 25, 100)  # el tracker dice 100 y solo han llegado 25
+        return [_torrent(i, 1) for i in range(1, 26)]
+
+    monkeypatch.setattr(mis_torrents, "emu_fetch_all_torrents", cortada)
+    assert sincronizar(conn, AHORA) == ("failed", "La lectura está incompleta (25 de 100 subidas): se conserva la anterior")
+    assert resumen(conn)["totales"]["subidas"] == 100
+
+
+def test_una_pagina_vacia_con_subidas_en_el_total_no_borra_la_lista(conn, tracker, monkeypatch):
+    tracker["torrents"] = [_torrent(i, 1) for i in range(1, 11)]
+    sincronizar(conn, AHORA - timedelta(days=1))
+    monkeypatch.setattr(mis_torrents, "emu_fetch_all_torrents", emu.emu_fetch_all_torrents)
+    monkeypatch.setattr(emu, "request_json", lambda method, url, **kw: {"data": [], "meta": {"total": 10}})
+    assert sincronizar(conn, AHORA)[0] == "failed"
+    assert resumen(conn)["totales"]["subidas"] == 10
+
+
+def test_las_filas_que_no_se_pueden_guardar_no_cuentan_para_el_total(conn, tracker, monkeypatch):
+    tracker["torrents"] = [_torrent(i, 1) for i in range(1, 101)]
+    sincronizar(conn, AHORA - timedelta(days=1))
+
+    def con_filas_rotas(api_key, base_url=None, **kwargs):
+        kwargs["progress"](1, 1, 100, 100)
+        return [_torrent(i, 1) for i in range(1, 81)] + [{"id": str(i), "attributes": {}} for i in range(81, 101)]
+
+    monkeypatch.setattr(mis_torrents, "emu_fetch_all_torrents", con_filas_rotas)
+    assert sincronizar(conn, AHORA) == ("failed", "La lectura está incompleta (80 de 100 subidas): se conserva la anterior")
+    assert resumen(conn)["totales"]["subidas"] == 100
+
+
+def test_una_subida_nueva_mientras_se_pagina_no_tumba_la_lectura(conn, tracker, monkeypatch):
+    def con_una_de_mas(api_key, base_url=None, **kwargs):
+        kwargs["progress"](2, 2, 40, 41)
+        return [_torrent(i, 1) for i in range(1, 41)]
+
+    monkeypatch.setattr(mis_torrents, "emu_fetch_all_torrents", con_una_de_mas)
+    assert sincronizar(conn, AHORA)[0] == "completed"
+
+
 # --- Varios trackers: cada uno con su clave, su URL y su cupo ----------------------------------------------------------
 
 @pytest.fixture
@@ -362,6 +406,14 @@ def test_el_fallo_de_un_tracker_no_para_a_los_demas_ni_borra_lo_suyo(conn, vario
     assert estado == "failed" and "N.O.B.S: N.O.B.S no responde" in texto and "Milnueve: 1 subidas" in texto
     assert resumen(conn, TRACKERS["nobs"])["totales"]["subidas"] == 2
     assert resumen(conn, TRACKERS["mnv"])["torrents"][0]["completados"] == 5
+
+
+def test_una_respuesta_rara_de_un_tracker_no_deja_sin_leer_a_los_siguientes(conn, varios):
+    varios["NOBS"] = ["no es un torrent"]
+    estado, texto = sincronizar(conn, AHORA)
+    assert estado == "failed" and "N.O.B.S: No se pudieron leer tus subidas: error inesperado" in texto
+    assert "Milnueve: 1 subidas" in texto
+    assert resumen(conn, TRACKERS["mnv"])["totales"]["subidas"] == 1
 
 
 def test_un_tracker_sin_usuario_se_salta(conn, varios):
