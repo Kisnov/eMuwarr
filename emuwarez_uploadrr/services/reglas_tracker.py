@@ -176,7 +176,20 @@ def reglas_para_subir(conn: sqlite3.Connection, item: dict, tracker_id: str, *, 
         from .season_pack import reglas_del_pack
         return reglas_del_pack(item, tracker_id, conn, idiomas=idiomas)
     item = con_idiomas_elegidos(item, overrides=overrides, idiomas=idiomas)
-    return reglas_de(tracker_id, item, anime=obtener(tracker_id).id != EMU.id and es_anime(conn, item))
+    reglas = reglas_de(tracker_id, item, anime=obtener(tracker_id).id != EMU.id and es_anime(conn, item))
+    sin_tipo = _motivo_sin_tipo(conn, item, tracker_id) if reglas.permitido else None
+    return Reglas(False, sin_tipo, None) if sin_tipo else reglas
+
+
+def _motivo_sin_tipo(conn: sqlite3.Connection, item: dict, tracker_id: str) -> Optional[str]:
+    """Si el tracker no tiene el tipo de la copia (N.O.B.S y Milnueve no tienen «SD»), por qué no se sube ahí. El
+    formato, el mismo de la comprobación «tipo»: el de su propuesta de nomenclatura o, sin ella, el que se le deducirá.
+    El de un pack sale de su plan: ese se mira al correr el trabajo (upload_queue._paso_nombre)."""
+    from .nomenclature import _infer_source_from_item, get_latest_nomenclature_proposal
+    from .upload_preflight import formato_de_subida
+    from .uploadrr_contract import motivo_sin_tipo
+    propuesta = get_latest_nomenclature_proposal(item["id"], conn=conn) if item.get("id") else None
+    return motivo_sin_tipo(tracker_id, formato_de_subida(item, propuesta) if propuesta else _infer_source_from_item(item))
 
 
 def elegibilidad(conn: sqlite3.Connection, item: dict) -> dict:

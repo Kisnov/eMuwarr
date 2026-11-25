@@ -1051,11 +1051,14 @@ export function useAsistente({ item, onClose: onCloseProp, onDone, onNavigate, p
     if (!targetIsSeason) {
       const nuevos = { ...fields, source, ...(PROVIDER_SOURCES.has(source) ? {} : { provider: null }) }
       try { await saveNomenclatureFields(targetId, nuevos) } catch { /* «Subir» lo vuelve a guardar */ }
+      setTipoGuardado(n => n + 1)
     }
     await runChecks(source)
   }
 
-  // Las de los otros trackers para este elemento: se piden al llegar al paso 2 de una subida suelta.
+  // Las de los otros trackers para este elemento: se piden al llegar al paso 2 de una subida suelta, y otra vez al
+  // cambiar el tipo en el Resumen (N.O.B.S y Milnueve no tienen todos los de eMuwarez).
+  const [tipoGuardado, setTipoGuardado] = useState(0)
   const otrosTrackers = trackersParaSubir.filter(t => t.id !== 'emu').map(t => t.id).join(',')
   useEffect(() => {
     setReglas(new Map())
@@ -1068,7 +1071,7 @@ export function useAsistente({ item, onClose: onCloseProp, onDone, onNavigate, p
     }
     return () => { vigente = false }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [step, targetId, otrosTrackers])
+  }, [step, targetId, otrosTrackers, tipoGuardado])
   // Si cambia el tracker principal (se desmarca eMuwarez), las comprobaciones se rehacen con sus normas.
   const principalComprobado = useRef(trackerPrincipal)
   useEffect(() => {

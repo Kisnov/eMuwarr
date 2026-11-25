@@ -369,6 +369,19 @@ def test_el_source_elegido_en_el_asistente_desbloquea(db_conn, tmp_path):
     assert (_tipo(r)["status"], _tipo(r)["message"], r["ready"]) == ("ok", "BluRay", True)
 
 
+@pytest.mark.parametrize("tracker, nombre", [("nobs", "N.O.B.S"), ("mnv", "Milnueve")])
+def test_un_tipo_que_el_tracker_no_tiene_bloquea(db_conn, tmp_path, tracker, nombre):
+    f = tmp_path / "movie.mkv"; f.write_bytes(b"x")
+    iid = _movie_with_path(db_conn, str(f), source="SD")
+    assert _tipo(uc.run_upload_checks(db_conn, iid, scope="content"))["status"] == "ok"  # eMuwarez sí lo tiene
+    r = uc.run_upload_checks(db_conn, iid, scope="content", tracker=tracker)
+    assert r["ready"] is False
+    assert _tipo(r) == {"id": "tipo", "label": f"{nombre} no tiene este tipo", "status": "fail",
+                        "message": f"{nombre} no tiene el tipo «SD»: esta copia no se puede subir ahí"}
+    assert _tipo(uc.run_upload_checks(db_conn, iid, scope="content", tracker=tracker,
+                                      ajustes={"source": "WEB-DL"}))["status"] == "ok"
+
+
 @pytest.mark.parametrize("source", ["", None, "WEB-DL", "BluRay", "DVD", "Full BluRay"])
 def test_la_comprobacion_y_el_comando_dicen_lo_mismo(db_conn, tmp_path, source):
     """Pasa si y solo si el comando lleva `-t`: los dos leen el formato de la misma propuesta."""

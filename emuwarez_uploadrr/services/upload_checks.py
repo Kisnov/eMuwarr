@@ -319,12 +319,16 @@ def run_upload_checks(conn: sqlite3.Connection, item_id: int, *, scope: str = "a
 
     # Sin tipo, Uploadrr-EMU lo adivina del nombre y eMuwarez puede recibir el tipo 0.
     if scope != "environment":
-        from .uploadrr_contract import tipo_de_subida
+        from .trackers import obtener
+        from .uploadrr_contract import motivo_sin_tipo, tipo_de_subida
         donde = "elígelo en el resumen" if scope == "all" else "elige su Source en el asistente de subida"
         cual = f"Source «{formato}»" if formato else "sin Source"
-        if not add("tipo", "Se sabe el tipo de la copia", "No se sabe el tipo de la copia",
-                   bool(tipo_de_subida(formato)),
-                   formato if tipo_de_subida(formato) else f"No se sabe el tipo de esta copia ({cual}): {donde}"):
+        sin_tipo = motivo_sin_tipo(tracker, formato)  # N.O.B.S y Milnueve no tienen «SD»
+        if not tipo_de_subida(formato):
+            fallo, mensaje = "No se sabe el tipo de la copia", f"No se sabe el tipo de esta copia ({cual}): {donde}"
+        else:
+            fallo, mensaje = f"{obtener(tracker).nombre} no tiene este tipo", sin_tipo or formato
+        if not add("tipo", "Se sabe el tipo de la copia", fallo, bool(tipo_de_subida(formato)) and not sin_tipo, mensaje):
             return done()
 
     if scope == "content":
