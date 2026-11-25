@@ -292,7 +292,8 @@ def emu_fetch_all_torrents(
             total_items = meta.get("total") or total_items
         # Una página que no trae la lista no es el final: cortar ahí daría por completa una lectura a medias.
         if not isinstance(items, list):
-            raise IntegrationError(f"eMuwarez ha devuelto la página {page} en un formato que no se reconoce")
+            from ..services.trackers import nombre_de
+            raise IntegrationError(f"{nombre_de(tracker)} ha devuelto la página {page} en un formato que no se reconoce")
         if not items:
             break
         if stop_after_id is not None:

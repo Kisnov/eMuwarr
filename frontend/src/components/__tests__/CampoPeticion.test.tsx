@@ -47,7 +47,7 @@ describe('CampoPeticion', () => {
     expect(a.getAttribute('href')).toBe('https://emu-warez.com/requests/600')
     expect(a.target).toBe('_blank')
     expect(a.rel).toBe('noreferrer')
-    expect(a.getAttribute('aria-label')).toBe('Abrir la petición en eMuwarez: Re:Zero')
+    expect(a.getAttribute('aria-label')).toBe('Abrir la petición en su tracker: Re:Zero')
   })
 
   it('la tuya sale con (Yo); sin autor visible no se inventa uno', async () => {
