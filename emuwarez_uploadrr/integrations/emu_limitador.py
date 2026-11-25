@@ -149,8 +149,9 @@ class Limitador:
             if espera <= 0:
                 break
             if interactiva and (ahora - inicio) + espera > self.espera_maxima_interactiva:
+                from ..services.trackers import nombre_de
                 raise IntegrationError(
-                    "eMuwarez: se ha llegado al límite de peticiones por minuto de la API key; "
+                    f"{nombre_de(tracker)}: se ha llegado al límite de peticiones por minuto de la API key; "
                     f"prueba dentro de {max(1, round(espera))} s")
             self._dormir(min(espera, self.tramo))
             ahora = self._reloj()
