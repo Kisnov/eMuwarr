@@ -5,12 +5,13 @@
    específico como la regla base o más: una clase suelta perdería contra ellas. */
 
 /* ---- Tareas ---- */
-/* Las tarjetas se reparten en columnas de 480px como mínimo; con una sola columna ocupan el ancho entero. */
+/* Las tarjetas se reparten en columnas de 480px como mínimo; con una sola columna ocupan el ancho entero. Cada una
+   mide lo que necesita: estirarlas a la más alta de la fila dejaba huecos grandes en las cortas. */
 .tareas-lista {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(min(100%, 480px), 1fr));
   gap: 16px;
-  align-items: stretch;
+  align-items: start;
 }
 
 .tareas-resumen-pagina {
