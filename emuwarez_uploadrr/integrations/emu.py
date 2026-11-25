@@ -294,6 +294,7 @@ def emu_fetch_all_torrents(
         if not isinstance(items, list):
             raise IntegrationError(f"eMuwarez ha devuelto la página {page} en un formato que no se reconoce")
         if not items:
+            _avisar(progress, page, total_pages, len(all_items), total_items)
             break
         if stop_after_id is not None:
             for t in items:
@@ -307,18 +308,30 @@ def emu_fetch_all_torrents(
                 all_items.append(t)
         else:
             all_items.extend(items)
-        if progress:
-            try:
-                progress(page, total_pages, len(all_items), total_items)
-            except Exception:  # noqa: BLE001 — progress is best-effort
-                pass
-        if len(items) < per_page or (total_pages and page >= total_pages):
+        _avisar(progress, page, total_pages, len(all_items), total_items)
+        # Una página corta solo es la última si el tracker no dice cuántas páginas o cuántos torrents hay: uno que
+        # limite `perPage` por debajo de lo pedido las da todas cortas.
+        if total_pages:
+            ultima = page >= total_pages
+        elif total_items and stop_after_id is None:
+            ultima = len(all_items) >= total_items
+        else:
+            ultima = len(items) < per_page
+        if ultima:
             break
         page += 1
     # Acabar las páginas permitidas sin ver el final no es el catálogo entero: guardarlo borraría lo que falta.
     if page > max_pages and not reached_known:
         raise IntegrationError(f"El catálogo tiene más de {max_pages} páginas: no se guarda una lectura a medias")
     return all_items
+
+
+def _avisar(progress, *datos) -> None:
+    if progress:
+        try:
+            progress(*datos)
+        except Exception:  # noqa: BLE001 — progress is best-effort
+            pass
 
 
 # ---------------------------------------------------------------------------
