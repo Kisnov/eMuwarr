@@ -108,8 +108,7 @@ came in from `Kisnov/Uploadrr-EMU` with `git subtree add`, history kept; that re
   written before launch and deleted with the job's config;
   `test_contrato_uploadrr_real.py` parses the app's argv with the real `uploadrr-emu/src/args.py`);
   `config.yaml` keys set by `upload_execution/config.py` with `uploadrr_config.py` / `uploadrr_yaml.py` (among them the stock signature image, replaced by the current one, `AUTO.keep_quiet`, `SCREENS.use_oxipng`/`oxipng_level`, `DEFAULT.always_anon`
-  and `TRACKERS.<X>.anon`, all `false`: only the `-a` flag makes an upload anonymous; NOBS/MNV also get `api_key` and `url`,
-  `trackers.url_de`: `<prefijo>.url` or the `services/trackers.py` one), on top of the user's
+  and `TRACKERS.<X>.anon`, all `false`: only the `-a` flag makes an upload anonymous; NOBS/MNV also get `api_key`), on top of the user's
   `config.yaml`, go into the job's own file,
   `config_uploadrr/<job>.yaml` next to the DB (`<job>-reenvio.yaml` for «Reenviar a qBittorrent»; dir 0700, file 0600 via `O_EXCL`,
   deleted after the process, swept at startup, never in a backup), passed as `--config <absolute path>` (global, like `--eventos`),

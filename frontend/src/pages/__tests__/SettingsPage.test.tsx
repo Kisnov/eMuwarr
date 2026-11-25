@@ -71,8 +71,6 @@ const AJUSTES: SettingsData = {
   nobs_api_key_masked: 'nobs…1234',
   mnv_api_key_configured: false,
   mnv_api_key_masked: null,
-  nobs_url: 'https://nobs.rawsmoke.net',
-  mnv_url: 'https://tracker.milnueve.cc',
   marcas_por_tracker: { nobs: null, mnv: { personal_release: ['OTRO'], anonimos: [] } },
   emu_username: 'gabriel',
   uploadrr_path: null,
@@ -288,18 +286,6 @@ describe('Configuración: pestaña de ajustes', () => {
     expect(payload).not.toHaveProperty('clear')
     expect(porPlaceholder('API key de N.O.B.S').value).toBe('')
     expect(hayCambios()).toBe(false)
-  })
-
-  it('la URL de un tracker solo viaja si se cambia, y vacía vuelve a la de siempre', async () => {
-    await montar()
-    const url = () => [...document.body.querySelectorAll<HTMLInputElement>('input[type="url"]')]
-    expect(url().map(i => i.value)).toEqual(['https://nobs.rawsmoke.net', 'https://tracker.milnueve.cc'])
-    await escribir(url()[0], '  ')
-    expect(hayCambios()).toBe(true)
-    await pulsar(boton('Guardar'))
-    const payload = vi.mocked(updateSettings).mock.calls[0][0]
-    expect(payload.nobs_url).toBe('')
-    expect(payload).not.toHaveProperty('mnv_url')
   })
 
   it('las marcas de un tracker siguen a eMuwarez hasta marcarlas aparte', async () => {
