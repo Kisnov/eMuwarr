@@ -8,6 +8,7 @@ Antes de encolar se mira que qBittorrent tiene entero el torrent de origen con e
 from __future__ import annotations
 
 import json
+import os
 import time
 
 import pytest
@@ -471,18 +472,64 @@ def test_sin_huellas_una_subida_normal_a_nobs_sigue_fallando(db_conn, pipeline):
     assert _fila(db_conn, nobs)["status"] == "failed"
 
 
-def test_con_otro_nombre_no_se_sube(db_conn, pipeline, tmp_path):
-    """Si el nombre de eMuwarez de ahora no es el de entonces, otro fichero no se sembraría junto: falla sin preparar."""
-    iid, emu = _subida_a_emu_hecha(db_conn, pipeline)
-    db_conn.execute("UPDATE upload_jobs SET prepared_path = ? WHERE id = ?", (str(tmp_path / "subidas" / "Viejo.mkv"), emu))
+def test_con_otro_nombre_de_ahora_sube_con_el_de_la_fuente(db_conn, pipeline, tmp_path):
+    """Si la nomenclatura cambió después, la copia sube el mismo fichero con el nombre que ya tiene en la otra."""
+    # Las huellas van con el nombre de entonces.
+    huellas = json.dumps({"Peli.2022.mkv": uq._huella_de(str(pipeline.origen))})
+    iid, emu = _subida_a_emu_hecha(db_conn, pipeline, huellas_preparacion_json=huellas,
+                                   nomenclature_snapshot_json=json.dumps({"proposed_title": "Peli 2022"}))
+    viejo = tmp_path / "subidas" / "Peli.2022.mkv"
+    os.rename(pipeline.destino, viejo)
+    db_conn.execute("UPDATE upload_jobs SET prepared_path = ? WHERE id = ?", (str(viejo), emu))
     db_conn.commit()
     nobs = _trabajo(db_conn, iid, tracker="nobs", copia_de_job_id=emu)
 
     uq._run_queued_job(nobs)
 
     fila = _fila(db_conn, nobs)
-    assert fila["status"] == "failed" and "Viejo.mkv" in fila["error_message"]
+    assert fila["status"] != "failed", _logs(db_conn, nobs)
+    assert fila["prepared_path"] == str(viejo) and pipeline.preparados == []
+    assert json.loads(fila["nomenclature_snapshot_json"]) == {"proposed_title": "Peli 2022"}
+
+
+def test_la_copia_publica_con_el_titulo_de_la_fuente(db_conn, tmp_path):
+    """El `-mt` (el nombre en el tracker) es el de la subida de origen, no el de la nomenclatura de ahora."""
+    from emuwarez_uploadrr.services.uploadrr_contract import RUNTIME_EMU
+    iid, emu, _ruta = _emu_completada(db_conn, tmp_path, uploadrr_command_json=json.dumps({"title": "Peli 2022 JAP"}))
+    nobs = _trabajo(db_conn, iid, tracker="nobs", copia_de_job_id=emu)
+    args = ["python", "upload.py", "/x", "-mt", "Peli 2026 JPN", "-tk", "NOBS"]
+
+    uq._marcar_lista(nobs, {"runtime_type": RUNTIME_EMU, "title": "Peli 2026 JPN", "command_args": args}, db_conn,
+                     tracker="nobs")
+
+    comando = json.loads(_fila(db_conn, nobs)["uploadrr_command_json"])
+    assert comando["title"] == "Peli 2022 JAP"
+    assert comando["command_args"][comando["command_args"].index("-mt") + 1] == "Peli 2022 JAP"
+
+
+def test_sin_fichero_en_la_fuente_no_se_sube(db_conn, pipeline):
+    iid, emu = _subida_a_emu_hecha(db_conn, pipeline)
+    db_conn.execute("UPDATE upload_jobs SET prepared_path = NULL WHERE id = ?", (emu,))
+    db_conn.commit()
+    nobs = _trabajo(db_conn, iid, tracker="nobs", copia_de_job_id=emu)
+
+    uq._run_queued_job(nobs)
+
+    fila = _fila(db_conn, nobs)
+    assert fila["status"] == "failed" and f"#{emu}" in fila["error_message"]
     assert pipeline.preparados == []
+
+
+def test_un_pack_toma_los_nombres_de_sus_capitulos_por_sxxeyy(tmp_path):
+    carpeta = tmp_path / "Serie 2022 S02"
+    carpeta.mkdir()
+    for n in ("Serie 2022 S02E01 JAP.mkv", "Serie 2022 S02E02 JAP.mkv"):
+        (carpeta / n).write_bytes(b"x")
+    ficheros = [(1, "/o/1.mkv", "Serie 2026 S02E01 JPN.mkv"), (2, "/o/2.mkv", "Serie 2026 S02E02 JPN.mkv"),
+                (3, "/o/3.mkv", "Serie 2026 S02E03 JPN.mkv")]
+    assert uq._con_nombres_de_la_fuente(str(carpeta), ficheros, True) == [
+        (1, "/o/1.mkv", "Serie 2022 S02E01 JAP.mkv"), (2, "/o/2.mkv", "Serie 2022 S02E02 JAP.mkv"),
+        (3, "/o/3.mkv", "Serie 2026 S02E03 JPN.mkv")]
 
 
 def test_el_reintento_sigue_siendo_copia(db_conn, tmp_path, sin_hilos):
