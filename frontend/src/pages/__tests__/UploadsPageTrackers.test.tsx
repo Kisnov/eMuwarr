@@ -61,7 +61,7 @@ afterEach(async () => {
 describe('el mismo elemento en varios trackers', () => {
   it('va en una sola fila con el título y, debajo, la del otro tracker con su estado y sus acciones', async () => {
     await pagina([
-      trabajo({ id: 2, ...IMITATION, ...MIL, status: 'failed', created_at: '2026-11-20T10:01:00', result_url: null }),
+      trabajo({ id: 2, ...IMITATION, ...MIL, status: 'failed', created_at: '2026-11-20T09:59:00', result_url: null }),
       trabajo({ id: 1, ...IMITATION, ...NOBS, created_at: '2026-11-20T10:00:00', result_url: 'https://nobs.example/t/1' }),
     ])
     expect(filas()).toEqual(['The Imitation Game'])
@@ -71,6 +71,8 @@ describe('el mismo elemento en varios trackers', () => {
     const [primera, otra] = document.querySelectorAll('tbody tr')
     // La primera lleva su tracker aunque no sea eMuwarez de más; la de debajo no repite póster ni tipo.
     expect(primera.querySelector('.sub-chips .sub-tracker-chip')?.textContent).toBe('Milnueve')
+    // Y abre su detalle, como el de las de debajo.
+    expect(primera.querySelector('.sub-chips a.sub-tracker-chip')?.getAttribute('href')).toBe('/uploads/2')
     expect(otra.querySelector('.sub-poster')).toBeNull()
     expect(otra.querySelector('.sub-col-tipo')).toBeNull()
     expect(primera.querySelector('.sub-estado .badge')?.textContent).toBe('Fallido')
@@ -83,7 +85,7 @@ describe('el mismo elemento en varios trackers', () => {
 
   it('con eMuwarez en el grupo, su chip también sale', async () => {
     await pagina([
-      trabajo({ id: 2, ...IMITATION, created_at: '2026-11-20T10:01:00' }),
+      trabajo({ id: 2, ...IMITATION, created_at: '2026-11-20T09:59:00' }),
       trabajo({ id: 1, ...IMITATION, ...NOBS, created_at: '2026-11-20T10:00:00' }),
     ])
     expect(document.querySelector('tbody tr .sub-chips .sub-tracker-chip')?.textContent).toBe('eMuwarez')
@@ -129,13 +131,14 @@ describe('el mismo elemento en varios trackers', () => {
       trabajo({ id: 1, ...IMITATION, created_at: '2026-11-20T09:00:00' }),
     ])
     await abrirTrackers()
-    expect(filas()).toEqual(['The Imitation Game', '  eMuwarez', 'Shutter Island', '  N.O.B.S'])
+    // Dentro del grupo, arriba la que empezó antes, sea cual sea el orden.
+    expect(filas()).toEqual(['The Imitation Game', '  N.O.B.S', 'Shutter Island', '  eMuwarez'])
     await elegir(document.querySelector<HTMLSelectElement>('select[aria-label="Ordenar subidas"]')!, 'created_asc')
     await abrirTrackers()
     expect(filas()).toEqual(['The Imitation Game', '  N.O.B.S', 'Shutter Island', '  eMuwarez'])
     await elegir(document.querySelector<HTMLSelectElement>('select[aria-label="Ordenar subidas"]')!, 'title')
     await abrirTrackers()
-    expect(filas()).toEqual(['Shutter Island', '  N.O.B.S', 'The Imitation Game', '  eMuwarez'])
+    expect(filas()).toEqual(['Shutter Island', '  eMuwarez', 'The Imitation Game', '  N.O.B.S'])
   })
 
   it('por estado, la que espera en cola sube su grupo con las de la cola', async () => {
@@ -148,7 +151,7 @@ describe('el mismo elemento en varios trackers', () => {
     await abrirTrackers()
     expect(filas()).toEqual(['The Imitation Game', '  eMuwarez', 'Shutter Island'])
     await elegir(document.querySelector<HTMLSelectElement>('select[aria-label="Ordenar subidas"]')!, 'created_desc')
-    expect(filas()).toEqual(['Shutter Island', 'The Imitation Game', '  N.O.B.S'])
+    expect(filas()).toEqual(['Shutter Island', 'The Imitation Game', '  eMuwarez'])
   })
 
   it('dos puntas del mismo tracker (un intento anterior con el filtro de estado) no se juntan', async () => {
@@ -161,8 +164,8 @@ describe('el mismo elemento en varios trackers', () => {
 
   it('las de los otros trackers se pliegan y despliegan con el chip, y salen solas si alguna no terminó bien', async () => {
     await pagina([
-      trabajo({ id: 3, ...SHUTTER, created_at: '2026-11-20T11:00:00' }),
-      trabajo({ id: 2, ...SHUTTER, ...NOBS, status: 'failed', created_at: '2026-11-20T10:30:00' }),
+      trabajo({ id: 3, ...SHUTTER, created_at: '2026-11-20T10:30:00' }),
+      trabajo({ id: 2, ...SHUTTER, ...NOBS, status: 'failed', created_at: '2026-11-20T11:00:00' }),
       trabajo({ id: 1, ...IMITATION, ...MIL, created_at: '2026-11-20T10:00:00' }),
       trabajo({ id: 4, ...IMITATION, ...NOBS, created_at: '2026-11-20T09:00:00' }),
     ])
@@ -174,7 +177,7 @@ describe('el mismo elemento en varios trackers', () => {
     expect(filas()).toEqual(['Shutter Island', 'The Imitation Game'])
     await pulsar(plegado)
     expect(plegado.getAttribute('aria-expanded')).toBe('true')
-    expect(filas()).toEqual(['Shutter Island', 'The Imitation Game', '  N.O.B.S'])
+    expect(filas()).toEqual(['Shutter Island', 'The Imitation Game', '  Milnueve'])
     expect(subtitulo()).toBe('4 subidas de 2 elementos')
   })
 
@@ -196,7 +199,7 @@ describe('el mismo elemento en varios trackers', () => {
     ])
     await escribir(document.querySelector<HTMLInputElement>('input[aria-label="Buscar subidas por título"]')!, 'imitation')
     await abrirTrackers()
-    expect(filas()).toEqual(['The Imitation Game', '  N.O.B.S'])
+    expect(filas()).toEqual(['The Imitation Game', '  Milnueve'])
     expect(texto()).toContain('2 subidas de 1 elemento')
   })
 })
