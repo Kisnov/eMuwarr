@@ -817,12 +817,14 @@ export function UploadsPage({ onNavigate }: { onNavigate?: (page: string) => voi
       if (grupo && !grupo.some(o => o.tracker === j.tracker)) grupo.push(j)
       else porElemento.set(grupo || j.library_item_id == null ? -j.id! : j.library_item_id, [j])
     }
-    // Dentro del grupo, arriba la subida de la que salen las demás: la que empezó antes (su primer intento).
+    // Dentro del grupo, arriba la subida de la que salen las demás: la que empezó antes. Los ids van en el orden en que
+    // se crean, y de un reintento se sabe el id del anterior aunque no esté cargado (el filtro por lote solo trae puntas).
     const inicio = (j: UploadJob) => {
-      let t = dt(j.created_at)
-      for (let c = j.retry_of_job_id != null ? jobById.get(j.retry_of_job_id) : undefined; c;
-        c = c.retry_of_job_id != null ? jobById.get(c.retry_of_job_id) : undefined) t = Math.min(t, dt(c.created_at))
-      return t
+      let id = j.id!
+      for (let c: UploadJob | undefined = j; c?.retry_of_job_id != null; c = jobById.get(c.retry_of_job_id)) {
+        id = Math.min(id, c.retry_of_job_id)
+      }
+      return id
     }
     return [...porElemento.values()].map(g => (g.length > 1 ? [...g].sort((a, b) => inicio(a) - inicio(b)) : g))
   }, [jobs, jobById, search, sortBy, typeFilter, hasNewerRetry])
