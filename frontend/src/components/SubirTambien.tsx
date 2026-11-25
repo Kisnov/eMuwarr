@@ -118,10 +118,12 @@ export function SubirTambienModal({ inicial, onClose, onEncolado }: {
     setEnviando(true)
     setMensajes([])
     try {
-      const r = await subirTambien([...elegidas], [...trackers])
+      const enviadas = [...elegidas]
+      const r = await subirTambien(enviadas, [...trackers])
       setMensajes(textoResultado(r, nombres))
       if (r.encolados) {
-        setElegidas(new Set())
+        // Solo lo enviado: lo que se marcó mientras tanto se queda.
+        setElegidas(e => new Set([...e].filter(id => !enviadas.includes(id))))
         setVez(n => n + 1)
         onEncolado(r.lote_id)
       }
