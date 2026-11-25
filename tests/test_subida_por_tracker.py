@@ -332,6 +332,22 @@ def test_si_el_original_cambio_la_subida_a_nobs_falla_sin_tocar_el_de_emuwarez(d
     assert pipeline.preparados == []
 
 
+@pytest.mark.parametrize("tracker, falla", [("emu", False), ("nobs", True), ("mnv", True)])
+def test_una_copia_sd_no_se_prepara_para_un_tracker_sin_ese_tipo(db_conn, pipeline, tracker, falla):
+    iid = _peli(db_conn, str(pipeline.origen))
+    db_conn.execute("UPDATE library_items SET source = 'SD' WHERE id = ?", (iid,))
+    job = _trabajo(db_conn, iid, tracker=tracker)
+
+    uq._run_queued_job(job)
+
+    fila = _fila(db_conn, job)
+    assert (fila["status"] == "failed") == falla, _logs(db_conn, job)
+    if falla:
+        assert fila["error_message"] == (f"{trackers.obtener(tracker).nombre} no tiene el tipo «SD»: "
+                                         "esta copia no se puede subir ahí")
+        assert pipeline.preparados == []
+
+
 def test_la_misma_subida_al_mismo_tracker_sigue_bloqueada(db_conn, pipeline):
     """Lo de siempre: si eMuwarez ya lo tiene, una segunda subida a eMuwarez no rehace su fichero."""
     iid, emu = _subida_a_emu_hecha(db_conn, pipeline)

@@ -154,6 +154,22 @@ def _comprobacion(conn, iid, **kw):
     return next(c for c in uc.run_upload_checks(conn, iid, scope="content", **kw)["checks"] if c["id"] == "spanish")
 
 
+def test_un_tracker_sin_el_tipo_de_la_copia_no_la_admite(db_conn, tmp_path):
+    """Va con sus normas: es lo que miran el asistente, los lotes, «Subir también» y la cola antes de crear la subida."""
+    from emuwarez_uploadrr.services.reglas_tracker import reglas_para_subir
+    iid = _pelicula(db_conn, str(tmp_path / "peli.mkv"), "spa")
+    db_conn.execute("UPDATE library_items SET source = 'SD' WHERE id = ?", (iid,))
+    item = dict(db_conn.execute("SELECT * FROM library_items WHERE id = ?", (iid,)).fetchone())
+    assert reglas_para_subir(db_conn, item, "emu").permitido
+    for tracker, nombre in (("nobs", "N.O.B.S"), ("mnv", "Milnueve")):
+        assert reglas_para_subir(db_conn, item, tracker) == Reglas(
+            False, f"{nombre} no tiene el tipo «SD»: esta copia no se puede subir ahí", None)
+    # Con otro Source en su propuesta de nomenclatura, sí.
+    db_conn.execute("INSERT INTO nomenclature_proposals (library_item_id, status, source) VALUES (?, 'draft', 'WEB-DL')",
+                    (iid,))
+    assert reglas_para_subir(db_conn, item, "nobs").permitido
+
+
 def test_la_comprobacion_de_idiomas_es_la_del_tracker(db_conn, tmp_path):
     f = tmp_path / "peli.mkv"
     f.write_bytes(b"x")

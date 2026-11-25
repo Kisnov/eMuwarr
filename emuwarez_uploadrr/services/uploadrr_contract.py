@@ -126,6 +126,17 @@ def tipo_de_subida(release_format) -> Optional[str]:
     return _UPLOADRR_TYPES.get(str(release_format or "").strip())
 
 
+def motivo_sin_tipo(tracker: str, release_format) -> Optional[str]:
+    """Por qué `tracker` (su id) no puede recibir una copia de este formato; None si tiene su tipo o no se sabe cuál es
+    (eso lo dice su propia comprobación). N.O.B.S y Milnueve no tienen «SD»."""
+    from ..integrations.emu import tiene_tipo
+    from .trackers import obtener
+    tipo, destino = tipo_de_subida(release_format), obtener(tracker)
+    if not tipo or tiene_tipo(destino.uploadrr, tipo):
+        return None
+    return f"{destino.nombre} no tiene el tipo «{release_format}»: esta copia no se puede subir ahí"
+
+
 def _format_season(value) -> str:
     if isinstance(value, int):
         return f"S{value:02d}"

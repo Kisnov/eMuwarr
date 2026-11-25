@@ -114,6 +114,7 @@ def _lote(conn, *, en_marcha: int, en_cola: int, lote_id: str = LOTE) -> tuple[l
     "Error aplicando la nomenclatura del pack de temporada: boom",
     "«Peli.2020.1080p.mkv» es de la subida #12, que lo siembra o lo tiene en qBittorrent: no se rehace.",
     "El elemento ya no existe en la biblioteca.",
+    "N.O.B.S no tiene el tipo «SD»: esta copia no se puede subir ahí",
     "Interrumpido al pararse la aplicación. Puedes reintentar la subida.",
     "",
     None,

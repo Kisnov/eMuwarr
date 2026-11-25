@@ -343,6 +343,7 @@ _MARCAS_DE_LA_APP: tuple[str, ...] = (
     "Error aplicando la nomenclatura",
     "No se pudo aplicar la nomenclatura",
     " es de la subida #",  # su carpeta en subidas es de otra subida que la siembra
+    " no tiene el tipo «",  # uploadrr_contract.motivo_sin_tipo: esa copia, no el resto del lote
     # reconcile_interrupted_jobs: la aplicación se paró; no habla de eMuwarez ni del resto del lote.
     "Interrumpido al pararse la aplicación",
 )

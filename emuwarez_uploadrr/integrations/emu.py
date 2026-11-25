@@ -32,14 +32,20 @@ def _ruta_ids(tracker: str) -> Path:
 RUTA_IDS_EMU = _ruta_ids("EMU")
 
 
-def _cargar_etiquetas(ruta: Path, nombre: str = "eMuwarez") -> Optional[dict[str, dict[int, str]]]:
-    """id -> etiqueta por sección (las entradas sin `label` no se enseñan) y, en `subibles`, las categorías con token;
-    None y un aviso si no se puede leer."""
+def _token(t: str) -> str:
+    """Como los compara Uploadrr-EMU (src/trackers/unit3d_tabla.py)."""
+    return t.upper().replace("-", "")
+
+
+def _cargar_etiquetas(ruta: Path, nombre: str = "eMuwarez") -> Optional[dict[str, Any]]:
+    """id -> etiqueta por sección (las entradas sin `label` no se enseñan); en `subibles`, las categorías con token, y
+    en `tokens_de_tipo`, los `-t` que tiene. None y un aviso si no se puede leer."""
     try:
         tabla = json.loads(ruta.read_text(encoding="utf-8"))
         etiquetas = {s: {e["id"]: e["label"] for e in tabla[s] if "label" in e}
                      for s in ("categories", "types", "resolutions")}
-        return {**etiquetas, "subibles": {e["id"]: e.get("label") for e in tabla["categories"] if e.get("tokens")}}
+        return {**etiquetas, "subibles": {e["id"]: e.get("label") for e in tabla["categories"] if e.get("tokens")},
+                "tokens_de_tipo": {_token(t) for e in tabla["types"] for t in e.get("tokens", ())}}
     except (OSError, ValueError, KeyError, TypeError) as exc:
         logger.warning("No se puede leer la tabla de ids de %s (%s): las peticiones llevarán el id, no el nombre",
                        nombre, exc)
@@ -55,8 +61,14 @@ EMU_RESOLUCIONES = (_ETIQUETAS or {}).get("resolutions", {})
 _ETIQUETAS_OTROS = {t: _cargar_etiquetas(_ruta_ids(t), t) for t in ("NOBS", "MNV")}
 
 
-def _etiquetas_de(tracker: str) -> Optional[dict[str, dict[int, str]]]:
+def _etiquetas_de(tracker: str) -> Optional[dict[str, Any]]:
     return _ETIQUETAS if tracker == "EMU" else _ETIQUETAS_OTROS[tracker]
+
+
+def tiene_tipo(tracker: str, tipo: str) -> bool:
+    """Si `tracker` tiene el tipo `tipo` (el `-t` de Uploadrr-EMU); sin su tabla no se sabe, y no se dice que no."""
+    etiquetas = _etiquetas_de(tracker)
+    return etiquetas is None or _token(tipo) in etiquetas["tokens_de_tipo"]
 
 
 def _categorias_de_peticiones(tracker: str) -> list[int]:

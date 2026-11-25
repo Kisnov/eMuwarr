@@ -1469,6 +1469,15 @@ def _paso_comprobar(t: _Trabajo) -> bool:
     return _check_generic_upload_preconditions(job_id, t.item_id, t.is_season, conn=conn)
 
 
+def _sin_tipo_en_su_tracker(t: _Trabajo, formato) -> bool:
+    """Falla el trabajo, antes de preparar nada, si su tracker no tiene el tipo de esta copia."""
+    from .uploadrr_contract import motivo_sin_tipo
+    motivo = motivo_sin_tipo(t.job.get("tracker") or trackers.POR_DEFECTO, formato)
+    if motivo:
+        _fail(t.job_id, motivo)
+    return bool(motivo)
+
+
 def _paso_nombre(t: _Trabajo) -> bool:
     """Nomenclatura: el nombre de eMuwarez de cada fichero. Uno de la
     biblioteca no se renombra (lo lleva su enlace en la carpeta de subidas);
@@ -1490,6 +1499,8 @@ def _paso_nombre(t: _Trabajo) -> bool:
         if plan_pack.get("status") != "valid":
             reason = "; ".join(plan_pack.get("errors") or []) or "estado desconocido"
             _fail(job_id, f"No se pudo aplicar la nomenclatura del pack de temporada: {reason}")
+            return False
+        if _sin_tipo_en_su_tracker(t, plan_pack.get("source")):
             return False
         t.plan_pack = plan_pack
         _write_snapshot(job_id, "nomenclature_snapshot_json", {
@@ -1529,6 +1540,9 @@ def _paso_nombre(t: _Trabajo) -> bool:
     if plan_nombre.get("status") != "ready":
         reason = "; ".join(plan_nombre.get("errors") or []) or "estado desconocido"
         _fail(job_id, f"No se pudo aplicar la nomenclatura: {reason}")
+        return False
+    from .upload_preflight import formato_de_subida
+    if _sin_tipo_en_su_tracker(t, formato_de_subida(t.item, plan_nombre.get("proposal"))):
         return False
     t.plan_nombre = plan_nombre
     if plan_nombre.get("proposal"):
