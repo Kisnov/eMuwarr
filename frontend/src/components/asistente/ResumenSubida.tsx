@@ -33,7 +33,9 @@ export function ResumenSubida({ a }: { a: Asistente }) {
   const filas = ids.map(fila)
   const objetivo = filas[0]
   const tipo = objetivo?.item_type ?? item.item_type
-  const cubiertos = esTanda
+  // Una petición solo la cubre la subida a su tracker: sin él entre los destinos, nada queda enlazado.
+  const aSuTracker = !preselect?.tracker || destinos.some(d => d.id === preselect.tracker)
+  const cubiertos = !aSuTracker ? 0 : esTanda
     ? filas.filter(f => !f || peticionCubre(preselect, f)).length
     : requestId != null ? 1 : 0
 

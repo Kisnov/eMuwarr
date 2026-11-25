@@ -101,6 +101,18 @@ def test_las_de_un_tracker_sin_clave_se_borran(db_conn, trackers):
     assert _filas(db_conn) == [("emu", "1")]
 
 
+def test_al_volver_a_poner_la_clave_sus_peticiones_no_se_avisan_como_nuevas(db_conn, trackers):
+    set_setting(db_conn, "nobs.api_key", "clave-nobs")
+    trackers["EMU"], trackers["NOBS"] = ([_fila(1)], 1), ([_fila(5)], 1)
+    reqs.sync_emu_requests(db_conn, force=True)  # recorrido completo: desde aquí se sabe cuáles son nuevas
+    marca = reqs.emu_catalog._clave(reqs.SYNC_COMPLETA_KEY, reqs.TRACKERS["nobs"])
+    assert reqs.get_state(db_conn, marca) == "1"
+    set_setting(db_conn, "nobs.api_key", "")
+    reqs.sync_emu_requests(db_conn, force=True)
+    # Sin la marca, el primer recorrido con la clave de vuelta no da ninguna por nueva (_leer_peticiones_de).
+    assert reqs.get_state(db_conn, marca) != "1"
+
+
 def test_los_errores_de_otro_tracker_dicen_su_nombre(monkeypatch):
     def limitado(*_a, **_kw):
         raise IntegrationError("http 429 en una URL con la clave", status=429)

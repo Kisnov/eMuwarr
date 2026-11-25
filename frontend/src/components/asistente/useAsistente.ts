@@ -59,11 +59,14 @@ export interface PropsAsistente {
   onNavigate?: (page: string) => void
   // Optional pre-selection (e.g. from a request's scope): season number and,
   // for a single episode, its episode number. Used to auto-fill step 0.
-  preselect?: { season?: number | null; episode?: number | null }
+  preselect?: PreseleccionDePeticion
   // La petición desde la que se abrió, si fue así: todo lo que se suba aquí la
   // cubre, y Subidas lo enseña.
   requestId?: number
 }
+
+// Lo que una petición deja elegido en el asistente: su temporada o capítulo, y su tracker como destino.
+export type PreseleccionDePeticion = { season?: number | null; episode?: number | null; tracker?: string | null }
 
 export function useAsistente({ item, onClose: onCloseProp, onDone, onNavigate, preselect, requestId }: PropsAsistente) {
   const isSeries = item.item_type === 'series'
@@ -209,8 +212,8 @@ export function useAsistente({ item, onClose: onCloseProp, onDone, onNavigate, p
   }
   // Una película o un capítulo abierto solo: los destinos de entrada en cuanto se sabe qué trackers lo admiten.
   useEffect(() => {
-    if (!needsSelection && elegibilidad) setTrackersElegidos(destinosDeEntradaDeVarios([elegibilidad.trackers]))
-  }, [needsSelection, elegibilidad, setTrackersElegidos])
+    if (!needsSelection && elegibilidad) setTrackersElegidos(destinosDeEntradaDeVarios([elegibilidad.trackers], preselect?.tracker))
+  }, [needsSelection, elegibilidad, setTrackersElegidos, preselect?.tracker])
   // La descripción propia (BBCode) del Resumen: la misma para todos los trackers, salvo los que tengan la suya.
   const [descripcion, setDescripcion] = useState('')
   // La plantilla de Configuración: con ella empieza la de cada contenido.
@@ -439,7 +442,7 @@ export function useAsistente({ item, onClose: onCloseProp, onDone, onNavigate, p
       camposDe.current = null
       cargadoPara.current = null
       // Los destinos de entrada de lo elegido: si eMuwarez no lo admite, los que sí; de una tanda, los de cada uno.
-      setTrackersElegidos(destinosDeEntradaDeVarios((esTanda(nueva) ? nueva.ids : [nueva.objetivo]).map(reglasDe)))
+      setTrackersElegidos(destinosDeEntradaDeVarios((esTanda(nueva) ? nueva.ids : [nueva.objetivo]).map(reglasDe), preselect?.tracker))
     }
     setStep(1)
   }

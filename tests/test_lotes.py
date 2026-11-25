@@ -635,11 +635,12 @@ def test_cada_elemento_lleva_su_peticion_sus_comprobaciones_y_el_proveedor_solo_
     assert kw_p["lote_id"] == kw_t["lote_id"]
 
 
-def _peticion_compatible(conn, emu_id: str, cruce: int) -> int:
+def _peticion_compatible(conn, emu_id: str, cruce: int, tracker: str = "emu") -> int:
     from emuwarez_uploadrr.models import RequestItem
     from emuwarez_uploadrr.services.requests import upsert_request
+    from emuwarez_uploadrr.services.trackers import TRACKERS
     rid = upsert_request(conn, RequestItem(id=None, emu_id=emu_id, title=f"Petición {emu_id}", emu_status="Sin llenar",
-                                           url=f"https://emu-warez.com/requests/{emu_id}"))
+                                           url=f"https://emu-warez.com/requests/{emu_id}"), tracker=TRACKERS[tracker])
     conn.execute("INSERT INTO request_matches (library_item_id, request_item_id, status, confidence) "
                  "VALUES (?, ?, 'Compatible', 0.9)", (cruce, rid))
     conn.commit()
@@ -678,10 +679,34 @@ def test_la_peticion_elegida_en_el_panel_gana(db_conn, tmp_path, sin_comprobacio
     assert _peticion_del_trabajo(db_conn, job) == (elegida, "Petición 2")
 
 
+def test_cada_subida_enlaza_la_peticion_de_su_tracker(db_conn, tmp_path, sin_comprobaciones):
+    """A varios trackers: la de eMuwarez va con la subida a eMuwarez y la de N.O.B.S con la suya; una elegida en el
+    Panel, solo con la de su tracker."""
+    _clave(db_conn, "nobs")
+    peli = _con_castellano(db_conn, _peli(db_conn, tmp_path, "A"))
+    de_emu = _peticion_compatible(db_conn, "1", peli)
+    de_nobs = _peticion_compatible(db_conn, "1", peli, "nobs")
+    solo_nobs = _con_castellano(db_conn, _peli(db_conn, tmp_path, "B"))
+    la_suya = _peticion_compatible(db_conn, "2", solo_nobs, "nobs")
+    en_los_dos = _con_castellano(db_conn, _peli(db_conn, tmp_path, "C"))
+    c_emu_pet = _peticion_compatible(db_conn, "3", en_los_dos)
+    c_nobs_pet = _peticion_compatible(db_conn, "3", en_los_dos, "nobs")
+
+    r = lotes.encolar_lote(db_conn, [_el(peli), _el(solo_nobs, request_item_id=la_suya),
+                                     _el(en_los_dos, request_item_id=c_nobs_pet)], ["emu", "nobs"])
+
+    a_emu, a_nobs, b_emu, b_nobs, c_emu, c_nobs = (x["job_id"] for x in r["resultados"])
+    assert [_peticion_del_trabajo(db_conn, j)[0] for j in (a_emu, a_nobs, b_emu, b_nobs)] == [
+        de_emu, de_nobs, None, la_suya]
+    assert _peticion_del_trabajo(db_conn, b_emu) == (None, None)
+    # Con la de N.O.B.S elegida, la subida a eMuwarez enlaza la abierta de eMuwarez.
+    assert [_peticion_del_trabajo(db_conn, j)[0] for j in (c_emu, c_nobs)] == [c_emu_pet, c_nobs_pet]
+
+
 def test_si_falla_buscar_la_peticion_se_sube_igual_sin_ella(db_conn, tmp_path, sin_comprobaciones, monkeypatch):
     from emuwarez_uploadrr.services import requests as reqs
 
-    def rota(conn, item_id):
+    def rota(conn, item_id, tracker):
         raise RuntimeError("boom")
     monkeypatch.setattr(reqs, "peticion_que_enlazar", rota)
     peli = _peli(db_conn, tmp_path)

@@ -19,8 +19,14 @@ export function destinosDeEntrada(reglas: readonly ReglasConNombre[]): string[] 
 }
 
 // Los de entrada de varios (una tanda, un lote): los de cada uno, juntos. Sin saber de uno, eMuwarez.
-export function destinosDeEntradaDeVarios(reglas: readonly (readonly ReglasConNombre[] | undefined)[]): string[] {
-  return [...new Set(reglas.flatMap(r => r ? destinosDeEntrada(r) : ['emu']))]
+// `dePeticion`: el tracker de la petición desde la que se abrió. Lo que se pide allí se sube allí: es el destino de
+// cada uno que admite (o del que aún no se sabe); los demás, con los suyos de siempre.
+export function destinosDeEntradaDeVarios(
+  reglas: readonly (readonly ReglasConNombre[] | undefined)[], dePeticion?: string | null,
+): string[] {
+  const suyo = dePeticion ?? 'emu'
+  return [...new Set(reglas.flatMap(r =>
+    !r || r.some(x => x.tracker === suyo && x.permitido) ? [suyo] : destinosDeEntrada(r)))]
 }
 
 // De los destinos elegidos, los que lo admiten. Sin sus normas (un solo tracker, o sin respuesta), todos.

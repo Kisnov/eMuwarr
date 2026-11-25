@@ -23,6 +23,20 @@ describe('elegibilidad por tracker', () => {
     expect(destinosDeEntrada([EMU_NO, NOBS_NO])).toEqual(['emu'])
   })
 
+  it('desde una petición de otro tracker, el destino de entrada es ese tracker si lo admite', () => {
+    const los_dos = [r('emu', 'eMuwarez', true), r('nobs', 'N.O.B.S', true)]
+    expect(destinosDeEntradaDeVarios([los_dos], 'nobs')).toEqual(['nobs'])
+    expect(destinosDeEntradaDeVarios([los_dos], 'emu')).toEqual(['emu'])
+    expect(destinosDeEntradaDeVarios([los_dos])).toEqual(['emu'])
+    // Si no lo admite (o no se sabe), lo de siempre.
+    expect(destinosDeEntradaDeVarios([[r('emu', 'eMuwarez', true), NOBS_NO]], 'nobs')).toEqual(['emu'])
+    // Sin saber aún qué admite, el de la petición; y lo que él no admite va a los suyos de siempre.
+    expect(destinosDeEntradaDeVarios([undefined], 'nobs')).toEqual(['nobs'])
+    expect(destinosDeEntradaDeVarios([undefined])).toEqual(['emu'])
+    expect(destinosDeEntradaDeVarios([los_dos, [EMU_NO, NOBS_NO, MNV_SI]], 'nobs')).toEqual(['nobs', 'mnv'])
+    expect(destinosDeEntradaDeVarios([[r('emu', 'eMuwarez', true), MNV_SI], [EMU_NO, MNV_SI]], 'emu')).toEqual(['emu', 'mnv'])
+  })
+
   it('los capítulos: cuántos admite cada tracker', () => {
     expect(resumenDeCapitulos([[EMU_NO, MNV_SI], [EMU_NO, r('mnv', 'Milnueve', false)]]))
       .toBe('Milnueve ✓ 1 de 2 · eMuwarez ✗ sin castellano')
