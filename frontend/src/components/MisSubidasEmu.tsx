@@ -17,7 +17,7 @@ const cifra = (n: number | null) => (n === null ? SIN_DATO : formatNumero(n))
 
 const EMU: TrackerParaSubir = { id: 'emu', nombre: 'eMuwarez' }
 
-// Tus subidas en `tracker` (eMuwarez sin él): lo que guardó la última lectura (la tarea «Leer tus subidas en eMuwarez»,
+// Tus subidas en `tracker` (eMuwarez sin él): lo que guardó la última lectura (la tarea «Leer tus subidas»,
 // cada 6 horas). Se pide cada vez que se entra en Estadísticas (`visible`); no llama al tracker.
 export function MisSubidasEmu({ visible, tracker = EMU }: { visible: boolean; tracker?: TrackerParaSubir }) {
   const nombre = tracker.nombre
@@ -49,7 +49,7 @@ export function MisSubidasEmu({ visible, tracker = EMU }: { visible: boolean; tr
       <h2 className="est-grupo-titulo" id={titulo}>Tus subidas en {nombre}</h2>
       {aviso}
       {datos.leido_at === null ? (
-        <p className="est-nota">Aún no se han leído: la tarea «Leer tus subidas en eMuwarez» lo hace cada 6 horas, y en Tareas se puede ejecutar ahora.</p>
+        <p className="est-nota">Aún no se han leído: la tarea «Leer tus subidas» lo hace cada 6 horas, y en Tareas se puede ejecutar ahora.</p>
       ) : (
         <>
           <div className="stat-cards-row" role="group" aria-label={`Totales de tus subidas en ${nombre}`}>

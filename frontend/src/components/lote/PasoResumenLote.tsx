@@ -194,7 +194,7 @@ export function PasoResumenLote({
 
       {paralelo === 0 ? (
         <p className="lote-paralelo lote-paralelo-aviso">
-          ⚠ Sin límite: se lanzarán las {incluidas} a la vez contra eMuwarez. Puedes ponerle un tope en Configuración → Otros, «Máximo de subidas en paralelo».
+          ⚠ Sin límite: se lanzarán las {incluidas} a la vez. Puedes ponerle un tope en Configuración → Otros, «Máximo de subidas en paralelo».
         </p>
       ) : (
         <p className="lote-paralelo">

@@ -54,6 +54,10 @@ describe('las etiquetas de fase', () => {
   it('sin fase, la raya de "sin dato" de toda la app', () => {
     expect(phaseLabel(null)).toBe('—')
     expect(phaseLabel(undefined)).toBe('—')
+    // La fase de subida nombra al tracker de la subida.
+    expect(phaseLabel('uploading_emu')).toBe('Subiendo a eMuwarez')
+    expect(phaseLabel('uploading_emu', { tracker: 'nobs', tracker_nombre: 'N.O.B.S' })).toBe('Subiendo a N.O.B.S')
+    expect(phaseLabel('uploading_emu', { tracker: 'emu', tracker_nombre: 'eMuwarez' })).toBe('Subiendo a eMuwarez')
   })
 
   it('traduce las fases del backend', () => {

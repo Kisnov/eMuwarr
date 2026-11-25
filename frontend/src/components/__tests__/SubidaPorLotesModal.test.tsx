@@ -304,7 +304,7 @@ describe('lo que se manda y lo que vuelve', () => {
     m(fetchSettings).mockResolvedValue({ upload_max_concurrent: 0 } as never)
     await abrir([DUNE, ALIEN])
     await alResumen(2)
-    expect(texto()).toContain('Sin límite: se lanzarán las 2 a la vez contra eMuwarez')
+    expect(texto()).toContain('Sin límite: se lanzarán las 2 a la vez.')
     // El nombre real de la sección y del campo, con las comillas del resto de la interfaz.
     expect(texto()).toContain('Configuración → Otros, «Máximo de subidas en paralelo»')
   })
