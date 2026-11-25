@@ -343,6 +343,19 @@ def test_una_pagina_vacia_con_subidas_en_el_total_no_borra_la_lista(conn, tracke
     assert resumen(conn)["totales"]["subidas"] == 10
 
 
+def test_las_filas_que_no_se_pueden_guardar_no_cuentan_para_el_total(conn, tracker, monkeypatch):
+    tracker["torrents"] = [_torrent(i, 1) for i in range(1, 101)]
+    sincronizar(conn, AHORA - timedelta(days=1))
+
+    def con_filas_rotas(api_key, base_url=None, **kwargs):
+        kwargs["progress"](1, 1, 100, 100)
+        return [_torrent(i, 1) for i in range(1, 81)] + [{"id": str(i), "attributes": {}} for i in range(81, 101)]
+
+    monkeypatch.setattr(mis_torrents, "emu_fetch_all_torrents", con_filas_rotas)
+    assert sincronizar(conn, AHORA) == ("failed", "La lectura está incompleta (80 de 100 subidas): se conserva la anterior")
+    assert resumen(conn)["totales"]["subidas"] == 100
+
+
 def test_una_subida_nueva_mientras_se_pagina_no_tumba_la_lectura(conn, tracker, monkeypatch):
     def con_una_de_mas(api_key, base_url=None, **kwargs):
         kwargs["progress"](2, 2, 40, 41)

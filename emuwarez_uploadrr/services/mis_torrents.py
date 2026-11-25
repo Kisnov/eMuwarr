@@ -112,8 +112,8 @@ def _sincronizar(conn: sqlite3.Connection, ahora: Optional[datetime], tracker: T
     filas = list({f[0]: f for f in map(_fila, torrents) if f}.values())
     # La lista sustituye a la guardada: una que se queda muy corta frente al total del tracker borraría las que
     # faltan. Con margen: el total puede moverse mientras se pagina.
-    if len(torrents) < (dicho.get("total") or 0) * MIN_FRENTE_AL_TOTAL:
-        return "failed", (f"La lectura está incompleta ({len(torrents)} de {dicho['total']} subidas): "
+    if len(filas) < (dicho.get("total") or 0) * MIN_FRENTE_AL_TOTAL:
+        return "failed", (f"La lectura está incompleta ({len(filas)} de {dicho['total']} subidas): "
                           "se conserva la anterior")
 
     ahora = ahora or datetime.now()

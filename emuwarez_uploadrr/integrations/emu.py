@@ -313,8 +313,9 @@ def emu_fetch_all_torrents(
         # limite `perPage` por debajo de lo pedido las da todas cortas.
         if total_pages:
             ultima = page >= total_pages
-        elif total_items and stop_after_id is None:
-            ultima = len(all_items) >= total_items
+        elif total_items:
+            # El incremental acaba al dar con el id conocido (o en una página vacía): el total es el del catálogo.
+            ultima = stop_after_id is None and len(all_items) >= total_items
         else:
             ultima = len(items) < per_page
         if ultima:
