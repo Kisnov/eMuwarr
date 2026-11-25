@@ -67,6 +67,21 @@ def test_al_encolar_desde_una_peticion_se_guardan_su_titulo_y_su_enlace(db_conn,
     assert _fila(db_conn, job["id"]) == (peticion, TITULO, ENLACE)
 
 
+def test_la_subida_a_otro_tracker_no_se_enlaza_a_la_peticion_de_emuwarez(db_conn, tmp_path):
+    """El asistente manda la misma petición a cada tracker elegido: solo la cubre la subida al suyo."""
+    from emuwarez_uploadrr.services.settings import set_setting
+    set_setting(db_conn, "nobs.api_key", "clave")
+    item, peticion = _peli(db_conn, tmp_path), _peticion(db_conn)
+    db_conn.execute("UPDATE library_items SET audio_languages = 'spa' WHERE id = ?", (item,))
+    db_conn.commit()
+
+    a_nobs = uq.queue_upload_for_item(item, request_item_id=peticion, tracker="nobs", conn=db_conn)["job"]
+    a_emu = uq.queue_upload_for_item(item, request_item_id=peticion, conn=db_conn)["job"]
+
+    assert _fila(db_conn, a_nobs["id"]) == (None, None, None)
+    assert _fila(db_conn, a_emu["id"]) == (peticion, TITULO, ENLACE)
+
+
 def test_sin_peticion_las_columnas_quedan_vacias(db_conn, tmp_path):
     job = uq.queue_upload_for_item(_peli(db_conn, tmp_path), conn=db_conn)["job"]
     assert _fila(db_conn, job["id"]) == (None, None, None)

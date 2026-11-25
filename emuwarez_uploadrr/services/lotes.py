@@ -553,12 +553,12 @@ def _primer_fallo(comprobaciones: dict) -> str:
     return "No pasó las comprobaciones previas."
 
 
-def _peticion_de(conn: sqlite3.Connection, item_id: int) -> int | None:
-    """Sin petición elegida (un lote desde Biblioteca): la abierta que cubre el elemento, si hay una sola. Enlazarla es
-    un extra: si falla la búsqueda, el elemento se sube igual, sin petición."""
+def _peticion_de(conn: sqlite3.Connection, item_id: int, tracker: str) -> int | None:
+    """Sin petición elegida (un lote desde Biblioteca): la abierta de ese tracker que cubre el elemento, si hay una
+    sola. Enlazarla es un extra: si falla la búsqueda, el elemento se sube igual, sin petición."""
     from .requests import peticion_que_enlazar
     try:
-        return peticion_que_enlazar(conn, item_id)
+        return peticion_que_enlazar(conn, item_id, tracker)
     except Exception:
         logger.exception("No se pudo buscar la petición del elemento %s; se sube sin enlazar", item_id)
         return None
@@ -613,9 +613,10 @@ def _encolar_uno(conn: sqlite3.Connection, el: dict, lote_id: str, vistos: set[i
     if trabajo_activo(conn, item_id):
         return _bloqueado(item_id, tracker_ids, "Ya hay una subida en curso para este contenido.")
 
-    request_item_id = el.get("request_item_id")
-    if request_item_id is None:
-        request_item_id = _peticion_de(conn, item_id)
+    # La elegida, para la subida a su tracker; las demás, la abierta del suyo si hay una sola.
+    from .upload_queue import _peticion_de_su_tracker
+    elegida = el.get("request_item_id")
+    peticiones = {t: _peticion_de_su_tracker(conn, elegida, t) or _peticion_de(conn, item_id, t) for t in tracker_ids}
     campos = el.get("campos")
     # «¿Ya está parado el lote?» y crear el trabajo, sin que el freno se cuele entre medias (ver _FRENO). Antes de
     # escribir nada: un elemento que se salta no cambia su propuesta de nomenclatura.
@@ -642,7 +643,7 @@ def _encolar_uno(conn: sqlite3.Connection, el: dict, lote_id: str, vistos: set[i
                 continue
             try:
                 resultado = queue_upload_for_item(
-                    item_id, request_item_id=request_item_id, checks=checks,
+                    item_id, request_item_id=peticiones[tracker], checks=checks,
                     # El proveedor solo cuenta en un pack; el de una película va dentro de `campos`.
                     provider_override=el.get("provider") if tipo == "season" else None,
                     lote_id=lote_id, tracker=tracker, conn=conn,

@@ -323,8 +323,12 @@ def _importar_peticiones(conn: sqlite3.Connection) -> dict[str, int | str]:
         # sus peticiones.
         otros = [t for t in TRACKERS.values() if t is not EMU and tiene_clave(conn, t)]
         # Las de un tracker cuya clave se ha quitado ya no se pueden refrescar: se borran.
-        removed_sin_clave = sum(borrar_peticiones(conn, "tracker = ?", (t.id,)) for t in TRACKERS.values()
-                                if t is not EMU and t not in otros)
+        sin_clave = [t for t in TRACKERS.values() if t is not EMU and t not in otros]
+        removed_sin_clave = sum(borrar_peticiones(conn, "tracker = ?", (t.id,)) for t in sin_clave)
+        for t in sin_clave:
+            # Sin base: al volver a poner la clave, sus peticiones no son nuevas y no se avisa de todas.
+            if get_state(conn, emu_catalog._clave(SYNC_COMPLETA_KEY, t)) == "1":
+                set_state(conn, emu_catalog._clave(SYNC_COMPLETA_KEY, t), "")
         error_emu = None
         try:
             imported, removed = _leer_peticiones_de(conn, EMU, api_key)
@@ -1235,9 +1239,10 @@ def peticiones_heredadas(conn: sqlite3.Connection, ids: list[int]) -> dict[int, 
     return heredadas
 
 
-def peticion_que_enlazar(conn: sqlite3.Connection, item_id: int) -> Optional[int]:
-    """La petición abierta que enlazaría una subida de esta fila sin que nadie la elija (un lote desde Biblioteca),
-    o None si no hay ninguna o hay más de una (ambiguo: mejor sin enlazar que enlazar la que no es).
+def peticion_que_enlazar(conn: sqlite3.Connection, item_id: int, tracker: str = EMU.id) -> Optional[int]:
+    """La petición abierta de `tracker` que enlazaría una subida de esta fila a ese tracker sin que nadie la elija (un
+    lote desde Biblioteca), o None si no hay ninguna o hay más de una (ambiguo: mejor sin enlazar que enlazar la que
+    no es).
 
     Las mismas reglas que el resto: una petición cuenta si su cruce guardado es «Compatible» (las que el Panel ofrece
     en «Listo para subir» con su `rec_request_id`), y es de esta fila si la fila a la que va (`_scoped_library_id`)
@@ -1263,10 +1268,10 @@ def peticion_que_enlazar(conn: sqlite3.Connection, item_id: int) -> Optional[int
             FROM request_matches rm
             JOIN request_items ri ON ri.id = rm.request_item_id
             JOIN library_items li ON li.id = rm.library_item_id
-            WHERE rm.library_item_id IN ({marcas}) AND rm.status = 'Compatible'
+            WHERE rm.library_item_id IN ({marcas}) AND rm.status = 'Compatible' AND ri.tracker = ?
               AND rm.id = (SELECT rm2.id FROM request_matches rm2 WHERE rm2.request_item_id = ri.id
                            ORDER BY rm2.confidence DESC LIMIT 1)""",
-        linea,
+        (*linea, tracker),
     ).fetchall()
     por_nivel: dict[int, set[int]] = {}
     for c in candidatas:

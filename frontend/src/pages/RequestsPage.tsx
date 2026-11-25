@@ -53,6 +53,7 @@ import { SubidaPorLotesModal } from '../components/lote/SubidaPorLotesModal'
 import { useSeleccionLote } from '../hooks/useSeleccionLote'
 import { entradaDePeticion, peticionSeleccionableEnLote, type EntradaLote } from '../utils/lote'
 import { desplazarAlContenedor } from '../utils/desplazar'
+import type { PreseleccionDePeticion } from '../components/asistente/useAsistente'
 
 // Fallback for "Consultar en eMuwarez" while we don't have the exact
 // per-request URL yet — points at the general requests listing instead of
@@ -365,7 +366,7 @@ function RequestDetailPage({ item, readiness, instances, onBack, onShowCandidate
   instances: InstanceSafeResponse[]
   onBack: () => void
   onShowCandidates: () => void
-  onUpload: (libraryItemId: number, preselect?: { season?: number | null; episode?: number | null }, requestId?: number) => void
+  onUpload: (libraryItemId: number, preselect?: PreseleccionDePeticion, requestId?: number) => void
   onOpenLibraryItem?: (id: number) => void
 }) {
   const m = item.match
@@ -395,7 +396,7 @@ function RequestDetailPage({ item, readiness, instances, onBack, onShowCandidate
   // Sin el contenido en la biblioteca el botón no hace nada, y el motivo va escrito a su lado: en un tooltip no llegaba
   // ni al dedo ni a un botón deshabilitado, que no recibe el ratón.
   const subirTip = useTooltip(libraryTargetId
-    ? 'Subir el contenido de tu biblioteca a eMuwarez (mismo asistente que en Biblioteca)'
+    ? `Subir el contenido de tu biblioteca a ${tracker} (mismo asistente que en Biblioteca)`
     : null)
   const reqNameTip = useTooltip(m?.content_name || null)
   const libNameTip = useTooltip(m?.content_name || baseName(m?.local_path ?? null) || m?.library_title || null)
@@ -432,11 +433,12 @@ function RequestDetailPage({ item, readiness, instances, onBack, onShowCandidate
             onClick={() => libraryTargetId && onUpload(libraryTargetId, {
               season: item.req_season,
               episode: item.req_scope === 'episode' ? item.req_episode : null,
+              tracker: item.tracker,
             }, item.id)}
             {...subirTip.triggerProps}
             aria-describedby={libraryTargetId ? subirTip.triggerProps['aria-describedby'] : 'pet-motivo-subir'}
           >
-            <UploadButtonIcon /> Subir a eMuwarez
+            <UploadButtonIcon /> Subir a {tracker}
             {subirTip.tooltipNode}
           </button>
         </div>
@@ -704,7 +706,7 @@ export function RequestsPage({ onNavigate }: { onNavigate?: (page: string) => vo
   const [detailLoading, setDetailLoading] = useState(false)
   const [showCandidates, setShowCandidates] = useState(false)
   const [wizardItem, setWizardItem] = useState<LibraryItemResponse | null>(null)
-  const [wizardPreselect, setWizardPreselect] = useState<{ season?: number | null; episode?: number | null } | undefined>(undefined)
+  const [wizardPreselect, setWizardPreselect] = useState<PreseleccionDePeticion | undefined>(undefined)
   const [wizardRequestId, setWizardRequestId] = useState<number | undefined>(undefined)
   // «Subir seleccionadas»: el botón «Seleccionar» pone casillas en las peticiones que se pueden subir (las mismas que
   // «Listo para subir» del Panel). Lo marcado sobrevive a filtrar y ordenar, y se limpia al salir de Peticiones y al
@@ -756,7 +758,7 @@ export function RequestsPage({ onNavigate }: { onNavigate?: (page: string) => vo
   // "Subir a eMuwarez" — reuse the exact same upload wizard as Biblioteca by
   // loading the matched library item and handing it to UploadWizardModal, with
   // the request's scope (season / episode) so the selection is pre-filled.
-  const openUpload = useCallback(async (libraryItemId: number, preselect?: { season?: number | null; episode?: number | null }, requestId?: number) => {
+  const openUpload = useCallback(async (libraryItemId: number, preselect?: PreseleccionDePeticion, requestId?: number) => {
     try {
       const libItem = await getLibraryItem(libraryItemId)
       setWizardPreselect(preselect)
