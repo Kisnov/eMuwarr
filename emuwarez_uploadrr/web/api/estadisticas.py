@@ -60,6 +60,6 @@ def estadisticas_mis_subidas(
     current_user: dict = Depends(require_auth),
     conn: sqlite3.Connection = Depends(get_db),
 ) -> MisTorrentsResponse:
-    """Tus subidas en `tracker` de la última lectura (la tarea «Leer tus subidas en eMuwarez»), sin llamar al tracker."""
+    """Tus subidas en `tracker` de la última lectura (la tarea «Leer tus subidas»), sin llamar al tracker."""
     from emuwarez_uploadrr.services.mis_torrents import resumen
     return MisTorrentsResponse(**resumen(conn, tracker))

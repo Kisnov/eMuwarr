@@ -463,8 +463,8 @@ def delete_upload_job(job_id: int, confirmation: str | None = None, conn=None) -
         mensaje = ("Subida eliminada." if len(chain) == 1
                    else f"Subida eliminada, con sus {len(chain) - 1} reintento(s).")
         if conservadas:
-            mensaje += (f" Se conserva la subida #{conservadas[0]}, que llegó a eMuwarez." if len(conservadas) == 1
-                        else f" Se conservan {len(conservadas)} subidas que llegaron a eMuwarez.")
+            mensaje += (f" Se conserva la subida #{conservadas[0]}, que llegó a su tracker." if len(conservadas) == 1
+                        else f" Se conservan {len(conservadas)} subidas que llegaron a su tracker.")
         return {"ok": True, "message": mensaje, "job_id": job_id, "deleted_job_ids": chain,
                 "kept_job_ids": conservadas}
     finally:
