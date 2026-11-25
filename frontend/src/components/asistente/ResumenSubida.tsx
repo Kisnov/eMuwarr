@@ -2,6 +2,7 @@
 // última ocasión de ver una categoría, una pista o un duplicado equivocados, y sirve igual para una película, un pack
 // y una tanda de temporadas o capítulos.
 import { useId } from 'react'
+import { soloA } from '../../utils/elegibilidad'
 import { timeAgo } from '../../utils/format'
 import { peticionCubre } from '../../utils/seleccionSubida'
 import {
@@ -70,12 +71,17 @@ export function ResumenSubida({ a }: { a: Asistente }) {
         <h3 className="asist-panel-titulo" id={idTitulo}>Lo que se sube</h3>
         {esTanda ? (
           <ul className="asist-lista-subida">
-            {batchQueue.map(id => (
-              <li key={id}>
-                <span className="asist-lista-titulo">{batchItemTitle(id)}</span>
-                <NombreDeLaTanda nombre={nombreDeLaTanda(id)} />
-              </li>
-            ))}
+            {batchQueue.map(id => {
+              // A cuáles de los elegidos va, si alguno no lo admite.
+              const solo = soloA(destinos, reglasDe(id))
+              return (
+                <li key={id}>
+                  <span className="asist-lista-titulo">{batchItemTitle(id)}</span>
+                  <NombreDeLaTanda nombre={nombreDeLaTanda(id)} />
+                  {solo && <span className="asist-dato-nota asist-aviso-dato">Solo a {solo}</span>}
+                </li>
+              )
+            })}
           </ul>
         ) : (
           <p className="asist-nombre-torrent" translate="no">{nombre || '—'}</p>
@@ -115,7 +121,8 @@ export function ResumenSubida({ a }: { a: Asistente }) {
                 {/* Las normas de idioma de cada otro tracker (las de eMuwarez van en las comprobaciones). */}
                 {esTanda ? (
                   <span className="asist-dato-nota">
-                    Las comprobaciones son las del primero; lo que otro no admita se salta solo para él.
+                    Las comprobaciones de cada uno son las del primero que lo admite; lo que otro no admita se salta solo
+                    para él.
                   </span>
                 ) : trackersParaSubir.filter(t => t.id !== 'emu').map(t => {
                   const r = reglas.get(t.id)

@@ -802,6 +802,19 @@ def test_lo_que_ya_tienen_todos_no_escribe_nada(db_conn, tmp_path, sin_comprobac
     assert r["lote_id"] is None
 
 
+def test_si_el_unico_que_lo_admite_ya_lo_tiene_no_escribe_nada(db_conn, tmp_path, sin_comprobaciones, monkeypatch):
+    from emuwarez_uploadrr.services import nomenclature
+    monkeypatch.setattr(nomenclature, "save_manual_nomenclature_fields", lambda *a, **k: pytest.fail("guardó campos"))
+    _clave(db_conn, "nobs")
+    sin_idiomas = _peli(db_conn, tmp_path)  # eMuwarez la admite y N.O.B.S no
+
+    r = lotes.encolar_lote(db_conn, [_el(sin_idiomas, campos={"title": "X"}, omitir=["emu"])], ["emu", "nobs"])
+
+    assert [(x["tracker"], x["status"]) for x in r["resultados"]] == [("emu", "blocked"), ("nobs", "blocked")]
+    assert r["resultados"][1]["errors"][0].startswith("N.O.B.S no lo admite")
+    assert r["lote_id"] is None
+
+
 def test_lo_que_se_salta_por_el_elemento_se_salta_para_cada_tracker(db_conn, tmp_path, sin_comprobaciones):
     _clave(db_conn, "nobs")
     serie = _item(db_conn, "series", "Serie")
@@ -830,6 +843,34 @@ def test_el_contenido_se_comprueba_con_las_normas_del_primer_tracker(db_conn, tm
     assert [(x["tracker"], x["status"]) for x in r["resultados"]] == [("nobs", "queued")]
 
 
+@pytest.mark.parametrize("audio, mirado, estados", [
+    # Sin castellano pero con catalán: las comprobaciones con las de Milnueve, y a eMuwarez no va.
+    ("cat", "mnv", [("emu", "blocked"), ("mnv", "queued")]),
+    # No lo admite ninguno: con las del primero, que dicen por qué.
+    ("jpn", "emu", [("emu", "queued"), ("mnv", "blocked")]),
+])
+def test_las_comprobaciones_van_con_el_primero_que_lo_admite(db_conn, tmp_path, monkeypatch, audio, mirado, estados):
+    from emuwarez_uploadrr.services import upload_checks, upload_queue
+    monkeypatch.setattr(upload_queue, "_season_upload_preconditions", lambda conn, *_tracker: [])
+    trackers_mirados = []
+
+    def comprobar(conn, item_id, scope="all", tracker="emu", **kw):
+        trackers_mirados.append(tracker)
+        return LISTO
+    monkeypatch.setattr(upload_checks, "run_upload_checks", comprobar)
+    _clave(db_conn, "mnv")
+    peli = _peli(db_conn, tmp_path)
+    db_conn.execute("UPDATE library_items SET audio_languages = ? WHERE id = ?", (audio, peli))
+    db_conn.commit()
+
+    r = lotes.encolar_lote(db_conn, [_el(peli)], ["emu", "mnv"])
+
+    assert trackers_mirados == [mirado]
+    assert [(x["tracker"], x["status"]) for x in r["resultados"]] == estados
+    saltado = next(x for x in r["resultados"] if x["status"] == "blocked")
+    assert saltado["errors"][0].startswith("Ni el audio" if saltado["tracker"] == "emu" else "Milnueve no lo admite")
+
+
 def test_un_tracker_sin_clave_rechaza_el_lote_entero(db_conn, tmp_path, sin_comprobaciones):
     with pytest.raises(lotes.LoteRechazado) as e:
         lotes.encolar_lote(db_conn, [_el(_peli(db_conn, tmp_path))], ["emu", "nobs"])
@@ -851,7 +892,7 @@ def test_la_api_encola_un_lote_a_varios_trackers(client, auth_headers, db_conn, 
 
 
 def test_eMuwarez_va_primero_aunque_llegue_despues(db_conn, tmp_path, sin_comprobaciones):
-    """Sus normas de idioma solo las miran las comprobaciones, que son las del primer tracker."""
+    """Como en el Resumen: eMuwarez y luego los demás."""
     _clave(db_conn, "nobs")
     peli = _con_castellano(db_conn, _peli(db_conn, tmp_path))
 

@@ -10,7 +10,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('../../api/uploads', () => ({
   queueLote: vi.fn(), runUploadChecks: vi.fn(), getUploadChecksProgress: vi.fn(), fetchTrackersParaSubir: vi.fn(),
-  fetchReglasTracker: vi.fn(),
+  fetchElegibilidad: vi.fn(),
 }))
 vi.mock('../../api/nomenclature', () => ({ getNomenclatureFields: vi.fn(), previewNomenclatureFields: vi.fn() }))
 vi.mock('../../api/library', () => ({ getEmuComparisons: vi.fn(), getLibrary: vi.fn(), suggestProvider: vi.fn() }))
@@ -646,14 +646,16 @@ describe('desde el Panel', () => {
 })
 
 describe('a varios trackers', () => {
-  const NOBS_NO = { tracker: 'nobs', permitido: false, motivo: 'N.O.B.S no lo admite: el audio (jpn) no está en castellano ni latino.', variante: null }
+  const NOBS_NO = { tracker: 'nobs', nombre: 'N.O.B.S', permitido: false, motivo: 'N.O.B.S no lo admite: el audio (jpn) no está en castellano ni latino.', variante: null }
+  const si = (tracker: string, nombre: string) => ({ tracker, nombre, permitido: true, motivo: 'Audio en castellano.', variante: null })
   const casillaTracker = (nombre: string) =>
     [...document.querySelectorAll<HTMLLabelElement>('.lote-trackers label')].find(l => l.textContent === nombre)!.querySelector('input')!
 
   beforeEach(() => {
     m(subidas.fetchTrackersParaSubir).mockResolvedValue([{ id: 'emu', nombre: 'eMuwarez' }, { id: 'nobs', nombre: 'N.O.B.S' }])
-    m(subidas.fetchReglasTracker).mockImplementation(async (id, tracker) =>
-      id === 12 ? NOBS_NO : { tracker, permitido: true, motivo: 'Audio en castellano.', variante: null })
+    m(subidas.fetchElegibilidad).mockImplementation(async id => ({
+      trackers: [si('emu', 'eMuwarez'), id === 12 ? NOBS_NO : si('nobs', 'N.O.B.S')], capitulos: [],
+    }))
   })
 
   it('con solo eMuwarez no se ve nada nuevo ni se manda el tracker', async () => {
@@ -664,6 +666,7 @@ describe('a varios trackers', () => {
     await pulsar(boton('Subir (1)'))
     await esperar(() => texto().includes('1 de 1 encolada'))
     expect(m(subidas.queueLote).mock.calls[0]).toHaveLength(1)
+    expect(subidas.fetchElegibilidad).not.toHaveBeenCalled()
   })
 
   it('eMuwarez de entrada; con otro marcado, dice lo que ese no admite y manda los dos en orden', async () => {
@@ -677,7 +680,7 @@ describe('a varios trackers', () => {
     await esperar(() => fila(12).textContent?.includes('No va a N.O.B.S'))
     expect(fila(12).textContent).toContain(`⚠ No va a N.O.B.S: ${NOBS_NO.motivo}`)
     expect(fila(11).textContent).not.toContain('No va a')
-    expect(m(subidas.fetchReglasTracker).mock.calls.map(c => c.join(':')).sort()).toEqual(['11:nobs', '12:nobs'])
+    expect(m(subidas.fetchElegibilidad).mock.calls.map(c => c[0]).sort()).toEqual([11, 12])
     // Las comprobaciones siguen siendo las de eMuwarez, el primero: no se repiten.
     expect(llamadas('content')).toHaveLength(2)
 
@@ -773,6 +776,108 @@ describe('a varios trackers', () => {
     await esperar(() => !texto().includes('N.O.B.S no responde'))
     expect(boton('Subir (1) a eMuwarez y N.O.B.S')!.disabled).toBe(false)
     expect(llamadas('environment')).toHaveLength(2)
+  })
+
+  describe('lo que eMuwarez no admite y Milnueve sí', () => {
+    const CATALAN = peli(15, 'Catalana', { has_spanish_ok: 0 })
+    const JAPONESA = peli(16, 'Japonesa', { has_spanish_ok: 0 })
+    const EMU_NO = { tracker: 'emu', nombre: 'eMuwarez', permitido: false, motivo: 'Ni el audio (cat) ni los subtítulos (sin detectar) están en castellano.', variante: null }
+    const MNV_NO = { tracker: 'mnv', nombre: 'Milnueve', permitido: false, motivo: 'Milnueve no lo admite.', variante: null }
+
+    beforeEach(() => {
+      m(subidas.fetchTrackersParaSubir).mockResolvedValue([{ id: 'emu', nombre: 'eMuwarez' }, { id: 'mnv', nombre: 'Milnueve' }])
+      m(subidas.fetchElegibilidad).mockImplementation(async id => ({
+        trackers: id === 15 ? [EMU_NO, si('mnv', 'Milnueve')] : id === 16 ? [EMU_NO, MNV_NO] : [si('emu', 'eMuwarez'), si('mnv', 'Milnueve')],
+        capitulos: [],
+      }))
+    })
+
+    it('entra, va solo a Milnueve y se comprueba con sus normas', async () => {
+      await abrir([DUNE, CATALAN, JAPONESA])
+      await esperar(() => !casillaPaso1('Catalana').disabled)
+      expect(casillaPaso1('Catalana').checked).toBe(true)
+      expect(texto()).toContain('Milnueve ✓ · eMuwarez ✗ sin castellano')
+      expect(casillaPaso1('Japonesa').disabled).toBe(true)
+      expect(texto()).toContain('Ningún tracker con clave admite sus idiomas.')
+
+      await alResumen(2)
+      // De entrada, eMuwarez para Dune y Milnueve para la catalana.
+      expect(casillaTracker('eMuwarez').checked).toBe(true)
+      expect(casillaTracker('Milnueve').checked).toBe(true)
+      expect(llamadas('content').map(c => [c[0], c[4]])).toEqual([[11, undefined], [15, 'mnv']])
+      expect(fila(15).textContent).toContain('⚠ Solo a Milnueve')
+      expect(fila(15).textContent).toContain(`⚠ No va a eMuwarez: ${EMU_NO.motivo}`)
+      expect(fila(11).textContent).not.toContain('Solo a')
+      expect(incluir('Catalana').checked).toBe(true)
+
+      await pulsar(boton('Subir (2) a eMuwarez y Milnueve'))
+      await esperar(() => m(subidas.queueLote).mock.calls.length)
+      expect(m(subidas.queueLote).mock.calls[0][1]).toEqual(['emu', 'mnv'])
+    })
+
+    it('volver al paso 1 sin cambiar nada conserva los trackers elegidos; cambiarlo los vuelve a decidir', async () => {
+      await abrir([DUNE, CATALAN])
+      await esperar(() => !casillaPaso1('Catalana').disabled)
+      await alResumen(2)
+      await pulsar(casillaTracker('eMuwarez'))
+      await pulsar(boton('← Volver'))
+      await alResumen(2)
+      expect(casillaTracker('eMuwarez').checked).toBe(false)
+
+      await pulsar(boton('← Volver'))
+      await pulsar(casillaPaso1('Dune'))
+      await alResumen(1)
+      expect(casillaTracker('eMuwarez').checked).toBe(false)
+      expect(casillaTracker('Milnueve').checked).toBe(true)
+      await pulsar(boton('← Volver'))
+      await pulsar(casillaPaso1('Dune'))
+      await alResumen(2)
+      expect(casillaTracker('eMuwarez').checked).toBe(true)
+    })
+
+    it('no deja continuar hasta saber qué admite cada tracker', async () => {
+      const respuesta = diferida<Awaited<ReturnType<typeof subidas.fetchElegibilidad>>>()
+      m(subidas.fetchElegibilidad).mockReturnValueOnce(respuesta.promesa)
+      await abrir([CATALAN])
+      await esperar(() => texto().includes('Mirando qué admite cada tracker'))
+      expect(boton('Continuar (0)')!.disabled).toBe(true)
+      await act(async () => respuesta.resolver({ trackers: [EMU_NO, si('mnv', 'Milnueve')], capitulos: [] }))
+      await esperar(() => !boton('Continuar (1)')!.disabled)
+      expect(texto()).not.toContain('Mirando qué admite')
+    })
+
+    it('tampoco mientras no ha llegado la lista de trackers', async () => {
+      const lista = diferida<Awaited<ReturnType<typeof subidas.fetchTrackersParaSubir>>>()
+      m(subidas.fetchTrackersParaSubir).mockReturnValueOnce(lista.promesa)
+      await abrir([DUNE])
+      expect(boton('Continuar (1)')!.disabled).toBe(true)
+      await act(async () => lista.resolver([]))
+      await esperar(() => !boton('Continuar (1)')!.disabled)
+    })
+
+    it('mientras tanto no se puede cambiar lo marcado', async () => {
+      const respuesta = diferida<Awaited<ReturnType<typeof subidas.fetchElegibilidad>>>()
+      m(subidas.fetchElegibilidad).mockReturnValueOnce(respuesta.promesa)
+      await abrir([DUNE, CATALAN])
+      await esperar(() => texto().includes('Mirando qué admite cada tracker'))
+      expect(casillaPaso1('Dune').disabled).toBe(true)
+      await act(async () => respuesta.resolver({ trackers: [si('emu', 'eMuwarez')], capitulos: [] }))
+      await esperar(() => !casillaPaso1('Dune').disabled)
+    })
+
+    it('sin Milnueve marcado, se comprueba con las de eMuwarez y se salta', async () => {
+      // Milnueve la admite; con las de eMuwarez, falla el castellano.
+      m(subidas.runUploadChecks).mockImplementation(async (id, scope, ...resto) => (scope === 'environment' ? ENTORNO
+        : id === 15 && resto[2] !== 'mnv' ? { ready: false, checks: [{ id: 'spanish', label: 'No tiene castellano', status: 'fail' as const, message: '' }] } : LISTO))
+      await abrir([DUNE, CATALAN])
+      await esperar(() => !casillaPaso1('Catalana').disabled)
+      await alResumen(2)
+      expect(fila(15).textContent).not.toContain('No tiene castellano')
+      await pulsar(casillaTracker('Milnueve'))
+      await esperar(() => fila(15).textContent?.includes('No tiene castellano'))
+      expect(llamadas('content').filter(c => c[0] === 15).map(c => c[4])).toEqual(['mnv', undefined])
+      expect(incluir('Catalana').checked).toBe(false)
+    })
   })
 
   it('sin ninguno marcado no se sube', async () => {

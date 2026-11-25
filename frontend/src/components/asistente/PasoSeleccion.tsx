@@ -2,7 +2,7 @@
 // entero o una selección de capítulos.
 import { useId } from 'react'
 import type { LibraryItemResponse } from '../../types/api'
-import { episodeNotReadyReason, isSeasonReady, seasonNotReadyReason } from '../../utils/libraryItem'
+import { episodeNotReadyReason, seasonNotReadyReason } from '../../utils/libraryItem'
 import { admiten, resumenDeCapitulos, resumenPorTracker } from '../../utils/elegibilidad'
 import { IconoAviso } from '../Iconos'
 import { Tooltip } from '../Tooltip'
@@ -13,22 +13,20 @@ export function PasoSeleccion({ a }: { a: Asistente }) {
   const {
     item, allowMultiSeason, seasons, episodes, multiSelected, setMultiSelected, seasonUploadMode, setSeasonUploadMode,
     episodeSelected, setEpisodeSelected, selError, confirmMultiSelection, confirmEpisodeSelection, confirmSeasonWhole,
-    reglasDe,
+    reglasDe, temporadasMiradas,
   } = a
   const idMotivo = useId()
 
   // Con más de un tracker con clave, decide lo que admite cada uno (reglasDe); solo con eMuwarez, su regla de siempre.
   const reglasPack = reglasDe(item.id)
-  const admitenCapitulo = (ep: LibraryItemResponse) => {
-    const r = reglasDe(ep.id)
+  // Los que admiten un capítulo o una temporada de la serie; undefined si no se sabe.
+  const admitenEste = (x: LibraryItemResponse) => {
+    const r = reglasDe(x.id)
     return r ? admiten(r) : undefined
   }
-  const eligibleEpisodes = episodes.filter(ep => !episodeNotReadyReason(ep, admitenCapitulo(ep)))
+  const eligibleEpisodes = episodes.filter(ep => !episodeNotReadyReason(ep, admitenEste(ep)))
   const enDisco = episodes.filter(ep => ep.local_status === 'Disponible' || ep.local_status === 'Subido')
   const reglasCapitulos = enDisco.map(ep => reglasDe(ep.id)).filter(r => r !== undefined)
-  // Varios capítulos se suben en tanda, con las comprobaciones del primer tracker: si eMuwarez no admite alguno, avisa.
-  const tandaSinEmu = reglasPack !== undefined && episodeSelected.size > 1
-    && [...episodeSelected].some(id => reglasDe(id)?.some(r => r.tracker === 'emu' && !r.permitido))
   const allEligibleSelected = eligibleEpisodes.length > 0
     && eligibleEpisodes.every(ep => episodeSelected.has(ep.id))
 
@@ -129,8 +127,8 @@ export function PasoSeleccion({ a }: { a: Asistente }) {
           </div>
           <div className="asist-rejilla-tarjetas">
             {episodes.map(ep => {
-              const admitenEste = admitenCapitulo(ep)
-              const reason = episodeNotReadyReason(ep, admitenEste)
+              const loAdmiten = admitenEste(ep)
+              const reason = episodeNotReadyReason(ep, loAdmiten)
               const ready = !reason
               const selected = episodeSelected.has(ep.id)
               // Already on eMuwarez stays selectable on purpose: re-uploading a
@@ -155,21 +153,15 @@ export function PasoSeleccion({ a }: { a: Asistente }) {
                 </button>
               )
               const yaEnEmu = onEmu ? 'Ya existe en eMuwarez. Puedes subirlo igualmente (por ejemplo, una versión mejor).' : null
-              const loAdmiten = admitenEste?.length
-                ? `Lo ${admitenEste.length > 1 ? 'admiten' : 'admite'}: ${admitenEste.join(', ')}.`
+              const quienes = loAdmiten?.length
+                ? `Lo ${loAdmiten.length > 1 ? 'admiten' : 'admite'}: ${loAdmiten.join(', ')}.`
                 : null
-              const tip = reason ?? ([loAdmiten, yaEnEmu].filter(Boolean).join(' ') || null)
+              const tip = reason ?? ([quienes, yaEnEmu].filter(Boolean).join(' ') || null)
               return tip
                 ? <Tooltip key={ep.id} content={tip} style={{ width: '100%' }}>{card}</Tooltip>
                 : <div key={ep.id}>{card}</div>
             })}
           </div>
-          {tandaSinEmu && (
-            <p className="text-muted asist-t12 asist-mt-10" role="status">
-              eMuwarez no admite alguno de los elegidos: con eMuwarez marcado en el Resumen, esos se saltan. Para
-              subirlos a otro tracker, desmárcalo allí.
-            </p>
-          )}
         </div>
       )}
     </>
@@ -183,7 +175,8 @@ export function PasoSeleccion({ a }: { a: Asistente }) {
   // pick one and fail later. isSeasonReady/seasonNotReadyReason (shared with
   // LibraryActionButtons' own "Subir" button) only know about the
   // consistency check; the "incomplete" message is layered on here.
-  const selectableSeasons = seasons.filter(isSeasonReady)
+  // Con más de un tracker, la que admite alguno (reglasDe); solo con eMuwarez, su regla.
+  const selectableSeasons = seasons.filter(s => !seasonNotReadyReason(s, admitenEste(s)))
   // The series' own name is redundant here (already the wizard's title) —
   // just the season part, e.g. "Temporada 1"/"Especiales".
   const seasonCardLabel = (s: LibraryItemResponse) => {
@@ -204,8 +197,11 @@ export function PasoSeleccion({ a }: { a: Asistente }) {
       </label>
       <div className="asist-rejilla-tarjetas asist-rejilla-alta">
         {seasons.map(s => {
-          const ready = isSeasonReady(s)
-          const reason = seasonNotReadyReason(s)
+          const reason = seasonNotReadyReason(s, admitenEste(s))
+          const ready = !reason
+          // Qué tracker la admite, si alguno no.
+          const reglas = reglasDe(s.id)
+          const trackers = reglas?.some(r => !r.permitido) ? resumenPorTracker(reglas) : null
           const selected = multiSelected.has(s.id)
           const motivoId = `${idMotivo}-temporada-${s.id}`
           return (
@@ -220,6 +216,7 @@ export function PasoSeleccion({ a }: { a: Asistente }) {
                 <span className="asist-negrita">{seasonCardLabel(s)}</span>
               </button>
               {!ready && reason && <MotivoNoDisponible id={motivoId}>{reason}</MotivoNoDisponible>}
+              {ready && trackers && <span className="asist-dato-nota">{trackers}</span>}
             </div>
           )
         })}
@@ -240,8 +237,9 @@ export function PasoSeleccion({ a }: { a: Asistente }) {
         <button
           className="btn btn-primary"
           // Sin nada elegido no hay a dónde continuar: antes se pulsaba y solo entonces avisaba.
+          // De una serie, tampoco hasta saber qué admite cada tracker: de ahí salen los de entrada del Resumen.
           disabled={allowMultiSeason
-            ? multiSelected.size === 0
+            ? multiSelected.size === 0 || !temporadasMiradas
             : seasonUploadMode === null || (seasonUploadMode === 'episodes' && episodeSelected.size === 0)}
           onClick={
             allowMultiSeason ? confirmMultiSelection

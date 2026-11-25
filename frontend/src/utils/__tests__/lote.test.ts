@@ -75,6 +75,8 @@ describe('razonNoSubible', () => {
   it('sin castellano, o sin poder leer sus pistas, no se puede', () => {
     expect(razonNoSubible(pelicula({ has_spanish_ok: 0 }))).toBe('No tiene castellano ni en el audio ni en los subtítulos.')
     expect(razonNoSubible(pelicula({ has_spanish_ok: null }))).toContain('no se puede confirmar que tenga castellano')
+    // Con lo que admite cada tracker, manda eso: el servidor lo ha mirado con sus normas.
+    expect(razonNoSubible(pelicula({ has_spanish_ok: null }), ['mnv'])).toBeNull()
   })
 
   it('una temporada entra si se puede subir como pack, y si no, con el motivo de seasonNotReadyReason', () => {
@@ -91,6 +93,13 @@ describe('razonNoSubible', () => {
     expect(razonNoSubible(pelicula({ item_type: 'series' }))).toBe('Una serie se sube por temporadas.')
   })
 
+  it('con más de un tracker, en vez del castellano decide si lo admite alguno', () => {
+    expect(razonNoSubible(pelicula({ has_spanish_ok: 0 }), ['Milnueve'])).toBeNull()
+    expect(razonNoSubible(pelicula({ has_spanish_ok: 0 }), [])).toBe('Ningún tracker con clave admite sus idiomas.')
+    expect(razonNoSubible(pelicula({ local_status: 'Faltante' }), ['Milnueve'])).toContain('Faltante')
+    expect(razonNoSubible(pelicula({ item_type: 'season', video_codec: 'x264', has_spanish_ok: 0 }), ['Milnueve'])).toBeNull()
+  })
+
   it('lo de una carpeta manual sin ficha de TMDb no entra, a ningún nivel, aunque lo demás esté bien', () => {
     for (const item_type of ['movie', 'series', 'season', 'episode']) {
       expect(razonNoSubible(pelicula({ item_type, por_identificar: true })))
@@ -100,6 +109,13 @@ describe('razonNoSubible', () => {
 })
 
 describe('razonNoMarcable', () => {
+  it('con más de un tracker no mira los idiomas: los mira el lote', () => {
+    expect(razonNoMarcable(pelicula({ has_spanish_ok: 0 }))).toBe('No tiene castellano ni en el audio ni en los subtítulos.')
+    expect(razonNoMarcable(pelicula({ has_spanish_ok: 0 }), true)).toBeNull()
+    expect(razonNoMarcable(pelicula({ local_status: 'Faltante' }), true)).toContain('Faltante')
+    expect(razonNoMarcable(pelicula({ por_identificar: true }), true)).toBe('Identifica la ficha en TMDb antes de subirla.')
+  })
+
   it('una serie se marca (se cambia por sus temporadas) salvo que esté por identificar', () => {
     expect(razonNoMarcable(pelicula({ item_type: 'series' }))).toBeNull()
     expect(razonNoMarcable(pelicula({ item_type: 'series', por_identificar: true })))

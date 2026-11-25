@@ -1,8 +1,10 @@
 // Paso 1 de «Subir por lotes»: qué entra. Cada serie marcada sale como sus temporadas (packs). Lo que no se puede
 // subir (no está en disco, sin castellano, una temporada que no se puede subir como pack) sale desmarcado y sin
-// casilla que marcar, con su motivo. Desde el Panel cada fila dice qué petición cubre y, si cubre varias (dos
+// casilla que marcar, con su motivo. Con más de un tracker con clave, en vez del castellano, que lo admita alguno. Desde el Panel cada fila dice qué petición cubre y, si cubre varias (dos
 // peticiones sobre el mismo elemento), deja elegir cuál se enlaza: el servidor solo enlaza una por subida.
+import type { ReglasConNombre } from '../../api/uploads'
 import type { LibraryItemResponse } from '../../types/api'
+import { admiten, resumenPorTracker } from '../../utils/elegibilidad'
 import { formatNumero } from '../../utils/format'
 import { listDisplayTitle, tituloEnFicha } from '../../utils/libraryItem'
 import { MAX_ELEMENTOS_LOTE, razonNoSubible } from '../../utils/lote'
@@ -13,6 +15,7 @@ const calidad = (item: LibraryItemResponse) => [item.resolution, item.source].fi
 const TIPO: Record<string, string> = { movie: 'Película', season: 'Temporada', episode: 'Capítulo' }
 
 const NINGUNA: readonly number[] = []
+const SIN_ELEGIBILIDAD: ReadonlyMap<number, readonly ReglasConNombre[]> = new Map()
 
 /** El título de la fila en dos partes: el nombre de la serie y lo que distingue a la temporada («Temporada 1»), para
  *  que en un móvil se recorte solo el nombre y la parte siga a la vista. Una película no tiene parte. */
@@ -27,10 +30,14 @@ function partesDelTitulo(item: LibraryItemResponse): { nombre: string; parte: st
 
 export function PasoContenidoLote({
   elementos, marcadas, onAlternar, onContinuar, expandiendo = null, avisos = [], peticiones, peticionDe,
-  onElegirPeticion,
+  onElegirPeticion, elegibilidad = SIN_ELEGIBILIDAD, comprobandoIdiomas = false,
 }: {
   elementos: readonly LibraryItemResponse[]
   marcadas: ReadonlySet<number>
+  // Con más de un tracker, qué admite cada uno (/upload/elegibilidad).
+  elegibilidad?: ReadonlyMap<number, readonly ReglasConNombre[]>
+  // Aún no han respondido todos: no se cambia ni se continúa, que de ellos salen las que entran.
+  comprobandoIdiomas?: boolean
   onAlternar: (id: number) => void
   onContinuar: () => void
   // Mientras se cargan las temporadas de las series marcadas: cuántas series van de cuántas.
@@ -42,7 +49,11 @@ export function PasoContenidoLote({
   peticionDe?: (id: number) => number | undefined
   onElegirPeticion?: (id: number, peticion: number) => void
 }) {
-  const n = elementos.filter(e => marcadas.has(e.id) && !razonNoSubible(e)).length
+  const razon = (e: LibraryItemResponse) => {
+    const r = elegibilidad.get(e.id)
+    return razonNoSubible(e, r && admiten(r))
+  }
+  const n = elementos.filter(e => marcadas.has(e.id) && !razon(e)).length
   const lleno = n >= MAX_ELEMENTOS_LOTE
   if (expandiendo) {
     return (
@@ -65,17 +76,20 @@ export function PasoContenidoLote({
       )}
       <ul className="lote-lista">
         {elementos.map(item => {
-          const razon = razonNoSubible(item)
-          const marcada = !razon && marcadas.has(item.id)
+          const motivo = razon(item)
+          const marcada = !motivo && marcadas.has(item.id)
+          // Qué tracker lo admite, si alguno no.
+          const reglas = elegibilidad.get(item.id)
+          const trackers = reglas?.some(r => !r.permitido) ? resumenPorTracker(reglas) : null
           const suyas = peticiones?.get(item.id) ?? NINGUNA
           const enlazada = peticionDe?.(item.id) ?? suyas[0]
           return (
-            <li key={item.id} className={razon ? 'lote-fila lote-fila-apagada' : 'lote-fila'}>
+            <li key={item.id} className={motivo ? 'lote-fila lote-fila-apagada' : 'lote-fila'}>
               <label className="checkbox-label lote-fila-casilla">
                 <input
                   type="checkbox"
                   checked={marcada}
-                  disabled={!!razon || (!marcada && lleno)}
+                  disabled={!!motivo || (!marcada && lleno) || comprobandoIdiomas}
                   onChange={() => onAlternar(item.id)}
                 />
                 <TituloDeFila item={item} />
@@ -93,7 +107,8 @@ export function PasoContenidoLote({
                   {suyas.map(p => <option key={p} value={p}>Petición #{p}</option>)}
                 </select>
               )}
-              {razon && <span className="lote-motivo"><IconoAviso /> {razon}</span>}
+              {motivo && <span className="lote-motivo"><IconoAviso /> {motivo}</span>}
+              {!motivo && trackers && <span className="lote-fila-trackers asist-dato-nota">{trackers}</span>}
             </li>
           )
         })}
@@ -102,7 +117,12 @@ export function PasoContenidoLote({
         {formatNumero(n)} de {formatNumero(elementos.length)} {elementos.length === 1 ? 'marcada' : 'marcadas'} · máximo {MAX_ELEMENTOS_LOTE} por lote
       </p>
       <div className="asist-pie asist-pie-fin">
-        <button className="btn btn-primary" type="button" onClick={onContinuar} disabled={n === 0}>
+        {comprobandoIdiomas && (
+          <span className="text-muted asist-t12" role="status">
+            <span className="spinner asist-spinner-14" /> Mirando qué admite cada tracker…
+          </span>
+        )}
+        <button className="btn btn-primary" type="button" onClick={onContinuar} disabled={n === 0 || comprobandoIdiomas}>
           Continuar ({n})
         </button>
       </div>

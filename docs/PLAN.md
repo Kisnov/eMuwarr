@@ -114,9 +114,8 @@ descripción y el cliente.
        no, los que lo admiten; el plan del pack usa las normas del primero de ellos.
      - Queda: probarlo en el NAS (una subida vieja a N.O.B.S: los dos torrents sembrando el mismo fichero sin comprobar
        datos).
-     - Por hacer: lo que eMuwarez no admite (sin castellano) aún no entra en «Subir por lotes» ni en una tanda de
-       temporadas, aunque N.O.B.S o Milnueve lo admitan: el paso 1 y la selección de Biblioteca usan su regla
-       (`utils/lote.ts::razonNoSubible`, `seasonNotReadyReason` sin elegibilidad). Hoy va por la subida suelta.
+     - Queda: probar en el NAS un lote y una tanda con lo que solo admite Milnueve (una temporada de anime solo en
+       catalán y una en castellano, a eMuwarez y Milnueve).
   3. Después, los internacionales que ya tienen código en `uploadrr-emu/`, solo para contenido con el audio en inglés y
      donde haya permiso.
 - **Por estudiar: nekoBT (nekobt.to; añadido y estudiado el 22/11).** Tracker público de anime centrado en fansubs y
