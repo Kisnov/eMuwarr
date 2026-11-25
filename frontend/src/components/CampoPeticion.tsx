@@ -1,7 +1,7 @@
 import type { PeticionDeLaFicha } from '../types/api'
 import { StatusBadge } from './StatusBadge'
 import { PlainValue, PointsValueIcon } from './DetailCard'
-import { Favicon } from './Favicon'
+import { Favicon, domainOf } from './Favicon'
 import { useTooltip } from './Tooltip'
 import { formatNumero, SIN_DATO } from '../utils/format'
 import { requestDisplayTitle } from '../utils/peticiones'
@@ -36,12 +36,12 @@ function tituloDe(p: PeticionDeLaFicha): string {
 }
 
 function EnlaceEmu({ p }: { p: PeticionDeLaFicha }) {
-  const tip = useTooltip(p.url ? 'Abrir la petición en eMuwarez' : null)
+  const tip = useTooltip(p.url ? 'Abrir la petición en su tracker' : null)
   if (!p.url) return null
   return (
     <a className="hover-link bibdet-pet-emu" href={p.url} target="_blank" rel="noreferrer"
-      aria-label={`Abrir la petición en eMuwarez: ${tituloDe(p)}`} {...tip.triggerProps}>
-      <Favicon domain={EMU_DOMINIO} size={16} radius={3} fallback={<span aria-hidden="true">↗</span>} />
+      aria-label={`Abrir la petición en su tracker: ${tituloDe(p)}`} {...tip.triggerProps}>
+      <Favicon domain={domainOf(p.url) || EMU_DOMINIO} size={16} radius={3} fallback={<span aria-hidden="true">↗</span>} />
       {tip.tooltipNode}
     </a>
   )

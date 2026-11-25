@@ -21,7 +21,7 @@ function FilaSubida({ job, yendose = false, onOpen }: {
   useTicker(ACTIVE_JOB_STATUSES.has(job.status))
   const isPreparingOrRunning = job.status === 'preparing' || job.status === 'running'
   const phaseInfo = isPreparingOrRunning ? currentPhaseInfo(job) : null
-  const phaseLabelText = phaseInfo?.label ?? (isPreparingOrRunning ? phaseLabel(job.progress_phase) : null)
+  const phaseLabelText = phaseInfo?.label ?? (isPreparingOrRunning ? phaseLabel(job.progress_phase, job) : null)
   // Total time since the job started (not just this sub-phase) — the
   // number that actually answers "how long has this been going".
   const totalElapsedText = isPreparingOrRunning ? progressCounter(job) : null

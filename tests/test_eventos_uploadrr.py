@@ -530,3 +530,22 @@ def test_el_seguidor_corre_a_la_vez_que_el_proceso(
     finally:
         senal.write_text("")
     assert _terminal(db_conn, jid)["status"] == "completed"
+
+
+def test_el_fallo_de_una_subida_a_otro_tracker_nombra_a_ese_tracker():
+    """Un duplicado en N.O.B.S no dice «en eMuwarez», y el fragmento que buscan los frenos del lote sigue ahí."""
+    from emuwarez_uploadrr.services import lotes
+    from emuwarez_uploadrr.services.uploadrr_eventos import mensaje_de_fallo
+    duplicado = {"ok": False, "codigo": "duplicado", "detalle": "Potential duplicate on NOBS"}
+    assert mensaje_de_fallo(duplicado, "N.O.B.S", "NOBS") == "Ya hay un torrent igual en N.O.B.S (Potential duplicate on NOBS)"
+    assert lotes.motivo_de_fallo(mensaje_de_fallo(duplicado, "N.O.B.S", "NOBS")) is None
+    # Con eMuwarez, lo de siempre.
+    assert mensaje_de_fallo({"ok": False, "codigo": "duplicado"}) == "Ya hay un torrent igual en eMuwarez (Potential duplicate on EMU)"
+
+
+def test_los_avisos_de_qbittorrent_nombran_al_tracker_de_la_subida():
+    from emuwarez_uploadrr.services.upload_execution.comun import mensaje_qbit_fallo
+    assert mensaje_qbit_fallo("no_aceptado").endswith("La subida a eMuwarez sí se completó.")
+    assert mensaje_qbit_fallo("no_aceptado", nombre="Milnueve").endswith("La subida a Milnueve sí se completó.")
+    assert "eMuwarez" not in mensaje_qbit_fallo("sin_torrent", nombre="Milnueve")
+    assert "eMuwarez" not in mensaje_qbit_fallo("no_visible", reenvio=True, nombre="Milnueve")
