@@ -127,7 +127,6 @@
   padding: 10px 12px;
   border-radius: var(--radius-small);
   background: color-mix(in srgb, var(--overlay-dark) 18%, transparent);
-  border: 1px solid var(--border);
 }
 
 .tareas-datos dt {

@@ -163,6 +163,7 @@ tracking y el color hielo, no otra familia.
 - **Cifra** (700, 22 px): valores de las tarjetas de estadísticas, con cifras tabulares.
 - **Cuerpo** (400, 13 px, interlineado 1.5): texto general, celdas de tabla.
 - **Etiqueta** (600, 11-12 px): cabeceras de tabla, chapas, campos de formulario.
+- **Ayuda** (400, 12 px): frases de ayuda o explicación bajo un campo, en tarjetas y en comprobaciones; nunca a 11 px.
 - **Navegación** (500, 12.5 px, mayúsculas, tracking .03em): menú lateral.
 
 ### Named Rules
