@@ -23,6 +23,14 @@ beforeEach(() => { m.mockReset() })
 afterEach(desmontar)
 
 describe('StatsTrackerBloque', () => {
+  it('lleva el nombre del tracker de la subida', async () => {
+    m.mockResolvedValue(stats({ disponible: false, mensaje: 'Falta la API key de N.O.B.S en Configuración.' }))
+    await montar(<StatsTrackerBloque job={subida({ tracker: 'nobs', tracker_nombre: 'N.O.B.S' })} />)
+    await esperar(() => texto().includes('Falta la API key'))
+    expect(document.querySelector('h2')!.textContent).toBe('En N.O.B.S')
+    expect(texto()).toContain('Sin datos de N.O.B.S')
+  })
+
   it('enseña seeders, leechers y veces completado con cifras es-ES', async () => {
     m.mockResolvedValue(stats())
     await montar(<StatsTrackerBloque job={subida()} />)

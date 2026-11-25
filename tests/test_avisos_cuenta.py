@@ -106,7 +106,7 @@ def test_la_lectura_del_perfil_avisa_comparando_con_la_anterior(conn, monkeypatc
     set_setting(conn, "emu.api_key", "clave")
     conn.commit()
     lecturas = iter([dict(PERFIL), {**PERFIL, "hit_and_runs": 2}])
-    monkeypatch.setattr(emu_perfil, "emu_get_user", lambda api_key, base_url=None: next(lecturas))
+    monkeypatch.setattr(emu_perfil, "emu_get_user", lambda api_key, base_url=None, **kw: next(lecturas))
     perfil_emu(conn)
     assert _avisos(conn) == []          # la primera lectura no tiene con qué comparar
     # Una hora después, la siguiente lectura trae un H&R más.
@@ -124,7 +124,7 @@ def test_los_avisos_salen_despues_de_guardar_la_lectura_y_quedan_guardados(conn,
     set_setting(conn, "emu.api_key", "clave")
     conn.commit()
     lecturas = iter([dict(PERFIL), {**PERFIL, "hit_and_runs": 2}])
-    monkeypatch.setattr(emu_perfil, "emu_get_user", lambda api_key, base_url=None: next(lecturas))
+    monkeypatch.setattr(emu_perfil, "emu_get_user", lambda api_key, base_url=None, **kw: next(lecturas))
     perfil_emu(conn)
     guardado = get_json_state(conn, emu_perfil.PERFIL_STATE_KEY)
     guardado["intento_at"] = (datetime.now(timezone.utc) - timedelta(hours=2)).isoformat()

@@ -25,9 +25,13 @@ export interface CurrentUserResponse {
   last_login_at: string | null
 }
 
-// Tu cuenta de eMuwarez: /api/user de UNIT3D tal cual, guardado una hora en el servidor.
+// Tu cuenta de eMuwarez: /api/user de UNIT3D tal cual, guardado una hora en el servidor. En `otros`, la de cada otro
+// tracker con clave.
 export interface EmuPerfil {
   configured: boolean
+  tracker?: string
+  nombre?: string
+  url?: string
   username: string | null
   group: string | null
   uploaded: string | null
@@ -40,6 +44,7 @@ export interface EmuPerfil {
   hit_and_runs: number | null
   updated_at: string | null
   error: string | null
+  otros?: EmuPerfil[]
 }
 
 // Una instantánea diaria de tu cuenta de eMuwarez (Estadísticas); lo que no se pudo leer ese día va a null.
@@ -64,7 +69,7 @@ export interface RitmosCuenta {
   bonus_hora: number | null
 }
 
-// Una de tus subidas en eMuwarez (GET /estadisticas/mis-subidas).
+// Una de tus subidas en un tracker (GET /estadisticas/mis-subidas?tracker=…).
 export interface MiTorrent {
   torrent_id: number
   nombre: string
@@ -80,6 +85,7 @@ export interface MiTorrent {
 
 export interface MisTorrents {
   leido_at: string | null
+  url: string
   torrents: MiTorrent[]
   totales: {
     subidas: number
