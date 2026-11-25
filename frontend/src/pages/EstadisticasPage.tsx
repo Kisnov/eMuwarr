@@ -74,7 +74,7 @@ const EMU: TrackerParaSubir = { id: 'emu', nombre: 'eMuwarez' }
 
 // Arriba, las cifras de tu biblioteca y de tus peticiones (las tarjetas que tenía el Panel); debajo, la evolución de
 // tu cuenta de eMuwarez: una instantánea al día, que el servidor guarda al leer tu perfil (cada hora, con la tarea
-// «Leer tu cuenta de eMuwarez»).
+// «Leer tu cuenta»).
 // Todo se pide al entrar en la sección y la evolución también al cambiar de rango; no hay sondeo.
 export function EstadisticasPage() {
   const seVe = useSeccionVisible()

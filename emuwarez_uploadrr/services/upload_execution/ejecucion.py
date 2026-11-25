@@ -22,6 +22,7 @@ from ..uploadrr_eventos import (
     SeguidorEventos,
     borrar_fichero,
     clasificar_con_eventos,
+    del_tracker,
     ficha_de_estado,
     preparar_fichero,
 )
@@ -39,6 +40,7 @@ from .comun import (
     logger,
     mensaje_qbit_fallo,
     redact_secrets,
+    subida_completada,
 )
 from .concurrencia import _upload_concurrency_gate
 from .config import (
@@ -48,7 +50,7 @@ from .config import (
     preparar_descripcion_de_la_subida,
     sin_config_por_subida,
 )
-from .consultas import build_uploadrr_execution_command, get_upload_job, validate_upload_job_start
+from .consultas import build_uploadrr_execution_command, get_upload_job, tracker_del_trabajo, validate_upload_job_start
 from .estado import (
     _avanzar_job,
     _check_trailer_and_log,
@@ -122,6 +124,9 @@ def _run_uploadrr_subprocess_body(job_id: int, cmd: dict, secrets: list[str]) ->
     config_ruta = cmd.get("config")
     descripcion_ruta = cmd.get("descripcion")
     try:
+        # El tracker de la subida: sus mensajes lo nombran a él, no a eMuwarez.
+        destino = tracker_del_trabajo(get_upload_job(job_id) or {})
+
         def _cancelado() -> None:
             append_upload_log(job_id, "info", "Subida cancelada antes de lanzar Uploadrr; no se lanza.", stream="system")
 
@@ -217,13 +222,14 @@ def _run_uploadrr_subprocess_body(job_id: int, cmd: dict, secrets: list[str]) ->
                     # gets written, so add_to_client() has nothing to add.
                     # Not a qBittorrent problem at all; the eMuwarez upload
                     # itself did succeed.
-                    append_upload_log(job_id, "error", QBIT_SIN_TORRENT_FIRMADO, stream="system")
+                    append_upload_log(job_id, "error", del_tracker(QBIT_SIN_TORRENT_FIRMADO, destino.nombre),
+                                      stream="system")
                 elif "Torrent client add failed:" in line:
                     motivo = redact_secrets(line.split("Torrent client add failed:", 1)[1].strip(), secrets)
                     append_upload_log(
                         job_id, "error",
                         f"qBittorrent: falló al añadir o etiquetar el torrent ({motivo}). Revisa qBittorrent. "
-                        "La subida a eMuwarez sí se completó.",
+                        f"{subida_completada(destino.nombre)}",
                         stream="system",
                     )
                 else:
@@ -266,7 +272,8 @@ def _run_uploadrr_subprocess_body(job_id: int, cmd: dict, secrets: list[str]) ->
             elif tipo == "qbit_fallo":
                 with progress_lock:
                     progress_state["qbittorrent_add_failed"] = True
-                append_upload_log(job_id, "error", mensaje_qbit_fallo(efecto[1]), stream="system")
+                append_upload_log(job_id, "error", mensaje_qbit_fallo(efecto[1], nombre=destino.nombre),
+                                  stream="system")
 
         def _procesar_evento(ev: dict) -> None:
             for efecto in estado_ev.aplicar(ev):
@@ -353,7 +360,7 @@ def _run_uploadrr_subprocess_body(job_id: int, cmd: dict, secrets: list[str]) ->
         stderr_text = "\n".join(stderr_lines)
 
         if por_eventos:
-            result = clasificar_con_eventos(estado_ev, returncode)
+            result = clasificar_con_eventos(estado_ev, returncode, destino.nombre, destino.uploadrr)
             if (estado_ev.resultado or {}).get("codigo") == "rechazado" and result["status"] == "failed":
                 # El motivo del rechazo (lo que dijo el tracker) solo está en el texto, y los frenos del lote lo leen.
                 result["error_summary"] = (build_error_summary(stderr_text, stdout_text, returncode)
@@ -400,7 +407,7 @@ def _run_uploadrr_subprocess_body(job_id: int, cmd: dict, secrets: list[str]) ->
                 append_upload_log(
                     job_id, "error",
                     "qBittorrent: Uploadrr-EMU terminó sin confirmar que el torrent se añadiera. Revisa qBittorrent. "
-                    "La subida a eMuwarez sí se completó.",
+                    f"{subida_completada(destino.nombre)}",
                     stream="system",
                 )
             else:

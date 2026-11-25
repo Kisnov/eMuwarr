@@ -169,7 +169,7 @@ function EstadoDeFila({ job }: { job: UploadJob }) {
   const viva = job.status === 'preparing' || job.status === 'running'
   const pct = Math.max(0, Math.min(100, job.progress?.global_pct ?? 0))
   const phaseInfo = viva ? currentPhaseInfo(job) : null
-  const fase = phaseInfo?.label ?? (viva ? phaseLabel(job.progress_phase) : null)
+  const fase = phaseInfo?.label ?? (viva ? phaseLabel(job.progress_phase, job) : null)
   const transcurrido = viva ? progressCounter(job) : null
   const clase = STATUS_CLASS[job.status] || 'badge req-unknown'
   const parpadea = job.status === 'preparing' || job.status === 'running'
