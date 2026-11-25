@@ -11,7 +11,7 @@ import type {
   TrailerEstado,
 } from '../types/api'
 import type { NomenclatureFields, TrackRemuxOverride } from './nomenclature'
-import { latestInChain } from '../utils/uploadStatus'
+import { ACTIVE_JOB_STATUSES, latestInChain, puntasPorTracker } from '../utils/uploadStatus'
 
 export interface UploadQueueResult {
   status: string
@@ -263,9 +263,11 @@ export async function reenviarAQbit(jobId: number): Promise<{ message: string }>
 // this item (any status, including Completado)? Used to show "ya existe una
 // subida — al continuar se encadenará a su historial" instead of creating an
 // unrelated duplicate row.
+// Con subidas a varios trackers hay una cadena por tracker: si alguna sigue en curso, es esa (el asistente espera a
+// que termine: «Continuar» reescribe la nomenclatura que esa subida aún tiene que aplicar).
 export async function getExistingJobForItem(itemId: number): Promise<UploadJob | null> {
   const jobs = await getUploads({ library_item_id: itemId, limit: 50 })
-  return latestInChain(jobs)
+  return [...puntasPorTracker(jobs).values()].find(j => ACTIVE_JOB_STATUSES.has(j.status)) ?? latestInChain(jobs)
 }
 
 export async function getUploadJob(jobId: number): Promise<UploadJob> {

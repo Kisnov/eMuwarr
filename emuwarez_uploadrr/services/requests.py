@@ -33,6 +33,7 @@ from .compatibility import (
     peor_resolucion,
     peor_source,
     reclamada_por,
+    usuario_en,
     tipo_de_peticion,
 )
 
@@ -689,6 +690,14 @@ def _effective_target(conn: sqlite3.Connection, matched_item: dict, req: dict) -
 _ORDEN_DEL_CASAMIENTO = {"Compatible": 0, "No disponible": 1, "Parcial": 2, "No compatible": 3}
 
 
+# Tu usuario en el tracker de la fila `ri`, en minúsculas, para comparar en SQL: un `?` por tracker (_mi_usuario_params).
+_MI_USUARIO_SQL = "CASE ri.tracker " + " ".join(f"WHEN '{t}' THEN ?" for t in TRACKERS) + " ELSE '' END"
+
+
+def _mi_usuario_params(mi_usuario: dict[str, str]) -> list[str]:
+    return [(mi_usuario.get(t) or "").strip().lower() for t in TRACKERS]
+
+
 def mi_usuario_emu(conn: sqlite3.Connection) -> Optional[str]:
     """Tu usuario de eMuwarez sin llamar a la API: el del perfil guardado (emu_perfil) y, si aún no hay, el de
     Ajustes. Sirve para saber si una petición reclamada la has reclamado tú."""
@@ -696,15 +705,26 @@ def mi_usuario_emu(conn: sqlite3.Connection) -> Optional[str]:
     return perfil.get("username") or ajuste_de_tracker(conn, "username") or None
 
 
+def usuarios_de_ajustes(conn: sqlite3.Connection) -> dict[str, str]:
+    """Tu usuario en cada tracker, por su id, tal como está guardado: el de eMuwarez es el de Configuración; el de
+    los demás lo guarda la lectura de su perfil. Con él se sabe qué peticiones son tuyas («(Yo)», «Mis peticiones»)."""
+    return {t.id: ajuste_de_tracker(conn, "username", t.id) or "" for t in TRACKERS.values()}
+
+
+def mis_usuarios(conn: sqlite3.Connection) -> dict[str, str]:
+    """Lo mismo para saber qué peticiones has reclamado tú: en eMuwarez manda el del perfil leído (mi_usuario_emu)."""
+    return {**usuarios_de_ajustes(conn), EMU.id: mi_usuario_emu(conn) or ""}
+
+
 def clasificar_peticion(
     conn: sqlite3.Connection, req: dict, item: dict, *, id_match: bool = False, title_match: bool = False,
-    base_confidence: float = 0.90, mi_usuario: Optional[str] = None,
+    base_confidence: float = 0.90, mi_usuario: "dict[str, str] | str | None" = None,
 ) -> tuple[dict, dict]:
     """(fila con lo que de verdad tiene lo pedido, clasificación). Es LA definición de «compatible»: la usan el cruce
     guardado, el detalle y «lista para subir», para que la lista, el Panel y los avisos digan lo mismo que la ficha."""
     efectiva = _effective_target(conn, item, req)
     if mi_usuario is None:
-        mi_usuario = mi_usuario_emu(conn)
+        mi_usuario = mis_usuarios(conn)
     cls = classify_request_match(req, efectiva, id_match=id_match, title_match=title_match,
                                  base_confidence=base_confidence, mi_usuario=mi_usuario)
     # Una petición de temporada o serie completa se cubre con un PACK. Si ese pack no puede armarse (los capítulos no
@@ -719,7 +739,7 @@ def clasificar_peticion(
 
 
 def _mejor_candidato(
-    conn: sqlite3.Connection, req: dict, candidates: list[dict], mi_usuario: Optional[str] = None,
+    conn: sqlite3.Connection, req: dict, candidates: list[dict], mi_usuario: "dict[str, str] | str | None" = None,
 ) -> tuple[dict, dict]:
     """De los candidatos igual de seguros (la misma película en Radarr y en Radarr 4K) el que mejor atiende la
     petición, con su clasificación: el primero de la lista podía ser la copia de 1080p de una petición de 2160p."""
@@ -740,7 +760,7 @@ _INSERTAR_CASAMIENTO = """
 
 
 def _casar(
-    conn: sqlite3.Connection, req: dict, library: list[dict], mi_usuario: Optional[str] = None,
+    conn: sqlite3.Connection, req: dict, library: list[dict], mi_usuario: "dict[str, str] | str | None" = None,
 ) -> Optional[tuple]:
     """(petición, candidata, clasificación, fila a la que va el estado) o None si no casa con nada. Solo lee."""
     candidates = match_request_to_library(req, library)
@@ -824,7 +844,7 @@ def _cruzar_todas(conn: sqlite3.Connection) -> tuple[int, set[int]]:
     antes = _compatible_request_ids(conn)
     requests = [dict(r) for r in conn.execute("SELECT * FROM request_items").fetchall()]
     library = _biblioteca(conn)
-    usuario = mi_usuario_emu(conn) or ""
+    usuario = mis_usuarios(conn)
     casamientos = [c for c in (_casar(conn, req, library, usuario) for req in requests) if c]
     _guardar_casamientos(conn, casamientos)
     return len(casamientos), _compatible_request_ids(conn) - antes
@@ -1003,7 +1023,7 @@ def list_request_items(
     if search:
         where_clauses.append("ri.title LIKE ?")
         params.append(f"%{search}%")
-    mi_usuario = mi_usuario_emu(conn) or ""
+    mi_usuario = mis_usuarios(conn)
     if status:
         # Mirrors compatibility.estado_emu_de() — a request with zero
         # library candidates has no request_matches row at all, but can still
@@ -1015,10 +1035,10 @@ def list_request_items(
                 rm.status,
                 CASE
                     WHEN LOWER(COALESCE(ri.emu_status,'')) LIKE '%reclam%' OR LOWER(COALESCE(ri.emu_status,'')) LIKE '%claim%' THEN
-                        CASE WHEN ? != '' AND LOWER(TRIM(COALESCE(CASE WHEN json_valid(ri.raw_json) THEN
+                        CASE WHEN {_MI_USUARIO_SQL} != '' AND LOWER(TRIM(COALESCE(CASE WHEN json_valid(ri.raw_json) THEN
                                 COALESCE(json_extract(ri.raw_json, '$.claimed_by.username'),
                                          json_extract(ri.raw_json, '$.claimed_by.name'),
-                                         json_extract(ri.raw_json, '$.claimed_by')) END, ''))) = ?
+                                         json_extract(ri.raw_json, '$.claimed_by')) END, ''))) = {_MI_USUARIO_SQL}
                              THEN 'Sin coincidencia' ELSE 'Reclamado' END
                     WHEN LOWER(COALESCE(ri.emu_status,'')) LIKE '%pend%' THEN 'Pendiente'
                     -- "Sin llenar" = petición abierta: no es un override, y
@@ -1036,7 +1056,7 @@ def list_request_items(
                 END
             ) IN ({','.join('?' * len(status))})
         """)
-        params.extend([mi_usuario.strip().lower()] * 2 + list(status))
+        params.extend(_mi_usuario_params(mi_usuario) * 2 + list(status))
     en("ri.category", category)
     pedido("ri.requested_resolution", resolution)
     pedido("ri.requested_source", source)
@@ -1119,7 +1139,7 @@ def list_request_items(
 def get_request_item(conn: sqlite3.Connection, request_id: int) -> Optional[dict]:
     """Return a single request_item dict (no match info)."""
     row = conn.execute("SELECT * FROM request_items WHERE id = ?", (request_id,)).fetchone()
-    return _safe_request_dict(dict(row), mi_usuario_emu(conn) or "") if row else None
+    return _safe_request_dict(dict(row), mis_usuarios(conn)) if row else None
 
 
 # ---------------------------------------------------------------------------
@@ -1127,7 +1147,7 @@ def get_request_item(conn: sqlite3.Connection, request_id: int) -> Optional[dict
 # ---------------------------------------------------------------------------
 
 _CAMPOS_DE_LA_FICHA = (
-    "ri.id AS peticion_id, ri.title, ri.author, ri.author_visible, ri.points, ri.url, ri.emu_status, "
+    "ri.id AS peticion_id, ri.tracker, ri.title, ri.author, ri.author_visible, ri.points, ri.url, ri.emu_status, "
     "ri.created_at, ri.req_scope, ri.req_season, ri.req_episode"
 )
 
@@ -1149,7 +1169,7 @@ def _url_publica(url: Optional[str]) -> Optional[str]:
     return urllib.parse.urlunsplit((partes.scheme, partes.netloc.rpartition("@")[2], partes.path, "", ""))
 
 
-def _resumen_para_la_ficha(fila: dict, mi_usuario: str) -> dict:
+def _resumen_para_la_ficha(fila: dict, mi_usuario: dict[str, str]) -> dict:
     """Lo que la ficha enseña de una petición. El autor, solo si eMuwarez lo deja ver (la misma regla que
     `_safe_request_dict`): una petición anónima no tiene autor que enseñar."""
     autor = (fila.get("author") or "").strip() if fila.get("author_visible") else ""
@@ -1157,7 +1177,7 @@ def _resumen_para_la_ficha(fila: dict, mi_usuario: str) -> dict:
         "id": int(fila["peticion_id"]),
         "title": fila.get("title"),
         "author": autor or None,
-        "is_mine": bool(autor and mi_usuario and autor.lower() == mi_usuario.strip().lower()),
+        "is_mine": bool(autor and autor.lower() == usuario_en(mi_usuario, fila)),
         "points": fila.get("points"),
         "url": _url_publica(fila.get("url")),
         "emu_status": fila.get("emu_status"),
@@ -1271,7 +1291,7 @@ def peticiones_de_la_ficha(conn: sqlite3.Connection, fila: dict) -> dict:
 
     `peticiones_debajo`: en una serie o una temporada, las que guardan sus temporadas y capítulos (una serie con
     una petición por temporada), en orden. Solo para la ficha: son unas pocas consultas por elemento."""
-    mi_usuario = mi_usuario_emu(conn) or ""
+    mi_usuario = mis_usuarios(conn)
 
     def leer(peticion_id) -> Optional[dict]:
         if peticion_id is None:
@@ -1373,7 +1393,7 @@ def get_request_detail(conn: sqlite3.Connection, request_id: int) -> Optional[di
     req_row = conn.execute("SELECT * FROM request_items WHERE id = ?", (request_id,)).fetchone()
     if not req_row:
         return None
-    mi_usuario = mi_usuario_emu(conn) or ""
+    mi_usuario = mis_usuarios(conn)
     result = _safe_request_dict(dict(req_row), mi_usuario)
     # El de TMDb ('' = no tiene); el de la biblioteca, si hay cruce con póster, va delante.
     result["poster_url"] = result.get("tmdb_poster_url") or None
@@ -1550,7 +1570,7 @@ def normalize_title(value: str | None) -> str:
     return re.sub(r"\s+", " ", value).strip()
 
 
-def _safe_request_dict(d: dict, mi_usuario: Optional[str] = None) -> dict:
+def _safe_request_dict(d: dict, mi_usuario: "dict[str, str] | str | None" = None) -> dict:
     """Remove author info if author_visible=0.
 
     Also fills in compatibility_status when there's no request_matches row at
@@ -1612,14 +1632,12 @@ def dashboard_request_counters(conn: sqlite3.Connection) -> dict[str, int | str 
             (status,),
         )
 
-    mias = 0
-    usuario = ajuste_de_tracker(conn, "username")
-    if usuario:
-        mias = _cuenta(
-            "SELECT COUNT(*) AS cnt FROM request_items "
-            "WHERE author_visible = 1 AND LOWER(TRIM(author)) = LOWER(TRIM(?))",
-            (usuario,),
-        )
+    # Las tuyas en cada tracker, con tu usuario de allí.
+    mias = sum(_cuenta(
+        "SELECT COUNT(*) AS cnt FROM request_items "
+        "WHERE tracker = ? AND author_visible = 1 AND LOWER(TRIM(author)) = LOWER(TRIM(?))",
+        (tracker, usuario),
+    ) for tracker, usuario in usuarios_de_ajustes(conn).items() if usuario)
 
     return {
         "requests_total": total,

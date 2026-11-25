@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 
 from ..dependencies import require_auth
 from ..runtime import _db_path
-from emuwarez_uploadrr.services.settings import ajuste_de_tracker
+from emuwarez_uploadrr.services.compatibility import usuario_en
 from emuwarez_uploadrr.services.trackers import POR_DEFECTO, obtener
 from ..schemas import (
     OkResponse,
@@ -28,12 +28,11 @@ def _get_conn():
     return conn
 
 
-def _row_to_item(r: dict, my_username: str | None = None) -> RequestItemResponse:
+def _row_to_item(r: dict, my_username: dict[str, str] | None = None) -> RequestItemResponse:
+    """`my_username`: tu usuario en cada tracker (services.requests.usuarios_de_ajustes)."""
     author = r.get("author")
-    is_mine = bool(
-        my_username and author
-        and author.strip().lower() == my_username.strip().lower()
-    )
+    autor = (author or "").strip().lower()
+    is_mine = bool(autor and autor == usuario_en(my_username, r))
     tracker = obtener(r.get("tracker") or POR_DEFECTO)
     return RequestItemResponse(
         id=r["id"],
@@ -129,9 +128,9 @@ def list_requests(
     offset: int = Query(0, ge=0),
     current_user: dict = Depends(require_auth),
 ) -> RequestListResponse:
-    from emuwarez_uploadrr.services.requests import list_request_items
+    from emuwarez_uploadrr.services.requests import list_request_items, usuarios_de_ajustes
     with _get_conn() as conn:
-        my_username = ajuste_de_tracker(conn, "username")
+        my_username = usuarios_de_ajustes(conn)
         result = list_request_items(
             conn, limit=limit, offset=offset, search=search, status=status,
             category=category, resolution=resolution, source=source,
@@ -193,9 +192,9 @@ def get_request_detail(
     request_id: int,
     current_user: dict = Depends(require_auth),
 ) -> RequestDetailResponse:
-    from emuwarez_uploadrr.services.requests import get_request_detail as _svc_detail
+    from emuwarez_uploadrr.services.requests import get_request_detail as _svc_detail, usuarios_de_ajustes
     with _get_conn() as conn:
-        my_username = ajuste_de_tracker(conn, "username")
+        my_username = usuarios_de_ajustes(conn)
         data = _svc_detail(conn, request_id)
     if not data:
         raise HTTPException(status_code=404, detail="Petición no encontrada")
@@ -208,9 +207,9 @@ def rematch_request(
     request_id: int,
     current_user: dict = Depends(require_auth),
 ) -> RequestDetailResponse:
-    from emuwarez_uploadrr.services.requests import match_single_request, get_request_detail as _svc_detail
+    from emuwarez_uploadrr.services.requests import match_single_request, get_request_detail as _svc_detail, usuarios_de_ajustes
     with _get_conn() as conn:
-        my_username = ajuste_de_tracker(conn, "username")
+        my_username = usuarios_de_ajustes(conn)
         match_single_request(conn, request_id)
         data = _svc_detail(conn, request_id)
     if not data:

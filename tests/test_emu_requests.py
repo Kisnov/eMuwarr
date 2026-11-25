@@ -637,6 +637,35 @@ def test_la_lista_y_la_ficha_dicen_quien_la_reclamo(db_conn):
     assert get_request_detail(db_conn, ids["otro"])["match"]["status"] == "Reclamado"
 
 
+def test_en_otro_tracker_cuenta_tu_usuario_de_alli(db_conn):
+    """Con otro nombre en N.O.B.S: lo reclamado y lo pedido allí se reconoce con ese nombre, no con el de eMuwarez."""
+    import json
+    from emuwarez_uploadrr.database import set_json_state
+    from emuwarez_uploadrr.services.requests import dashboard_request_counters, list_request_items, usuarios_de_ajustes
+    from emuwarez_uploadrr.services.settings import set_setting
+    from emuwarez_uploadrr.web.api.requests import _row_to_item
+    set_json_state(db_conn, "emu.perfil", {"perfil": {"username": "Gabriel"}})
+    set_setting(db_conn, "emu.username", "Gabriel")
+    set_setting(db_conn, "nobs.username", "Gabi")
+    ids = {}
+    for nombre, tracker, quien in (("mia", "nobs", "gabi"), ("ajena", "nobs", "Gabriel"), ("emu", "emu", "Gabriel")):
+        raw = {"id": nombre, "status": "claimed", "claimed_by": quien}
+        ids[nombre] = db_conn.execute(
+            "INSERT INTO request_items(tracker,emu_id,title,emu_status,author,author_visible,raw_json) "
+            "VALUES (?, ?, 'Peli', 'claimed', ?, 1, ?)", (tracker, nombre, quien, json.dumps(raw))).lastrowid
+    db_conn.commit()
+
+    filas = {i["id"]: i for i in list_request_items(db_conn)["items"]}
+    assert {k: filas[v]["reclamada_por"] for k, v in ids.items()} == {"mia": "ti", "ajena": "otro", "emu": "ti"}
+    # El filtro de estado (SQL) dice lo mismo: solo la ajena sigue «Reclamado».
+    assert [i["id"] for i in list_request_items(db_conn, status=["Reclamado"])["items"]] == [ids["ajena"]]
+    # «(Yo)» y «Mis peticiones»: la que pidió «Gabriel» en N.O.B.S no es tuya.
+    yo = usuarios_de_ajustes(db_conn)
+    assert {k: _row_to_item(filas[v], yo).is_mine for k, v in ids.items()} == {"mia": True, "ajena": False, "emu": True}
+    assert not _row_to_item({**filas[ids["mia"]], "author": " "}, {"nobs": ""}).is_mine
+    assert dashboard_request_counters(db_conn)["requests_mine"] == 2
+
+
 def test_una_reclamada_por_ti_sin_cruce_no_sale_como_reclamado_en_el_filtro(db_conn):
     """Sin ningún cruce el estado sale del emu_status; la tuya cae en «Sin coincidencia», como una abierta."""
     from emuwarez_uploadrr.services.requests import list_request_items

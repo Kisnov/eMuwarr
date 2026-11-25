@@ -22,7 +22,7 @@ from datetime import datetime, timedelta
 from typing import Any, Optional
 
 from ..database import get_json_state, set_json_state
-from ..integrations.base import IntegrationError, texto_de_error
+from ..integrations.base import IntegrationError, error_inesperado, texto_de_error
 from ..integrations.emu import emu_fetch_all_torrents
 from .trackers import EMU, Tracker, para_subir
 from .settings import ajuste_de_tracker
@@ -36,6 +36,7 @@ SEMANA_DIAS = 7
 # lectura no está completa y no se guarda (borraría las que faltan).
 MAX_PAGINAS = 20
 POR_PAGINA = 100
+MIN_FRENTE_AL_TOTAL = 0.9
 
 # «Ejecutar ahora» y el reloj no leen a la vez: los dos sustituirían la lista entera.
 _LEYENDO = threading.Lock()
@@ -71,7 +72,7 @@ def sincronizar(conn: sqlite3.Connection, ahora: Optional[datetime] = None) -> t
         motivo = motivo_subida_en_marcha(conn)
         if motivo:
             return "busy", motivo
-        lecturas = [(t, *_sincronizar(conn, ahora, t)) for t in para_subir(conn)]
+        lecturas = [(t, *_leer(conn, ahora, t)) for t in para_subir(conn)]
     finally:
         _LEYENDO.release()
     if len(lecturas) == 1:
@@ -81,6 +82,15 @@ def sincronizar(conn: sqlite3.Connection, ahora: Optional[datetime] = None) -> t
     return estado, " · ".join(f"{t.nombre}: {texto}" for t, _, texto in lecturas)
 
 
+def _leer(conn: sqlite3.Connection, ahora: Optional[datetime], tracker: Tracker) -> tuple[str, str]:
+    """_sincronizar sin que una respuesta rara de un tracker deje sin leer a los siguientes."""
+    try:
+        return _sincronizar(conn, ahora, tracker)
+    except Exception as exc:  # noqa: BLE001 — se cuenta en el resumen de la tarea
+        conn.rollback()
+        return "failed", error_inesperado(exc, "No se pudieron leer tus subidas")
+
+
 def _sincronizar(conn: sqlite3.Connection, ahora: Optional[datetime], tracker: Tracker) -> tuple[str, str]:
     clave = (ajuste_de_tracker(conn, "api_key", tracker.id) or "").strip()
     usuario = (ajuste_de_tracker(conn, "username", tracker.id) or "").strip()
@@ -88,9 +98,11 @@ def _sincronizar(conn: sqlite3.Connection, ahora: Optional[datetime], tracker: T
         return "skipped", f"Sin API key de {tracker.nombre} en Configuración"
     if not usuario:
         return "skipped", f"Aún no se sabe tu usuario de {tracker.nombre}: sale de la primera lectura de tu cuenta"
+    dicho = {}
     try:
         torrents = emu_fetch_all_torrents(clave, tracker.url, uploader=usuario, per_page=POR_PAGINA,
-                                          max_pages=MAX_PAGINAS, tracker=tracker.uploadrr)
+                                          max_pages=MAX_PAGINAS, tracker=tracker.uploadrr,
+                                          progress=lambda _p, _u, _n, total: dicho.update(total=total))
     except IntegrationError as exc:
         return "failed", texto_de_error(exc)
     if len(torrents) >= MAX_PAGINAS * POR_PAGINA:
@@ -98,6 +110,11 @@ def _sincronizar(conn: sqlite3.Connection, ahora: Optional[datetime], tracker: T
                           "para no borrar las que faltan")
     # Una por torrent: una subida nueva mientras se pagina repite un id, y la clave primaria tumbaba la lectura entera.
     filas = list({f[0]: f for f in map(_fila, torrents) if f}.values())
+    # La lista sustituye a la guardada: una que se queda muy corta frente al total del tracker borraría las que
+    # faltan. Con margen: el total puede moverse mientras se pagina.
+    if len(filas) < (dicho.get("total") or 0) * MIN_FRENTE_AL_TOTAL:
+        return "failed", (f"La lectura está incompleta ({len(filas)} de {dicho['total']} subidas): "
+                          "se conserva la anterior")
 
     ahora = ahora or datetime.now()
     dia = ahora.strftime("%Y-%m-%d")
