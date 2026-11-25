@@ -294,7 +294,13 @@ const JobRow = memo(function JobRow({ job, instances, seeding, onOpen, indent, e
           </div>
           {/* Aparte del título: en la tarjeta de móvil bajan a la última línea. */}
           <div className="sub-chips">
-            {!otra && <ChipTracker tracker={job.tracker} nombre={job.tracker_nombre} siempre={enGrupo === 'primera'} />}
+            {/* En la primera de un grupo, su tracker abre su detalle, como el de las otras filas. */}
+            {enGrupo === 'primera' ? (
+              <HoverTitle as="span" className="lib-title-link sub-tracker-chip" href={`/uploads/${job.id}`} onClick={abrir}
+                tip="Ver progreso / detalle" aria-label={`${job.title} en ${job.tracker_nombre}`}>
+                {job.tracker_nombre}
+              </HoverTitle>
+            ) : !otra && <ChipTracker tracker={job.tracker} nombre={job.tracker_nombre} />}
             {otrosTrackers && onToggleTrackers && (
               <button
                 type="button"
@@ -802,8 +808,8 @@ export function UploadsPage({ onNavigate }: { onNavigate?: (page: string) => voi
         default: return dt(b.created_at) - dt(a.created_at) // created_desc
       }
     }
-    // Hay una cadena por elemento y tracker: las puntas del mismo elemento son sus subidas a cada tracker y van juntas,
-    // en el orden elegido; el grupo va donde va la primera. Dos del mismo tracker (un filtro de estado deja ver un
+    // Hay una cadena por elemento y tracker: las puntas del mismo elemento son sus subidas a cada tracker y van juntas;
+    // el grupo va donde va la primera en el orden elegido. Dos del mismo tracker (un filtro de estado deja ver un
     // intento anterior como punta) no se juntan.
     const porElemento = new Map<number, UploadJob[]>()
     for (const j of out.sort(comparar)) {
@@ -811,8 +817,17 @@ export function UploadsPage({ onNavigate }: { onNavigate?: (page: string) => voi
       if (grupo && !grupo.some(o => o.tracker === j.tracker)) grupo.push(j)
       else porElemento.set(grupo || j.library_item_id == null ? -j.id! : j.library_item_id, [j])
     }
-    return [...porElemento.values()]
-  }, [jobs, search, sortBy, typeFilter, hasNewerRetry])
+    // Dentro del grupo, arriba la subida de la que salen las demás: la que empezó antes. Los ids van en el orden en que
+    // se crean, y de un reintento se sabe el id del anterior aunque no esté cargado (el filtro por lote solo trae puntas).
+    const inicio = (j: UploadJob) => {
+      let id = j.id!
+      for (let c: UploadJob | undefined = j; c?.retry_of_job_id != null; c = jobById.get(c.retry_of_job_id)) {
+        id = Math.min(id, c.retry_of_job_id)
+      }
+      return id
+    }
+    return [...porElemento.values()].map(g => (g.length > 1 ? [...g].sort((a, b) => inicio(a) - inicio(b)) : g))
+  }, [jobs, jobById, search, sortBy, typeFilter, hasNewerRetry])
   const subidasVisibles = grupos.reduce((n, g) => n + g.length, 0)
 
   // La de la lista o, si es más antigua que las cargadas (enlace /uploads/123, notificación, Panel), la pedida por su id.

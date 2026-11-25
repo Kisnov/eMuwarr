@@ -149,11 +149,10 @@ descripción y el cliente.
     ([Groups](https://wiki.nekobt.to/info/groups/)).
   - **Encaje con eMuwarr:** peor que los UNIT3D: solo la parte de anime de la biblioteca, una nomenclatura propia, un
     .torrent público aparte y campos que eMuwarr hoy no conoce (nivel de subtítulos, MTL/OTL, grupos con roles).
-- **Esperando permiso:** Torrentland (torrentland.li; no acepta automatizaciones: hace falta el OK del staff por
-  escrito antes de subir por API. El 22/11 el staff respondió a Gabriel que puede preparar las subidas con una
-  herramienta propia y rellenar el formulario, presentándolo él a mano: «si no se necesita nada no te vamos a decir
-  nada de como realices las subidas si estan bien». Por API, preguntado el mismo día y sin respuesta aún) y HDZero (hdzero.org, permiso improbable). Los cuatro son UNIT3D (`/api/torrents/filter`
-  anónimo → 401 JSON, comprobado el 18/11).
+- **Esperando permiso:** Torrentland (torrentland.li): su API es solo para staff y uploaders (con el rango), y Gabriel aún
+  no lo tiene; con él iría por API como N.O.B.S y Milnueve. Rellenar su formulario desde el navegador está permitido (no
+  toca la API), pero se descarta: frágil y distinto del resto. HDZero (hdzero.org, permiso improbable). Los dos son UNIT3D
+  (`/api/torrents/filter` anónimo → 401 JSON, comprobado el 18/11).
 - **Por resolver en la fase A:** de dónde salen los ids de cada tracker (su formulario de subida o el staff; los de
   NOBS y Milnueve están en `docs/trackers-ids.md`), una nomenclatura por tracker (para NOBS y Milnueve vale la de
   eMuwarez; el fichero es el mismo para todos, ver la fase B), y si la app cambia de nombre (hoy «eMuwarr» es de eMuwarez).
