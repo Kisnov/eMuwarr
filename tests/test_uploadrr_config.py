@@ -591,3 +591,41 @@ def test_la_subida_fuerza_oxipng(tmp_path, monkeypatch):
     assert get_block_key(lineas, "SCREENS", "oxipng_level") == "2"
 
 
+
+
+def test_un_comentario_dentro_del_bloque_del_tracker_no_lo_corta():
+    import yaml
+    from emuwarez_uploadrr.services.uploadrr_yaml import set_tracker_config
+    lines = ["TRACKERS:", "  EMU:", "    api_key: old", "  # nota: otros", "    anon: true", "  BLU:", "    useAPI: true"]
+    set_tracker_config(lines, "EMU", api_key="nueva", anon=False)
+    leido = yaml.safe_load("\n".join(lines))["TRACKERS"]
+    assert leido == {"EMU": {"api_key": "nueva", "anon": False}, "BLU": {"useAPI": True}}
+    assert "  # nota: otros" in lines
+
+
+@pytest.mark.parametrize("texto, tracker", [
+    ("TRACKERS:\n    EMU:\n        api_key: old\n    BLU:\n        useAPI: true\n", "EMU"),
+    ("TRACKERS: {EMU: {api_key: old}, BLU: {useAPI: true}}\n", "EMU"),
+    ("TRACKERS:\n  EMU:\n    api_key: old\n  NOBS: {api_key: old, anon: true}\n", "NOBS"),
+], ids=["sangria-de-4", "trackers-en-una-linea", "tracker-en-una-linea"])
+def test_un_bloque_de_tracker_con_otra_forma_falla_en_vez_de_escribir(texto, tracker):
+    from emuwarez_uploadrr.services.uploadrr_yaml import set_tracker_config
+    lines = texto.splitlines()
+    with pytest.raises(ValueError, match=f"TRACKERS.{tracker} del config.yaml"):
+        set_tracker_config(lines, tracker, api_key="nueva", anon=False)
+    assert lines == texto.splitlines()
+
+
+def test_la_subida_no_se_prepara_con_un_bloque_de_tracker_que_no_entiende(tmp_path, monkeypatch):
+    from emuwarez_uploadrr.services.upload_execution.config import ConfigNoPreparada
+    with pytest.raises(ConfigNoPreparada, match="TRACKERS.EMU del config.yaml"):
+        _preparar(tmp_path, monkeypatch, "TRACKERS:\n    EMU:\n        anon: true\n")
+
+
+def test_un_comentario_tras_un_mapa_en_linea_sigue_fuera_de_el():
+    lines = ["TORRENT_CLIENTS:", "  qbit: {torrent_client: qbit, content_layout: Original}", "  # otro: {x: 1}",
+             "  watch: {torrent_client: watch}"]
+    assert get_child_inline_mapping(lines, "TORRENT_CLIENTS", "qbit") == {
+        "torrent_client": "qbit", "content_layout": "Original"}
+    staged, _ = stage_qbittorrent_config(lines, url="http://x:8080", username="u", password="p")
+    assert "  # otro: {x: 1}" in staged

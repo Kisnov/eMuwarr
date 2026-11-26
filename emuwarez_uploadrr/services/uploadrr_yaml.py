@@ -212,11 +212,14 @@ def find_child_block(lines: list[str], top_block: str, child: str, indent: int =
     if child_start < 0:
         return -1, -1
     child_end = end
-    next_child = re.compile(rf"^\s{{{indent}}}\S[^:]*\s*:")
+    next_child = re.compile(rf"^\s{{{indent}}}[^\s#][^:]*\s*:")  # un comentario no acaba el bloque
     for j in range(child_start + 1, end):
         if next_child.match(lines[j]):
             child_end = j
             break
+    # Los comentarios tras su última clave van con lo que sigue, no con este bloque.
+    ultima = max(i for i in range(child_start, child_end) if lines[i].strip() and not lines[i].lstrip().startswith("#"))
+    child_end = next((i for i in range(ultima + 1, child_end) if lines[i].lstrip().startswith("#")), child_end)
     return child_start, child_end
 
 
@@ -263,7 +266,15 @@ def set_emu_config(lines: list[str], api_key: Optional[str] = None, anon: Option
 def set_tracker_config(
     lines: list[str], tracker: str, api_key: Optional[str] = None, anon: Optional[bool] = None
 ) -> str:
-    """TRACKERS.<tracker>.api_key / anon (tracker como lo nombra Uploadrr-EMU: EMU, NOBS, MNV)."""
+    """TRACKERS.<tracker>.api_key / anon (tracker como lo nombra Uploadrr-EMU: EMU, NOBS, MNV).
+
+    ValueError si el bloque tiene otra forma (en una línea, otra sangría): escribir ahí dejaría un YAML que dice otra
+    cosa, p. ej. un `anon` repetido del que Uploadrr-EMU lee el último."""
+    no_se_entiende = ValueError(
+        f"No se entiende la forma de TRACKERS.{tracker} del config.yaml: tiene que ir como en el de ejemplo, "
+        f"«{tracker}:» con dos espacios delante y sus claves debajo, con cuatro")
+    if any(re.match(r"^TRACKERS\s*:\s*[^\s#]", line) for line in lines):
+        raise no_se_entiende
     trackers_start, trackers_end = find_top_block(lines, "TRACKERS")
     if trackers_start < 0:
         if lines and lines[-1].strip():
@@ -272,6 +283,11 @@ def set_tracker_config(
         trackers_start = len(lines) - 1
 
     emu_start, emu_end = find_child_block(lines, "TRACKERS", tracker, indent=2)
+    if emu_start >= 0 and re.match(rf"^\s{{2}}{re.escape(tracker)}\s*:\s*[^\s#]", lines[emu_start]):
+        raise no_se_entiende
+    if emu_start < 0 and any(re.match(rf"^\s+{re.escape(tracker)}\s*:", line)
+                             for line in lines[trackers_start + 1:trackers_end]):
+        raise no_se_entiende
     if emu_start < 0:
         insert_at = trackers_start + 1
         block = [f"  {tracker}:"]
