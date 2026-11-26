@@ -29,18 +29,26 @@ _SQL = re.compile(r"\b(SELECT|INSERT\s+INTO|UPDATE|DELETE\s+FROM)\b", re.I)
 def _cadenas(src: str) -> list[str]:
     try:
         return [t.string for t in tokenize.generate_tokens(io.StringIO(src).readline)
-                if t.type is tokenize.STRING]
+                if t.type in (tokenize.STRING, tokenize.FSTRING_MIDDLE)]
     except tokenize.TokenError:
         return [src]
+
+
+def _ejecuta_sql(src: str) -> bool:
+    return ".execute" in src and any(_SQL.search(c) for c in _cadenas(src))
+
+
+def test_la_guarda_ve_fstrings_y_executemany():
+    assert _ejecuta_sql('conn.execute("UPDATE jobs SET a = 1")')
+    assert _ejecuta_sql('conn.execute(f"SELECT * FROM {tabla} WHERE id = ?", (i,))')
+    assert _ejecuta_sql('conn.executemany("INSERT INTO jobs VALUES (?)", filas)')
+    assert not _ejecuta_sql('mensaje = "No se pudo actualizar"')
 
 
 def test_ningun_endpoint_ejecuta_sql():
     culpables = []
     for f in sorted(API.rglob("*.py")):
-        src = f.read_text()
-        if ".execute(" not in src:
-            continue
-        if any(_SQL.search(c) for c in _cadenas(src)):
+        if _ejecuta_sql(f.read_text()):
             culpables.append(str(f.relative_to(API.parent.parent)))
     assert not culpables, (
         "\nSQL dentro de la capa web:\n  " + "\n  ".join(culpables)

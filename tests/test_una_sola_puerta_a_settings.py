@@ -27,7 +27,7 @@ PERMITIDOS = {"services/settings.py", "database.py"}
 # Una consulta de verdad, no prosa: hace falta un verbo SQL en la misma cadena.
 # Sin esto saltaba con un docstring que decía "resolves paths from settings at
 # runtime" y con el propio `from ...services.settings import`.
-_VERBO_SQL = re.compile(r"\b(SELECT|INSERT|UPDATE|DELETE)\b")
+_VERBO_SQL = re.compile(r"\b(SELECT|INSERT|UPDATE|DELETE)\b", re.I)
 _TABLA = re.compile(r"\b(FROM|INTO|UPDATE)\s+settings\b", re.I)
 
 
@@ -35,9 +35,20 @@ def _cadenas(src: str) -> list[str]:
     """Los literales de texto del fichero, que es donde vive el SQL."""
     try:
         return [t.string for t in tokenize.generate_tokens(io.StringIO(src).readline)
-                if t.type is tokenize.STRING]
+                if t.type in (tokenize.STRING, tokenize.FSTRING_MIDDLE)]
     except tokenize.TokenError:
         return [src]
+
+
+def _consulta_settings(src: str) -> bool:
+    return any(_TABLA.search(c) and _VERBO_SQL.search(c) for c in _cadenas(src))
+
+
+def test_la_guarda_ve_fstrings_minusculas_y_cadenas_normales():
+    assert _consulta_settings('conn.execute(f"SELECT value FROM settings WHERE key = {k!r}")')
+    assert _consulta_settings('conn.execute("select value from settings")')
+    assert _consulta_settings('conn.execute("DELETE FROM settings")')
+    assert not _consulta_settings('"""Resolves paths from settings at runtime."""')
 
 
 def test_nadie_consulta_la_tabla_settings_por_su_cuenta():
@@ -46,7 +57,7 @@ def test_nadie_consulta_la_tabla_settings_por_su_cuenta():
         rel = str(f.relative_to(RAIZ))
         if rel in PERMITIDOS:
             continue
-        if any(_TABLA.search(c) and _VERBO_SQL.search(c) for c in _cadenas(f.read_text())):
+        if _consulta_settings(f.read_text()):
             culpables.append(rel)
     assert not culpables, (
         "\nSQL directo contra la tabla settings fuera de services/settings.py:\n  "
