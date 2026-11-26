@@ -20,7 +20,6 @@ from ..database import (
 )
 from ..integrations.base import texto_de_error
 from .settings import all_settings, es_secreto, get_setting_canonical, set_setting
-from .upload_states import ACTIVE_JOB_STATUSES
 
 logger = logging.getLogger(__name__)
 
@@ -386,18 +385,20 @@ def _es_de_otra_aplicacion(ruta: Path) -> bool:
 
 
 def _hay_subidas_en_marcha(viva: Path) -> bool:
-    """Si la base viva tiene subidas o reenvíos a qBittorrent en marcha. Se mira en la base: vale también desde el CLI."""
+    """Si la base viva tiene subidas o reenvíos a qBittorrent en marcha, o una cancelada cuyo hilo aún termina su paso.
+    Se mira en la base: vale también desde el CLI, que no ve los hilos del servidor."""
     if not viva.exists() or viva.stat().st_size == 0 or not _es_sqlite(viva):
         return False
+    from .upload_queue import _condicion_activa
+    condicion, parametros = _condicion_activa()
     conn = sqlite3.connect(str(viva), timeout=30)
     try:
-        return conn.execute(
-            f"SELECT 1 FROM upload_jobs WHERE status IN ({','.join('?' * len(ACTIVE_JOB_STATUSES))}) "
-            "OR reenvio_qbit_estado = 'en_curso' LIMIT 1", tuple(ACTIVE_JOB_STATUSES)).fetchone() is not None
-    except sqlite3.OperationalError as e:
-        if "no such table" not in str(e):
-            raise  # ocupada: no se sabe, y restaurar a ciegas es lo que se quiere evitar
-        return False  # una base sin la tabla: no hay subidas
+        columnas = {fila[1] for fila in conn.execute("PRAGMA table_info(upload_jobs)")}
+        if "status" not in columnas:
+            return False  # una base sin la tabla: no hay subidas
+        if "reenvio_qbit_estado" in columnas:  # el CLI puede restaurar sobre una base anterior al esquema 55
+            condicion += " OR reenvio_qbit_estado = 'en_curso'"
+        return conn.execute(f"SELECT 1 FROM upload_jobs WHERE {condicion} LIMIT 1", parametros).fetchone() is not None
     finally:
         conn.close()
 

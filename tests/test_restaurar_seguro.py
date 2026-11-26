@@ -424,6 +424,27 @@ def test_con_una_subida_en_marcha_no_se_restaura(cfg, tmp_path, status, reenvio)
     assert not list(cfg.glob("backups/emuwarez_config_antes_de_restaurar_*"))
 
 
+def test_con_una_cancelada_que_aun_termina_su_paso_no_se_restaura(cfg, tmp_path, monkeypatch):
+    """Cancelar cambia la fila al momento, pero su hilo sigue escribiendo hasta acabar el paso (un remux largo)."""
+    from emuwarez_uploadrr.services import upload_queue
+
+    archivo = create_config_backup(output_dir=tmp_path / "copias")["archive_path"]
+    monkeypatch.setattr(upload_queue, "_EN_CURSO", {_subida("cancelled")})
+
+    r = _aplicar(archivo)
+
+    assert r["ok"] is False and "subidas en marcha" in r["error"]
+
+
+def test_una_base_viva_sin_la_columna_del_reenvio_se_puede_restaurar(cfg, tmp_path):
+    """El CLI restaura sin migrar antes la base viva: una anterior al esquema 55 no tiene `reenvio_qbit_estado`."""
+    archivo = create_config_backup(output_dir=tmp_path / "copias")["archive_path"]
+    with db() as conn:
+        conn.execute("ALTER TABLE upload_jobs DROP COLUMN reenvio_qbit_estado")
+
+    assert _aplicar(archivo)["ok"] is True
+
+
 def test_una_subida_terminada_no_impide_restaurar(cfg, tmp_path):
     _subida("completed", "ok")
     _subida("failed", "fallido")
