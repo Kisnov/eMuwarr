@@ -6,11 +6,12 @@ Cómo desplegar eMuwarr con Docker Compose en un servidor o NAS, y qué mirar cu
 ## 1. Qué necesitas
 
 - Docker 24+ con Compose v2 (`docker compose`).
-- Un host Linux con la media de Radarr/Sonarr. El contenedor la lee, la renombra y la enlaza, así que tiene que verla
-  y poder escribir en ella.
+- Un host Linux con la media de Radarr/Sonarr. El contenedor la lee y la enlaza, así que tiene que verla; si puede escribir
+  en ella, también edita las pistas de un MKV que no comparte ningún torrent.
 - qBittorrent para sembrar lo que subes. Es opcional: sin él, los torrents se añaden a mano.
 - Las claves: API key y usuario de eMuwarez, API key de TMDb y las de Radarr/Sonarr. Se introducen en el asistente
-  web o en Configuración, nunca en el compose ni en el `.env`.
+  web o en Configuración, nunca en el compose ni en el `.env`. Para subir también a N.O.B.S y a Milnueve, sus claves
+  van en Configuración → Otros trackers.
 
 ## 2. Las rutas
 
@@ -24,7 +25,7 @@ Es lo único delicado del despliegue. El contenedor trabaja con tres:
 
 ### Qué pasa al subir
 
-1. La app renombra el fichero en la biblioteca a la nomenclatura de eMuwarez.
+1. La app calcula el nombre de eMuwarez; el fichero de la biblioteca conserva su nombre.
 2. Lo enlaza en la carpeta de subidas. Una película o un capítulo suelto va directamente en la raíz; un pack de
    temporada, en una carpeta con el nombre del release y un enlace por capítulo, para que el torrent se llame como
    el release sin tocar la carpeta de Sonarr.
@@ -59,8 +60,9 @@ De ahí salen las reglas:
   ponla ahí.
 
 La app no borra los enlaces de una subida completada, porque qBittorrent siembra de ahí. Al borrar una subida en
-Subidas solo se quitan los enlaces de los intentos fallidos o cancelados que no use otra subida. El fichero de la
-biblioteca nunca se toca.
+Subidas solo se quitan los enlaces de los intentos fallidos o cancelados que no use otra subida. El nombre del fichero de la
+biblioteca no se cambia; un MKV que no comparte ningún torrent (un solo enlace) recibe en su sitio el nombre de las
+pistas, el título interno y el idioma elegido.
 
 ## 3. Preparar el host
 
@@ -74,9 +76,8 @@ chown "$PUID:$PGID" /srv/emuwarr/config /srv/data/uploads/emu
 
 El contenedor corre directamente como `PUID:PGID` (la clave `user:` del compose), sin pasar por root, así que no
 puede crear ni cambiar de dueño nada dentro de una carpeta que no sea suya. Por eso las dos carpetas se crean antes
-de arrancar y con ese dueño. El mismo usuario tiene que ser dueño de la media, o al menos poder escribir en ella: el
-paso 1 de la subida renombra el fichero ahí, y si no puede, la comprobación «Se puede renombrar» para la subida
-antes de empezar.
+de arrancar y con ese dueño. El mismo usuario tiene que ser dueño de la media, o al menos poder escribir en ella: si no
+puede, no edita las pistas de un MKV de la biblioteca (usa una copia o lo omite).
 
 ## 4. El compose
 
@@ -148,12 +149,12 @@ Abre `http://<IP-del-servidor>:9494`. El asistente de configuración se abre sol
 8. **Imágenes**: dónde se suben las capturas. De entrada va Pixhost, que no necesita key; se puede quitar o cambiar por otro.
 9. **Completar.**
 
-Todo se puede cambiar después en Configuración. Luego, en el Panel, sincroniza la biblioteca (↻ Biblioteca) y las
-peticiones; desde Tareas se repiten solas cada cierto tiempo.
+Todo se puede cambiar después en Configuración. Luego, en el Panel, pulsa ↻ Sincronizar todo (biblioteca,
+catálogo y peticiones); desde Tareas se repiten solas cada cierto tiempo.
 
-Para subir algo, pulsa **Subir** en la Biblioteca. El asistente comprueba el fichero (que se pueda leer, enlazar en
-la carpeta de subidas y renombrar), el directorio de salida de Uploadrr-EMU, qBittorrent, el host de imágenes y
-eMuwarez; después genera el nombre y lanza la subida. El progreso y los logs están en Subidas.
+Para subir algo, pulsa **Subir** en la Biblioteca. El asistente comprueba el fichero (que se pueda leer y enlazar en
+la carpeta de subidas), el directorio de salida de Uploadrr-EMU, qBittorrent, el host de imágenes y
+eMuwarez (si es el destino); después genera el nombre y lanza la subida. El progreso y los logs están en Subidas.
 
 ## 6. Uploadrr-EMU
 
@@ -217,7 +218,7 @@ Uploadrr-EMU deja de cada subida (`/config/Uploadrr/tmp`) cuando llevan 7 días 
 qBittorrent una subida más antigua los vuelve a generar. Los días se cambian en la propia tarea. No toca las subidas
 ni nada que enlacen.
 
-El backup no lleva las claves. En la base de datos van vacías las API keys (TMDb, eMuwarez, Radarr/Sonarr, hosts
+El backup no lleva las claves. En la base de datos van vacías las API keys (TMDb, eMuwarez, N.O.B.S, Milnueve, Radarr/Sonarr, hosts
 de imágenes), la contraseña de qBittorrent, el webhook de Discord, el token de Telegram y la clave del widget de Homepage, y de
 `/config/Uploadrr/data` no entran `config.yaml`, `config.yaml.bak`, `config.yaml.migrado` ni `cookies/`, que pueden llevar claves de
 cualquier tracker, ni las configuraciones antiguas de Uploadrr (`config.py`, `config.json`,
@@ -252,7 +253,7 @@ docker compose up -d
 
 ### PUID/PGID no coinciden con el dueño de la media
 
-Con otro usuario, la app no puede renombrar: el asistente de subida falla en «Se puede renombrar». Y aunque pueda
+Con otro usuario, la app no puede editar las pistas de un MKV de la biblioteca (usa una copia o lo omite). Y aunque pueda
 leer la media, el enlace sale simbólico en vez de duro. Pon en el `.env` el UID y GID que da `id` para el dueño de
 la media y recrea el contenedor con `docker compose up -d`.
 

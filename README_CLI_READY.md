@@ -72,13 +72,13 @@ Los argumentos entre corchetes son opcionales.
 | `arr health` | Mostrar salud de instancias ARR |
 | `arr refresh-health [--no-queue] [--no-history] [--history-size HISTORY_SIZE]` | Refrescar queue e historial ARR y actualizar diagnósticos. `--no-queue`: Omitir lectura de queue; `--no-history`: Omitir lectura de historial; `--history-size`: Número de entradas de historial (default: 100) |
 
-## `nomenclature` — Nomenclatura eMuwarez: `apply` renombra el archivo original, el resto no modifica archivos
+## `nomenclature` — Nomenclatura eMuwarez: `apply` renombra el archivo solo si está en la carpeta de subidas (uno de la biblioteca no se renombra), el resto no modifica archivos
 
 | Comando | Qué hace |
 |---|---|
 | `nomenclature preview ID [--force]` | Generar propuesta de nomenclatura para un item. `id`: ID del library_item; `--force`: Forzar regeneración aunque ya exista propuesta |
 | `nomenclature show ID` | Mostrar última propuesta de nomenclatura. `id`: ID del library_item |
-| `nomenclature apply ID [--dry-run] [--apply] [--confirm TOKEN]` | Adaptar nomenclatura renombrando el archivo original. `id`: ID del library_item; `--dry-run`: Solo previsualización (no escribe nada); `--apply`: Aplicar cambios reales; `--confirm`: Token de confirmación: APLICAR_NOMENCLATURA |
+| `nomenclature apply ID [--dry-run] [--apply] [--confirm TOKEN]` | Adaptar nomenclatura renombrando el archivo si está en la carpeta de subidas. `id`: ID del library_item; `--dry-run`: Solo previsualización (no escribe nada); `--apply`: Aplicar cambios reales; `--confirm`: Token de confirmación: APLICAR_NOMENCLATURA |
 | `nomenclature sources` | Listar sources eMuwarez disponibles |
 | `nomenclature providers` | Listar providers eMuwarez disponibles |
 | `nomenclature fields ID` | Ver campos editables de nomenclatura para un item |

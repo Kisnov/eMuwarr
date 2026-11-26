@@ -16,15 +16,15 @@ alguna acción suelta.
 
 ## Product Purpose
 
-Convierte la biblioteca de Radarr/Sonarr en subidas correctas a eMuwarez sin tocar la biblioteca: sincroniza, cruza con
+Convierte la biblioteca de Radarr/Sonarr en subidas correctas a eMuwarez sin cambiar los nombres de la biblioteca: sincroniza, cruza con
 las peticiones abiertas y con lo que ya hay en el tracker, genera el nombre con la nomenclatura de eMuwarez, enlaza los
 ficheros en una carpeta de subidas aparte (para seguir sembrando) y lanza la subida con Uploadrr-EMU, que va dentro de la
 imagen. El éxito es subir más y bien (sin rechazos ni duplicados) con menos trabajo manual.
 
 ## Positioning
 
-Una herramienta hecha para un solo tracker: conoce su nomenclatura, sus peticiones, su catálogo y su límite de API, y
-trabaja sobre la biblioteca real del NAS sin renombrarla ni reescribirla.
+Una herramienta hecha para pocos trackers (eMuwarez, N.O.B.S y Milnueve): conoce su nomenclatura, sus peticiones, su
+catálogo y su límite de API, y trabaja sobre la biblioteca real del NAS sin cambiar el nombre de sus ficheros.
 
 ## Operating Context
 
@@ -37,8 +37,9 @@ trabaja sobre la biblioteca real del NAS sin renombrarla ni reescribirla.
 ## Capabilities and Constraints
 
 - Interfaz, README y docs en castellano.
-- Nunca se renombra ni se escriben bytes fuera de la carpeta de subidas: Jellyfin usa los nombres de Sonarr/Radarr y los
-  ficheros comparten inodo con torrents que se siembran.
+- Nunca se renombra un fichero de la biblioteca ni se escribe en uno que comparta inodo con un torrent que se siembra:
+  Jellyfin usa los nombres de Sonarr/Radarr. Un MKV con un solo enlace recibe en su sitio el nombre de las pistas y el
+  título interno.
 - Autoalojado y de un solo proceso: SQLite, un uvicorn, bus de eventos en memoria; sin servicios externos propios. El
   servidor avisa por `/api/eventos` en vez de que la interfaz sondee.
 - Ningún secreto a la vista: las claves de eMuwarez y TMDb nunca salen en logs, respuestas ni pantallas.

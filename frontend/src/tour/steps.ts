@@ -61,7 +61,7 @@ export const TOUR_STEPS: TourStep[] = [
     selector: '[data-tour="uploads-content"]',
     title: 'Subidas',
     placement: 'top-center',
-    description: 'El historial de tus subidas a eMuwarez, con su estado y progreso.',
+    description: 'El historial de tus subidas, con su estado y progreso.',
   },
   {
     id: 'stats',
