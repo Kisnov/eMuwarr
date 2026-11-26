@@ -450,6 +450,26 @@ def test_las_subidas_que_la_copia_trae_en_marcha_quedan_fallidas(cfg, tmp_path):
     assert _estado(reenvio) == ("completed", "fallido")
 
 
+def test_una_restauracion_que_falla_a_medias_no_deja_subidas_en_marcha(cfg, tmp_path, monkeypatch):
+    """La base ya colocada las traía en marcha, y restaurar la copia que lo deshace se negaba por ellas."""
+    subida = _subida("running")
+    archivo = create_config_backup(output_dir=tmp_path / "copias")["archive_path"]
+    with db() as conn:
+        conn.execute("UPDATE upload_jobs SET status = 'cancelled'")
+
+    def _disco_lleno(*_, **__):
+        raise OSError(28, "No space left on device")
+
+    with monkeypatch.context() as m:
+        m.setattr(tarfile.TarFile, "extractall", _disco_lleno)
+        r = _aplicar(archivo)
+
+    assert r["ok"] is False and "no se completó" in r["error"]
+    assert _estado(subida) == ("failed", None)
+    previa = next(cfg.glob("backups/emuwarez_config_antes_de_restaurar_*"))
+    assert _aplicar(str(previa))["ok"] is True
+
+
 def test_si_no_se_pueden_cerrar_las_subidas_la_restauracion_sigue_hecha(cfg, tmp_path, monkeypatch):
     from emuwarez_uploadrr.services import upload_queue
 

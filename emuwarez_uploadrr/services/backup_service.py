@@ -394,7 +394,9 @@ def _hay_subidas_en_marcha(viva: Path) -> bool:
         return conn.execute(
             f"SELECT 1 FROM upload_jobs WHERE status IN ({','.join('?' * len(ACTIVE_JOB_STATUSES))}) "
             "OR reenvio_qbit_estado = 'en_curso' LIMIT 1", tuple(ACTIVE_JOB_STATUSES)).fetchone() is not None
-    except sqlite3.OperationalError:
+    except sqlite3.OperationalError as e:
+        if "no such table" not in str(e):
+            raise  # ocupada: no se sabe, y restaurar a ciegas es lo que se quiere evitar
         return False  # una base sin la tabla: no hay subidas
     finally:
         conn.close()
@@ -567,11 +569,25 @@ def restore_config_backup(
 
     with _restaurando:
         # Sus hilos seguirían escribiendo en la base restaurada.
-        if _hay_subidas_en_marcha(config_dir / _DB_NAME):
+        try:
+            en_marcha = _hay_subidas_en_marcha(config_dir / _DB_NAME)
+        except sqlite3.OperationalError as e:
+            return {"ok": False, "dry_run": False,
+                    "error": f"No se ha restaurado nada: no se pudo comprobar si hay subidas en marcha ({texto_de_error(e)})"}
+        if en_marcha:
             return {"ok": False, "dry_run": False,
                     "error": "No se ha restaurado nada: hay subidas en marcha (o un reenvío a qBittorrent). Espera a "
                              "que terminen o cancélalas en Subidas, y vuelve a restaurar."}
         return _aplicar_restauracion(path, config_dir, members)
+
+
+def _cerrar_subidas_de_la_copia() -> None:
+    """Las subidas que la copia trae en marcha no tienen hilo: quedan fallidas, como al arrancar. Nunca lanza."""
+    try:
+        from .upload_queue import reconcile_interrupted_jobs
+        reconcile_interrupted_jobs()
+    except Exception:
+        logger.warning("No se pudieron cerrar las subidas en marcha de la copia restaurada", exc_info=True)
 
 
 def _aplicar_restauracion(path: Path, config_dir: Path, members: list[str]) -> dict:
@@ -612,14 +628,11 @@ def _aplicar_restauracion(path: Path, config_dir: Path, members: list[str]) -> d
         if (config_dir / _DB_NAME).exists() and _es_sqlite(config_dir / _DB_NAME):
             # Una copia de un esquema anterior se migra aquí, una vez, y no desde cada petición que llegue después.
             preparar_base(config_dir / _DB_NAME)
-            # Las subidas que la copia trae en marcha no tienen hilo: quedan fallidas, como al arrancar.
-            try:
-                from .upload_queue import reconcile_interrupted_jobs
-                reconcile_interrupted_jobs()
-            except Exception:
-                logger.warning("No se pudieron cerrar las subidas en marcha de la copia restaurada", exc_info=True)
+            _cerrar_subidas_de_la_copia()
     except Exception as exc:
         logger.exception("La restauración de %s no se completó", path.name)
+        # Con la base ya colocada, sus subidas en marcha impedirían restaurar la copia que lo deshace.
+        _cerrar_subidas_de_la_copia()
         error = f"La restauración no se completó ({texto_de_error(exc)})"
         if previa:
             error += f". Lo que había antes está en {previa['archive_name']}: restáurala para deshacerlo"
