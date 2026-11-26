@@ -41,7 +41,7 @@ rutas permitidas.
 - Un equipo con **Docker** (24+ con Compose v2). La imagen lleva todo lo demás.
 - **Radarr** y/o **Sonarr** con tu biblioteca, o una **carpeta manual** con lo que quieras subir sin pasar por ellos.
 - Una cuenta de **eMuwarez** con su API key, y una API key de **TMDb** (gratuita). Para subir también a **N.O.B.S** o
-  **Milnueve**, sus claves van en Configuración → Otros trackers (las copias de seguridad las dejan vacías).
+  **Milnueve**, sus claves van en Configuración → Otros trackers.
 - **qBittorrent**, que vea la carpeta de subidas en la misma ruta que este contenedor.
 - La media y la carpeta de subidas en el **mismo sistema de ficheros**, para que la subida sea un enlace duro y no
   ocupe el doble.
