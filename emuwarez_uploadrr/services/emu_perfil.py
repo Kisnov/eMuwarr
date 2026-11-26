@@ -52,6 +52,9 @@ def perfil_emu(conn: sqlite3.Connection, *, actualizar: bool = False, tracker: T
         with _PIDIENDO:
             guardado = get_json_state(conn, f"{tracker.id}.perfil") or {}
             if guardado.get("huella") != _huella(clave):
+                if guardado.get("huella"):
+                    # El usuario de Ajustes era el de la clave anterior: se vacía y lo rellena la nueva cuenta.
+                    set_setting(conn, tracker.clave("username"), "")
                 guardado = {}  # era de otra clave: se pide ya con la nueva
             if _caducado(guardado, ESPERA_ACTUALIZAR if actualizar else DURACION):
                 guardado = _pedir(conn, clave, guardado, tracker)
