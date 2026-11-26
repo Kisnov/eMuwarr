@@ -132,6 +132,25 @@ def test_cancelar_mata_tambien_a_los_hijos_de_uploadrr(
     assert _esperar(lambda: not _vivo(hijo), 5), "el hijo de Uploadrr siguió vivo tras Cancelar"
 
 
+def test_cancelar_una_subida_en_marcha_no_avisa_de_subida_fallida(
+        db_conn, tmp_path, fake_uploadrr_emu_dir, fake_uploadrr_python_path, monkeypatch):
+    monkeypatch.setenv("FAKE_UPLOADRR_SLEEP", "30")
+    jid = _lanzar(db_conn, tmp_path, fake_uploadrr_emu_dir, fake_uploadrr_python_path)
+    assert _esperar(lambda: get_upload_job(jid, conn=db_conn).get("process_id"), 5)
+
+    assert cancel_upload_job(jid, conn=db_conn)["ok"] is True
+
+    # El hilo de la subida termina después de Cancelar: se espera a que suelte el proceso.
+    assert _esperar(lambda: _estado(db_conn, jid)["exit_code"] is not None and jid not in ue._PROCESOS, 15)
+    time.sleep(0.3)
+    fila = db_conn.execute("SELECT status, error_message FROM upload_jobs WHERE id = ?", (jid,)).fetchone()
+    assert (fila["status"], fila["error_message"]) == ("cancelled", None)
+    assert not db_conn.execute("SELECT 1 FROM notifications WHERE event_type = 'upload_failed'").fetchone()
+    mensajes = [m["message"] for m in db_conn.execute(
+        "SELECT message FROM upload_job_logs WHERE upload_job_id = ?", (jid,))]
+    assert not [m for m in mensajes if m.startswith("Proceso fallido")]
+
+
 def test_el_timeout_mata_el_grupo_y_deja_la_subida_en_timeout(
         db_conn, tmp_path, fake_uploadrr_emu_dir, fake_uploadrr_python_path, monkeypatch, hijo_de_uploadrr):
     monkeypatch.setenv("FAKE_UPLOADRR_SLEEP", "30")

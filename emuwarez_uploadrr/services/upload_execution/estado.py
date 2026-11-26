@@ -25,7 +25,7 @@ def _avanzar_job(job_id: int, status: str, **kwargs) -> bool:
     return escribir_estado(job_id, salvo=("cancelled",), status=status, **kwargs)
 
 
-def _finalize_job_status(job_id: int, desired_status: str, **kwargs) -> None:
+def _finalize_job_status(job_id: int, desired_status: str, **kwargs) -> bool:
     """Atomically set the terminal status of a job, unless it was already
     cancelled — as a single conditional UPDATE, not a read-then-write, so
     there is no race window with cancel_upload_job() running concurrently
@@ -41,6 +41,8 @@ def _finalize_job_status(job_id: int, desired_status: str, **kwargs) -> None:
     (status ends as "cancelled" either way); if it lands after, the WHERE
     clause here blocks clobbering an already-cancelled job, and only the
     non-status bookkeeping fields (exit_code/finished_at/duration) are kept.
+
+    Devuelve si escribió el estado: False es una subida cancelada, que no se da por fallida.
     """
     from ..upload_states import escribir_estado
 
@@ -51,12 +53,13 @@ def _finalize_job_status(job_id: int, desired_status: str, **kwargs) -> None:
         if not escrito:
             # Already cancelled — keep status/stage, but still record the
             # bookkeeping fields (exit_code, finished_at, duration_seconds…)
-            # for observability.
-            extra = {k: v for k, v in kwargs.items() if k != "stage"}
+            # for observability. El error no: la canceló el usuario.
+            extra = {k: v for k, v in kwargs.items() if k not in ("stage", "error_message")}
             if extra:
                 escribir_estado(job_id, conn=conn, **extra)
     finally:
         conn.close()
+    return escrito
 
 
 def _check_trailer_and_log(job_id: int) -> None:

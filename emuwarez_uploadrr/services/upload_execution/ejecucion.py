@@ -322,7 +322,7 @@ def _run_uploadrr_subprocess_body(job_id: int, cmd: dict, secrets: list[str]) ->
             duration_seconds = int((finished_dt - started_dt).total_seconds())
             msg = f"Proceso cancelado por timeout ({timeout}s)."
             subido = _ficha("\n".join(stdout_lines))
-            _finalize_job_status(
+            if _finalize_job_status(
                 job_id, "failed",
                 stage="timeout",
                 exit_code=returncode,
@@ -332,9 +332,9 @@ def _run_uploadrr_subprocess_body(job_id: int, cmd: dict, secrets: list[str]) ->
                 **subido,
                 last_log_at=_now(),
                 last_error_at=finished_at,
-            )
-            append_upload_log(job_id, "error", msg, stream="system")
-            _notify_upload_failed(job_id, msg, result_url=subido.get("result_url"))
+            ):
+                append_upload_log(job_id, "error", msg, stream="system")
+                _notify_upload_failed(job_id, msg, result_url=subido.get("result_url"))
             return
 
         # Transient progress marker only, applied atomically and only while
@@ -434,7 +434,7 @@ def _run_uploadrr_subprocess_body(job_id: int, cmd: dict, secrets: list[str]) ->
             # Si el torrent llegó a subirse antes de fallar, su ficha sigue siendo útil y su enlace no se borra.
             subido = _ficha(stdout_text)
 
-            _finalize_job_status(
+            if not _finalize_job_status(
                 job_id, "failed",
                 stage="failed",
                 exit_code=returncode,
@@ -444,7 +444,8 @@ def _run_uploadrr_subprocess_body(job_id: int, cmd: dict, secrets: list[str]) ->
                 **subido,
                 last_log_at=_now(),
                 last_error_at=finished_at,
-            )
+            ):
+                return  # cancelada por el usuario: ni «fallida» ni aviso
             append_upload_log(
                 job_id, "error",
                 f"Proceso fallido (exit code {returncode}). Duración: {duration_seconds}s",
