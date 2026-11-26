@@ -1721,7 +1721,7 @@ class ScheduledTaskResponse(BaseModel):
 
 class UpdateScheduledTaskRequest(BaseModel):
     # `run_at` (HH:MM) = cada día a esa hora; sin ella, cada `interval_minutes`.
-    interval_minutes: Optional[int] = None
+    interval_minutes: Optional[int] = Field(None, ge=1, le=525600)  # como mucho, un año
     run_at: Optional[str] = None
 
 
