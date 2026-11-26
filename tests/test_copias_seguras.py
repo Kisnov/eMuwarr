@@ -194,6 +194,18 @@ def test_la_copia_programada_que_falla_deja_un_aviso_en_la_campana(isolated_db, 
         conn.close()
 
 
+def test_una_restauracion_que_falla_a_medias_dice_donde_esta_lo_que_habia(cfg, monkeypatch):
+    vieja = bs.create_config_backup()["archive_path"]
+    _marcar("después")
+    monkeypatch.setattr(tarfile.TarFile, "extractall", _disco_lleno)
+
+    r = _restaurar(vieja)
+
+    previas = [c.name for c in bs.get_backup_dir().glob(f"{bs.PREFIJO_ANTES_DE_RESTAURAR}*")]
+    assert not r["ok"] and "no se completó" in r["error"]
+    assert len(previas) == 1 and previas[0] in r["error"]
+
+
 def test_dos_copias_en_el_mismo_segundo_no_se_mezclan(cfg, monkeypatch):
     """Compartían el .part: la segunda lo vaciaba y la primera escribía en la ya renombrada, o fallaba al renombrar."""
     class Reloj(datetime.datetime):

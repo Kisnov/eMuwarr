@@ -591,32 +591,39 @@ def _aplicar_restauracion(path: Path, config_dir: Path, members: list[str]) -> d
 
     # La de antes de restaurar va tal cual: también las claves vacías y los ficheros con claves que no estaban.
     exacta = path.name.startswith(PREFIJO_ANTES_DE_RESTAURAR)
-    config_dir.mkdir(parents=True, exist_ok=True)
-    conservadas: list[str] = []
-    with tarfile.open(str(path), "r:gz") as tar:
-        resto = []
-        for member in tar.getmembers():
-            if member.name != _DB_NAME or not member.isfile():
-                resto.append(member)
-                continue
-            # La base primero: si falla, el resto de ficheros sigue como estaba.
-            with tempfile.TemporaryDirectory() as tmp:
-                restaurada = Path(tmp) / _DB_NAME
-                with tar.extractfile(member) as origen, open(restaurada, "wb") as destino:
-                    shutil.copyfileobj(origen, destino)
-                conservadas = _colocar_base(restaurada, config_dir / _DB_NAME, fusionar=not exacta)
-        tar.extractall(path=config_dir, members=resto, filter="data")
-    if exacta:
-        _quitar_claves_que_no_estaban(config_dir, set(members))
-    if (config_dir / _DB_NAME).exists() and _es_sqlite(config_dir / _DB_NAME):
-        # Una copia de un esquema anterior se migra aquí, una vez, y no desde cada petición que llegue después.
-        preparar_base(config_dir / _DB_NAME)
-        # Las subidas que la copia trae en marcha no tienen hilo: quedan fallidas, como al arrancar.
-        try:
-            from .upload_queue import reconcile_interrupted_jobs
-            reconcile_interrupted_jobs()
-        except Exception:
-            logger.warning("No se pudieron cerrar las subidas en marcha de la copia restaurada", exc_info=True)
+    try:
+        config_dir.mkdir(parents=True, exist_ok=True)
+        conservadas: list[str] = []
+        with tarfile.open(str(path), "r:gz") as tar:
+            resto = []
+            for member in tar.getmembers():
+                if member.name != _DB_NAME or not member.isfile():
+                    resto.append(member)
+                    continue
+                # La base primero: si falla, el resto de ficheros sigue como estaba.
+                with tempfile.TemporaryDirectory() as tmp:
+                    restaurada = Path(tmp) / _DB_NAME
+                    with tar.extractfile(member) as origen, open(restaurada, "wb") as destino:
+                        shutil.copyfileobj(origen, destino)
+                    conservadas = _colocar_base(restaurada, config_dir / _DB_NAME, fusionar=not exacta)
+            tar.extractall(path=config_dir, members=resto, filter="data")
+        if exacta:
+            _quitar_claves_que_no_estaban(config_dir, set(members))
+        if (config_dir / _DB_NAME).exists() and _es_sqlite(config_dir / _DB_NAME):
+            # Una copia de un esquema anterior se migra aquí, una vez, y no desde cada petición que llegue después.
+            preparar_base(config_dir / _DB_NAME)
+            # Las subidas que la copia trae en marcha no tienen hilo: quedan fallidas, como al arrancar.
+            try:
+                from .upload_queue import reconcile_interrupted_jobs
+                reconcile_interrupted_jobs()
+            except Exception:
+                logger.warning("No se pudieron cerrar las subidas en marcha de la copia restaurada", exc_info=True)
+    except Exception as exc:
+        logger.exception("La restauración de %s no se completó", path.name)
+        error = f"La restauración no se completó ({texto_de_error(exc)})"
+        if previa:
+            error += f". Lo que había antes está en {previa['archive_name']}: restáurala para deshacerlo"
+        return {"ok": False, "dry_run": False, "error": error}
 
     message = f"Restauración completada: {len(members)} archivos"
     if conservadas:
