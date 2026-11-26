@@ -855,6 +855,19 @@ def test_delete_cancelled_job_removes_row_logs_and_artifacts(db_conn):
     assert db_conn.execute("SELECT id FROM upload_artifacts WHERE upload_job_id=?", (jid,)).fetchone() is None
 
 
+def test_no_se_borra_una_cancelada_cuyo_hilo_sigue_preparando(db_conn, monkeypatch):
+    from emuwarez_uploadrr.services import upload_queue
+
+    jid = _insert_job(db_conn, status="cancelled")
+    monkeypatch.setattr(upload_queue, "_EN_CURSO", {jid})
+    result = delete_upload_job(jid, confirmation=DELETE_CONFIRMATION_TOKEN, conn=db_conn)
+    assert (result["ok"], result["error"]) == (False, "invalid_status")
+    assert db_conn.execute("SELECT id FROM upload_jobs WHERE id=?", (jid,)).fetchone() is not None
+
+    monkeypatch.setattr(upload_queue, "_EN_CURSO", set())
+    assert delete_upload_job(jid, confirmation=DELETE_CONFIRMATION_TOKEN, conn=db_conn)["ok"] is True
+
+
 def test_delete_failed_job_ok(db_conn):
     jid = _insert_job(db_conn, status="failed")
     result = delete_upload_job(jid, confirmation=DELETE_CONFIRMATION_TOKEN, conn=db_conn)

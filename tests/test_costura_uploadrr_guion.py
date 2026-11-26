@@ -17,8 +17,10 @@ from emuwarez_uploadrr.services.upload_execution import (
     CONFIRMATION_TOKEN,
     consultas,
     get_upload_job,
+    puede_reenviar_qbit,
     start_upload_job,
 )
+from emuwarez_uploadrr.services.upload_queue import reconcile_interrupted_jobs
 
 # Líneas del Uploadrr-EMU real (UNIT3D.py, checks.py, meta.py, upload.py, clients.py).
 BUSCA = "Searching for existing torrents on EMU..."
@@ -141,6 +143,32 @@ def test_colgado_tras_el_post_con_la_ficha_ya_impresa_conserva_la_ficha(
     assert job["result_url"] == "https://fake-emu.invalid.test/torrents/4242"
     assert job["result_torrent_id"] == "4242" and job["torrent_subido"] == 1
     assert sp.leer_subpasos(job["pasos_uploadrr_json"]) == ["screenshots", "torrent", "tracker"]
+
+
+def test_un_reinicio_tras_la_ficha_impresa_deja_reenviar_a_qbittorrent(
+        db_conn, tmp_path, fake_uploadrr_emu_dir, fake_uploadrr_python_path, guion_uploadrr):
+    """La app se reinicia mientras Uploadrr-EMU espera a qBittorrent: la fila ya tiene el id que pide «Reenviar»."""
+    llegado, senal = tmp_path / "llegado", tmp_path / "sigue"
+    guion_uploadrr([*HASTA_EL_POST, {"out": URL}, {"touch": str(llegado)}, {"wait_for": str(senal)}, {"out": EXITO}])
+    jid = _lanzar(db_conn, tmp_path, fake_uploadrr_emu_dir, fake_uploadrr_python_path)
+    try:
+        limite = time.monotonic() + 15
+        while not (llegado.exists() and get_upload_job(jid, conn=db_conn)["result_torrent_id"]) \
+                and time.monotonic() < limite:
+            time.sleep(0.05)
+
+        reconcile_interrupted_jobs()
+
+        job = get_upload_job(jid, conn=db_conn)
+        assert job["status"] == "failed" and "Reenviar a qBittorrent" in job["error_message"]
+        assert (job["result_url"], job["result_torrent_id"]) == ("https://fake-emu.invalid.test/torrents/4242", "4242")
+        assert puede_reenviar_qbit(job) is True
+    finally:
+        senal.write_text("")
+        limite = time.monotonic() + 15
+        while get_upload_job(jid, conn=db_conn)["status"] != "completed" and time.monotonic() < limite:
+            time.sleep(0.05)
+        _terminal(db_conn, jid)
 
 
 def test_salida_cortada_antes_de_la_url_y_exit_1(db_conn, tmp_path, fake_uploadrr_emu_dir, fake_uploadrr_python_path, guion_uploadrr):

@@ -405,6 +405,15 @@ def test_borrar_lote_no_toca_una_que_volvio_a_la_cola_entre_medias(db_conn, tmp_
     assert _existe(db_conn, job) and _estado(db_conn, reintento) == "queued"
 
 
+def test_borrar_lote_cuenta_en_curso_una_cancelada_que_aun_termina_su_paso(db_conn, tmp_path, monkeypatch):
+    job = _encolar(db_conn, _peli(db_conn, tmp_path))
+    _poner(db_conn, job, "cancelled")
+    monkeypatch.setattr(uq, "_EN_CURSO", {job})
+
+    assert lotes.borrar_lote(db_conn, LOTE) == {"borradas": 0, "intentos": 0, "en_curso": 1}
+    assert _existe(db_conn, job)
+
+
 def test_la_api_borra_el_lote(client, auth_headers, db_conn, tmp_path):
     hecha = _encolar(db_conn, _peli(db_conn, tmp_path, "A"))
     en_cola = _encolar(db_conn, _peli(db_conn, tmp_path, "B"))
