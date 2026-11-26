@@ -47,7 +47,7 @@ def _set_checks_progress(item_id: int, *, checks: list[dict], done: bool = False
 # con 30 capítulos elegidos, preguntarle 30 veces a eMuwarez si está vivo no
 # aporta nada y multiplica por 30 la espera.
 CONTENT_CHECK_IDS = ("accesible", "season_pack", "idioma_audio", "capitulos_accesibles",
-                     "carpeta_subida", "renameable", "spanish", "tipo")
+                     "carpeta_subida", "renameable", "formato", "spanish", "tipo")
 ENVIRONMENT_CHECK_IDS = ("output", "qbittorrent", "imghosts", "emuwarez")
 
 
@@ -215,6 +215,14 @@ def run_upload_checks(conn: sqlite3.Connection, item_id: int, *, scope: str = "a
                    ", ".join(ilegibles) if ilegibles else f"{cuantos} capítulo(s) legibles"):
             return done()
 
+        from .uploadrr_contract import motivo_formato_no_subible
+        no_subibles = [f"Capítulo {ep.get('episode_number') or ep.get('episode_id')}: {motivo}"
+                       for ep in plan.get("episodes", [])
+                       if (motivo := motivo_formato_no_subible(ep.get("source_path") or ep.get("raw_source_path")))]
+        if not add("formato", "El formato de los capítulos se puede subir",
+                   "Hay capítulos en un formato que no se sube", not no_subibles, " ".join(no_subibles)):
+            return done()
+
         # Y que se pueda enlazar en la carpeta de subidas. Es lo que se le
         # entrega a Uploadrr para que el torrent se llame como el release sin
         # tocar la carpeta de Sonarr (ver services/carpeta_subida.py). Se
@@ -295,6 +303,12 @@ def run_upload_checks(conn: sqlite3.Connection, item_id: int, *, scope: str = "a
             return done()
         if elegidos and pistas:
             item = {**item, "audio_languages": " / ".join(dict.fromkeys(pistas))}
+
+        from .uploadrr_contract import motivo_formato_no_subible
+        motivo = motivo_formato_no_subible(local_path)
+        if not add("formato", "El formato del archivo se puede subir", "El formato del archivo no se puede subir",
+                   not motivo, motivo or ""):
+            return done()
 
         # 1c. Idiomas — las normas del tracker (services/reglas_tracker.py). eMuwarez: castellano en el audio o, si
         # no, en los subtítulos; sin MediaInfo leído no se puede confirmar y bloquea.

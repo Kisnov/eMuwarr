@@ -157,6 +157,18 @@ descripción y el cliente.
   NOBS y Milnueve están en `docs/trackers-ids.md`), una nomenclatura por tracker (para NOBS y Milnueve vale la de
   eMuwarez; el fichero es el mismo para todos, ver la fase B), y si la app cambia de nombre (hoy «eMuwarr» es de eMuwarez).
 
+## Por hacer: subir imágenes de disco (ISO)
+
+Los trackers UNIT3D admiten un ISO, pero desde la app todavía no se puede subir: Uploadrr-EMU solo reconoce un disco
+como carpeta (`BDMV`, `VIDEO_TS`, `HVDVD_TS`) y, como fichero suelto, solo MKV, MP4 y TS. La comprobación «formato» lo
+para antes de preparar nada. Para hacerlo falta ver:
+
+- qué tipo y qué ids piden eMuwarez, N.O.B.S y Milnueve para un disco (`uploadrr-emu/data/trackers/*.json`,
+  `docs/trackers-ids.md`);
+- de dónde salen el MediaInfo (o el BDInfo) y las capturas de un `.iso`, que no se abre como un vídeo;
+- cómo se llama el release, y qué hace la app con sus pistas, que no puede etiquetar;
+- una subida real en el NAS con un ISO.
+
 ## Por probar en el NAS (`:multitracker`)
 
 - La carpeta manual: escanear una carpeta real con WEB-DL de películas y de series, identificar en TMDb (una a

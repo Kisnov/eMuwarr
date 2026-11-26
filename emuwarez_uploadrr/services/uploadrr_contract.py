@@ -137,6 +137,21 @@ def motivo_sin_tipo(tracker: str, release_format) -> Optional[str]:
     return f"{destino.nombre} no tiene el tipo «{release_format}»: esta copia no se puede subir ahí"
 
 
+# Lo único que Uploadrr-EMU sube (src/videoprocessor.py::get_video): con otro formato acaba sin vídeo que subir.
+EXTENSIONES_SUBIBLES = (".mkv", ".mp4", ".ts")
+
+
+def motivo_formato_no_subible(ruta: str | None) -> Optional[str]:
+    """Por qué no se sube este fichero por su formato; None si es MKV, MP4 o TS."""
+    ext = os.path.splitext(ruta or "")[1].lower()
+    if ext in EXTENSIONES_SUBIBLES:
+        return None
+    if ext == ".iso":
+        return "Es un ISO: las imágenes de disco todavía no se pueden subir desde aquí."
+    return (f"Es un {ext.lstrip('.').upper() or 'archivo sin extensión'}: Uploadrr-EMU solo sube MKV, MP4 y TS. "
+            "Conviértelo a MKV antes de subirlo.")
+
+
 def _format_season(value) -> str:
     if isinstance(value, int):
         return f"S{value:02d}"

@@ -137,7 +137,7 @@ def motivo_audio_sin_idioma(posiciones: list[int]) -> str:
 
 def aviso_no_mkv(ruta: str | None) -> Optional[str]:
     """El aviso de una pista sin idioma en un fichero que no es MKV, que no bloquea: la app solo etiqueta pistas de un
-    MKV. None en un MKV o en un ISO (imagen de disco, que los trackers admiten tal cual)."""
+    MKV. None en un MKV o en un ISO (que no se sube: uploadrr_contract.motivo_formato_no_subible)."""
     ext = os.path.splitext(ruta or "")[1].lower()
     if ext in (".mkv", ".iso"):
         return None

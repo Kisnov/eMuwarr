@@ -78,6 +78,23 @@ def test_validate_job_missing_uploadrr_config(db_conn):
     assert any("uploadrr" in e.lower() for e in result["errors"])
 
 
+@pytest.mark.parametrize("nombre", ["movie.avi", "movie.m2ts", "movie.iso"])
+def test_validate_un_formato_que_uploadrr_no_sube_es_un_error(db_conn, tmp_path, nombre):
+    f = tmp_path / nombre
+    f.write_bytes(b"x")
+    errores = validate_upload_job_start(_insert_job(db_conn, source_path=str(f)), conn=db_conn)["errors"]
+    motivo = "todavía no se pueden subir" if nombre == "movie.iso" else "Uploadrr-EMU solo sube MKV, MP4 y TS"
+    assert any(motivo in e for e in errores)
+
+
+@pytest.mark.parametrize("nombre", ["movie.mkv", "movie.MP4", "movie.ts"])
+def test_validate_mkv_mp4_y_ts_si_se_suben(db_conn, tmp_path, nombre):
+    f = tmp_path / nombre
+    f.write_bytes(b"x")
+    r = validate_upload_job_start(_insert_job(db_conn, source_path=str(f)), conn=db_conn)
+    assert not any("solo sube" in e for e in r["errors"] + r["warnings"])
+
+
 # ---------------------------------------------------------------------------
 # start_upload_job — dry_run
 # ---------------------------------------------------------------------------

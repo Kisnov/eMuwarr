@@ -13,17 +13,12 @@ from ..uploadrr_contract import (
     RUNTIME_EMU,
     build_uploadrr_emu_command,
     get_runtime_settings,
+    motivo_formato_no_subible,
     render_command_preview,
 )
 from .. import trackers
 from .comun import _get_db_conn
 from .config import ruta_config, ruta_descripcion
-
-
-VIDEO_EXTENSIONS = {
-    ".mkv", ".mp4", ".avi", ".mov", ".ts", ".m2ts",
-    ".wmv", ".flv", ".webm", ".iso", ".m4v",
-}
 
 
 def get_upload_job(job_id: int, conn=None) -> dict | None:
@@ -166,8 +161,8 @@ def validate_upload_job_start(job_id: int, conn=None) -> dict:
                 pass
             elif not p.is_file():
                 errors.append(f"La ruta no es un archivo regular: {active_path}")
-            elif p.suffix.lower() not in VIDEO_EXTENSIONS:
-                warnings.append(f"El archivo no tiene extensión de vídeo reconocida: {p.suffix}")
+            elif motivo := motivo_formato_no_subible(active_path):
+                errors.append(motivo)
 
         # Falls back to the bundled runtime's own default the same way
         # get_runtime_settings() always does — it needs no configuration.

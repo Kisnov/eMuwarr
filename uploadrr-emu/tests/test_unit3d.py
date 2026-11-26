@@ -444,6 +444,50 @@ def test_upload_timeout_that_landed_is_recovered(tracker, emu, upload_meta, sign
     assert "Torrent uploaded successfully" in capsys.readouterr().out
 
 
+@pytest.mark.parametrize("errores", [
+    {"name": ["El nombre ya ha sido registrado."]},
+    {"info_hash": ["El valor del campo info hash ya está en uso."]},
+], ids=["nombre", "info_hash"])
+def test_upload_timeout_that_landed_is_recovered_in_another_language(tracker, emu, upload_meta, signed_torrent, errores, sleeps):
+    emu.timeout = httpx.Timeout(0.5)
+    landed = []
+
+    def upload(query):
+        if not landed:
+            landed.append(NAME)
+            time.sleep(1)  # entra, pero contesta tarde
+            return 200, {"success": True, "data": download_url(tracker)}
+        return 404, {"success": False, "message": "Error de validación.", "data": errores}
+
+    tracker.routes[("POST", UPLOAD)] = upload
+    tracker.routes[("GET", SEARCH)] = lambda q: (
+        200,
+        {"data": [item(n, SIZE, download_link=download_url(tracker)) for n in landed if n == q["name"][0]], "links": {"next": None}},
+    )
+    serve_download(tracker, resigned(signed_torrent))
+
+    assert run(emu.upload(upload_meta)) is True
+    assert saved_torrent(upload_meta).exists()
+    assert len(tracker.calls("POST", UPLOAD)) == 2
+
+
+def test_upload_timeout_then_another_validation_error_is_not_recovered(tracker, emu, upload_meta, sleeps):
+    emu.timeout = httpx.Timeout(0.2)
+
+    def upload(query):
+        if len(tracker.calls("POST", UPLOAD)) == 1:
+            time.sleep(0.5)  # no contesta a tiempo
+            return 500, b""
+        return 404, {"success": False, "message": "Error de validación.", "data": {"category_id": ["No válido."]}}
+
+    tracker.routes[("POST", UPLOAD)] = upload
+    tracker.routes[("GET", SEARCH)] = lambda q: (200, {"data": [], "links": {"next": None}})
+
+    assert run(emu.upload(upload_meta)) is False
+    assert len(tracker.calls("POST", UPLOAD)) == 2
+    assert len(tracker.calls("GET", SEARCH)) == 1  # solo la foto de antes de subir
+
+
 def test_upload_never_recovers_same_name_and_size_with_other_pieces(tracker, emu, upload_meta, tmp_path):
     emu.timeout = httpx.Timeout(0.2)
     landed = []

@@ -196,11 +196,12 @@ def test_otros_contenedores_avisan_como_un_mp4(db_conn, tmp_path, nombre):
     assert _check(uc.run_upload_checks(db_conn, iid, scope="content"), "idioma_audio")["status"] == "skip"
 
 
-def test_un_iso_sin_idioma_pasa_sin_aviso(db_conn, tmp_path):
+def test_un_iso_sin_idioma_no_avisa_del_idioma_pero_no_se_sube(db_conn, tmp_path):
     iid = _pelicula(db_conn, tmp_path, "spa/und")
     _con_ruta(db_conn, tmp_path, iid, "movie.iso")
     r = uc.run_upload_checks(db_conn, iid, scope="content")
-    assert r["ready"] is True and "idioma_audio" not in {c["id"] for c in r["checks"]}
+    assert "idioma_audio" not in {c["id"] for c in r["checks"]}
+    assert r["ready"] is False and _check(r, "formato")["status"] == "fail"
 
 
 def test_el_aviso_del_nombre_depende_del_contenedor():
