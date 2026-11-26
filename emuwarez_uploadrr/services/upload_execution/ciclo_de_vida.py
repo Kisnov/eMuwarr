@@ -252,6 +252,12 @@ def _cancelar(job_id: int, conn=None) -> dict:
                 "job_id": job_id,
             }
 
+        # La marca, antes de parar el proceso: si muere primero, su hilo da la subida por fallida y avisa.
+        _update_job_status(
+            job_id, "cancelled",
+            stage="cancelled",
+            finished_at=_now(),
+        )
         pid = job.get("process_id")
         cancelled = False
         with _PROCESOS_LOCK:
@@ -291,11 +297,6 @@ def _cancelar(job_id: int, conn=None) -> dict:
                     conn=conn,
                 )
 
-        _update_job_status(
-            job_id, "cancelled",
-            stage="cancelled",
-            finished_at=_now(),
-        )
         append_upload_log(job_id, "info", "Job marcado como cancelado.", stream="system")
 
         return {
