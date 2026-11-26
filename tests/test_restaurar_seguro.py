@@ -396,3 +396,37 @@ def test_una_base_sqlite_vacia_si_se_restaura(cfg, tmp_path):
     archivo = _tar_malo(tmp_path / "vacia.tar.gz", info, datos)
 
     assert _aplicar(archivo)["ok"] is True
+
+
+# ---------------------------------------------------------------------------
+# Subidas en marcha
+# ---------------------------------------------------------------------------
+
+def _subida(status: str, reenvio: str | None = None) -> int:
+    with db() as conn:
+        return conn.execute(
+            "INSERT INTO upload_jobs (title, path, status, reenvio_qbit_estado, created_at, updated_at) "
+            "VALUES ('Peli', '/media/peli.mkv', ?, ?, '2026-11-26', '2026-11-26')", (status, reenvio)).lastrowid
+
+
+@pytest.mark.parametrize("status, reenvio", [("running", None), ("queued", None), ("completed", "en_curso")])
+def test_con_una_subida_en_marcha_no_se_restaura(cfg, tmp_path, status, reenvio):
+    """Su hilo seguía escribiendo en la base restaurada: en otra fila con el mismo id, o un IntegrityError."""
+    archivo = create_config_backup(output_dir=tmp_path / "copias")["archive_path"]
+    with db() as conn:
+        set_state(conn, "marca", "despues")
+    _subida(status, reenvio)
+
+    r = _aplicar(archivo)
+
+    assert r["ok"] is False and "subidas en marcha" in r["error"] and "cancélalas" in r["error"]
+    assert _marca(cfg) == "despues"
+    assert not list(cfg.glob("backups/emuwarez_config_antes_de_restaurar_*"))
+
+
+def test_una_subida_terminada_no_impide_restaurar(cfg, tmp_path):
+    _subida("completed", "ok")
+    _subida("failed", "fallido")
+    archivo = create_config_backup(output_dir=tmp_path / "copias")["archive_path"]
+
+    assert _aplicar(archivo)["ok"] is True

@@ -19,6 +19,7 @@ from ..database import (
 )
 from ..integrations.base import texto_de_error
 from .settings import all_settings, es_secreto, get_setting_canonical, set_setting
+from .upload_states import ACTIVE_JOB_STATUSES
 
 RESTORE_CONFIRMATION = "RESTAURAR_CONFIG"
 _DB_NAME = "emuwarez_uploadrr.db"
@@ -381,6 +382,21 @@ def _es_de_otra_aplicacion(ruta: Path) -> bool:
     return bool(tablas) and "app_state" not in tablas
 
 
+def _hay_subidas_en_marcha(viva: Path) -> bool:
+    """Si la base viva tiene subidas o reenvíos a qBittorrent en marcha. Se mira en la base: vale también desde el CLI."""
+    if not viva.exists() or viva.stat().st_size == 0 or not _es_sqlite(viva):
+        return False
+    conn = sqlite3.connect(str(viva), timeout=30)
+    try:
+        return conn.execute(
+            f"SELECT 1 FROM upload_jobs WHERE status IN ({','.join('?' * len(ACTIVE_JOB_STATUSES))}) "
+            "OR reenvio_qbit_estado = 'en_curso' LIMIT 1", tuple(ACTIVE_JOB_STATUSES)).fetchone() is not None
+    except sqlite3.OperationalError:
+        return False  # una base sin la tabla: no hay subidas
+    finally:
+        conn.close()
+
+
 def _version_de_base(ruta: Path) -> int | None:
     """El esquema de una base, o None si no es SQLite o no lo dice."""
     conn = sqlite3.connect(str(ruta))
@@ -547,6 +563,11 @@ def restore_config_backup(
         }
 
     with _restaurando:
+        # Sus hilos seguirían escribiendo en la base restaurada.
+        if _hay_subidas_en_marcha(config_dir / _DB_NAME):
+            return {"ok": False, "dry_run": False,
+                    "error": "No se ha restaurado nada: hay subidas en marcha (o un reenvío a qBittorrent). Espera a "
+                             "que terminen o cancélalas en Subidas, y vuelve a restaurar."}
         return _aplicar_restauracion(path, config_dir, members)
 
 
