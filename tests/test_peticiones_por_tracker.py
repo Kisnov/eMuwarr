@@ -101,6 +101,17 @@ def test_las_de_un_tracker_sin_clave_se_borran(db_conn, trackers):
     assert _filas(db_conn) == [("emu", "1")]
 
 
+def test_las_de_un_tracker_sin_clave_se_borran_aunque_falle_emuwarez(db_conn, trackers):
+    set_setting(db_conn, "mnv.api_key", "clave-mnv")
+    db_conn.execute("INSERT INTO request_items (tracker, emu_id, title) VALUES ('nobs', '9', 'De cuando tenía clave')")
+    db_conn.commit()
+    trackers["EMU"] = IntegrationError("eMuwarez no responde")
+    trackers["MNV"] = ([_fila(3)], 1)
+    with pytest.raises(IntegrationError):
+        reqs.sync_emu_requests(db_conn, force=True)
+    assert ("nobs", "9") not in _filas(db_conn)
+
+
 def test_al_volver_a_poner_la_clave_sus_peticiones_no_se_avisan_como_nuevas(db_conn, trackers):
     set_setting(db_conn, "nobs.api_key", "clave-nobs")
     trackers["EMU"], trackers["NOBS"] = ([_fila(1)], 1), ([_fila(5)], 1)

@@ -121,9 +121,9 @@ function StartModal({ job, onClose, onDone }: { job: UploadJob; onClose: () => v
         <p className="sub-mb-8"><strong>{job.title || '—'}</strong></p>
         <div className="sub-aviso">
           <ul className="sub-aviso-lista">
-            <li>Esta acción puede publicar/subir contenido a eMuwarez.</li>
+            <li>Esta acción puede publicar/subir contenido al tracker.</li>
             <li>No se crearán peticiones automáticamente.</li>
-            <li>No se modificará el archivo original ni el título MKV.</li>
+            <li>El nombre del archivo de la biblioteca no se cambia.</li>
           </ul>
         </div>
         <label className="sub-etiqueta">

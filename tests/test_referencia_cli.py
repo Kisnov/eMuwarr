@@ -1,4 +1,7 @@
-"""README_CLI_READY.md sale de build_parser(). Si falla: python3 scripts/referencia_cli.py"""
+"""README_CLI_READY.md sale de build_parser(). Si falla: python3 scripts/referencia_cli.py
+
+Dice «frontend» para que la CI lo corra también en un PR que solo toca .md.
+"""
 import importlib.util
 from pathlib import Path
 

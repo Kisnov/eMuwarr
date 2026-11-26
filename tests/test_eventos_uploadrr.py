@@ -20,9 +20,11 @@ from emuwarez_uploadrr.services.upload_execution import (
     build_uploadrr_execution_command,
     get_upload_job,
     get_upload_job_logs,
+    puede_reenviar_qbit,
     start_upload_job,
 )
 from emuwarez_uploadrr.services.upload_execution.comun import QBIT_LOGIN_INCORRECTO
+from emuwarez_uploadrr.services.upload_queue import reconcile_interrupted_jobs
 from emuwarez_uploadrr.services.uploadrr_contract import build_uploadrr_emu_command
 from emuwarez_uploadrr.services.uploadrr_eventos import (
     EstadoEventos,
@@ -440,6 +442,26 @@ def test_muere_tras_subido_sin_resultado_conserva_el_torrent(
         "https://fake-emu.invalid.test/torrents/4242", "4242", 1)
     assert "murió a mitad de la subida" in job["error_message"] and "sí llegó a subirse" in job["error_message"]
     assert sp.leer_subpasos(job["pasos_uploadrr_json"]) == ["screenshots", "torrent", "tracker"]
+
+
+def test_un_reinicio_tras_subido_deja_reenviar_a_qbittorrent(
+        db_conn, tmp_path, fake_uploadrr_emu_dir, fake_uploadrr_python_path, guion_uploadrr):
+    """La app se reinicia mientras Uploadrr-EMU espera a qBittorrent: la fila ya tiene el id que pide «Reenviar»."""
+    llegado, senal = tmp_path / "llegado", tmp_path / "sigue"
+    guion_uploadrr([*HASTA_EL_POST, SUBIDO_G, {"touch": str(llegado)}, {"wait_for": str(senal)}, RESULTADO_OK])
+    jid = _lanzar(db_conn, tmp_path, fake_uploadrr_emu_dir, fake_uploadrr_python_path)
+    try:
+        assert _esperar(llegado.exists) and _esperar(lambda: get_upload_job(jid, conn=db_conn)["torrent_subido"] == 1)
+
+        reconcile_interrupted_jobs()
+
+        job = get_upload_job(jid, conn=db_conn)
+        assert job["status"] == "failed" and "Reenviar a qBittorrent" in job["error_message"]
+        assert (job["result_url"], job["result_torrent_id"]) == ("https://fake-emu.invalid.test/torrents/4242", "4242")
+        assert puede_reenviar_qbit(job) is True
+    finally:
+        senal.write_text("")
+        _terminal(db_conn, jid)
 
 
 def test_exit_0_sin_resultado_es_fallido(

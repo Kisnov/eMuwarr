@@ -10,6 +10,11 @@ import sqlite3
 from unittest.mock import patch
 
 from emuwarez_uploadrr.database import connect, db_path, init_db
+from emuwarez_uploadrr.integrations import radarr, sonarr
+from emuwarez_uploadrr.services import instances
+
+# Antes de que el autouse de conftest la sustituya por un OK.
+_COMPROBACION_REAL = instances.test_connection_params
 
 
 def _add_instance(client, auth_headers, *, type="radarr", name="Test", url="http://x:7878", api_key="key123"):
@@ -105,6 +110,45 @@ def test_create_duplicate_name_reports_name_error_before_connection_test(client,
     assert resp.status_code == 400
     assert "Dup" in resp.json()["detail"]
     assert not mock_test.called  # short-circuited before the connection test
+
+
+# ---------------------------------------------------------------------------
+# La comprobación real, sin el OK por defecto de conftest.
+# ---------------------------------------------------------------------------
+
+def test_crear_una_carpeta_que_no_existe_falla_y_no_la_guarda(client, auth_headers, monkeypatch, tmp_path):
+    monkeypatch.setattr(instances, "test_connection_params", _COMPROBACION_REAL)
+    resp = client.post("/api/instances", headers=auth_headers,
+                       json={"type": "carpeta", "name": "Manual", "url": str(tmp_path / "no-existe"), "api_key": ""})
+    assert resp.status_code == 400
+    assert "No existe o no se puede leer la carpeta" in resp.json()["detail"]
+    assert client.get("/api/instances", headers=auth_headers).json() == []
+
+
+def test_crear_una_carpeta_que_existe_la_guarda(client, auth_headers, monkeypatch, tmp_path):
+    monkeypatch.setattr(instances, "test_connection_params", _COMPROBACION_REAL)
+    (tmp_path / "videos").mkdir()
+    resp = client.post("/api/instances", headers=auth_headers,
+                       json={"type": "carpeta", "name": "Manual", "url": str(tmp_path / "videos"), "api_key": ""})
+    assert resp.status_code == 201, resp.text
+    assert [i["type"] for i in client.get("/api/instances", headers=auth_headers).json()] == ["carpeta"]
+
+
+def test_la_comprobacion_de_radarr_y_sonarr_normaliza_y_no_filtra_la_clave(monkeypatch):
+    recibido = []
+
+    def responde(d):
+        recibido.append(d)
+        return {"ok": True}
+    monkeypatch.setattr(radarr, "radarr_test_connection", responde)
+    assert _COMPROBACION_REAL("Radarr", " radarr:7878/ ", " clave ", "R") == {"ok": True}
+    assert recibido == [{"url": "http://radarr:7878", "api_key": "clave", "name": "R"}]
+
+    def revienta(d):
+        raise RuntimeError(f"fallo con {d['api_key']}")
+    monkeypatch.setattr(sonarr, "sonarr_test_connection", revienta)
+    resultado = _COMPROBACION_REAL("sonarr", "http://sonarr:8989", "clave")
+    assert resultado["ok"] is False and "clave" not in resultado["error"]
 
 
 # ---------------------------------------------------------------------------

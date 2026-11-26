@@ -83,7 +83,8 @@ def test_validate_un_formato_que_uploadrr_no_sube_es_un_error(db_conn, tmp_path,
     f = tmp_path / nombre
     f.write_bytes(b"x")
     errores = validate_upload_job_start(_insert_job(db_conn, source_path=str(f)), conn=db_conn)["errors"]
-    assert any("Uploadrr-EMU solo sube MKV, MP4 y TS" in e for e in errores)
+    motivo = "todavía no se pueden subir" if nombre == "movie.iso" else "Uploadrr-EMU solo sube MKV, MP4 y TS"
+    assert any(motivo in e for e in errores)
 
 
 @pytest.mark.parametrize("nombre", ["movie.mkv", "movie.MP4", "movie.ts"])
@@ -869,6 +870,19 @@ def test_delete_cancelled_job_removes_row_logs_and_artifacts(db_conn):
     assert db_conn.execute("SELECT id FROM upload_jobs WHERE id=?", (jid,)).fetchone() is None
     assert db_conn.execute("SELECT id FROM upload_job_logs WHERE upload_job_id=?", (jid,)).fetchone() is None
     assert db_conn.execute("SELECT id FROM upload_artifacts WHERE upload_job_id=?", (jid,)).fetchone() is None
+
+
+def test_no_se_borra_una_cancelada_cuyo_hilo_sigue_preparando(db_conn, monkeypatch):
+    from emuwarez_uploadrr.services import upload_queue
+
+    jid = _insert_job(db_conn, status="cancelled")
+    monkeypatch.setattr(upload_queue, "_EN_CURSO", {jid})
+    result = delete_upload_job(jid, confirmation=DELETE_CONFIRMATION_TOKEN, conn=db_conn)
+    assert (result["ok"], result["error"]) == (False, "invalid_status")
+    assert db_conn.execute("SELECT id FROM upload_jobs WHERE id=?", (jid,)).fetchone() is not None
+
+    monkeypatch.setattr(upload_queue, "_EN_CURSO", set())
+    assert delete_upload_job(jid, confirmation=DELETE_CONFIRMATION_TOKEN, conn=db_conn)["ok"] is True
 
 
 def test_delete_failed_job_ok(db_conn):

@@ -33,7 +33,7 @@ descripción y el cliente.
      tracker), ajustes por tracker (clave, usuario, grupos, anónimo), cola y Panel. Las URL de los tres son fijas, en
      `services/trackers.py` y la clase de Uploadrr-EMU: una errata no puede mandar la clave a otro sitio. eMuwarez
      queda como el primer adaptador, sin cambiar lo que ve hoy quien solo usa eMuwarez.
-     - Ya está la base (esquema 60): `services/trackers.py` con eMuwarez (`emu`) y la columna `tracker` en las
+     - Ya está la base (esquema 63): `services/trackers.py` con eMuwarez (`emu`) y la columna `tracker` en las
        subidas, peticiones, catálogo, «Tus subidas» y el historial del perfil; las claves de peticiones, «Tus subidas»
        y el perfil incluyen el tracker. Las sincronizaciones de eMuwarez (peticiones, catálogo, «Tus subidas», perfil)
        solo escriben, borran y comparan filas de eMuwarez. La clave y el usuario de un tracker se leen con
@@ -82,9 +82,7 @@ descripción y el cliente.
      - **Las subidas que ya están en eMuwarez (unas 50) se suben también a NOBS y Milnueve, cross-seedables.** Sin
        volver a preparar nada: el fichero sigue en la carpeta de subidas sembrando, y el `BASE.torrent` sale del torrent
        de eMuwarez (`torrentman.from_existing`, que ya existe: cambia el anuncio y el `source` y conserva nombre, ficheros y
-       piezas, sin hashear; el `tmp/<nombre>` original puede haberlo borrado el mantenimiento a los 7 días). Falta
-       decidir cómo se lanza (una acción en «Tus subidas» o un lote) y de dónde se lee el torrent de eMuwarez
-       (qBittorrent lo tiene; el tracker también, con la clave). Antes de cada una, buscar duplicados en ese tracker
+       piezas, sin hashear; el `tmp/<nombre>` original puede haberlo borrado el mantenimiento a los 7 días). Antes de cada una, buscar duplicados en ese tracker
        (Milnueve rechaza la misma calidad y fuente; NOBS, la misma obra con el mismo tipo y resolución) y comprobar que el
        fichero sigue ahí y completo en qBittorrent.
      - **Lo que sí exigen y hay que respetar** (detalle en `docs/trackers-ids.md`): el castellano va si existe el
@@ -94,7 +92,7 @@ descripción y el cliente.
        nombre (un WEB-DL que pasó por Tdarr/HandBrake/ffmpeg es WEBRip), y puede no coincidir con el que se usó en
        eMuwarez.
      - Ya está: los adaptadores de Uploadrr-EMU (`-tk NOBS` / `-tk MNV`), sus claves en Configuración y la subida desde
-       el Resumen del asistente (una sola subida, no una tanda): se eligen los trackers con clave y sale un trabajo por
+       el Resumen del asistente: se eligen los trackers con clave y sale un trabajo por
        tracker (`upload_jobs.tracker`), con el mismo nombre y el mismo fichero. El segundo espera a que acabe el primero,
        reutiliza su preparación y lanza Uploadrr-EMU con `--resume` (mismo BASE.torrent: mismas piezas). «Reenviar a
        qBittorrent» pide el torrent al tracker de la subida.
@@ -171,7 +169,7 @@ para antes de preparar nada. Para hacerlo falta ver:
 - cómo se llama el release, y qué hace la app con sus pistas, que no puede etiquetar;
 - una subida real en el NAS con un ISO.
 
-## Por probar en el NAS (`:dev`)
+## Por probar en el NAS (`:multitracker`)
 
 - La carpeta manual: escanear una carpeta real con WEB-DL de películas y de series, identificar en TMDb (una a
   una y las sugeridas de una vez) y subir una película y un pack de temporada.

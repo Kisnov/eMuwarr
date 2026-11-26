@@ -80,7 +80,7 @@ def cmd_nomenclature(args) -> int:
             if result.get("message"):
                 print(f"\nMensaje:\n  {result['message']}")
             print("\nSeguridad:")
-            print("  ✓ El archivo original no se ha renombrado.")
+            print("  ✓ Un archivo de la biblioteca no se renombra nunca.")
             print("  ✓ Uploadrr no se ha ejecutado.")
             print("  ✓ mkvpropedit no se ha ejecutado.")
             return 0

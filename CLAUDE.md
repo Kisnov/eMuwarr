@@ -39,10 +39,10 @@ came in from `Kisnov/Uploadrr-EMU` with `git subtree add`, history kept; that re
 ## Verify
 
 - Backend: run the tests in Linux (hardlinks, mediainfo, mkvtoolnix), e.g. `python:3.12-slim` with
-  `pip install -c constraints.txt -e ".[web,dev]"`, then `python -m pytest tests -q -p no:cacheprovider` (~2180 tests, ~7 min).
+  `pip install -c constraints.txt -e ".[web,dev]"`, then `python -m pytest tests -q -p no:cacheprovider` (~5200 tests, ~7 min).
   On Windows, copy the tree into the container (`cp -r /src/. /w/`) rather than running on the bind mount.
 - Uploadrr-EMU: from `uploadrr-emu/`, `pip install -r requirements.txt pytest pytest-cov`, then
-  `python -m pytest tests -q -p no:cacheprovider` (~460 tests, ~1 min; its `conftest.py` blocks network and subprocesses).
+  `python -m pytest tests -q -p no:cacheprovider` (~580 tests; its `conftest.py` blocks network and subprocesses).
   The root `pytest` only collects `tests/` (`testpaths`), and the root ruff skips `uploadrr-emu/`: its CI job checks
   only `E9,F63,F7,F82`, because the inherited code does not pass `F` yet.
 - Frontend: `cd frontend && npm ci && npx tsc --noEmit && npm run lint && npx vitest run && npx vite build`.
@@ -78,7 +78,8 @@ came in from `Kisnov/Uploadrr-EMU` with `git subtree add`, history kept; that re
 - Push events: call `eventos.publicar` from the one place that writes the data, not from its callers; it
   must never raise. The server stays a single process (no extra uvicorn workers): the event bus is in memory.
   A new `setInterval` in the frontend fails `test_no_han_aparecido_sondeos_nuevos` unless it is listed in
-  `SONDEOS_ESPERADOS` or `RELOJES`: push from the server instead of polling.
+  `SONDEOS_ESPERADOS` or `RELOJES`: push from the server instead of polling. It only sees `setInterval(`, so a
+  poll built from chained `setTimeout` calls has to be listed by hand too.
 - CI on a PR that only touches `frontend/`, `docs/` or `.md` runs just the test files that contain the word
   `frontend` (`grep -l frontend tests/test_*.py`). A test that reads frontend files must name `frontend` in its own file.
 
@@ -176,11 +177,11 @@ came in from `Kisnov/Uploadrr-EMU` with `git subtree add`, history kept; that re
   commits) merged since the last `__version__` change) runs
   the full CI on dev's tip, bumps `__version__` (`auto`: minor if any `feat/` PR, else patch), pushes that commit to `dev`, fast-forwards
   `main` to it and pushes `vX.Y.Z` (all atomic), builds `:X.Y.Z`, `:<sha>`, `:latest` and `:dev`, publishes the manifest (secret
-  `UPLOADRR_VERSION_TOKEN`) and creates the GitHub release with the PRs merged since the previous tag. Release when Gabriel asks: `gh workflow run publicar.yml -f notas="…"`, with a
-  neutral public note. Every push to `dev` (except docs/`.md`-only) and `solo_prueba=true` build `:dev` from dev's tip only (no tests). The long-lived branch `multitracker` (Gabriel's multi-tracker work, `docs/PLAN.md`; its PRs target it, `dev` is merged into it, never rebased) builds `:multitracker` the same way and can never publish a version. `ref=<commit|branch|tag>` publishes that commit's version instead (no tests; the version commit and tag go to `release/vX.Y.Z`, to merge into dev afterwards; neither `main` nor `:dev` moves). `scripts/desplegar.sh` is
+  `UPLOADRR_VERSION_TOKEN`) and creates the GitHub release with the PRs merged since the previous tag; after a failure, "Re-run failed jobs" (or a new run on the already tagged version commit) completes that same version. Release when Gabriel asks: `gh workflow run publicar.yml -f notas="…"`, with a
+  neutral public note. Every push to `dev` (except docs/`.md`-only) and `solo_prueba=true` build `:dev` from dev's tip only (no tests). The long-lived branch `multitracker` (Gabriel's multi-tracker work, `docs/PLAN.md`; its PRs target it, `dev` is merged into it, never rebased) builds `:multitracker` the same way and can never publish a version; `auto` only sees the one merge of it into `dev`, not its PRs, so publish that merge with `escala=minor`. `ref=<commit|branch|tag>` publishes that commit's version instead (no tests; the version commit and tag go to `release/vX.Y.Z`, to merge into dev afterwards; neither `main` nor `:dev` moves). `scripts/desplegar.sh` is
   the local fallback (no Actions minutes, no tests, amd64 only: a version published with it leaves `:latest` without
   arm64, so prefer `publicar.yml`, which builds amd64 and arm64 via QEMU) and pushes in the same order; `--solo-prueba` pushes only
-  `:dev`. The image copies `uploadrr-emu/` from the same commit (`.dockerignore` keeps out its tests and any local
+  `:dev`. It refuses a commit that is not in GitHub's `dev` (`--fuera-de-dev` to do it on purpose). The image copies `uploadrr-emu/` from the same commit (`.dockerignore` keeps out its tests and any local
   `config.yaml` or cookies), so a feat/fix PR there counts towards a release like any other.
 - Version manifest: the Diagnóstico card compares the image's `APP_COMMIT` with `latest.json` in the public
   repo `Kisnov/uploadrr-version` (a fork of `Rovaal-code/uploadrr-version`); to test against another

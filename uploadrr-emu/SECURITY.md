@@ -7,8 +7,8 @@ la incluye. No se mantienen versiones antiguas.
 
 ## Cómo informar de una vulnerabilidad
 
-Usa el informe privado de GitHub: pestaña **Security** de este repositorio, **Report a vulnerability**
-(<https://github.com/Kisnov/Uploadrr-EMU/security/advisories/new>).
+Usa el informe privado de GitHub: pestaña **Security** de eMuwarr (donde vive ahora este código), **Report a vulnerability**
+(<https://github.com/Kisnov/eMuwarr/security/advisories/new>).
 
 No abras un issue público ni publiques el detalle (ni un ejemplo que funcione) antes de que haya arreglo.
 

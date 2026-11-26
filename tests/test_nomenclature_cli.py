@@ -126,6 +126,16 @@ def test_mkv_title_preview_with_mkv(tmp_path, capsys):
     assert "Film" in out
 
 
+def test_nomenclature_apply_dice_que_la_biblioteca_no_se_renombra(tmp_path, capsys):
+    item_id = _seed_db(tmp_path, path="/media/Film.mkv", torrent_name="Film 2020 1080p WEB-DL x264")
+
+    rc = _run_cli(["nomenclature", "apply", str(item_id), "--dry-run"], tmp_path)
+
+    out = capsys.readouterr().out
+    assert rc == 0
+    assert "Un archivo de la biblioteca no se renombra nunca." in out
+
+
 def test_mkv_title_apply_dryrun_no_execution(tmp_path, capsys):
     mkv_file = tmp_path / "Film.mkv"
     mkv_file.write_bytes(b"fake mkv")

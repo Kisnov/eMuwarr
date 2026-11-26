@@ -881,7 +881,7 @@ def start_emu_sync_background(force: bool = False, mode: str = "incremental") ->
             return {"status": "throttled", "wait_seconds": wait}
         with _SYNC_LOCK:
             if _SYNC_PROGRESS.get("active"):
-                return {"status": "started"}  # one already running
+                return {"status": "started", "ya_en_marcha": True}  # one already running
         # Record the throttle NOW (at start), not at the end — otherwise a slow
         # or stalled download leaves no throttle and a page refresh lets you
         # relaunch it. Saved so a failed run can restore it. A full pass also

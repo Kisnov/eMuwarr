@@ -363,3 +363,166 @@ def test_una_base_sqlite_truncada_se_rechaza(cfg, tmp_path):
 
     assert r["ok"] is False and "dañada" in r["error"]
     assert _marca(cfg) == "antes"
+
+
+def _otra_sqlite(tmp_path, *sentencias: str) -> bytes:
+    ruta = tmp_path / "otra.db"
+    conn = sqlite3.connect(str(ruta))
+    for sentencia in sentencias:
+        conn.execute(sentencia)
+    conn.commit()
+    conn.close()
+    return ruta.read_bytes()
+
+
+def test_la_base_de_otra_aplicacion_se_rechaza(cfg, tmp_path):
+    """Sin app_state pasaba: se colocaba y volvía el asistente inicial, o fallaba con «no such table: settings»."""
+    info = tarfile.TarInfo("emuwarez_uploadrr.db")
+    datos = _otra_sqlite(tmp_path, "CREATE TABLE notas (id INTEGER, texto TEXT)")
+    info.size = len(datos)
+    archivo = _tar_malo(tmp_path / "ajena.tar.gz", info, datos)
+
+    assert "no es un backup de esta aplicación" in restore_config_backup(archivo, dry_run=True)["error"]
+    r = _aplicar(archivo)
+
+    assert r["ok"] is False and "no es un backup de esta aplicación" in r["error"]
+    assert _marca(cfg) == "antes"
+
+
+def test_una_base_sqlite_vacia_si_se_restaura(cfg, tmp_path):
+    info = tarfile.TarInfo("emuwarez_uploadrr.db")
+    datos = _otra_sqlite(tmp_path, "PRAGMA user_version = 1")
+    info.size = len(datos)
+    archivo = _tar_malo(tmp_path / "vacia.tar.gz", info, datos)
+
+    assert _aplicar(archivo)["ok"] is True
+
+
+# ---------------------------------------------------------------------------
+# Subidas en marcha
+# ---------------------------------------------------------------------------
+
+def _subida(status: str, reenvio: str | None = None) -> int:
+    with db() as conn:
+        return conn.execute(
+            "INSERT INTO upload_jobs (title, path, status, reenvio_qbit_estado, created_at, updated_at) "
+            "VALUES ('Peli', '/media/peli.mkv', ?, ?, '2026-11-26', '2026-11-26')", (status, reenvio)).lastrowid
+
+
+@pytest.mark.parametrize("status, reenvio", [("running", None), ("queued", None), ("completed", "en_curso")])
+def test_con_una_subida_en_marcha_no_se_restaura(cfg, tmp_path, status, reenvio):
+    """Su hilo seguía escribiendo en la base restaurada: en otra fila con el mismo id, o un IntegrityError."""
+    archivo = create_config_backup(output_dir=tmp_path / "copias")["archive_path"]
+    with db() as conn:
+        set_state(conn, "marca", "despues")
+    _subida(status, reenvio)
+
+    r = _aplicar(archivo)
+
+    assert r["ok"] is False and "subidas en marcha" in r["error"] and "cancélalas" in r["error"]
+    assert _marca(cfg) == "despues"
+    assert not list(cfg.glob("backups/emuwarez_config_antes_de_restaurar_*"))
+
+
+def test_con_una_cancelada_que_aun_termina_su_paso_no_se_restaura(cfg, tmp_path, monkeypatch):
+    """Cancelar cambia la fila al momento, pero su hilo sigue escribiendo hasta acabar el paso (un remux largo)."""
+    from emuwarez_uploadrr.services import upload_queue
+
+    archivo = create_config_backup(output_dir=tmp_path / "copias")["archive_path"]
+    monkeypatch.setattr(upload_queue, "_EN_CURSO", {_subida("cancelled")})
+
+    r = _aplicar(archivo)
+
+    assert r["ok"] is False and "subidas en marcha" in r["error"]
+
+
+def test_una_base_viva_sin_la_columna_del_reenvio_se_puede_restaurar(cfg, tmp_path):
+    """El CLI restaura sin migrar antes la base viva: una anterior al esquema 55 no tiene `reenvio_qbit_estado`."""
+    archivo = create_config_backup(output_dir=tmp_path / "copias")["archive_path"]
+    with db() as conn:
+        conn.execute("ALTER TABLE upload_jobs DROP COLUMN reenvio_qbit_estado")
+
+    assert _aplicar(archivo)["ok"] is True
+
+
+def test_una_subida_encolada_mientras_se_guarda_lo_actual_tampoco_se_pisa(cfg, tmp_path, monkeypatch):
+    """La copia de lo actual tarda: lo que se encole entre la comprobación y la restauración se vuelve a mirar."""
+    from emuwarez_uploadrr.services import backup_service
+
+    archivo = create_config_backup(output_dir=tmp_path / "copias")["archive_path"]
+    with db() as conn:
+        set_state(conn, "marca", "despues")
+    copiar = backup_service.create_config_backup
+
+    def _copiar_y_encolar(*args, **kwargs):
+        previa = copiar(*args, **kwargs)
+        _subida("queued")
+        return previa
+
+    monkeypatch.setattr(backup_service, "create_config_backup", _copiar_y_encolar)
+
+    r = _aplicar(archivo)
+
+    assert r["ok"] is False and "subidas en marcha" in r["error"]
+    assert _marca(cfg) == "despues"
+
+
+def test_una_subida_terminada_no_impide_restaurar(cfg, tmp_path):
+    _subida("completed", "ok")
+    _subida("failed", "fallido")
+    archivo = create_config_backup(output_dir=tmp_path / "copias")["archive_path"]
+
+    assert _aplicar(archivo)["ok"] is True
+
+
+def _estado(job_id: int) -> tuple:
+    with db() as conn:
+        return tuple(conn.execute(
+            "SELECT status, reenvio_qbit_estado FROM upload_jobs WHERE id = ?", (job_id,)).fetchone())
+
+
+def test_las_subidas_que_la_copia_trae_en_marcha_quedan_fallidas(cfg, tmp_path):
+    """Nadie las movía: la fila seguía «en marcha» y bloqueaba «Subir» hasta cancelarla o reiniciar."""
+    subida, reenvio = _subida("running"), _subida("completed", "en_curso")
+    archivo = create_config_backup(output_dir=tmp_path / "copias")["archive_path"]
+    with db() as conn:
+        conn.execute("UPDATE upload_jobs SET status = 'cancelled', reenvio_qbit_estado = 'ok'")
+
+    assert _aplicar(archivo)["ok"] is True
+    assert _estado(subida) == ("failed", None)
+    assert _estado(reenvio) == ("completed", "fallido")
+
+
+def test_una_restauracion_que_falla_a_medias_no_deja_subidas_en_marcha(cfg, tmp_path, monkeypatch):
+    """La base ya colocada las traía en marcha, y restaurar la copia que lo deshace se negaba por ellas."""
+    subida = _subida("running")
+    archivo = create_config_backup(output_dir=tmp_path / "copias")["archive_path"]
+    with db() as conn:
+        conn.execute("UPDATE upload_jobs SET status = 'cancelled'")
+
+    def _disco_lleno(*_, **__):
+        raise OSError(28, "No space left on device")
+
+    with monkeypatch.context() as m:
+        m.setattr(tarfile.TarFile, "extractall", _disco_lleno)
+        r = _aplicar(archivo)
+
+    assert r["ok"] is False and "no se completó" in r["error"]
+    assert _estado(subida) == ("failed", None)
+    previa = next(cfg.glob("backups/emuwarez_config_antes_de_restaurar_*"))
+    assert _aplicar(str(previa))["ok"] is True
+
+
+def test_si_no_se_pueden_cerrar_las_subidas_la_restauracion_sigue_hecha(cfg, tmp_path, monkeypatch):
+    from emuwarez_uploadrr.services import upload_queue
+
+    def _falla(*_, **__):
+        raise sqlite3.OperationalError("database is locked")
+
+    archivo = create_config_backup(output_dir=tmp_path / "copias")["archive_path"]
+    with db() as conn:
+        set_state(conn, "marca", "despues")
+    monkeypatch.setattr(upload_queue, "reconcile_interrupted_jobs", _falla)
+
+    assert _aplicar(archivo)["ok"] is True
+    assert _marca(cfg) == "antes"

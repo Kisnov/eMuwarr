@@ -263,7 +263,7 @@ def _run_uploadrr_subprocess_body(job_id: int, cmd: dict, secrets: list[str]) ->
             elif tipo == "paso":
                 _apuntar_clave(efecto[1])
                 if efecto[1] == "tracker":
-                    marcar_torrent_subido(job_id)
+                    marcar_torrent_subido(job_id, estado_ev.url, estado_ev.torrent_id)
             elif tipo == "qbit_ok":
                 with progress_lock:
                     progress_state["qbittorrent_add_failed"] = False
@@ -298,6 +298,8 @@ def _run_uploadrr_subprocess_body(job_id: int, cmd: dict, secrets: list[str]) ->
                 logger.exception("Subida %s: no se pudo actualizar el progreso", job_id)
             try:
                 _apuntar_subpaso(line)
+                if ficha := _ficha_del_torrent(redact_secrets(line, secrets)):
+                    marcar_torrent_subido(job_id, ficha["result_url"], ficha["result_torrent_id"])
             except Exception:
                 logger.exception("Subida %s: no se pudo apuntar el paso que terminó Uploadrr", job_id)
 
@@ -320,7 +322,7 @@ def _run_uploadrr_subprocess_body(job_id: int, cmd: dict, secrets: list[str]) ->
             duration_seconds = int((finished_dt - started_dt).total_seconds())
             msg = f"Proceso cancelado por timeout ({timeout}s)."
             subido = _ficha("\n".join(stdout_lines))
-            _finalize_job_status(
+            if _finalize_job_status(
                 job_id, "failed",
                 stage="timeout",
                 exit_code=returncode,
@@ -330,9 +332,9 @@ def _run_uploadrr_subprocess_body(job_id: int, cmd: dict, secrets: list[str]) ->
                 **subido,
                 last_log_at=_now(),
                 last_error_at=finished_at,
-            )
-            append_upload_log(job_id, "error", msg, stream="system")
-            _notify_upload_failed(job_id, msg, result_url=subido.get("result_url"))
+            ):
+                append_upload_log(job_id, "error", msg, stream="system")
+                _notify_upload_failed(job_id, msg, result_url=subido.get("result_url"))
             return
 
         # Transient progress marker only, applied atomically and only while
@@ -432,7 +434,7 @@ def _run_uploadrr_subprocess_body(job_id: int, cmd: dict, secrets: list[str]) ->
             # Si el torrent llegó a subirse antes de fallar, su ficha sigue siendo útil y su enlace no se borra.
             subido = _ficha(stdout_text)
 
-            _finalize_job_status(
+            if not _finalize_job_status(
                 job_id, "failed",
                 stage="failed",
                 exit_code=returncode,
@@ -442,7 +444,8 @@ def _run_uploadrr_subprocess_body(job_id: int, cmd: dict, secrets: list[str]) ->
                 **subido,
                 last_log_at=_now(),
                 last_error_at=finished_at,
-            )
+            ):
+                return  # cancelada por el usuario: ni «fallida» ni aviso
             append_upload_log(
                 job_id, "error",
                 f"Proceso fallido (exit code {returncode}). Duración: {duration_seconds}s",

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import datetime
+import logging
 import os
 import posixpath
 import re
@@ -19,6 +20,8 @@ from ..database import (
 )
 from ..integrations.base import texto_de_error
 from .settings import all_settings, es_secreto, get_setting_canonical, set_setting
+
+logger = logging.getLogger(__name__)
 
 RESTORE_CONFIRMATION = "RESTAURAR_CONFIG"
 _DB_NAME = "emuwarez_uploadrr.db"
@@ -39,7 +42,11 @@ _TAR_ILEGIBLE = (tarfile.TarError, OSError, EOFError, zlib.error)
 # temporales de Uploadrr (capturas, torrents; en una instalación real, 1,7 GB).
 # Una carpeta "backups" a cualquier profundidad tampoco: la copia no se mete a sí misma.
 # config_uploadrr/ son los config de las subidas en curso, con claves: ni en la copia con secretos.
-_FUERA_DE_LA_COPIA = (("Uploadrr", "uploads"), ("Uploadrr", "tmp"), ("config_uploadrr",))
+# limitador/, plazas/ y eventos_uploadrr/ son estado en vivo de las subidas: cambian mientras se leen.
+_FUERA_DE_LA_COPIA = (
+    ("Uploadrr", "uploads"), ("Uploadrr", "tmp"), ("config_uploadrr",), ("limitador",), ("plazas",),
+    ("eventos_uploadrr",),
+)
 # Lo que solo va en la copia con secretos. El config.yaml de Uploadrr-EMU (y el
 # config.yaml.bak que dejaron las versiones anteriores, también apartado como
 # config.yaml.migrado o si no se pudo migrar) pueden llevar claves de cualquier
@@ -151,8 +158,8 @@ def get_backup_dir() -> Path:
 
 def _abrir_0600(path: Path):
     """Abre `path` para escribir, creado solo legible por su dueño (la copia puede llevar claves)."""
-    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-    os.chmod(path, 0o600)  # si ya existía con otro modo
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    os.chmod(path, 0o600)  # sin depender de la umask
     return os.fdopen(fd, "wb")
 
 
@@ -218,7 +225,7 @@ def create_config_backup(
     archive_name = f"{prefijo}{ts}{suffix}.tar.gz"
     archive_path = backup_dir / archive_name
     # Se escribe aparte y se renombra al acabar: una a medias no puede pasar por buena ni contar en la retención.
-    parcial = backup_dir / f".{archive_name}.part"
+    parcial = backup_dir / f".{archive_name}.{secrets.token_hex(6)}.part"
 
     # "backups": no meter copias dentro de copias.
     #
@@ -337,9 +344,12 @@ def _motivo_de_rechazo(tar: tarfile.TarFile, config_dir: Path) -> str | None:
         version = _version_de_base(ruta)
         base_de_la_copia_es_sqlite = _es_sqlite(ruta)
         legible = _base_legible(ruta) if base_de_la_copia_es_sqlite else True
+        ajena = base_de_la_copia_es_sqlite and legible and _es_de_otra_aplicacion(ruta)
     if not legible:
         # La cabecera dice SQLite pero no se puede leer (truncada o dañada): pondría una base rota.
         return "La copia no es válida: su base de datos está dañada o incompleta"
+    if ajena:
+        return "El archivo no es un backup de esta aplicación: su base de datos es de otra aplicación"
     viva = config_dir / _DB_NAME
     if not base_de_la_copia_es_sqlite and viva.exists() and viva.stat().st_size > 0 and _es_sqlite(viva):
         # _colocar_base la copiaría en crudo encima de una base que sí lo es, sin copia previa.
@@ -360,6 +370,35 @@ def _base_legible(ruta: Path) -> bool:
         return conn.execute("PRAGMA quick_check").fetchone()[0] == "ok"
     except sqlite3.DatabaseError:
         return False
+    finally:
+        conn.close()
+
+
+def _es_de_otra_aplicacion(ruta: Path) -> bool:
+    """Si la base tiene tablas pero no app_state, que toda base de esta aplicación tiene. Una sin tablas sí vale."""
+    conn = sqlite3.connect(str(ruta))
+    try:
+        tablas = {fila[0] for fila in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
+    finally:
+        conn.close()
+    return bool(tablas) and "app_state" not in tablas
+
+
+def _hay_subidas_en_marcha(viva: Path) -> bool:
+    """Si la base viva tiene subidas o reenvíos a qBittorrent en marcha, o una cancelada cuyo hilo aún termina su paso.
+    Se mira en la base: vale también desde el CLI, que no ve los hilos del servidor."""
+    if not viva.exists() or viva.stat().st_size == 0 or not _es_sqlite(viva):
+        return False
+    from .upload_queue import _condicion_activa
+    condicion, parametros = _condicion_activa()
+    conn = sqlite3.connect(str(viva), timeout=30)
+    try:
+        columnas = {fila[1] for fila in conn.execute("PRAGMA table_info(upload_jobs)")}
+        if "status" not in columnas:
+            return False  # una base sin la tabla: no hay subidas
+        if "reenvio_qbit_estado" in columnas:  # el CLI puede restaurar sobre una base anterior al esquema 55
+            condicion += " OR reenvio_qbit_estado = 'en_curso'"
+        return conn.execute(f"SELECT 1 FROM upload_jobs WHERE {condicion} LIMIT 1", parametros).fetchone() is not None
     finally:
         conn.close()
 
@@ -530,7 +569,32 @@ def restore_config_backup(
         }
 
     with _restaurando:
+        if rechazo := _rechazo_por_subidas_en_marcha(config_dir):
+            return rechazo
         return _aplicar_restauracion(path, config_dir, members)
+
+
+def _rechazo_por_subidas_en_marcha(config_dir: Path) -> dict | None:
+    """El error de una restauración con subidas en marcha: sus hilos seguirían escribiendo en la base restaurada."""
+    try:
+        en_marcha = _hay_subidas_en_marcha(config_dir / _DB_NAME)
+    except sqlite3.OperationalError as e:
+        return {"ok": False, "dry_run": False,
+                "error": f"No se ha restaurado nada: no se pudo comprobar si hay subidas en marcha ({texto_de_error(e)})"}
+    if en_marcha:
+        return {"ok": False, "dry_run": False,
+                "error": "No se ha restaurado nada: hay subidas en marcha (o un reenvío a qBittorrent). Espera a "
+                         "que terminen o cancélalas en Subidas, y vuelve a restaurar."}
+    return None
+
+
+def _cerrar_subidas_de_la_copia() -> None:
+    """Las subidas que la copia trae en marcha no tienen hilo: quedan fallidas, como al arrancar. Nunca lanza."""
+    try:
+        from .upload_queue import reconcile_interrupted_jobs
+        reconcile_interrupted_jobs()
+    except Exception:
+        logger.warning("No se pudieron cerrar las subidas en marcha de la copia restaurada", exc_info=True)
 
 
 def _aplicar_restauracion(path: Path, config_dir: Path, members: list[str]) -> dict:
@@ -548,28 +612,42 @@ def _aplicar_restauracion(path: Path, config_dir: Path, members: list[str]) -> d
         _retirar_antiguas(Path(previa["archive_path"]).parent, PREFIJO_ANTES_DE_RESTAURAR,
                           _COPIAS_ANTES_DE_RESTAURAR, salvo=(path.name, previa["archive_name"]))
 
+        # Otra vez, ya con la copia hecha (tarda): una subida encolada mientras tanto no se pisa.
+        if rechazo := _rechazo_por_subidas_en_marcha(config_dir):
+            return rechazo
+
     # La de antes de restaurar va tal cual: también las claves vacías y los ficheros con claves que no estaban.
     exacta = path.name.startswith(PREFIJO_ANTES_DE_RESTAURAR)
-    config_dir.mkdir(parents=True, exist_ok=True)
-    conservadas: list[str] = []
-    with tarfile.open(str(path), "r:gz") as tar:
-        resto = []
-        for member in tar.getmembers():
-            if member.name != _DB_NAME or not member.isfile():
-                resto.append(member)
-                continue
-            # La base primero: si falla, el resto de ficheros sigue como estaba.
-            with tempfile.TemporaryDirectory() as tmp:
-                restaurada = Path(tmp) / _DB_NAME
-                with tar.extractfile(member) as origen, open(restaurada, "wb") as destino:
-                    shutil.copyfileobj(origen, destino)
-                conservadas = _colocar_base(restaurada, config_dir / _DB_NAME, fusionar=not exacta)
-        tar.extractall(path=config_dir, members=resto, filter="data")
-    if exacta:
-        _quitar_claves_que_no_estaban(config_dir, set(members))
-    if (config_dir / _DB_NAME).exists() and _es_sqlite(config_dir / _DB_NAME):
-        # Una copia de un esquema anterior se migra aquí, una vez, y no desde cada petición que llegue después.
-        preparar_base(config_dir / _DB_NAME)
+    try:
+        config_dir.mkdir(parents=True, exist_ok=True)
+        conservadas: list[str] = []
+        with tarfile.open(str(path), "r:gz") as tar:
+            resto = []
+            for member in tar.getmembers():
+                if member.name != _DB_NAME or not member.isfile():
+                    resto.append(member)
+                    continue
+                # La base primero: si falla, el resto de ficheros sigue como estaba.
+                with tempfile.TemporaryDirectory() as tmp:
+                    restaurada = Path(tmp) / _DB_NAME
+                    with tar.extractfile(member) as origen, open(restaurada, "wb") as destino:
+                        shutil.copyfileobj(origen, destino)
+                    conservadas = _colocar_base(restaurada, config_dir / _DB_NAME, fusionar=not exacta)
+            tar.extractall(path=config_dir, members=resto, filter="data")
+        if exacta:
+            _quitar_claves_que_no_estaban(config_dir, set(members))
+        if (config_dir / _DB_NAME).exists() and _es_sqlite(config_dir / _DB_NAME):
+            # Una copia de un esquema anterior se migra aquí, una vez, y no desde cada petición que llegue después.
+            preparar_base(config_dir / _DB_NAME)
+            _cerrar_subidas_de_la_copia()
+    except Exception as exc:
+        logger.exception("La restauración de %s no se completó", path.name)
+        # Con la base ya colocada, sus subidas en marcha impedirían restaurar la copia que lo deshace.
+        _cerrar_subidas_de_la_copia()
+        error = f"La restauración no se completó ({texto_de_error(exc)})"
+        if previa:
+            error += f". Lo que había antes está en {previa['archive_name']}: restáurala para deshacerlo"
+        return {"ok": False, "dry_run": False, "error": error}
 
     message = f"Restauración completada: {len(members)} archivos"
     if conservadas:

@@ -155,3 +155,24 @@ def test_una_version_publicada_mientras_se_construye_no_mueve_las_etiquetas(ento
     assert _docker(entorno) == [["build"], ["push", entorno.commit]]
     assert entorno.git("--git-dir=origen.git", "tag") == ""
     assert _manifiesto(entorno)["version"] == "99.0.0"
+
+
+@pytest.mark.parametrize("args", [["--solo-prueba"], ["--notas", "Mejoras"]])
+def test_un_commit_que_no_esta_en_dev_no_se_construye(entorno, args):
+    entorno.git("checkout", "-q", "-b", "multitracker", cwd=entorno.repo)
+    entorno.git("commit", "-q", "--allow-empty", "-m", "otra rama", cwd=entorno.repo)
+
+    r = _desplegar(entorno, *args)
+
+    assert r.returncode == 1
+    assert "no está en dev" in r.stderr
+    assert _docker(entorno) == []
+
+
+def test_fuera_de_dev_lo_permite_a_proposito(entorno):
+    entorno.git("commit", "-q", "--allow-empty", "-m", "sin subir", cwd=entorno.repo)
+
+    r = _desplegar(entorno, "--solo-prueba", "--fuera-de-dev")
+
+    assert r.returncode == 0, r.stderr
+    assert _docker(entorno) == [["build"], ["push", "dev"]]

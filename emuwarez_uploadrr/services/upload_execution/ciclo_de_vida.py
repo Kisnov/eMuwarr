@@ -11,6 +11,7 @@ from .ejecucion import start_upload_job
 from .estado import _update_job_status
 from .procesos import _PROCESOS, _PROCESOS_LOCK, _detener_proceso, _pid_es_de_este_job
 from .registro import append_upload_log
+from ..eventos import EVENTO_SUBIDA_ESTADO, publicar
 from ..trackers import POR_DEFECTO
 from ...integrations.base import texto_de_error
 
@@ -251,6 +252,12 @@ def _cancelar(job_id: int, conn=None) -> dict:
                 "job_id": job_id,
             }
 
+        # La marca, antes de parar el proceso: si muere primero, su hilo da la subida por fallida y avisa.
+        _update_job_status(
+            job_id, "cancelled",
+            stage="cancelled",
+            finished_at=_now(),
+        )
         pid = job.get("process_id")
         cancelled = False
         with _PROCESOS_LOCK:
@@ -290,11 +297,6 @@ def _cancelar(job_id: int, conn=None) -> dict:
                     conn=conn,
                 )
 
-        _update_job_status(
-            job_id, "cancelled",
-            stage="cancelled",
-            finished_at=_now(),
-        )
         append_upload_log(job_id, "info", "Job marcado como cancelado.", stream="system")
 
         return {
@@ -422,6 +424,17 @@ def delete_upload_job(job_id: int, confirmation: str | None = None, conn=None) -
                            f"canceladas o fallidas (status={estados}).",
                 "job_id": job_id,
             }
+        # Una cancelada cuyo hilo aún termina el paso en curso sigue escribiendo en su fila y en la carpeta de subidas.
+        from ..upload_queue import _condicion_activa
+        condicion, parametros = _condicion_activa()
+        if conn.execute(f"SELECT 1 FROM upload_jobs WHERE id IN ({','.join('?' * len(cadena))}) AND {condicion}",
+                        (*cadena, *parametros)).fetchone():
+            return {
+                "ok": False,
+                "error": "invalid_status",
+                "message": "La subida cancelada aún está terminando el paso en curso; bórrala en un momento.",
+                "job_id": job_id,
+            }
         # Un reenvío a qBittorrent en marcha escribe en su registro y en su fila.
         if conn.execute(
             f"SELECT 1 FROM upload_jobs WHERE id IN ({','.join('?' * len(chain))}) AND reenvio_qbit_estado = 'en_curso'",
@@ -493,6 +506,8 @@ def delete_upload_job(job_id: int, confirmation: str | None = None, conn=None) -
                 conn.execute("UPDATE upload_jobs SET retry_of_job_id = ? WHERE id = ?", (padre, conservada))
         conn.execute(f"DELETE FROM upload_jobs WHERE id IN ({marcas})", chain)
         conn.commit()
+        for borrada in chain:
+            publicar(EVENTO_SUBIDA_ESTADO, {"job_id": borrada})
 
         mensaje = ("Subida eliminada." if len(chain) == 1
                    else f"Subida eliminada, con sus {len(chain) - 1} reintento(s).")
