@@ -32,12 +32,21 @@ _TABLA = re.compile(r"\b(FROM|INTO|UPDATE)\s+settings\b", re.I)
 
 
 def _cadenas(src: str) -> list[str]:
-    """Los literales de texto del fichero, que es donde vive el SQL."""
+    """Los literales de texto del fichero, que es donde vive el SQL. Una f-string cuenta entera, sin lo interpolado."""
+    cadenas, abiertas = [], []
     try:
-        return [t.string for t in tokenize.generate_tokens(io.StringIO(src).readline)
-                if t.type in (tokenize.STRING, tokenize.FSTRING_MIDDLE)]
+        for t in tokenize.generate_tokens(io.StringIO(src).readline):
+            if t.type == tokenize.STRING:
+                cadenas.append(t.string)
+            elif t.type == tokenize.FSTRING_START:
+                abiertas.append([])
+            elif t.type == tokenize.FSTRING_MIDDLE and abiertas:
+                abiertas[-1].append(t.string)
+            elif t.type == tokenize.FSTRING_END and abiertas:
+                cadenas.append(" ".join(abiertas.pop()))
     except tokenize.TokenError:
         return [src]
+    return cadenas
 
 
 def _consulta_settings(src: str) -> bool:
@@ -46,6 +55,7 @@ def _consulta_settings(src: str) -> bool:
 
 def test_la_guarda_ve_fstrings_minusculas_y_cadenas_normales():
     assert _consulta_settings('conn.execute(f"SELECT value FROM settings WHERE key = {k!r}")')
+    assert _consulta_settings('conn.execute(f"SELECT {columna} FROM settings")')
     assert _consulta_settings('conn.execute("select value from settings")')
     assert _consulta_settings('conn.execute("DELETE FROM settings")')
     assert not _consulta_settings('"""Resolves paths from settings at runtime."""')
