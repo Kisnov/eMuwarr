@@ -569,17 +569,23 @@ def restore_config_backup(
         }
 
     with _restaurando:
-        # Sus hilos seguirían escribiendo en la base restaurada.
-        try:
-            en_marcha = _hay_subidas_en_marcha(config_dir / _DB_NAME)
-        except sqlite3.OperationalError as e:
-            return {"ok": False, "dry_run": False,
-                    "error": f"No se ha restaurado nada: no se pudo comprobar si hay subidas en marcha ({texto_de_error(e)})"}
-        if en_marcha:
-            return {"ok": False, "dry_run": False,
-                    "error": "No se ha restaurado nada: hay subidas en marcha (o un reenvío a qBittorrent). Espera a "
-                             "que terminen o cancélalas en Subidas, y vuelve a restaurar."}
+        if rechazo := _rechazo_por_subidas_en_marcha(config_dir):
+            return rechazo
         return _aplicar_restauracion(path, config_dir, members)
+
+
+def _rechazo_por_subidas_en_marcha(config_dir: Path) -> dict | None:
+    """El error de una restauración con subidas en marcha: sus hilos seguirían escribiendo en la base restaurada."""
+    try:
+        en_marcha = _hay_subidas_en_marcha(config_dir / _DB_NAME)
+    except sqlite3.OperationalError as e:
+        return {"ok": False, "dry_run": False,
+                "error": f"No se ha restaurado nada: no se pudo comprobar si hay subidas en marcha ({texto_de_error(e)})"}
+    if en_marcha:
+        return {"ok": False, "dry_run": False,
+                "error": "No se ha restaurado nada: hay subidas en marcha (o un reenvío a qBittorrent). Espera a "
+                         "que terminen o cancélalas en Subidas, y vuelve a restaurar."}
+    return None
 
 
 def _cerrar_subidas_de_la_copia() -> None:
@@ -605,6 +611,10 @@ def _aplicar_restauracion(path: Path, config_dir: Path, members: list[str]) -> d
                              f"({texto_de_error(exc)})"}
         _retirar_antiguas(Path(previa["archive_path"]).parent, PREFIJO_ANTES_DE_RESTAURAR,
                           _COPIAS_ANTES_DE_RESTAURAR, salvo=(path.name, previa["archive_name"]))
+
+        # Otra vez, ya con la copia hecha (tarda): una subida encolada mientras tanto no se pisa.
+        if rechazo := _rechazo_por_subidas_en_marcha(config_dir):
+            return rechazo
 
     # La de antes de restaurar va tal cual: también las claves vacías y los ficheros con claves que no estaban.
     exacta = path.name.startswith(PREFIJO_ANTES_DE_RESTAURAR)

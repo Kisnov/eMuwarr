@@ -445,6 +445,28 @@ def test_una_base_viva_sin_la_columna_del_reenvio_se_puede_restaurar(cfg, tmp_pa
     assert _aplicar(archivo)["ok"] is True
 
 
+def test_una_subida_encolada_mientras_se_guarda_lo_actual_tampoco_se_pisa(cfg, tmp_path, monkeypatch):
+    """La copia de lo actual tarda: lo que se encole entre la comprobación y la restauración se vuelve a mirar."""
+    from emuwarez_uploadrr.services import backup_service
+
+    archivo = create_config_backup(output_dir=tmp_path / "copias")["archive_path"]
+    with db() as conn:
+        set_state(conn, "marca", "despues")
+    copiar = backup_service.create_config_backup
+
+    def _copiar_y_encolar(*args, **kwargs):
+        previa = copiar(*args, **kwargs)
+        _subida("queued")
+        return previa
+
+    monkeypatch.setattr(backup_service, "create_config_backup", _copiar_y_encolar)
+
+    r = _aplicar(archivo)
+
+    assert r["ok"] is False and "subidas en marcha" in r["error"]
+    assert _marca(cfg) == "despues"
+
+
 def test_una_subida_terminada_no_impide_restaurar(cfg, tmp_path):
     _subida("completed", "ok")
     _subida("failed", "fallido")
