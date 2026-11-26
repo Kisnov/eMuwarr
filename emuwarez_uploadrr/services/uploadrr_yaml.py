@@ -285,9 +285,13 @@ def set_tracker_config(
     emu_start, emu_end = find_child_block(lines, "TRACKERS", tracker, indent=2)
     if emu_start >= 0 and re.match(rf"^\s{{2}}{re.escape(tracker)}\s*:\s*[^\s#]", lines[emu_start]):
         raise no_se_entiende
-    if emu_start < 0 and any(re.match(rf"^\s+{re.escape(tracker)}\s*:", line)
+    if emu_start < 0 and any(re.match(rf"""^\s+["']?{re.escape(tracker)}["']?\s*:""", line)
                              for line in lines[trackers_start + 1:trackers_end]):
-        raise no_se_entiende
+        raise no_se_entiende  # con otra sangría o entre comillas: insertar otro bloque lo dejaría repetido
+    if emu_start >= 0:
+        claves = [line for line in lines[emu_start + 1:emu_end] if line.strip() and not line.lstrip().startswith("#")]
+        if claves and len(claves[0]) - len(claves[0].lstrip()) != 4:
+            raise no_se_entiende
     if emu_start < 0:
         insert_at = trackers_start + 1
         block = [f"  {tracker}:"]

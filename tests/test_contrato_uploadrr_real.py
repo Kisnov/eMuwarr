@@ -252,10 +252,11 @@ def test_el_trabajo_de_otro_tracker_llega_con_su_variante_hasta_la_categoria(
 
 
 def test_la_app_solo_deja_subir_los_formatos_que_sube_uploadrr():
+    import ast
     import re
     # get_video descarta lo demás y la subida acaba sin vídeo; torrentman tampoco lo mete en el torrent.
     for fichero, patron in (("videoprocessor.py", r"video_extensions = \{([^}]*)\}"),
                             ("utils/torrentman.py", r"valid_extensions = \{([^}]*)\}")):
         fuente = (CARPETA_UPLOADRR / "src" / fichero).read_text(encoding="utf-8")
-        suyas = re.findall(r'"(\.\w+)"', re.search(patron, fuente).group(1))
-        assert set(suyas) == set(EXTENSIONES_SUBIBLES), fichero
+        suyas = ast.literal_eval("{" + re.search(patron, fuente).group(1) + "}")
+        assert suyas == set(EXTENSIONES_SUBIBLES), fichero

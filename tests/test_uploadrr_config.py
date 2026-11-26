@@ -607,7 +607,10 @@ def test_un_comentario_dentro_del_bloque_del_tracker_no_lo_corta():
     ("TRACKERS:\n    EMU:\n        api_key: old\n    BLU:\n        useAPI: true\n", "EMU"),
     ("TRACKERS: {EMU: {api_key: old}, BLU: {useAPI: true}}\n", "EMU"),
     ("TRACKERS:\n  EMU:\n    api_key: old\n  NOBS: {api_key: old, anon: true}\n", "NOBS"),
-], ids=["sangria-de-4", "trackers-en-una-linea", "tracker-en-una-linea"])
+    ("TRACKERS:\n  EMU:\n      api_key: old\n      anon: true\n", "EMU"),
+    ('TRACKERS:\n  "EMU":\n    api_key: old\n    anon: true\n', "EMU"),
+], ids=["sangria-de-4", "trackers-en-una-linea", "tracker-en-una-linea", "claves-con-sangria-de-6",
+        "tracker-entre-comillas"])
 def test_un_bloque_de_tracker_con_otra_forma_falla_en_vez_de_escribir(texto, tracker):
     from emuwarez_uploadrr.services.uploadrr_yaml import set_tracker_config
     lines = texto.splitlines()
