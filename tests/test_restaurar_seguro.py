@@ -430,3 +430,36 @@ def test_una_subida_terminada_no_impide_restaurar(cfg, tmp_path):
     archivo = create_config_backup(output_dir=tmp_path / "copias")["archive_path"]
 
     assert _aplicar(archivo)["ok"] is True
+
+
+def _estado(job_id: int) -> tuple:
+    with db() as conn:
+        return tuple(conn.execute(
+            "SELECT status, reenvio_qbit_estado FROM upload_jobs WHERE id = ?", (job_id,)).fetchone())
+
+
+def test_las_subidas_que_la_copia_trae_en_marcha_quedan_fallidas(cfg, tmp_path):
+    """Nadie las movía: la fila seguía «en marcha» y bloqueaba «Subir» hasta cancelarla o reiniciar."""
+    subida, reenvio = _subida("running"), _subida("completed", "en_curso")
+    archivo = create_config_backup(output_dir=tmp_path / "copias")["archive_path"]
+    with db() as conn:
+        conn.execute("UPDATE upload_jobs SET status = 'cancelled', reenvio_qbit_estado = 'ok'")
+
+    assert _aplicar(archivo)["ok"] is True
+    assert _estado(subida) == ("failed", None)
+    assert _estado(reenvio) == ("completed", "fallido")
+
+
+def test_si_no_se_pueden_cerrar_las_subidas_la_restauracion_sigue_hecha(cfg, tmp_path, monkeypatch):
+    from emuwarez_uploadrr.services import upload_queue
+
+    def _falla(*_, **__):
+        raise sqlite3.OperationalError("database is locked")
+
+    archivo = create_config_backup(output_dir=tmp_path / "copias")["archive_path"]
+    with db() as conn:
+        set_state(conn, "marca", "despues")
+    monkeypatch.setattr(upload_queue, "reconcile_interrupted_jobs", _falla)
+
+    assert _aplicar(archivo)["ok"] is True
+    assert _marca(cfg) == "antes"
