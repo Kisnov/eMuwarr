@@ -341,9 +341,12 @@ def _motivo_de_rechazo(tar: tarfile.TarFile, config_dir: Path) -> str | None:
         version = _version_de_base(ruta)
         base_de_la_copia_es_sqlite = _es_sqlite(ruta)
         legible = _base_legible(ruta) if base_de_la_copia_es_sqlite else True
+        ajena = base_de_la_copia_es_sqlite and legible and _es_de_otra_aplicacion(ruta)
     if not legible:
         # La cabecera dice SQLite pero no se puede leer (truncada o dañada): pondría una base rota.
         return "La copia no es válida: su base de datos está dañada o incompleta"
+    if ajena:
+        return "El archivo no es un backup de esta aplicación: su base de datos es de otra aplicación"
     viva = config_dir / _DB_NAME
     if not base_de_la_copia_es_sqlite and viva.exists() and viva.stat().st_size > 0 and _es_sqlite(viva):
         # _colocar_base la copiaría en crudo encima de una base que sí lo es, sin copia previa.
@@ -366,6 +369,16 @@ def _base_legible(ruta: Path) -> bool:
         return False
     finally:
         conn.close()
+
+
+def _es_de_otra_aplicacion(ruta: Path) -> bool:
+    """Si la base tiene tablas pero no app_state, que toda base de esta aplicación tiene. Una sin tablas sí vale."""
+    conn = sqlite3.connect(str(ruta))
+    try:
+        tablas = {fila[0] for fila in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
+    finally:
+        conn.close()
+    return bool(tablas) and "app_state" not in tablas
 
 
 def _version_de_base(ruta: Path) -> int | None:

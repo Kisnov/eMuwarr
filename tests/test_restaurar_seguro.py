@@ -363,3 +363,36 @@ def test_una_base_sqlite_truncada_se_rechaza(cfg, tmp_path):
 
     assert r["ok"] is False and "dañada" in r["error"]
     assert _marca(cfg) == "antes"
+
+
+def _otra_sqlite(tmp_path, *sentencias: str) -> bytes:
+    ruta = tmp_path / "otra.db"
+    conn = sqlite3.connect(str(ruta))
+    for sentencia in sentencias:
+        conn.execute(sentencia)
+    conn.commit()
+    conn.close()
+    return ruta.read_bytes()
+
+
+def test_la_base_de_otra_aplicacion_se_rechaza(cfg, tmp_path):
+    """Sin app_state pasaba: se colocaba y volvía el asistente inicial, o fallaba con «no such table: settings»."""
+    info = tarfile.TarInfo("emuwarez_uploadrr.db")
+    datos = _otra_sqlite(tmp_path, "CREATE TABLE notas (id INTEGER, texto TEXT)")
+    info.size = len(datos)
+    archivo = _tar_malo(tmp_path / "ajena.tar.gz", info, datos)
+
+    assert "no es un backup de esta aplicación" in restore_config_backup(archivo, dry_run=True)["error"]
+    r = _aplicar(archivo)
+
+    assert r["ok"] is False and "no es un backup de esta aplicación" in r["error"]
+    assert _marca(cfg) == "antes"
+
+
+def test_una_base_sqlite_vacia_si_se_restaura(cfg, tmp_path):
+    info = tarfile.TarInfo("emuwarez_uploadrr.db")
+    datos = _otra_sqlite(tmp_path, "PRAGMA user_version = 1")
+    info.size = len(datos)
+    archivo = _tar_malo(tmp_path / "vacia.tar.gz", info, datos)
+
+    assert _aplicar(archivo)["ok"] is True
