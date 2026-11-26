@@ -1643,8 +1643,9 @@ def _paso_preparar(t: _Trabajo) -> bool:
             # Con los ficheros de la anterior, Uploadrr-EMU también reanuda (`--resume`): reutiliza las capturas y el
             # torrent que dejó hechos, pero solo si fue la anterior quien lo lanzó (subida_pasos.uploadrr_puede_reanudar).
             # Con ficheros rehechos o un tmp de otra preparación, empieza de cero.
-            reanuda = uploadrr_puede_reanudar(anterior.get("status"), anterior.get("etapa_parada"),
-                                              anterior.get("pasos_uploadrr_json"))
+            # Sin `process_id` la anterior no llegó a lanzarlo (falló preparando su config, p. ej.).
+            reanuda = anterior.get("process_id") is not None and uploadrr_puede_reanudar(
+                anterior.get("status"), anterior.get("etapa_parada"), anterior.get("pasos_uploadrr_json"))
             # Si reanuda, hereda los pasos que dejó hechos: un fallo antes del primer `Step done` no debe borrarlos.
             pasos = anterior.get("pasos_uploadrr_json") if reanuda else None
             conn.execute("UPDATE upload_jobs SET remux_snapshot_json = ?, huellas_preparacion_json = ?, "

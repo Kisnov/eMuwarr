@@ -231,8 +231,8 @@ def _huellas(originales: dict) -> str:
 
 
 def _anterior(conn, iid, destino, originales=None, **extra):
-    datos = {"status": "failed", "stage": "failed", "etapa_parada": "running", "prepared_path": str(destino),
-             "remux_snapshot_json": json.dumps({"omitida": "Ninguno"}), **extra}
+    datos = {"status": "failed", "stage": "failed", "etapa_parada": "running", "process_id": 4321,
+             "prepared_path": str(destino), "remux_snapshot_json": json.dumps({"omitida": "Ninguno"}), **extra}
     if originales is not None:
         datos["huellas_preparacion_json"] = _huellas(originales)
     return _trabajo(conn, iid, **datos)
@@ -432,6 +432,8 @@ def test_el_reintento_reutiliza_la_preparacion_que_sigue_valiendo(db_conn, pipel
     {"etapa_parada": "verificacion_presubida"},
     # La ficha ya estaba en eMuwarez.
     {"pasos_uploadrr_json": json.dumps(["screenshots", "torrent", "tracker"])},
+    # Falló al preparar su config, antes de lanzar Uploadrr-EMU: su tmp es de otra preparación.
+    {"etapa_parada": "config_staging", "process_id": None},
 ])
 def test_el_reintento_reutiliza_los_ficheros_pero_uploadrr_no_reanuda(db_conn, pipeline, extra):
     os.link(pipeline.origen, pipeline.destino)
