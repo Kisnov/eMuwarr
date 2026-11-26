@@ -185,8 +185,6 @@ def test_tick_due_tasks_second_tick_runs_nothing(isolated_db):
 @pytest.mark.parametrize("resultado, estado, texto", [
     ({"status": "ok", "imported": 12, "matched": 3}, "completed", "12 peticiones importadas, 3 cruces"),
     ({"status": "throttled", "wait_seconds": 90}, "skipped", "Esperando 90s"),
-    ({"status": "busy", "message": "Hay una subida en marcha; vuelve a probar cuando termine."},
-     "skipped", "Hay una subida en marcha"),
 ])
 def test_emu_request_sync_records_what_happened(db_conn, resultado, estado, texto):
     with patch("emuwarez_uploadrr.services.requests.sync_emu_requests", return_value=resultado) as mock_emu:
@@ -196,6 +194,17 @@ def test_emu_request_sync_records_what_happened(db_conn, resultado, estado, text
     assert run["status"] == estado
     assert texto in run["summary"]
     assert get_scheduled_task(db_conn, TASK_EMU_SYNC)["last_status"] == estado
+
+
+def test_emu_request_sync_waits_for_an_upload_and_runs_next_tick(db_conn):
+    db_conn.execute("INSERT INTO upload_jobs (title, path, status) VALUES ('X', '/x', 'running')")
+    db_conn.commit()
+    run = run_scheduled_task(db_conn, TASK_EMU_SYNC)
+
+    assert (run["status"], "subida en marcha" in run["summary"]) == ("skipped", True)
+    tarea = get_scheduled_task(db_conn, TASK_EMU_SYNC)
+    assert tarea["last_run_at"] is None  # no cuenta como ejecución
+    assert TASK_EMU_SYNC in claim_due_tasks(db_conn)  # y se reintenta en el siguiente tick
 
 
 def test_emu_request_sync_failure_is_recorded_with_its_message(db_conn):
