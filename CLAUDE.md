@@ -39,10 +39,10 @@ came in from `Kisnov/Uploadrr-EMU` with `git subtree add`, history kept; that re
 ## Verify
 
 - Backend: run the tests in Linux (hardlinks, mediainfo, mkvtoolnix), e.g. `python:3.12-slim` with
-  `pip install -c constraints.txt -e ".[web,dev]"`, then `python -m pytest tests -q -p no:cacheprovider` (~2180 tests, ~7 min).
+  `pip install -c constraints.txt -e ".[web,dev]"`, then `python -m pytest tests -q -p no:cacheprovider` (~4600 tests, ~7 min).
   On Windows, copy the tree into the container (`cp -r /src/. /w/`) rather than running on the bind mount.
 - Uploadrr-EMU: from `uploadrr-emu/`, `pip install -r requirements.txt pytest pytest-cov`, then
-  `python -m pytest tests -q -p no:cacheprovider` (~460 tests, ~1 min; its `conftest.py` blocks network and subprocesses).
+  `python -m pytest tests -q -p no:cacheprovider` (~580 tests; its `conftest.py` blocks network and subprocesses).
   The root `pytest` only collects `tests/` (`testpaths`), and the root ruff skips `uploadrr-emu/`: its CI job checks
   only `E9,F63,F7,F82`, because the inherited code does not pass `F` yet.
 - Frontend: `cd frontend && npm ci && npx tsc --noEmit && npm run lint && npx vitest run && npx vite build`.

@@ -114,7 +114,7 @@ or report their errors unless they break an eMuwarez upload.
   stay free on purpose: the app installs this file into the same environment as its own FastAPI stack.
   `pip install -r requirements.txt` on `python:3.12-slim` needs nothing else; running `upload.py` also needs
   `ffmpeg` and `mediainfo` (the `Dockerfile` installs them).
-- Tests: `pip install pytest pytest-cov`, then `python -m pytest tests -q -p no:cacheprovider` (in Docker; ~10 s).
+- Tests: `pip install pytest pytest-cov`, then `python -m pytest tests -q -p no:cacheprovider` (in Docker; ~580 tests).
   `tests/conftest.py` blocks network, DNS and subprocesses; known bugs are `xfail`. `tests/test_unit3d.py`
   runs the dupe search and the upload against a fake UNIT3D tracker on localhost. Anything else: focused scripts in
   Docker (`upload.py` on a test folder, exit code).
