@@ -11,6 +11,7 @@ from .ejecucion import start_upload_job
 from .estado import _update_job_status
 from .procesos import _PROCESOS, _PROCESOS_LOCK, _detener_proceso, _pid_es_de_este_job
 from .registro import append_upload_log
+from ..eventos import EVENTO_SUBIDA_ESTADO, publicar
 from ..trackers import POR_DEFECTO
 from ...integrations.base import texto_de_error
 
@@ -504,6 +505,8 @@ def delete_upload_job(job_id: int, confirmation: str | None = None, conn=None) -
                 conn.execute("UPDATE upload_jobs SET retry_of_job_id = ? WHERE id = ?", (padre, conservada))
         conn.execute(f"DELETE FROM upload_jobs WHERE id IN ({marcas})", chain)
         conn.commit()
+        for borrada in chain:
+            publicar(EVENTO_SUBIDA_ESTADO, {"job_id": borrada})
 
         mensaje = ("Subida eliminada." if len(chain) == 1
                    else f"Subida eliminada, con sus {len(chain) - 1} reintento(s).")
