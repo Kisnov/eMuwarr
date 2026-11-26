@@ -587,7 +587,7 @@ def reconcile_interrupted_jobs(conn=None) -> int:
     conn = conn or connect()
     try:
         rows = conn.execute(
-            "SELECT id, title, torrent_subido FROM upload_jobs WHERE status IN ({})".format(
+            "SELECT id, title, torrent_subido, tracker FROM upload_jobs WHERE status IN ({})".format(
                 ",".join("?" * len(ACTIVE_JOB_STATUSES))),
             tuple(ACTIVE_JOB_STATUSES),
         ).fetchall()
@@ -598,7 +598,8 @@ def reconcile_interrupted_jobs(conn=None) -> int:
                 f"finished_at = ?, updated_at = ?, error_message = ?, {parada} WHERE id = ?",
                 (_now_iso(), _now_iso(),
                  "Interrumpido al pararse la aplicación. " + (
-                     "El torrent ya está en eMuwarez: usa «Reenviar a qBittorrent»." if row["torrent_subido"]
+                     f"El torrent ya está en {trackers.obtener(row['tracker'] or trackers.POR_DEFECTO).nombre}: "
+                     "usa «Reenviar a qBittorrent»." if row["torrent_subido"]
                      else "Puedes reintentar la subida."),
                  *parametros_parada, row["id"]),
             )
