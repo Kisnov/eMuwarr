@@ -39,7 +39,11 @@ _TAR_ILEGIBLE = (tarfile.TarError, OSError, EOFError, zlib.error)
 # temporales de Uploadrr (capturas, torrents; en una instalación real, 1,7 GB).
 # Una carpeta "backups" a cualquier profundidad tampoco: la copia no se mete a sí misma.
 # config_uploadrr/ son los config de las subidas en curso, con claves: ni en la copia con secretos.
-_FUERA_DE_LA_COPIA = (("Uploadrr", "uploads"), ("Uploadrr", "tmp"), ("config_uploadrr",))
+# limitador/, plazas/ y eventos_uploadrr/ son estado en vivo de las subidas: cambian mientras se leen.
+_FUERA_DE_LA_COPIA = (
+    ("Uploadrr", "uploads"), ("Uploadrr", "tmp"), ("config_uploadrr",), ("limitador",), ("plazas",),
+    ("eventos_uploadrr",),
+)
 # Lo que solo va en la copia con secretos. El config.yaml de Uploadrr-EMU (y el
 # config.yaml.bak que dejaron las versiones anteriores, también apartado como
 # config.yaml.migrado o si no se pudo migrar) pueden llevar claves de cualquier
