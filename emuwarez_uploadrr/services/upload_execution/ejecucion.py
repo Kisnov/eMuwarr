@@ -263,7 +263,7 @@ def _run_uploadrr_subprocess_body(job_id: int, cmd: dict, secrets: list[str]) ->
             elif tipo == "paso":
                 _apuntar_clave(efecto[1])
                 if efecto[1] == "tracker":
-                    marcar_torrent_subido(job_id)
+                    marcar_torrent_subido(job_id, estado_ev.url, estado_ev.torrent_id)
             elif tipo == "qbit_ok":
                 with progress_lock:
                     progress_state["qbittorrent_add_failed"] = False
@@ -298,6 +298,8 @@ def _run_uploadrr_subprocess_body(job_id: int, cmd: dict, secrets: list[str]) ->
                 logger.exception("Subida %s: no se pudo actualizar el progreso", job_id)
             try:
                 _apuntar_subpaso(line)
+                if ficha := _ficha_del_torrent(redact_secrets(line, secrets)):
+                    marcar_torrent_subido(job_id, ficha["result_url"], ficha["result_torrent_id"])
             except Exception:
                 logger.exception("Subida %s: no se pudo apuntar el paso que terminó Uploadrr", job_id)
 
