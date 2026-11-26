@@ -31,7 +31,6 @@ from .comun import (  # noqa: F401
     _collect_secrets,
 )
 from .consultas import (  # noqa: F401
-    VIDEO_EXTENSIONS,
     get_upload_job,
     _upload_jobs_where,
     list_upload_jobs,

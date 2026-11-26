@@ -97,7 +97,7 @@ def test_all_green_when_everything_passes(db_conn, tmp_path, monkeypatch):
     iid = _movie_with_path(db_conn, str(f))
     r = uc.run_upload_checks(db_conn, iid)
     ids = [c["id"] for c in r["checks"]]
-    assert ids == ["accesible", "carpeta_subida", "renameable", "idioma_audio", "spanish", "tipo",
+    assert ids == ["accesible", "carpeta_subida", "renameable", "idioma_audio", "formato", "spanish", "tipo",
                    "output", "qbittorrent", "imghosts", "emuwarez"]
     # Un archivo de la biblioteca no se renombra: esa no bloquea.
     assert {c["id"]: c["status"] for c in r["checks"]}["renameable"] == "skip"
@@ -417,3 +417,34 @@ def test_un_pack_toma_el_tipo_de_su_plan(db_conn, tmp_path, monkeypatch, plan_so
     r = uc.run_upload_checks(db_conn, iid, scope="content", **({"ajustes": ajustes} if ajustes else {}))
     assert _tipo(r)["status"] == estado
     assert vistos == [(ajustes or {}).get("source")]  # el Source elegido llega al plan, del que sale el `-t`
+
+
+@pytest.mark.parametrize("nombre, estado", [("movie.avi", "fail"), ("movie.iso", "fail"), ("movie.m2ts", "fail"),
+                                            ("movie.mkv", "ok"), ("movie.mp4", "ok"), ("movie.ts", "ok")])
+def test_solo_se_sube_lo_que_sube_uploadrr(db_conn, tmp_path, nombre, estado):
+    f = tmp_path / nombre
+    f.write_bytes(b"x" * 2048)
+    r = uc.run_upload_checks(db_conn, _movie_with_path(db_conn, str(f)), scope="content")
+    formato = next(c for c in r["checks"] if c["id"] == "formato")
+    assert formato["status"] == estado and r["ready"] is (estado == "ok")
+    if estado == "fail":
+        assert formato["message"].startswith(f"Es un {f.suffix[1:].upper()}: Uploadrr-EMU solo sube MKV, MP4 y TS.")
+
+
+def test_un_pack_con_un_capitulo_en_otro_formato_no_se_sube(db_conn, tmp_path, monkeypatch):
+    from emuwarez_uploadrr.services import season_pack
+    caps = [tmp_path / "S01E01.mkv", tmp_path / "S01E02.avi"]
+    for cap in caps:
+        cap.write_bytes(b"x")
+    monkeypatch.setattr(season_pack, "build_season_pack_plan", lambda item_id, **kw: {
+        "status": "valid", "errors": [], "pack_folder": str(tmp_path), "source": "WEB-DL",
+        "episodes": [{"source_path": str(c), "episode_number": n} for n, c in enumerate(caps, 1)]})
+    db_conn.execute("""INSERT INTO library_items (item_type, title, local_status, request_status, nomenclature_status,
+                       season_number, updated_at)
+                       VALUES ('season', 'Serie - Temporada 1', 'Disponible', '', 'N/A', 1, CURRENT_TIMESTAMP)""")
+    db_conn.commit()
+    iid = db_conn.execute("SELECT id FROM library_items ORDER BY id DESC LIMIT 1").fetchone()["id"]
+    r = uc.run_upload_checks(db_conn, iid, scope="content")
+    formato = next(c for c in r["checks"] if c["id"] == "formato")
+    assert formato["status"] == "fail" and r["ready"] is False
+    assert formato["message"].startswith("Capítulo 2: Es un AVI: Uploadrr-EMU solo sube MKV, MP4 y TS.")

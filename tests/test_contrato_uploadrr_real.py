@@ -18,6 +18,7 @@ from unittest import mock
 import pytest
 
 from emuwarez_uploadrr.services.uploadrr_contract import (
+    EXTENSIONES_SUBIBLES,
     _UPLOADRR_RES_CHOICES,
     _UPLOADRR_TYPES,
     build_uploadrr_emu_command,
@@ -248,3 +249,13 @@ def test_el_trabajo_de_otro_tracker_llega_con_su_variante_hasta_la_categoria(
     tabla = json.loads((CARPETA_UPLOADRR / "data" / "trackers" / f"{tk}.json").read_text(encoding="utf-8"))
     ids = {t.upper(): e["id"] for e in tabla["categories"] for t in e["tokens"]}
     assert ids[f"{meta['category']}_{meta['variante'].upper()}"] == cat_id
+
+
+def test_la_app_solo_deja_subir_los_formatos_que_sube_uploadrr():
+    import re
+    # get_video descarta lo demás y la subida acaba sin vídeo; torrentman tampoco lo mete en el torrent.
+    for fichero, patron in (("videoprocessor.py", r"video_extensions = \{([^}]*)\}"),
+                            ("utils/torrentman.py", r"valid_extensions = \{([^}]*)\}")):
+        fuente = (CARPETA_UPLOADRR / "src" / fichero).read_text(encoding="utf-8")
+        suyas = re.findall(r'"(\.\w+)"', re.search(patron, fuente).group(1))
+        assert set(suyas) == set(EXTENSIONES_SUBIBLES), fichero
