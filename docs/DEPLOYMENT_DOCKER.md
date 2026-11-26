@@ -154,7 +154,7 @@ catálogo y peticiones); desde Tareas se repiten solas cada cierto tiempo.
 
 Para subir algo, pulsa **Subir** en la Biblioteca. El asistente comprueba el fichero (que se pueda leer y enlazar en
 la carpeta de subidas), el directorio de salida de Uploadrr-EMU, qBittorrent, el host de imágenes y
-el tracker; después genera el nombre y lanza la subida. El progreso y los logs están en Subidas.
+eMuwarez (si es el destino); después genera el nombre y lanza la subida. El progreso y los logs están en Subidas.
 
 ## 6. Uploadrr-EMU
 

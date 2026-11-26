@@ -500,9 +500,9 @@ const OTHER_CONDITION_ROWS: OtherRow[] = [
     why: 'Es donde se generan el .torrent, las capturas y la descripción antes de enviarlos. Sin poder escribir ahí no hay nada que subir.',
   },
   {
-    applies: 'Cualquiera', condition: 'El tracker de destino no responde (eMuwarez, si subes a eMuwarez)',
+    applies: 'Cualquiera', condition: 'eMuwarez no responde (si subes a eMuwarez)',
     verdict: 'blocked', verdictLabel: 'Bloquea',
-    why: 'Es el destino de la subida; si subes a otro tracker, no se comprueba eMuwarez. Suele ser la API key mal puesta o el tracker caído.',
+    why: 'Es el destino de la subida. Suele ser la API key mal puesta o el tracker caído. La conexión con N.O.B.S y Milnueve no se comprueba antes: un fallo suyo se ve al subir.',
   },
   {
     applies: 'Cualquiera', condition: 'El repositorio de imágenes no responde',
