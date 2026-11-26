@@ -40,7 +40,8 @@ rutas permitidas.
 
 - Un equipo con **Docker** (24+ con Compose v2). La imagen lleva todo lo demás.
 - **Radarr** y/o **Sonarr** con tu biblioteca, o una **carpeta manual** con lo que quieras subir sin pasar por ellos.
-- Una cuenta de **eMuwarez** con su API key, y una API key de **TMDb** (gratuita).
+- Una cuenta de **eMuwarez** con su API key, y una API key de **TMDb** (gratuita). Para subir también a **N.O.B.S** o
+  **Milnueve**, sus claves van en Configuración → Otros trackers (las copias de seguridad las dejan vacías).
 - **qBittorrent**, que vea la carpeta de subidas en la misma ruta que este contenedor.
 - La media y la carpeta de subidas en el **mismo sistema de ficheros**, para que la subida sea un enlace duro y no
   ocupe el doble.
@@ -127,8 +128,8 @@ qBittorrent, «Reenviar a qBittorrent» lo vuelve a añadir sin subir nada.
 - **Subidas**: un asistente con pasos (contenido, nombre y pistas, **resumen**) comprueba el contenido, genera el nombre
   (también para packs de temporada) y lanza Uploadrr-EMU. El resumen enseña lo que se sube (nombre, ficheros,
   categoría, petición, pistas y tipo de copia) y lo que ya hay en eMuwarez del mismo contenido, con si lo tuyo es
-  mejor, igual o peor, antes de pulsar «Subir». Opcionalmente renombra y reordena las pistas (cuatro modos, apagado
-  por defecto). El detalle de una subida terminada abre por el resultado (enlace a eMuwarez, estado de siembra en
+  mejor, igual o peor, antes de pulsar «Subir». Opcionalmente renombra y reordena las pistas (cuatro modos; por defecto
+  «Solo renombrar»). El detalle de una subida terminada abre por el resultado (enlace a eMuwarez, estado de siembra en
   qBittorrent y dónde se fue el tiempo); si falla, se reintenta desde el paso que falló, y si el torrent ya estaba
   en eMuwarez pero no llegó a qBittorrent, «Reenviar a qBittorrent» lo vuelve a añadir sin subir nada. Progreso en
   directo, límite de subidas en paralelo y varios grupos de subida guardados para el tag; cada grupo se puede marcar
@@ -301,7 +302,8 @@ docker load -i emuwarez-dev.tar.gz && EMUWAREZ_UPLOADRR_TAG=dev docker compose u
 
 Necesita Python 3.12+, Node 26, `mediainfo`, `ffmpeg`, `mkvtoolnix` y las dependencias de Uploadrr-EMU
 (`pip install -r uploadrr-emu/requirements.txt`). Su ruta va en el ajuste `uploadrr.path`, por defecto `/opt/Uploadrr`:
-apúntalo a la carpeta `uploadrr-emu/`.
+apúntalo a la carpeta `uploadrr-emu/`. Copia también `uploadrr-emu/data/backup/example_config.yaml` a
+`uploadrr-emu/data/config.yaml`: sin él, la primera subida falla.
 
 ```bash
 pip install -e ".[web]"
@@ -315,7 +317,7 @@ la nomenclatura, subir…): ver [`README_CLI_READY.md`](README_CLI_READY.md).
 ## Desarrollo
 
 ```bash
-# Backend, en Linux (hardlinks, mediainfo, mkvtoolnix): ~4400 tests
+# Backend, en Linux (hardlinks, mediainfo, mkvtoolnix): ~4600 tests
 pip install -e ".[web,dev]"
 python -m pytest tests -q -p no:cacheprovider
 

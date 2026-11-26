@@ -9,8 +9,7 @@ oficiales de eMuwarez y nunca devuelve "unknown".
 
 ## Candidatos
 
-Coinciden exactamente con la tabla "Formato (Source)" de
-`references/nomenclatura-emuwarez.md`:
+Coinciden exactamente con la tabla "Formato (Source)" de la nomenclatura de eMuwarez:
 
 ```
 FBD  FDVD  BDRemux  BluRay  MHD  WEB-DL  WEBRIP  HDTV  SD
