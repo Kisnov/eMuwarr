@@ -273,6 +273,20 @@ def test_full_catalog_sync_skipped_while_uploading_then_runs_next_tick(isolated_
         conn.close()
 
 
+def test_full_catalog_sync_waits_for_a_catalog_sync_already_running(db_conn):
+    from emuwarez_uploadrr.services import emu_catalog
+    emu_catalog._set_progress(active=True)
+    try:
+        with patch("emuwarez_uploadrr.services.emu_catalog.threading") as hilo_mod:
+            run = run_scheduled_task(db_conn, TASK_EMU_CATALOG_FULL)
+            hilo_mod.Thread.assert_not_called()
+        assert run["status"] == "skipped"
+        assert get_scheduled_task(db_conn, TASK_EMU_CATALOG_FULL)["last_run_at"] is None
+        assert TASK_EMU_CATALOG_FULL in claim_due_tasks(db_conn)
+    finally:
+        emu_catalog._set_progress(active=False)
+
+
 def test_el_nombre_de_una_tarea_ya_instalada_se_pone_al_dia_sin_tocar_cada_cuanto_corre(db_conn):
     from emuwarez_uploadrr.services.scheduler import ensure_default_tasks
     set_task_interval(db_conn, TASK_EMU_SYNC, 720)
