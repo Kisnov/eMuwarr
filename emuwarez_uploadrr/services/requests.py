@@ -329,6 +329,7 @@ def _importar_peticiones(conn: sqlite3.Connection) -> dict[str, int | str]:
             # Sin base: al volver a poner la clave, sus peticiones no son nuevas y no se avisa de todas.
             if get_state(conn, emu_catalog._clave(SYNC_COMPLETA_KEY, t)) == "1":
                 set_state(conn, emu_catalog._clave(SYNC_COMPLETA_KEY, t), "")
+        conn.commit()  # el fallo de un tracker que sí tiene clave no la deshace
         error_emu = None
         try:
             imported, removed = _leer_peticiones_de(conn, EMU, api_key)

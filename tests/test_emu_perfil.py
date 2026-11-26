@@ -146,6 +146,28 @@ def test_rellena_el_usuario_de_ajustes_solo_si_esta_vacio(conn, llamadas):
     assert get_setting_canonical(conn, "emu.username") == "OtroNombre"
 
 
+def test_con_la_clave_de_otra_cuenta_el_usuario_de_ajustes_pasa_a_ser_el_suyo(conn, monkeypatch):
+    cuenta = {"username": "Kisnov"}
+    monkeypatch.setattr(emu_perfil, "emu_get_user", lambda api_key, base_url=None, **kw: {**USUARIO, **cuenta})
+    perfil_emu(conn)
+    assert get_setting_canonical(conn, "emu.username") == "Kisnov"
+
+    def falla(api_key, base_url=None, **kw):
+        raise IntegrationError("eMuwarez no responde")
+
+    monkeypatch.setattr(emu_perfil, "emu_get_user", falla)
+    set_setting(conn, "emu.api_key", "de-otra-cuenta")
+    conn.commit()
+    perfil_emu(conn)  # la primera lectura con la clave nueva falla: el nombre de la anterior ya no vale
+    assert not get_setting_canonical(conn, "emu.username")
+
+    cuenta["username"] = "OtraCuenta"
+    monkeypatch.setattr(emu_perfil, "emu_get_user", lambda api_key, base_url=None, **kw: {**USUARIO, **cuenta})
+    _intento_hace(conn, timedelta(hours=1))
+    perfil_emu(conn)
+    assert get_setting_canonical(conn, "emu.username") == "OtraCuenta"
+
+
 def test_dos_pestanas_a_la_vez_hacen_una_sola_llamada(conn, monkeypatch):
     dentro, seguir = threading.Event(), threading.Event()
     hechas = []

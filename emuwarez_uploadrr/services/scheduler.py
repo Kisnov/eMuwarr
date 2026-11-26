@@ -282,13 +282,16 @@ def _run_emu_sync(conn: sqlite3.Connection) -> tuple[str, str]:
     if result.get("status") == "throttled":
         return "skipped", f"Esperando {result.get('wait_seconds', 0)}s (mínimo 1 hora entre sincronizaciones)"
     if result.get("status") == "busy":
-        return "skipped", str(result["message"])
+        return "busy", str(result["message"])
     return "completed", f"{result.get('imported', 0)} peticiones importadas, {result.get('matched', 0)} cruces"
 
 
 def _run_emu_catalog_full(conn: sqlite3.Connection) -> tuple[str, str]:
     from .emu_catalog import start_emu_sync_background
     result = start_emu_sync_background(mode="full")
+    # Con otra del catálogo en marcha no lanza nada (el botón se engancha a esa): la completa espera.
+    if result.get("ya_en_marcha"):
+        return "busy", "Ya hay una sincronización del catálogo en marcha"
     if result.get("status") == "throttled":
         return "skipped", f"Esperando {result.get('wait_seconds', 0)}s (mínimo 1 día entre descargas completas)"
     if result.get("status") == "busy":
