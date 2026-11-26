@@ -422,6 +422,17 @@ def delete_upload_job(job_id: int, confirmation: str | None = None, conn=None) -
                            f"canceladas o fallidas (status={estados}).",
                 "job_id": job_id,
             }
+        # Una cancelada cuyo hilo aún termina el paso en curso sigue escribiendo en su fila y en la carpeta de subidas.
+        from ..upload_queue import _condicion_activa
+        condicion, parametros = _condicion_activa()
+        if conn.execute(f"SELECT 1 FROM upload_jobs WHERE id IN ({','.join('?' * len(cadena))}) AND {condicion}",
+                        (*cadena, *parametros)).fetchone():
+            return {
+                "ok": False,
+                "error": "invalid_status",
+                "message": "La subida cancelada aún está terminando el paso en curso; bórrala en un momento.",
+                "job_id": job_id,
+            }
         # Un reenvío a qBittorrent en marcha escribe en su registro y en su fila.
         if conn.execute(
             f"SELECT 1 FROM upload_jobs WHERE id IN ({','.join('?' * len(chain))}) AND reenvio_qbit_estado = 'en_curso'",
