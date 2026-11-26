@@ -18,12 +18,19 @@ export function urlEditarEnEmu(resultUrl?: string | null): string | null {
 
 export const faltaTrailer = (job: Pick<UploadJob, 'trailer_estado'>) => job.trailer_estado === 'falta'
 
-const EXPLICACION = 'eMuwarez exige un tráiler y TMDb no tiene ninguno para este contenido, así que la subida salió sin él.'
+type DeSuTracker = Pick<UploadJob, 'tracker' | 'tracker_nombre'>
 
-/** La chapa de la fila: abre la edición del torrent en eMuwarez (o el detalle, si no se sabe su enlace). */
+// El tracker de la subida: el torrent se edita allí, no siempre en eMuwarez.
+const nombreDe = (job: DeSuTracker) => job.tracker_nombre || 'eMuwarez'
+
+const explicacion = (job: DeSuTracker) => !job.tracker || job.tracker === 'emu'
+  ? 'eMuwarez exige un tráiler y TMDb no tiene ninguno para este contenido, así que la subida salió sin él.'
+  : `TMDb no tiene ningún tráiler para este contenido, así que la subida a ${nombreDe(job)} salió sin él.`
+
+/** La chapa de la fila: abre la edición del torrent en su tracker (o el detalle, si no se sabe su enlace). */
 export function ChipSinTrailer({ job, onAbrir }: { job: UploadJob; onAbrir: () => void }) {
   const editar = urlEditarEnEmu(job.result_url)
-  const tip = useTooltip(<>{EXPLICACION} {editar ? 'Pulsa para editar el torrent en eMuwarez y añadirlo.' : 'Pulsa para ver qué hacer.'}</>)
+  const tip = useTooltip(<>{explicacion(job)} {editar ? `Pulsa para editar el torrent en ${nombreDe(job)} y añadirlo.` : 'Pulsa para ver qué hacer.'}</>)
   const contenido = <><IconoAviso size={12} /> Sin trailer{tip.tooltipNode}</>
   return editar ? (
     <a className="sub-trailer-chip" href={editar} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} {...tip.triggerProps}>
@@ -97,12 +104,12 @@ export function AvisoTrailerDetalle({ job, onCambiado }: { job: UploadJob; onCam
       <div className="dsub-trailer-aviso-texto">
         <strong className="dsub-trailer-aviso-titulo">Falta el trailer</strong>
         <span>
-          {EXPLICACION} Edita el torrent en eMuwarez y pon el tráiler de YouTube en la descripción
+          {explicacion(job)} Edita el torrent en {nombreDe(job)} y pon el tráiler de YouTube en la descripción
           (<code>[youtube]ID[/youtube]</code>).
         </span>
         <div className="dsub-trailer-aviso-acciones">
           {editar && (
-            <a className="btn btn-primary btn-sm" href={editar} target="_blank" rel="noreferrer">Editar en eMuwarez</a>
+            <a className="btn btn-primary btn-sm" href={editar} target="_blank" rel="noreferrer">Editar en {nombreDe(job)}</a>
           )}
           <button type="button" className="btn btn-secondary btn-sm" onClick={() => marcar(true)} disabled={enviando}>
             {enviando ? 'Guardando…' : 'Ya lo he añadido'}
