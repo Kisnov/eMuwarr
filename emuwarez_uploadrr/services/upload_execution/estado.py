@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import logging
 
+from .. import seeding_qbit
 from ..uploadrr_contract import get_runtime_settings
 from .comun import _get_db_conn, logger
 from .consultas import get_upload_job, tracker_del_trabajo
@@ -59,6 +60,8 @@ def _finalize_job_status(job_id: int, desired_status: str, **kwargs) -> bool:
                 escribir_estado(job_id, conn=conn, **extra)
     finally:
         conn.close()
+    if escrito and desired_status == "completed":
+        seeding_qbit.olvidar_cache()  # la lista de qBittorrent leída antes no tiene su torrent
     return escrito
 
 
