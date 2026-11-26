@@ -270,6 +270,16 @@ describe('el aviso «Falta el trailer»', () => {
     await esperar(() => onTrailerCambiado.mock.calls.length === 1)
   })
 
+  it('en una subida a otro tracker, el texto y el botón dicen ese tracker', async () => {
+    const enNobs = { ...completada, trailer_estado: 'falta' as const, tracker: 'nobs', tracker_nombre: 'N.O.B.S', result_url: 'https://nobs.example/torrents/15729' }
+    await montar(pagina(enNobs))
+    const aviso = document.querySelector('.dsub-trailer-aviso')
+    expect(aviso?.textContent).toContain('Edita el torrent en N.O.B.S')
+    expect(aviso?.textContent).not.toContain('eMuwarez')
+    const editar = [...aviso!.querySelectorAll('a')].find(a => a.textContent === 'Editar en N.O.B.S')
+    expect(editar?.getAttribute('href')).toBe('https://nobs.example/torrents/15729/edit')
+  })
+
   it('marcada a mano solo queda una línea para deshacerlo', async () => {
     await montar(pagina({ ...completada, trailer_estado: 'a_mano' }))
     expect(document.querySelector('.dsub-trailer-aviso')).toBeNull()
