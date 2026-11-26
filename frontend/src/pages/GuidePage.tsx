@@ -425,7 +425,7 @@ const SPANISH_ROWS: SpanishRow[] = [
   },
   {
     kind: 'Película', audio: 'spa / und', subs: 'cualquiera', verdict: 'blocked', verdictLabel: 'Bloqueado',
-    why: 'Una pista sin idioma (und o vacía) es un dato que falta: en un MKV, hasta que le pongas el suyo en «Ver pistas» no se sube, y se escribe en la pista al preparar la subida. Un MP4 o un TS solo avisa de convertirlo a MKV; los demás (AVI, M2TS, ISO…) no se suben: Uploadrr-EMU solo sube MKV, MP4 y TS.',
+    why: 'Una pista sin idioma (und o vacía) es un dato que falta: en un MKV, hasta que le pongas el suyo en «Ver pistas» no se sube, y se escribe en la pista al preparar la subida. Un MP4 o un TS solo avisa de convertirlo a MKV; los demás (AVI, M2TS…) no se suben: Uploadrr-EMU solo sube MKV, MP4 y TS. Un ISO (imagen de disco) todavía no se puede subir.',
   },
   {
     kind: 'Película', audio: 'zxx', subs: 'ninguno', verdict: 'ok',

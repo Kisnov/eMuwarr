@@ -427,7 +427,9 @@ def test_solo_se_sube_lo_que_sube_uploadrr(db_conn, tmp_path, nombre, estado):
     r = uc.run_upload_checks(db_conn, _movie_with_path(db_conn, str(f)), scope="content")
     formato = next(c for c in r["checks"] if c["id"] == "formato")
     assert formato["status"] == estado and r["ready"] is (estado == "ok")
-    if estado == "fail":
+    if nombre == "movie.iso":
+        assert formato["message"] == "Es un ISO: las imágenes de disco todavía no se pueden subir desde aquí."
+    elif estado == "fail":
         assert formato["message"].startswith(f"Es un {f.suffix[1:].upper()}: Uploadrr-EMU solo sube MKV, MP4 y TS.")
 
 

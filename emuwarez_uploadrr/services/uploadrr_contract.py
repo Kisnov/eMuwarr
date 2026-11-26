@@ -146,6 +146,8 @@ def motivo_formato_no_subible(ruta: str | None) -> Optional[str]:
     ext = os.path.splitext(ruta or "")[1].lower()
     if ext in EXTENSIONES_SUBIBLES:
         return None
+    if ext == ".iso":
+        return "Es un ISO: las imágenes de disco todavía no se pueden subir desde aquí."
     return (f"Es un {ext.lstrip('.').upper() or 'archivo sin extensión'}: Uploadrr-EMU solo sube MKV, MP4 y TS. "
             "Conviértelo a MKV antes de subirlo.")
 
