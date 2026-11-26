@@ -155,8 +155,8 @@ def get_backup_dir() -> Path:
 
 def _abrir_0600(path: Path):
     """Abre `path` para escribir, creado solo legible por su dueño (la copia puede llevar claves)."""
-    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-    os.chmod(path, 0o600)  # si ya existía con otro modo
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    os.chmod(path, 0o600)  # sin depender de la umask
     return os.fdopen(fd, "wb")
 
 
@@ -222,7 +222,7 @@ def create_config_backup(
     archive_name = f"{prefijo}{ts}{suffix}.tar.gz"
     archive_path = backup_dir / archive_name
     # Se escribe aparte y se renombra al acabar: una a medias no puede pasar por buena ni contar en la retención.
-    parcial = backup_dir / f".{archive_name}.part"
+    parcial = backup_dir / f".{archive_name}.{secrets.token_hex(6)}.part"
 
     # "backups": no meter copias dentro de copias.
     #
