@@ -223,7 +223,8 @@ de imágenes), la contraseña de qBittorrent, el webhook de Discord, el token de
 `/config/Uploadrr/data` no entran `config.yaml`, `config.yaml.bak`, `config.yaml.migrado` ni `cookies/`, que pueden llevar claves de
 cualquier tracker, ni las configuraciones antiguas de Uploadrr (`config.py`, `config.json`,
 `backup/old_config.py`). Los config de las subidas en curso (`/config/config_uploadrr/`) no van en ninguna copia, tampoco
-en la que lleva las claves. La contraseña de acceso a la app sí va, como hash. Al restaurarlo, las claves que tengas
+en la que lleva las claves, ni el estado de las subidas en marcha (`limitador/`, `plazas/`, `eventos_uploadrr/`).
+La contraseña de acceso a la app sí va, como hash. Al restaurarlo, las claves que tengas
 puestas y esos ficheros se quedan como están; en una instalación nueva, vuelve a poner las claves en Configuración.
 
 Desde la línea de comandos se crea el mismo backup. Con `--include-secrets` lleva también las claves y esos

@@ -4,6 +4,7 @@ from __future__ import annotations
 import datetime
 import os
 import stat
+import tarfile
 import types
 
 import pytest
@@ -191,3 +192,41 @@ def test_la_copia_programada_que_falla_deja_un_aviso_en_la_campana(isolated_db, 
         assert avisos == [("backup_failed", "error")]
     finally:
         conn.close()
+
+
+def test_una_restauracion_que_falla_a_medias_dice_donde_esta_lo_que_habia(cfg, monkeypatch):
+    vieja = bs.create_config_backup()["archive_path"]
+    _marcar("después")
+    monkeypatch.setattr(tarfile.TarFile, "extractall", _disco_lleno)
+
+    r = _restaurar(vieja)
+
+    previas = [c.name for c in bs.get_backup_dir().glob(f"{bs.PREFIJO_ANTES_DE_RESTAURAR}*")]
+    assert not r["ok"] and "no se completó" in r["error"]
+    assert len(previas) == 1 and previas[0] in r["error"]
+
+
+def test_dos_copias_en_el_mismo_segundo_no_se_mezclan(cfg, monkeypatch):
+    """Compartían el .part: la segunda lo vaciaba y la primera escribía en la ya renombrada, o fallaba al renombrar."""
+    class Reloj(datetime.datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return datetime.datetime(2026, 11, 20, 12, 0, 0)
+
+    monkeypatch.setattr(bs, "datetime", types.SimpleNamespace(datetime=Reloj))
+    original = bs._add_db_snapshot
+    otra: list[dict] = []
+
+    def _con_otra_a_la_vez(*args, **kwargs):
+        if not otra:
+            otra.append({})
+            otra[0] = bs.create_config_backup()
+        original(*args, **kwargs)
+
+    monkeypatch.setattr(bs, "_add_db_snapshot", _con_otra_a_la_vez)
+    r = bs.create_config_backup()
+
+    assert r["ok"] and otra[0]["ok"]
+    with tarfile.open(r["archive_path"], "r:gz") as tar:
+        assert "emuwarez_uploadrr.db" in tar.getnames()
+    assert not list(bs.get_backup_dir().glob(".*.part"))
