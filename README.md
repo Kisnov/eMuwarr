@@ -317,7 +317,7 @@ la nomenclatura, subir…): ver [`README_CLI_READY.md`](README_CLI_READY.md).
 ## Desarrollo
 
 ```bash
-# Backend, en Linux (hardlinks, mediainfo, mkvtoolnix): ~4600 tests
+# Backend, en Linux (hardlinks, mediainfo, mkvtoolnix): ~5200 tests
 pip install -e ".[web,dev]"
 python -m pytest tests -q -p no:cacheprovider
 
