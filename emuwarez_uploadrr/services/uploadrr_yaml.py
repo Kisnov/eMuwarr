@@ -301,7 +301,7 @@ def set_tracker_config(
     if api_key is not None:
         rendered = f"    api_key: {yaml_scalar(api_key)}"
         for i in range(emu_start + 1, emu_end):
-            if re.match(r"^\s{4}api_key\s*:", lines[i]):
+            if re.match(r"""^\s{4}["']?api_key["']?\s*:""", lines[i]):
                 lines[i] = rendered
                 changed = True
                 break
@@ -314,7 +314,7 @@ def set_tracker_config(
         rendered = f"    anon: {yaml_scalar(anon)}"
         replaced = False
         for i in range(emu_start + 1, emu_end):
-            if re.match(r"^\s{4}anon\s*:", lines[i]):
+            if re.match(r"""^\s{4}["']?anon["']?\s*:""", lines[i]):
                 lines[i] = rendered
                 replaced = True
                 break

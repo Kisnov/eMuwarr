@@ -616,6 +616,16 @@ def test_un_bloque_de_tracker_con_otra_forma_falla_en_vez_de_escribir(texto, tra
     assert lines == texto.splitlines()
 
 
+def test_una_clave_entre_comillas_se_sustituye_en_vez_de_repetirse():
+    """`"anon": true` es YAML válido: sin reconocerla quedaba detrás del `anon: false` nuevo, y se lee el último."""
+    import yaml
+    from emuwarez_uploadrr.services.uploadrr_yaml import set_tracker_config
+    lines = ["TRACKERS:", "  EMU:", "    'api_key': old", '    "anon": true']
+    set_tracker_config(lines, "EMU", api_key="nueva", anon=False)
+    assert yaml.safe_load("\n".join(lines))["TRACKERS"] == {"EMU": {"api_key": "nueva", "anon": False}}
+    assert len(lines) == 4
+
+
 def test_la_subida_no_se_prepara_con_un_bloque_de_tracker_que_no_entiende(tmp_path, monkeypatch):
     from emuwarez_uploadrr.services.upload_execution.config import ConfigNoPreparada
     with pytest.raises(ConfigNoPreparada, match="TRACKERS.EMU del config.yaml"):
