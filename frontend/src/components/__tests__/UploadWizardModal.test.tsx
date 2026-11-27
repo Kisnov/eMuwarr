@@ -830,6 +830,31 @@ describe('varios capítulos de una temporada', () => {
   })
 })
 
+describe('varios capítulos: respuestas tardías al cambiar de capítulo', () => {
+  it('el proveedor que TMDb sugiere para un capítulo no cae en el siguiente', async () => {
+    m(biblioteca.getLibrary).mockResolvedValue({ items: [E1, E2], total: 2 } as never)
+    m(nom.getNomenclatureFields).mockImplementation(async id => respuestaCampos({
+      title: 'Serie', tag: `G${id}`, provider: id === 21 ? undefined : 'AMZN' }) as never)
+    const sugerencia = diferida<Awaited<ReturnType<typeof biblioteca.suggestProvider>>>()
+    m(biblioteca.suggestProvider).mockImplementation(() => sugerencia.promesa)
+    await abrir(TEMPORADA)
+    await pulsar(await esperar(() => tarjeta('Selección de capítulos')))
+    await pulsar(boton('E01'))
+    await pulsar(boton('E02'))
+    await pulsar(boton('Continuar'))
+    await esperar(() => texto().includes('Serie WEB-DL [G21]'))
+    await esperar(() => m(biblioteca.suggestProvider).mock.calls.length === 1, 3000)
+    expect(biblioteca.suggestProvider).toHaveBeenCalledWith(21)
+
+    await elegir(document.querySelector<HTMLSelectElement>('.modal-body > div > select') ?? undefined, '22')
+    await esperar(() => texto().includes('Serie WEB-DL AMZN [G22]'))
+    await act(async () => { sugerencia.resolver({ suggested: 'NF' } as never) })
+    await act(async () => { await new Promise(r => setTimeout(r, 20)) })
+    expect(campo('Proveedor')!.value).toBe('AMZN')
+    expect(texto()).toContain('Serie WEB-DL AMZN [G22]')
+  })
+})
+
 describe('varias temporadas de una serie', () => {
   beforeEach(() => {
     m(biblioteca.getLibrary).mockResolvedValue({ items: [T1, T2], total: 2 } as never)

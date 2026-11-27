@@ -775,7 +775,7 @@ export function useAsistente({ item, onClose: onCloseProp, onDone, onNavigate, p
       try {
         const res = await suggestProvider(targetId)
         // Como setField('provider', …, false) fuera de una temporada, sin depender de él: se recrea en cada pintado.
-        if (res.suggested) setFields(prev => ({ ...prev, provider: res.suggested }))
+        if (res.suggested && objetivoActual.current === targetId) setFields(prev => ({ ...prev, provider: res.suggested }))
       } catch { /* non-blocking — leave "Sin provider" */ }
       finally { setDetectingProvider(false) }
     }, 500)
