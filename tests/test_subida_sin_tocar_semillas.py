@@ -657,6 +657,24 @@ def test_tras_borrar_el_pack_completado_no_se_rehace_su_carpeta(entorno, mkv_bas
         assert cap["f"].stat().st_nlink == 3 and _sha(cap["f"]) == cap["sha"]
 
 
+def test_lo_que_sembraba_una_subida_borrada_no_lo_explica_la_fallida_que_lo_compartia(entorno):
+    """La de eMuwarez completada se borró y la de N.O.B.S fallida apuntaba al mismo fichero (enlaces_sembrados_sin_fila):
+    ese fichero es el del torrent de eMuwarez, no un resto de la fallida."""
+    from emuwarez_uploadrr.database import set_json_state
+    from emuwarez_uploadrr.services.upload_execution.ciclo_de_vida import ENLACES_SEMBRADOS_SIN_FILA
+    conn = entorno["conn"]
+    entorno["uploads"].mkdir()
+    destino = entorno["uploads"] / "Peli.mkv"
+    destino.write_bytes(b"sembrado")
+    conn.execute("INSERT INTO upload_jobs (library_item_id, status, stage, title, path, source_path, prepared_path, "
+                 "created_at, updated_at) VALUES (NULL, 'failed', 'failed', 'X', '', '', ?, 'x', 'x')", (str(destino),))
+    conn.commit()
+    assert uq._destino_sin_dueno(conn, str(destino), 999, ["/data/Peli.mkv"]) is False
+    set_json_state(conn, ENLACES_SEMBRADOS_SIN_FILA, [str(destino)])
+    conn.commit()
+    assert uq._destino_sin_dueno(conn, str(destino), 999, ["/data/Peli.mkv"]) is True
+
+
 def test_un_reintento_tras_un_fallo_rehace_lo_que_dejo_su_intento(entorno, mkv_base, monkeypatch):
     """Lo que dejó una subida fallida con su fila sí se rehace: es suyo y nadie lo siembra."""
     from emuwarez_uploadrr.services import carpeta_subida
