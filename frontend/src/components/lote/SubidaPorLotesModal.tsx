@@ -67,7 +67,12 @@ export function SubidaPorLotesModal({ entradas, onClose, onDone, onNavigate }: {
   // Dos peticiones sobre el mismo elemento: la elegida a mano; si no, la primera.
   const [peticionElegida, setPeticionElegida] = useState<ReadonlyMap<number, number>>(() => new Map())
   const peticionDe = (id: number): number | undefined => peticionElegida.get(id) ?? expansion.peticiones.get(id)?.[0]
+  // El tracker de la petición de cada uno, si sigue teniendo clave.
   const trackerDePeticion = new Map(copia.map(e => [e.requestId, e.tracker] as const))
+  const trackerPedido = (id: number) => {
+    const t = trackerDePeticion.get(peticionDe(id))
+    return trackersParaSubir.some(x => x.id === t) ? t : undefined
+  }
   const enCola = elementos.filter(e => marcadas.has(e.id) && !razon(e))
   const cola = enCola.map(e => e.id)
   const [fase, setFase] = useState<'idle' | 'processing' | 'done'>('idle')
@@ -234,7 +239,7 @@ export function SubidaPorLotesModal({ entradas, onClose, onDone, onNavigate }: {
             if (colaAlContinuar.current !== clave) {
               colaAlContinuar.current = clave
               setTrackersElegidos([...new Set(enCola.flatMap(e =>
-                destinosDeEntradaDeVarios([elegibilidad.get(e.id)], trackerDePeticion.get(peticionDe(e.id)))))])
+                destinosDeEntradaDeVarios([elegibilidad.get(e.id)], trackerPedido(e.id))))])
             }
             setPaso('resumen')
           }}

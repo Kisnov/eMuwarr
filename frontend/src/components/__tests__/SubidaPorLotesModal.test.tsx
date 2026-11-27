@@ -786,6 +786,14 @@ describe('a varios trackers', () => {
     expect(boton('Subir (1) a N.O.B.S')).toBeDefined()
   })
 
+  it('una petición de un tracker que ya no tiene clave no deja el lote sin destino', async () => {
+    m(subidas.fetchTrackersParaSubir).mockResolvedValue([{ id: 'emu', nombre: 'eMuwarez' }])
+    await abrirEntradas([{ item: DUNE, requestId: 77, alcance: { season: null, episode: null }, tracker: 'nobs' }])
+    await alResumen(1)
+    await pulsar(boton('Subir (1)'))
+    await esperar(() => texto().includes('1 de 1 encolada'))
+  })
+
   it('con peticiones de dos trackers, cada una marca el suyo; la que el suyo no admite, eMuwarez', async () => {
     await abrirEntradas([
       { item: DUNE, requestId: 77, alcance: { season: null, episode: null }, tracker: 'nobs' },
