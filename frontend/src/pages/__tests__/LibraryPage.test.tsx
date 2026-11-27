@@ -372,4 +372,22 @@ describe('Biblioteca: lo que se recarga sola tras una sincronización', () => {
     expect(texto()).toContain('Dune nueva')
     expect(texto()).not.toContain('Dune vieja')
   })
+
+  it('la tabla de temporadas de la ficha abierta se pone al día tras una sincronización, sin «Cargando…»', async () => {
+    const temporada = (id: number, n: number) => item(id, `Serie - Temporada ${n}`, { item_type: 'season', parent_id: 3, season_number: n })
+    let temporadas = [temporada(31, 1)]
+    vi.mocked(getLibrary).mockImplementation(async q => (q?.parent_id === 3
+      ? { items: temporadas, total: temporadas.length }
+      : { items: [DUNE, ALIEN, SERIE], total: 3, archivos: 2 }) as never)
+    vi.mocked(getLibraryItem).mockResolvedValue(SERIE)
+    localStorage.setItem('emuwarez_uploadrr_library_view', 'list')
+    await montar(<ConMarca />)
+    await esperar(() => texto().includes('Alien'))
+    await abrirFicha('Serie')
+    await esperar(() => texto().includes('Temporada 1'))
+    temporadas = [temporada(31, 1), temporada(32, 2)]
+    await act(async () => { invalidar() })
+    expect(document.querySelector('.hijos-aviso')).toBeNull()
+    await esperar(() => texto().includes('Temporada 2'))
+  })
 })

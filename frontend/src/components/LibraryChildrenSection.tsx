@@ -1,5 +1,6 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useContext, useRef } from 'react'
 import { getLibrary } from '../api/library'
+import { SyncContext } from '../context/SyncContext'
 import type { LibraryItemResponse, InstanceSafeResponse } from '../types/api'
 import { LibraryTreeRow, type LibraryActionKind } from './LibraryTreeRow'
 import { useTooltip } from './Tooltip'
@@ -33,6 +34,18 @@ export function LibraryChildrenSection({ parentId, childType, title, instances, 
       .catch(() => setChildren([]))
       .finally(() => setLoading(false))
   }, [parentId, childType, reloadKey])
+
+  // Tras una sincronización se vuelven a pedir sin «Cargando…»: la tabla, su desplazamiento y lo desplegado se quedan.
+  const lastInvalidatedAt = useContext(SyncContext)?.lastInvalidatedAt ?? 0
+  const padre = useRef(parentId)
+  padre.current = parentId
+  useEffect(() => {
+    if (!lastInvalidatedAt) return
+    getLibrary({ parent_id: parentId, type: childType, limit: 500 })
+      .then(r => { if (padre.current === parentId) setChildren(r.items) })
+      .catch(() => {})
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- solo cuando algo invalida la lista
+  }, [lastInvalidatedAt])
 
   const emptyLabel = childType === 'season' ? 'Sin temporadas' : 'Sin capítulos'
 
