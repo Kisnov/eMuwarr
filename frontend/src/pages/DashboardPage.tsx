@@ -195,8 +195,11 @@ export function DashboardPage({ onNavigate }: DashboardPageProps = {}) {
   // refresca el aviso del servidor, sin esperar a que dé la vuelta el Panel.
   const subidasPedidas = useRef(false)
   const versionMirada = useRef(0)
+  // Solo cuenta la última carga: una vieja más lenta no pisa la nueva.
+  const datosSeq = useRef(0)
 
   const loadData = useCallback(async () => {
+    const seq = ++datosSeq.current
     if (!subidasPedidas.current) {
       subidasPedidas.current = true
       void loadActiveUploads()
@@ -212,6 +215,7 @@ export function DashboardPage({ onNavigate }: DashboardPageProps = {}) {
       getDashboardSummary(),
       getDashboardRecommendations(recentLimit),
     ])
+    if (seq !== datosSeq.current) return
     if (s.status === 'fulfilled') setSummary(s.value)
     else {
       setDataError('No se pudieron cargar los datos del Panel')

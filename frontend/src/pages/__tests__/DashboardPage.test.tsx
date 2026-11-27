@@ -944,3 +944,24 @@ describe('«Subir seleccionadas» en «Listo para subir»', () => {
     expect(document.querySelector('.lote-lista')).toBeNull()
   })
 })
+
+describe('Panel: recargas que se cruzan', () => {
+  it('una carga vieja que responde después de una nueva no pisa lo nuevo', async () => {
+    let soltarVieja: () => void = () => {}
+    vi.mocked(getDashboardRecommendations)
+      .mockImplementationOnce(() => new Promise(r => {
+        soltarVieja = () => r({ items: [rec({ id: 5, content_name: 'Vieja', rec_request_id: 9, rec_points: 10 })] })
+      }))
+      .mockResolvedValue({ items: [rec({ id: 6, content_name: 'Nueva', rec_request_id: 8, rec_points: 10 })] })
+    await montar(<Envoltorio />)
+    await esperar(() => vi.mocked(getDashboardRecommendations).mock.calls.length === 1)
+    await act(async () => {
+      for (const [tipo, cb] of vi.mocked(suscribirse).mock.calls) if (tipo === 'tarea-terminada') (cb as () => void)()
+    })
+    await esperar(() => document.querySelector('.panel-carriles') && carril('Listo para subir').textContent?.includes('Nueva'))
+    await act(async () => { soltarVieja() })
+    await act(async () => { await new Promise(r => setTimeout(r, 20)) })
+    expect(carril('Listo para subir').textContent).toContain('Nueva')
+    expect(carril('Listo para subir').textContent).not.toContain('Vieja')
+  })
+})
