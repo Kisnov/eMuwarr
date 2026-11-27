@@ -135,3 +135,15 @@ def test_el_asistente_propone_el_grupo_de_la_pelicula(client, auth_headers, tmp_
         resp = client.get(f"/api/library/{item_id}/nomenclature/fields", headers=auth_headers)
     assert resp.status_code == 200, resp.text
     assert resp.json()["fields"]["tag"] == "FLUX"
+
+
+def test_un_capitulo_guardado_sin_tag_recupera_su_grupo_en_el_pack(isolated_db, tmp_path):
+    """La propuesta propia del capítulo puede estar guardada con «Sin Tag»: en el pack lleva su grupo igualmente."""
+    conn = _open(isolated_db)
+    season_id = _pack(conn, tmp_path, ["Loco87", "Loco87"])
+    build_season_pack_plan(season_id, conn=conn)
+    conn.execute("UPDATE nomenclature_proposals SET release_tag = NULL, "
+                 "proposed_filename = REPLACE(proposed_filename, '-Loco87', '')")
+    conn.commit()
+    plan = build_season_pack_plan(season_id, conn=conn)
+    assert all(e["proposed_filename"].endswith("-Loco87") for e in plan["episodes"]), plan["episodes"]

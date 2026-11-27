@@ -119,10 +119,12 @@ def titulo_actual(ruta: str) -> str | None:
     return ((leido["data"].get("container") or {}).get("properties") or {}).get("title")
 
 
-def preview_internal_title_update(library_item_id: int, conn=None, *, ruta: str | None = None) -> dict:
+def preview_internal_title_update(library_item_id: int, conn=None, *, ruta: str | None = None,
+                                  nombre: str | None = None) -> dict:
     """Return a dry-run preview of the MKV title update. Never modifies anything.
 
-    `ruta`: el fichero sobre el que se aplicaría, si no es el del elemento."""
+    `ruta`: el fichero sobre el que se aplicaría, si no es el del elemento.
+    `nombre`: el nombre del que sale el título, si no es el de su propuesta (un capítulo dentro de un pack)."""
     own = conn is None
     conn = conn or connect()
     try:
@@ -152,7 +154,7 @@ def preview_internal_title_update(library_item_id: int, conn=None, *, ruta: str 
                 "warnings": [],
             }
 
-        torrent_name = _get_torrent_name_for_item(library_item_id, conn)
+        torrent_name = nombre or _get_torrent_name_for_item(library_item_id, conn)
         internal_title = build_internal_mkv_title(torrent_name or p.stem)
 
         warnings: list[str] = []
@@ -196,6 +198,7 @@ def apply_internal_title_update(
     confirmation: str | None = None,
     conn=None,
     ruta: str | None = None,
+    nombre: str | None = None,
 ) -> dict:
     """Apply or preview the MKV internal title update.
 
@@ -206,7 +209,7 @@ def apply_internal_title_update(
     own = conn is None
     conn = conn or connect()
     try:
-        preview = preview_internal_title_update(library_item_id, conn=conn, ruta=ruta)
+        preview = preview_internal_title_update(library_item_id, conn=conn, ruta=ruta, nombre=nombre)
 
         if preview["status"] == "blocked":
             return {**preview, "dry_run": True, "apply": False}

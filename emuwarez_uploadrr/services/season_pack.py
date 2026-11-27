@@ -968,8 +968,8 @@ def build_season_pack_plan(
             grupo = (ep.get("release_group") or "").strip()
             viejo = to_filesystem_name(f"-{proposal.get('release_tag')}") if proposal.get("release_tag") else ""
             nuevo = to_filesystem_name(f"-{grupo}") if grupo else ""
-            if viejo and viejo != nuevo and proposed_filename.endswith(viejo):
-                proposed_filename = f"{proposed_filename[:-len(viejo)]}{nuevo}"
+            if viejo != nuevo and proposed_filename.endswith(viejo):
+                proposed_filename = f"{proposed_filename[:len(proposed_filename) - len(viejo)]}{nuevo}"
             ext = ""
             if source_path and os.path.isfile(source_path):
                 ext = os.path.splitext(source_path)[1]
