@@ -450,3 +450,25 @@ def test_un_pack_con_un_capitulo_en_otro_formato_no_se_sube(db_conn, tmp_path, m
     formato = next(c for c in r["checks"] if c["id"] == "formato")
     assert formato["status"] == "fail" and r["ready"] is False
     assert formato["message"].startswith("Capítulo 2: Es un AVI: Uploadrr-EMU solo sube MKV, MP4 y TS.")
+
+
+def test_un_enlace_simbolico_en_la_carpeta_de_subidas_avisa_sin_bloquear(db_conn, tmp_path, monkeypatch):
+    """Carpeta de subidas en otro disco: el enlace sale simbólico y Uploadrr-EMU lo resuelve (nombre de la biblioteca)."""
+    import os
+    from emuwarez_uploadrr.services import carpeta_subida
+
+    def simbolico(origen, destino):
+        os.symlink(origen, destino)
+        return "simbólico"
+    monkeypatch.setattr(carpeta_subida, "_enlazar", simbolico)
+    f = tmp_path / "movie.mkv"
+    f.write_bytes(b"x" * 2048)
+    iid = _movie_with_path(db_conn, str(f))
+
+    r = uc.run_upload_checks(db_conn, iid, scope="content")
+
+    check = next(c for c in r["checks"] if c["id"] == "carpeta_subida")
+    assert check["status"] == "skip"
+    assert "(enlace simbólico)" in check["message"] and "otro disco" in check["message"]
+    assert "nombre de la biblioteca" in check["message"] and "UPLOADRR_UPLOADS_DIR" in check["message"]
+    assert [c["id"] for c in r["checks"]][-1] == "tipo"           # sigue con las demás

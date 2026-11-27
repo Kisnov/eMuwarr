@@ -53,9 +53,10 @@ export function textoPistas(modo: string | null | undefined, cambian: number | n
   ])
 }
 
-// El tipo de enlace que dijo la comprobación «Se puede preparar la carpeta de subida» («…/uploads (enlace duro)»).
+// El tipo de enlace que dijo la comprobación «Se puede preparar la carpeta de subida» («…/uploads (enlace duro)»); el
+// simbólico sale como aviso.
 export function tipoDeEnlace(checks: UploadCheck[] | undefined): 'duro' | 'simbólico' | null {
-  const mensaje = checks?.find(c => c.id === 'carpeta_subida' && c.status === 'ok')?.message
+  const mensaje = checks?.find(c => c.id === 'carpeta_subida' && c.status !== 'fail')?.message
   const m = /\(enlace (duro|simbólico)\)/.exec(mensaje ?? '')
   return m ? (m[1] as 'duro' | 'simbólico') : null
 }

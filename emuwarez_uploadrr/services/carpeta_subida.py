@@ -25,8 +25,10 @@ nueva, el torrent se llama como debe, y la biblioteca no se toca.
 CUÁNDO NO SE PUEDE. Un enlace duro exige que las dos rutas estén en el mismo
 sistema de ficheros. Es habitual tener la configuración en un SSD y los medios
 en otro disco, y ahí `os.link` falla con EXDEV. En ese caso se cae a un enlace
-simbólico, que cruza sistemas de ficheros sin copiar: mkvmerge y qBittorrent
-leen a través de él sin enterarse.
+simbólico, que cruza sistemas de ficheros sin copiar, pero no es lo mismo:
+Uploadrr-EMU lo resuelve y un archivo suelto sale con el nombre y la carpeta de
+la biblioteca, y el original no cuenta el enlace (st_nlink), así que no se edita
+en su sitio. La comprobación de la subida lo avisa.
 
 TODO PASA POR AQUÍ, no solo los packs, y el nombre de eMuwarez se pone AQUÍ:
 el fichero de la biblioteca conserva el nombre de Radarr/Sonarr (Jellyfin lo
@@ -323,9 +325,10 @@ def comprobar_enlace(fichero: str, *, raiz: Optional[str] = None) -> dict:
     lados dan el mismo `st_dev` y aun así `os.link` falla con EPERM. Cuesta
     microsegundos y no puede equivocarse.
 
-    Devuelve {ok, tipo, error}. `tipo` es "duro" o "simbólico": el segundo
-    también vale —Uploadrr y qBittorrent leen a través de él— pero conviene
-    decirlo, porque significa que la carpeta de subidas está en otro disco.
+    Devuelve {ok, tipo, error}. `tipo` es "duro" o "simbólico". El segundo
+    significa que la carpeta de subidas está en otro disco: se puede subir, pero
+    Uploadrr-EMU resuelve el enlace y un archivo suelto sale con el nombre de la
+    biblioteca, sembrando el original.
     """
     raiz = raiz or RAIZ_SUBIDAS
     if not asegurar_raiz(raiz):

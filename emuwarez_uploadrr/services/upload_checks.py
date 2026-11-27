@@ -127,6 +127,20 @@ def run_upload_checks(conn: sqlite3.Connection, item_id: int, *, scope: str = "a
         checks.append({"id": cid, "label": label, "status": "skip", "message": message})
         _set_checks_progress(item_id, checks=checks)
 
+    # Si se puede enlazar en la carpeta de subidas (carpeta_subida.comprobar_enlace). Un enlace simbólico no bloquea,
+    # pero avisa: la carpeta de subidas está en otro disco que la biblioteca.
+    def carpeta_subida(prueba: dict) -> bool:
+        from .carpeta_subida import RAIZ_SUBIDAS
+        if prueba["tipo"] == "simbólico":
+            add_skip("carpeta_subida", "La carpeta de subidas está en otro disco",
+                     f"{RAIZ_SUBIDAS} (enlace simbólico): está en otro disco que la biblioteca. Un archivo suelto se "
+                     "subiría con el nombre de la biblioteca y qBittorrent sembraría el original, y las pistas y el "
+                     "título interno no se editan. Pon UPLOADRR_UPLOADS_DIR en el mismo disco que la biblioteca.")
+            return True
+        return add("carpeta_subida", "Se puede preparar la carpeta de subida",
+                   "No se puede preparar la carpeta de subida", prueba["ok"],
+                   f"{RAIZ_SUBIDAS} (enlace {prueba['tipo']})" if prueba["ok"] else prueba["error"] or "")
+
     def done(complete: bool = False) -> dict:
         # Skips don't block: only a real failure (red) does. `complete` dice si
         # se llegó al final del grupo pedido — antes se deducía mirando que la
@@ -229,17 +243,12 @@ def run_upload_checks(conn: sqlite3.Connection, item_id: int, *, scope: str = "a
         # prueba haciendo un enlace de verdad y deshaciéndolo, no mirando
         # números de dispositivo: hay montajes donde coinciden y el enlace
         # falla igual.
-        from .carpeta_subida import RAIZ_SUBIDAS, comprobar_enlace
+        from .carpeta_subida import comprobar_enlace
         muestra = next((ep.get("source_path") for ep in plan.get("episodes", [])
                         if ep.get("source_path")), None)
         prueba = comprobar_enlace(muestra) if muestra else {
             "ok": False, "tipo": None, "error": "El pack no tiene ningún capítulo con ruta."}
-        if not add("carpeta_subida",
-                   "Se puede preparar la carpeta de subida",
-                   "No se puede preparar la carpeta de subida",
-                   prueba["ok"],
-                   (f"{RAIZ_SUBIDAS} (enlace {prueba['tipo']})" if prueba["ok"]
-                    else prueba["error"] or "")):
+        if not carpeta_subida(prueba):
             return done()
         # Falls through to the shared checks below (output dir/qBittorrent/
         # image hosts/eMuwarez) — those don't depend on item_type.
@@ -263,14 +272,9 @@ def run_upload_checks(conn: sqlite3.Connection, item_id: int, *, scope: str = "a
         # 0b. Y que se pueda enlazar en la carpeta de subidas, igual que un
         # pack: desde 2026-08-04 TODO lo que se sube se enlaza ahí, no solo los
         # packs, para que la biblioteca no aparezca en ninguna ruta de subida.
-        from .carpeta_subida import RAIZ_SUBIDAS, comprobar_enlace
+        from .carpeta_subida import comprobar_enlace
         prueba = comprobar_enlace(local_path)
-        if not add("carpeta_subida",
-                   "Se puede preparar la carpeta de subida",
-                   "No se puede preparar la carpeta de subida",
-                   prueba["ok"],
-                   (f"{RAIZ_SUBIDAS} (enlace {prueba['tipo']})" if prueba["ok"]
-                    else prueba["error"] or "")):
+        if not carpeta_subida(prueba):
             return done()
 
         # 1. Renameable — write permission on the file's directory. Solo cuenta

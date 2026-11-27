@@ -41,8 +41,9 @@ la app crea uno **simbólico**. Pasa en estos casos:
   (`fs.protected_hardlinks`, también `EPERM`).
 - El fichero ha llegado a su límite de enlaces (`EMLINK`).
 
-Un enlace simbólico solo siembra si qBittorrent puede resolver a dónde apunta, es decir, si también ve la
-biblioteca en la misma ruta.
+Un enlace simbólico no es lo mismo: Uploadrr-EMU lo resuelve, así que una película o un capítulo suelto se sube con
+el nombre del fichero de la biblioteca y qBittorrent siembra el original (tiene que ver la biblioteca en la misma
+ruta), y las pistas y el título interno no se editan. La comprobación de la subida lo avisa.
 
 De ahí salen las reglas:
 
@@ -273,8 +274,8 @@ docker compose restart
 
 Cuando todo va bien, el asistente muestra `/data/uploads/emu (enlace duro)`. Si dice `enlace simbólico`, mira los
 casos de la sección 2: carpeta de subidas en otro sistema de ficheros, montaje sin enlaces duros, o media que no es
-de `PUID:PGID`. Funciona solo si qBittorrent ve la biblioteca en la misma ruta, así que conviene arreglarlo:
-mueve la carpeta de subidas al sistema de ficheros de la media o corrige el dueño de la media.
+de `PUID:PGID`. Un fichero suelto se subiría con el nombre de la biblioteca y sembrando el original, así que hay
+que arreglarlo: mueve la carpeta de subidas al sistema de ficheros de la media o corrige el dueño de la media.
 
 ### qBittorrent no siembra
 
