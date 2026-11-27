@@ -8,15 +8,15 @@ const POR_ID = new Map(Object.entries(LOGOS).map(([ruta, url]) => [ruta.split('/
 // Los que son arte de píxel: se escalan sin suavizar.
 const PIXELADOS = new Set(['mnv'])
 
-// El logo del tracker a `size` px de alto (y como mucho 1,4 veces de ancho), con su nombre de texto alternativo; con
-// `conNombre`, el nombre va escrito al lado. Sin logo, el nombre.
-export function LogoTracker({ tracker, nombre, size = 16, conNombre = false }: {
-  tracker?: string; nombre: string; size?: number; conNombre?: boolean
+// El logo del tracker a `size` px de alto (y como mucho 1,4 veces de ancho: las clases de componentes-menores.css), con
+// su nombre de texto alternativo; con `conNombre`, el nombre va escrito al lado. Sin logo, el nombre.
+export function LogoTracker({ tracker, nombre, size = 18, conNombre = false }: {
+  tracker?: string; nombre: string; size?: 14 | 18 | 20 | 24; conNombre?: boolean
 }) {
   const id = tracker || 'emu'
   const url = POR_ID.get(id)
   if (!url) return conNombre ? <>{nombre}</> : <span className="logo-tracker-sin-logo">{nombre}</span>
-  const img = <img className={PIXELADOS.has(id) ? 'logo-tracker es-pixel' : 'logo-tracker'} src={url}
-    alt={conNombre ? '' : nombre} title={conNombre ? undefined : nombre} height={size} style={{ maxWidth: size * 1.4 }} />
+  const img = <img className={`logo-tracker logo-tracker-${size}${PIXELADOS.has(id) ? ' es-pixel' : ''}`} src={url}
+    alt={conNombre ? '' : nombre} title={conNombre ? undefined : nombre} height={size} />
   return conNombre ? <span className="logo-tracker-con-nombre">{img}{nombre}</span> : img
 }

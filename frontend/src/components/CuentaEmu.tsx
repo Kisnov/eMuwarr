@@ -32,7 +32,7 @@ export function Cuentas({ cuentas }: { cuentas: EmuPerfil[] }) {
 }
 
 // Lo que comparten las dos disposiciones: enlaces, avisos, cifras y el botón de volver a leer.
-function useCuenta(perfil: EmuPerfil, alturaLogo: number) {
+function useCuenta(perfil: EmuPerfil, alturaLogo: 20 | 24) {
   const { actualizar, ocultarNombre } = usePerfilEmu()
   const espera = useCooldown()
   const [actualizando, setActualizando] = useState(false)
