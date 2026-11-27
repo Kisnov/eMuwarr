@@ -645,6 +645,16 @@ describe('«Subir también a…»', () => {
     await esperar(() => boton('Subir también a N.O.B.S'))
   })
 
+  it('la ficha abierta desde la lista enseña también los avisos que trae el GET de esa subida', async () => {
+    const aviso = 'Milnueve ya tiene uno igual o mejor.'
+    vi.mocked(getUploadJob).mockResolvedValue({
+      ...SUELTA, display_title: 'Película suelta (2024)', subir_tambien_a: [NOBS], subir_tambien_avisos: [aviso],
+    })
+    await pagina()
+    await pulsar(filaDe('Película suelta').querySelector('.sub-titulo')!)
+    await esperar(() => texto().includes(aviso))
+  })
+
   it('el botón de la lista aparece al volver a Subidas tras poner la clave en Configuración, sin recargar', async () => {
     let fijarVisible: (v: boolean) => void = () => {}
     function Seccion() {
