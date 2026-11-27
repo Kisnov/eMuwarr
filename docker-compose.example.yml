@@ -46,7 +46,7 @@ services:
     init: true
 
     ports:
-      - "${EMUWAREZ_UPLOADRR_PORT:-9494}:9494"
+      - "${EMUWARR_PORT:-${EMUWAREZ_UPLOADRR_PORT:-9494}}:9494"
 
     # Ajusta PUID/PGID al UID/GID del usuario propietario de los archivos de media
     user: "${PUID:-1000}:${PGID:-1000}"

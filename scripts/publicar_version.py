@@ -179,7 +179,7 @@ def main() -> int:
             print(f"✗ La versión publicada es {anterior}, más nueva que la {manifiesto['version']} de este commit.",
                   file=sys.stderr)
             print("\n  Para volver a una versión anterior, fíjala en el compose"
-                  " (EMUWAREZ_UPLOADRR_TAG=X.Y.Z): no se republica.", file=sys.stderr)
+                  " (EMUWARR_TAG=X.Y.Z): no se republica.", file=sys.stderr)
             return 1
 
     # Antes de construir: una versión ya publicada no debe mover las etiquetas de la imagen.

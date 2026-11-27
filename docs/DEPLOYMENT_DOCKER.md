@@ -87,9 +87,9 @@ no compila nada. Lo que hay que mirar:
 
 | Clave | En el repo | Para qué |
 |---|---|---|
-| `image` | `ghcr.io/kisnov/emuwarr:${EMUWAREZ_UPLOADRR_TAG:-latest}` | `latest` es la última imagen publicada. Para quedarte en una versión o volver atrás, `EMUWAREZ_UPLOADRR_TAG` acepta también `X.Y.Z` o el SHA del commit de una versión: ver [Versiones y volver atrás](../README.md#versiones-y-volver-atrás). |
+| `image` | `ghcr.io/kisnov/emuwarr:${EMUWARR_TAG:-${EMUWAREZ_UPLOADRR_TAG:-latest}}` | `latest` es la última imagen publicada. Para quedarte en una versión o volver atrás, `EMUWARR_TAG` acepta también `X.Y.Z` o el SHA del commit de una versión: ver [Versiones y volver atrás](../README.md#versiones-y-volver-atrás). |
 | `init` | `true` | Un init como proceso 1 recoge los procesos que quedan sueltos al cancelar una subida (ffmpeg, mkbrr...). |
-| `ports` | `${EMUWAREZ_UPLOADRR_PORT:-9494}:9494` | Interfaz web y API. |
+| `ports` | `${EMUWARR_PORT:-${EMUWAREZ_UPLOADRR_PORT:-9494}}:9494` | Interfaz web y API. |
 | `user` | `${PUID:-1000}:${PGID:-1000}` | El usuario con el que corre todo (sección 3). |
 | `cpus`, `mem_limit` | `"2"`, `"2g"` | Cada subida activa puede ocupar un núcleo entero (el hash del torrent) y unos 0,8 GB de RAM: con estos valores caben unas dos subidas en paralelo. Si subes *Máximo de Subidas en Paralelo* (Configuración → Otros), sube también estos dos. |
 | `TZ` | `Europe/Madrid` | Zona horaria. |
@@ -107,7 +107,8 @@ contraseña en la URL. La WebUI no tiene enlace directo a un torrent, así que j
 pegarlo en su filtro.
 
 Para no editar el compose, copia [`.env.example`](../.env.example) a `.env` al lado y ajusta `PUID`, `PGID`, `TZ`,
-`EMUWAREZ_UPLOADRR_PORT` y `EMUWAREZ_UPLOADRR_TAG`. Luego:
+`EMUWARR_PORT` y `EMUWARR_TAG`. Un `.env` de antes, con `EMUWAREZ_UPLOADRR_PORT` y `EMUWAREZ_UPLOADRR_TAG`, sigue
+valiendo tal cual; si están los dos nombres, manda el nuevo. Luego:
 
 ```bash
 docker compose up -d
@@ -190,7 +191,7 @@ docker compose up -d
 
 La base de datos se migra sola, y antes deja una copia en `/config/backups/pre-migracion-*.db`. Si no hay sitio en
 el disco para esa copia, se actualiza igual y la campana avisa de que no la hay. Si la versión nueva
-falla, vuelve a la anterior con `EMUWAREZ_UPLOADRR_TAG`; si cambió el esquema, hay que restaurar esa copia
+falla, vuelve a la anterior con `EMUWARR_TAG`; si cambió el esquema, hay que restaurar esa copia
 ([Versiones y volver atrás](../README.md#versiones-y-volver-atrás)). Si construyes la imagen tú, haz `git pull` y
 repite los dos comandos de [Construir la imagen tú mismo](#construir-la-imagen-tú-mismo).
 

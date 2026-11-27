@@ -16,7 +16,7 @@
 # Al publicar sigue el orden del workflow: la imagen como :<sha>, la etiqueta
 # vX.Y.Z (y main avanza hasta ella), la imagen como :X.Y.Z, :dev y :latest, y el manifiesto. Si algo falla,
 # relanzar completa la versión. :X.Y.Z es la que se fija en el compose
-# (EMUWAREZ_UPLOADRR_TAG=X.Y.Z) para quedarse en una versión o volver a ella.
+# (EMUWARR_TAG=X.Y.Z) para quedarse en una versión o volver a ella.
 #
 # Lo normal es el workflow «Publicar versión», que hace lo mismo en GitHub tras
 # pasar los tests. Esto es la alternativa local, sin gastar minutos de Actions
