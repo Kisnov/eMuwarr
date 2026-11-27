@@ -301,6 +301,20 @@ def asegurar_raiz(raiz: Optional[str] = None) -> bool:
         return False
 
 
+def motivo_para_no_editar(fichero: str) -> Optional[str]:
+    """Por qué no se edita `fichero` en su sitio (un torrent puede sembrarlo), o None.
+
+    Un enlace simbólico de la carpeta de subidas no suma a `st_nlink`: con la carpeta en otro disco, el original
+    parece no compartido aunque otra subida lo siembre a través de él."""
+    enlaces = os.stat(fichero).st_nlink
+    if enlaces > 1:
+        return f"lo comparten {enlaces} enlaces duros (un torrent que siembra o una subida anterior)"
+    if comprobar_enlace(fichero)["tipo"] == "simbólico":
+        return ("se enlaza con un enlace simbólico (la carpeta de subidas está en otro disco), que no cuenta como "
+                "enlace: puede sembrarlo un torrent")
+    return None
+
+
 def comprobar_enlace(fichero: str, *, raiz: Optional[str] = None) -> dict:
     """Si se puede enlazar ESE fichero dentro de la carpeta de subidas.
 

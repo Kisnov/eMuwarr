@@ -217,6 +217,23 @@ def test_no_retitula_uno_de_la_biblioteca_que_comparte_un_torrent(tmp_path, monk
     mock_run.assert_not_called()
 
 
+def test_no_retitula_uno_de_la_biblioteca_con_la_carpeta_de_subidas_en_otro_disco(tmp_path, monkeypatch):
+    """El enlace simbólico de la carpeta de subidas no suma a st_nlink: un torrent puede sembrarlo igual."""
+    from emuwarez_uploadrr.services import carpeta_subida
+
+    def simbolico(origen, destino):
+        os.symlink(origen, destino)
+        return "simbólico"
+    monkeypatch.setattr(carpeta_subida, "_enlazar", simbolico)
+    monkeypatch.setattr(carpeta_subida, "RAIZ_SUBIDAS", str(tmp_path / "uploads"))
+    (tmp_path / "media").mkdir()
+    peli = tmp_path / "media" / "Film (2024).mkv"
+    peli.write_bytes(b"fake mkv")
+    r, mock_run = _titulo_en(tmp_path, monkeypatch, peli)
+    assert r["status"] == "blocked" and "enlace simbólico" in r["errors"][0]
+    mock_run.assert_not_called()
+
+
 def test_no_retitula_con_las_pistas_en_ninguno(tmp_path, monkeypatch):
     from emuwarez_uploadrr.services.mkv_title import TITULO_CON_NINGUNO
     monkeypatch.setattr("emuwarez_uploadrr.services.mkv_remux.modo_pistas", lambda conn=None: "ninguno")

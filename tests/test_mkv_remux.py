@@ -960,6 +960,33 @@ def test_apply_refuses_a_file_shared_by_a_hardlink(tmp_path):
     mock_run.assert_not_called()
     mock_popen.assert_not_called()
     assert mkv_file.read_bytes() == b"contenido original"
+
+
+def test_apply_refuses_a_file_seeded_through_a_symlink_of_the_uploads_folder(tmp_path, monkeypatch):
+    """Con la carpeta de subidas en otro disco el enlace es simbólico y no suma a st_nlink: tampoco se escribe."""
+    from emuwarez_uploadrr.services import carpeta_subida
+    from emuwarez_uploadrr.services.mkv_remux import apply_remux, REMUX_CONFIRMATION_TOKEN
+
+    def simbolico(origen, destino):
+        os.symlink(origen, destino)
+        return "simbólico"
+    monkeypatch.setattr(carpeta_subida, "_enlazar", simbolico)
+    monkeypatch.setattr(carpeta_subida, "RAIZ_SUBIDAS", str(tmp_path / "uploads"))
+    mkv_file = tmp_path / "Film.2024.mkv"
+    mkv_file.write_bytes(b"contenido original")
+    conn = _make_conn(tmp_path)
+    item_id = _insert_library_item(conn, prepared_path=str(mkv_file))
+
+    with patch("emuwarez_uploadrr.services.mkv_remux.check_mkvmerge_available",
+               return_value={"available": True, "path": "/usr/bin/mkvmerge"}),          patch("emuwarez_uploadrr.services.mkv_remux.read_tracks_json",
+               return_value={"ok": True, "data": _SAMPLE_MKV_JSON}),          patch("emuwarez_uploadrr.services.mkv_remux.subprocess.run") as mock_run,          patch("emuwarez_uploadrr.services.mkv_remux.subprocess.Popen") as mock_popen:
+        result = apply_remux(item_id, conn=conn, dry_run=False, apply=True,
+                             confirmation=REMUX_CONFIRMATION_TOKEN)
+
+    assert result["status"] == "blocked" and "enlace simbólico" in result["errors"][0]
+    mock_run.assert_not_called()
+    mock_popen.assert_not_called()
+    assert mkv_file.read_bytes() == b"contenido original"
     conn.close()
 
 

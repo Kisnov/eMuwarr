@@ -1132,9 +1132,10 @@ def _subida_que_lo_usa(conn, ruta: str, job_id: int) -> int | None:
 
 def _motivo_para_no_tocar(origen: str) -> str | None:
     """None si se puede escribir en el original; si no, por qué no."""
-    enlaces = os.stat(origen).st_nlink
-    if enlaces > 1:
-        return f"lo comparten {enlaces} enlaces duros (un torrent que siembra o una subida anterior)"
+    from .carpeta_subida import motivo_para_no_editar
+    motivo = motivo_para_no_editar(origen)
+    if motivo:
+        return motivo
     if not (os.access(origen, os.W_OK) and os.access(os.path.dirname(origen), os.W_OK)):
         return "no se puede escribir en él"
     return None

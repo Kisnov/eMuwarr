@@ -628,6 +628,39 @@ def test_no_se_rehace_el_enlace_que_siembra_otra_subida(entorno, mkv_base, monke
     assert _sha(peli["f"]) == sembrado
 
 
+def _simbolico(origen, destino):
+    """carpeta_subida._enlazar con la carpeta de subidas en otro disco: EXDEV y un enlace simbólico de verdad."""
+    os.symlink(origen, destino)
+    return "simbólico"
+
+
+def test_con_enlace_simbolico_el_original_que_siembra_otra_subida_no_se_edita(entorno, mkv_base, monkeypatch):
+    """Un enlace simbólico no suma a st_nlink: el original parecía no compartido y la segunda subida, con otro
+    nombre, lo editaba en su sitio mientras la primera lo sembraba a través del enlace."""
+    from emuwarez_uploadrr.services import carpeta_subida
+    monkeypatch.setattr(carpeta_subida, "_enlazar", _simbolico)
+    monkeypatch.setattr(carpeta_subida, "clonar", _reflink("no"))     # entre discos no hay reflink
+    _modo(entorno, "solo_renombrar")
+    peli = _pelicula(entorno, mkv_base, carpeta=entorno["tmp"] / "media" / "Peli (2024)", semilla=False)
+    conn = entorno["conn"]
+    primera = _subir(entorno, peli["id"], peli["proposal_id"])
+    conn.execute("UPDATE upload_jobs SET status = 'completed' WHERE id = ?", (primera["id"],))
+    conn.execute("UPDATE nomenclature_proposals SET proposed_filename = ?, proposed_torrent_name = ? WHERE id = ?",
+                 (PROPUESTO + ".v2", PROPUESTO.replace(".", " ") + " v2", peli["proposal_id"]))
+    conn.commit()
+    sembrado = entorno["uploads"] / f"{PROPUESTO}.mkv"
+    assert os.path.islink(sembrado) and peli["f"].stat().st_nlink == 1
+    antes = _sha(peli["f"])
+
+    r = _subir(entorno, peli["id"], peli["proposal_id"])
+
+    assert r["visto"]["prepared_path"] == str(entorno["uploads"] / f"{PROPUESTO}.v2.mkv"), r["logs"]
+    assert _sha(peli["f"]) == antes and _sha(sembrado) == antes
+    assert any("sin reflink" in m for m in r["logs"])
+    assert any("enlace simbólico" in m and "el original no se ha tocado" in m for m in r["logs"])
+    assert json.loads(r["job"]["remux_snapshot_json"]) == {"omitida": "sin reflink"}
+
+
 # ---------------------------------------------------------------------------
 # Las demás ramas de _preparar_fichero
 # ---------------------------------------------------------------------------
