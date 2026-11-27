@@ -244,6 +244,19 @@ def en_carpeta_de_subidas(ruta: str, *, raiz: Optional[str] = None) -> bool:
     return os.path.commonpath((padre, raiz)) == raiz
 
 
+def abarca_la_biblioteca(raices: Iterable[str], *, raiz: Optional[str] = None) -> Optional[str]:
+    """Por qué no vale la carpeta de subidas si es una ruta permitida (allowed_roots) o la contiene: los archivos de la
+    biblioteca contarían como «en la carpeta de subidas» y se renombrarían. None si no."""
+    raiz = raiz or RAIZ_SUBIDAS
+    real = os.path.realpath(raiz)
+    dentro = next((r for r in raices if r and os.path.commonpath((os.path.realpath(r), real)) == real), None)
+    if dentro is None:
+        return None
+    return (f"La carpeta de subidas ({raiz}) es o contiene la ruta permitida {dentro}, donde está la biblioteca: sus "
+            "archivos se tomarían por enlaces de subida y se renombrarían. Pon UPLOADRR_UPLOADS_DIR en una carpeta "
+            "propia, p. ej. /data/uploads/emu.")
+
+
 def borrar_de_subidas(ruta: Optional[str], *, raiz: Optional[str] = None) -> bool:
     """Borra de la carpeta de subidas, sea una carpeta de pack o un fichero
     suelto. Solo borra ENLACES: lo de verdad sigue en la biblioteca.

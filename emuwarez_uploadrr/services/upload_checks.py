@@ -127,10 +127,15 @@ def run_upload_checks(conn: sqlite3.Connection, item_id: int, *, scope: str = "a
         checks.append({"id": cid, "label": label, "status": "skip", "message": message})
         _set_checks_progress(item_id, checks=checks)
 
-    # Si se puede enlazar en la carpeta de subidas (carpeta_subida.comprobar_enlace). Un enlace simbólico no bloquea,
-    # pero avisa: la carpeta de subidas está en otro disco que la biblioteca.
-    def carpeta_subida(prueba: dict) -> bool:
-        from .carpeta_subida import RAIZ_SUBIDAS
+    # Si se puede enlazar `ruta` en la carpeta de subidas (carpeta_subida.comprobar_enlace). Un enlace simbólico no
+    # bloquea, pero avisa: la carpeta de subidas está en otro disco que la biblioteca.
+    def carpeta_subida(prueba: dict, ruta: str | None) -> bool:
+        from .carpeta_subida import RAIZ_SUBIDAS, abarca_la_biblioteca, en_carpeta_de_subidas
+        from .uploadrr_contract import get_allowed_roots
+        amplia = ruta and en_carpeta_de_subidas(ruta) and abarca_la_biblioteca(get_allowed_roots(conn))
+        if amplia:
+            return add("carpeta_subida", "Se puede preparar la carpeta de subida",
+                       "No se puede preparar la carpeta de subida", False, amplia)
         if prueba["tipo"] == "simbólico":
             add_skip("carpeta_subida", "La carpeta de subidas está en otro disco",
                      f"{RAIZ_SUBIDAS} (enlace simbólico): está en otro disco que la biblioteca. Un archivo suelto se "
@@ -248,7 +253,7 @@ def run_upload_checks(conn: sqlite3.Connection, item_id: int, *, scope: str = "a
                         if ep.get("source_path")), None)
         prueba = comprobar_enlace(muestra) if muestra else {
             "ok": False, "tipo": None, "error": "El pack no tiene ningún capítulo con ruta."}
-        if not carpeta_subida(prueba):
+        if not carpeta_subida(prueba, muestra):
             return done()
         # Falls through to the shared checks below (output dir/qBittorrent/
         # image hosts/eMuwarez) — those don't depend on item_type.
@@ -274,7 +279,7 @@ def run_upload_checks(conn: sqlite3.Connection, item_id: int, *, scope: str = "a
         # packs, para que la biblioteca no aparezca en ninguna ruta de subida.
         from .carpeta_subida import comprobar_enlace
         prueba = comprobar_enlace(local_path)
-        if not carpeta_subida(prueba):
+        if not carpeta_subida(prueba, local_path):
             return done()
 
         # 1. Renameable — write permission on the file's directory. Solo cuenta

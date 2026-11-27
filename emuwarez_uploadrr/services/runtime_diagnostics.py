@@ -116,6 +116,10 @@ def check_allowed_roots_setting() -> dict:
                 "uploadrr.allowed_roots configurado como vacío — las subidas reales se bloquearán hasta configurarlo en Ajustes",
                 {},
             )
+        from .carpeta_subida import abarca_la_biblioteca
+        amplia = abarca_la_biblioteca(roots)
+        if amplia:
+            return _check("allowed_roots", "warning", amplia, {"roots": roots})
         missing = [r for r in roots if not Path(r).exists()]
         if missing:
             return _check(

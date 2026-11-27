@@ -384,6 +384,26 @@ def test_a_library_file_is_never_renamed(isolated_db, tmp_path, monkeypatch):
     conn.close()
 
 
+def test_con_la_carpeta_de_subidas_abarcando_la_biblioteca_no_se_renombra(isolated_db, tmp_path, monkeypatch):
+    """UPLOADRR_UPLOADS_DIR igual a la ruta permitida: el original de la biblioteca quedaba «en la carpeta de subidas»."""
+    from emuwarez_uploadrr.services import carpeta_subida, uploadrr_contract
+    monkeypatch.setattr(carpeta_subida, "RAIZ_SUBIDAS", str(tmp_path))
+    monkeypatch.setattr(uploadrr_contract, "DEFAULT_ALLOWED_ROOTS", [str(tmp_path)])
+    media = tmp_path / "media"
+    media.mkdir()
+    src = media / "Test Film (2021).mkv"
+    src.write_bytes(b"video bytes")
+    conn = _open(isolated_db)
+    item_id = _insert_item(conn, title="Test Film", path=str(src))
+
+    result = apply_nomenclature_proposal(
+        item_id, dry_run=False, apply=True, confirmation=CONFIRMATION_TOKEN, conn=conn)
+
+    assert result["status"] == "blocked" and result["renombrable"] is False
+    assert [p.name for p in media.iterdir()] == ["Test Film (2021).mkv"]
+    conn.close()
+
+
 def test_an_old_uploads_link_in_prepared_path_is_not_renamed(isolated_db, tmp_path, monkeypatch):
     """Una fila de la biblioteca con prepared_path apuntando a un enlace viejo de
     la carpeta de subidas: ni se renombra ese enlace ni `path` cambia."""

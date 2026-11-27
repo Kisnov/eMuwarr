@@ -472,3 +472,19 @@ def test_un_enlace_simbolico_en_la_carpeta_de_subidas_avisa_sin_bloquear(db_conn
     assert "(enlace simbólico)" in check["message"] and "otro disco" in check["message"]
     assert "nombre de la biblioteca" in check["message"] and "UPLOADRR_UPLOADS_DIR" in check["message"]
     assert [c["id"] for c in r["checks"]][-1] == "tipo"           # sigue con las demás
+
+
+def test_la_carpeta_de_subidas_que_abarca_la_biblioteca_bloquea(db_conn, tmp_path, monkeypatch):
+    """Con UPLOADRR_UPLOADS_DIR igual a la ruta permitida, el original se tomaría por un enlace y se renombraría."""
+    from emuwarez_uploadrr.services import carpeta_subida, uploadrr_contract
+    monkeypatch.setattr(carpeta_subida, "RAIZ_SUBIDAS", str(tmp_path))
+    monkeypatch.setattr(uploadrr_contract, "DEFAULT_ALLOWED_ROOTS", [str(tmp_path)])
+    (tmp_path / "media").mkdir()
+    f = tmp_path / "media" / "movie.mkv"
+    f.write_bytes(b"x" * 2048)
+    iid = _movie_with_path(db_conn, str(f))
+
+    r = uc.run_upload_checks(db_conn, iid, scope="content")
+
+    assert r["checks"][-1]["id"] == "carpeta_subida" and r["checks"][-1]["status"] == "fail"
+    assert "UPLOADRR_UPLOADS_DIR" in r["checks"][-1]["message"]

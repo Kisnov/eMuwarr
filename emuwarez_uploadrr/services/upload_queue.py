@@ -1095,10 +1095,18 @@ def _renombrar_si_esta_en_subidas(job_id: int, item_id: int, origen: str | None,
     """Renombra en su sitio un archivo que ya está en la carpeta de subidas (los de
     la biblioteca, nunca). Devuelve la ruta con la que seguir, o None si falló
     (el trabajo ya queda fallido)."""
-    from .carpeta_subida import ENLACES, en_carpeta_de_subidas
+    from .carpeta_subida import ENLACES, abarca_la_biblioteca, en_carpeta_de_subidas
     from .nomenclature import renombrar_en_subidas
     from .upload_execution import append_upload_log
-    if not origen or not en_carpeta_de_subidas(origen) or os.path.basename(origen) == nombre:
+    from .uploadrr_contract import get_allowed_roots
+    if not origen or not en_carpeta_de_subidas(origen):
+        return origen
+    # Con la carpeta de subidas abarcando la biblioteca, «en la carpeta de subidas» puede ser el original.
+    amplia = abarca_la_biblioteca(get_allowed_roots(conn))
+    if amplia:
+        _fail(job_id, amplia)
+        return None
+    if os.path.basename(origen) == nombre:
         return origen
     destino = os.path.join(os.path.dirname(origen), nombre)
     with ENLACES:

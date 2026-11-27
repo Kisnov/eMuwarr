@@ -523,6 +523,21 @@ def test_en_la_carpeta_de_subidas_se_renombra_y_se_titula_en_su_sitio(entorno, m
     assert r["refrescos"] == [peli["id"]]
 
 
+def test_con_la_carpeta_de_subidas_abarcando_la_biblioteca_no_se_renombra_ni_se_prepara(entorno, mkv_base, monkeypatch):
+    """UPLOADRR_UPLOADS_DIR=/data: todo el original de Radarr contaba como «en la carpeta de subidas» y se renombraba."""
+    from emuwarez_uploadrr.services import carpeta_subida
+    monkeypatch.setattr(carpeta_subida, "RAIZ_SUBIDAS", str(entorno["tmp"]))     # la ruta permitida entera
+    _modo(entorno, "ninguno")
+    peli = _pelicula(entorno, mkv_base, carpeta=entorno["tmp"] / "media" / "Peli (2024)", semilla=False)
+
+    r = _subir(entorno, peli["id"], peli["proposal_id"])
+
+    assert r["job"]["status"] == "failed" and r["visto"] == {}
+    assert "UPLOADRR_UPLOADS_DIR" in r["job"]["error_message"]
+    assert [p.name for p in peli["f"].parent.iterdir()] == ["Peli (2024) WEBDL-1080p.mkv"]
+    assert not (entorno["tmp"] / f"{PROPUESTO}.mkv").exists()
+
+
 def test_no_se_renombra_un_capitulo_de_un_pack_que_siembra_otra_subida(entorno, mkv_base, monkeypatch):
     """La subida del pack apunta a su carpeta, no al fichero: renombrarlo se lo quitaba al torrent del pack."""
     from emuwarez_uploadrr.services import carpeta_subida
