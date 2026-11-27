@@ -13,8 +13,8 @@ export async function setupTmdb(api_key: string, region = 'ES', localize_series_
   return api.post<OkResponse>('/setup/tmdb', { api_key, region, localize_series_titles })
 }
 
-export async function setupEmu(api_key: string, endpoint_url: string | null = null): Promise<OkResponse> {
-  return api.post<OkResponse>('/setup/emu', { api_key, endpoint_url })
+export async function setupEmu(api_key: string): Promise<OkResponse> {
+  return api.post<OkResponse>('/setup/emu', { api_key })
 }
 
 // El puerto va dentro de la url; `tag` es la etiqueta que qBittorrent pone al

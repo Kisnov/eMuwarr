@@ -120,28 +120,10 @@ class TestEmuwarezConnection:
         assert result["status"] == "not_configured"
         assert result["service"] == "emuwarez"
 
-    def test_invalid_url(self):
-        result = svc_test_emu(api_key="key123", base_url="not-a-url")
-        assert result["ok"] is False
-        assert result["status"] == "invalid_url"
-
-    def test_http_remoto_se_rechaza_sin_enviar_la_clave(self, http_falso):
-        result = svc_test_emu(api_key="key123", base_url="http://emu-warez.com")
-        assert result["ok"] is False
-        assert result["status"] == "insecure_url"
-        assert "key123" not in str(result)
-        assert http_falso.peticiones == []
-
-    def test_url_con_corchete_roto_es_invalida_y_no_revienta(self):
-        result = svc_test_emu(api_key="key123", base_url="http://[::1")
-        assert result["ok"] is False
-        assert result["status"] == "invalid_url"
-        assert "key123" not in str(result)
-
     def test_una_redireccion_a_http_no_lleva_la_clave(self, http_falso):
         from tests.http_falso import respuesta
         http_falso.responde(respuesta(302, headers={"Location": "http://otro.example/api?api_token=key123"}))
-        result = svc_test_emu(api_key="key123", base_url="https://emu-warez.com")
+        result = svc_test_emu(api_key="key123")
         assert result["ok"] is False
         assert result["status"] == "connection_error"
         assert len(http_falso.peticiones) == 1  # no se pidió el salto inseguro
@@ -153,7 +135,7 @@ class TestEmuwarezConnection:
             respuesta(301, headers={"Location": "https://emu-warez.com/api/torrents/filter?perPage=1"}),
             respuesta(200),
         )
-        result = svc_test_emu(api_key="key123", base_url="https://emu-warez.com")
+        result = svc_test_emu(api_key="key123")
         assert result["ok"] is True
         assert len(http_falso.peticiones) == 2
 
@@ -163,7 +145,7 @@ class TestEmuwarezConnection:
             respuesta(301, headers={"Location": "https://www.emu-warez.com/api/torrents/filter?api_token=key123"}),
             respuesta(200),
         )
-        result = svc_test_emu(api_key="key123", base_url="https://emu-warez.com")
+        result = svc_test_emu(api_key="key123")
         assert result["ok"] is False
         assert result["status"] == "connection_error"
         assert "redirección a otro servidor (www.emu-warez.com)" in result["message"]
@@ -175,7 +157,7 @@ class TestEmuwarezConnection:
         from emuwarez_uploadrr import __version__
         from tests.http_falso import respuesta
         http_falso.responde(respuesta(200, json={"data": []}))
-        assert svc_test_emu(api_key=" key123 ", base_url="https://emu-warez.com/")["ok"] is True
+        assert svc_test_emu(api_key=" key123 ")["ok"] is True
         p = http_falso.ultima
         assert str(p.url) == "https://emu-warez.com/api/torrents/filter?perPage=1"
         assert p.headers["Authorization"] == "Bearer key123"
@@ -184,55 +166,50 @@ class TestEmuwarezConnection:
     def test_una_clave_rechazada_como_bearer_se_prueba_una_vez_en_la_url(self, http_falso):
         from tests.http_falso import respuesta
         http_falso.responde(lambda req: respuesta(200 if req.url.params.get("api_token") == "key123" else 401)(req))
-        assert svc_test_emu(api_key="key123", base_url="https://emu-warez.com")["ok"] is True
+        assert svc_test_emu(api_key="key123")["ok"] is True
         primera, segunda = http_falso.peticiones
         assert "Authorization" not in segunda.headers and "api_token" not in primera.url.params
 
     def test_una_clave_rechazada_de_las_dos_maneras_es_invalida(self, http_falso):
         http_falso.responde(_http_error(403))
-        result = svc_test_emu(api_key="key123", base_url="https://emu-warez.com")
+        result = svc_test_emu(api_key="key123")
         assert result["status"] == "invalid_key" and len(http_falso.peticiones) == 2
-
-    def test_http_tampoco_se_admite_en_loopback(self, http_falso):
-        result = svc_test_emu(api_key="key123", base_url="http://localhost:8080")
-        assert result["status"] == "insecure_url"
-        assert http_falso.peticiones == []
 
     def test_success(self, http_falso):
         http_falso.responde(_mock_response(200))
-        result = svc_test_emu(api_key="key123", base_url="https://emu-warez.com")
+        result = svc_test_emu(api_key="key123")
         assert result["ok"] is True
         assert result["status"] == "connected"
 
     def test_invalid_key_401(self, http_falso):
         http_falso.responde(_http_error(401))
-        result = svc_test_emu(api_key="badkey", base_url="https://emu-warez.com")
+        result = svc_test_emu(api_key="badkey")
         assert result["ok"] is False
         assert result["status"] == "invalid_key"
 
     def test_timeout(self, http_falso):
         http_falso.responde(_timeout_url_error())
-        result = svc_test_emu(api_key="key", base_url="https://emu-warez.com")
+        result = svc_test_emu(api_key="key")
         assert result["ok"] is False
         assert result["status"] == "timeout"
 
     def test_connection_error(self, http_falso):
         http_falso.responde(_url_error("Connection refused"))
-        result = svc_test_emu(api_key="key", base_url="https://emu-warez.com")
+        result = svc_test_emu(api_key="key")
         assert result["ok"] is False
         assert result["status"] == "connection_error"
 
-    def test_defaults_to_emuwarez_base_url(self, http_falso):
-        """base_url defaults to https://emu-warez.com when not provided."""
+    def test_va_a_la_url_de_emuwarez(self, http_falso):
         http_falso.responde(_mock_response(200))
         result = svc_test_emu(api_key="key123")
         assert result["ok"] is True
         assert urlsplit(str(http_falso.ultima.url)).hostname == "emu-warez.com"
 
-    def test_full_key_never_in_response(self):
+    def test_full_key_never_in_response(self, http_falso):
         import json
         secret = "emuwarez_secret_key_00000"
-        result = svc_test_emu(api_key=secret, base_url="badurl")
+        http_falso.responde(_url_error(f"fallo con api_token={secret}"))
+        result = svc_test_emu(api_key=secret)
         serialised = json.dumps(result)
         assert secret not in serialised
 
@@ -243,11 +220,11 @@ class TestEmuwarezConnection:
         init_db(conn)
         http_falso.responde(_mock_response(200))
 
-        first = svc_test_emu(api_key="key123", base_url="https://emu-warez.com", conn=conn)
+        first = svc_test_emu(api_key="key123", conn=conn)
         assert first["ok"] is True
         assert len(http_falso.peticiones) == 1
 
-        second = svc_test_emu(api_key="key123", base_url="https://emu-warez.com", conn=conn)
+        second = svc_test_emu(api_key="key123", conn=conn)
         assert second["ok"] is False
         assert second["status"] == "rate_limited"
         assert second["details"]["wait_seconds"] > 0
@@ -269,7 +246,7 @@ class TestEmuwarezConnection:
         stale = dt.datetime.now(dt.timezone.utc) - dt.timedelta(seconds=MIN_EMU_TEST_SECONDS + 1)
         set_state(conn, EMU_TEST_STATE_KEY, stale.isoformat())
 
-        result = svc_test_emu(api_key="key123", base_url="https://emu-warez.com", conn=conn)
+        result = svc_test_emu(api_key="key123", conn=conn)
         assert result["ok"] is True
         assert len(http_falso.peticiones) == 1
 
@@ -290,12 +267,12 @@ class TestEmuwarezConnection:
             return respuesta(200)(request)
 
         http_falso.responde(al_pedir)
-        result = svc_test_emu(api_key="key123", base_url="https://emu-warez.com", conn=conn)
+        result = svc_test_emu(api_key="key123", conn=conn)
         assert result["ok"] is True
         assert en_transaccion == [False]
 
-    def test_con_clave_nueva_usa_la_url_guardada(self, http_falso, tmp_path):
-        """Probar una clave nueva (Ajustes, Setup) sin url explícita lee la url de la base, sin UnboundLocalError."""
+    def test_una_url_guardada_de_antes_no_se_usa(self, http_falso, tmp_path):
+        """La prueba va a la misma URL fija que la sincronización y las subidas, aunque quede una url guardada."""
         from emuwarez_uploadrr.database import connect, init_db
         from emuwarez_uploadrr.services.settings import set_setting
         conn = connect(tmp_path / "test.db")
@@ -306,7 +283,7 @@ class TestEmuwarezConnection:
 
         result = svc_test_emu(api_key="clave-nueva", conn=conn, enforce_rate_limit=False)
         assert result["ok"] is True
-        assert "otra.example" in str(http_falso.ultima.url)
+        assert str(http_falso.ultima.url) == "https://emu-warez.com/api/torrents/filter?perPage=1"
 
     def test_not_configured_is_not_throttled(self, http_falso, tmp_path):
         """Pre-network failures (no key) must never consume/trigger the rate limit."""
@@ -315,7 +292,7 @@ class TestEmuwarezConnection:
         conn = connect(tmp_path / "test.db")
         init_db(conn)
 
-        result = svc_test_emu(api_key=None, base_url="https://emu-warez.com", conn=conn)
+        result = svc_test_emu(api_key=None, conn=conn)
         assert result["status"] == "not_configured"
         # no timestamp recorded, no network call
         assert get_state(conn, EMU_TEST_STATE_KEY) is None

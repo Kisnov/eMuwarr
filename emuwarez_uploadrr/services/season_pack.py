@@ -242,10 +242,11 @@ def pack_rollup_sql(alias: str = "") -> str:
 def can_pack_from_rollup(row: dict) -> bool:
     """Si esta temporada podría subirse como pack, mirando solo su fila.
 
-    Es la MISMA regla que build_season_pack_plan aplica de verdad, en versión
-    barata: las columnas de rollup solo se rellenan cuando todos los capítulos
+    Es una versión barata de la regla de build_season_pack_plan, no la misma:
+    las columnas de rollup solo se rellenan cuando todos los capítulos
     coinciden en ese campo (library._update_season_rollup), así que un NULL
-    significa "no coinciden".
+    significa "no coinciden"; pero el rollup no guarda el HDR/DV, y una
+    temporada con capítulos HDR y SDR pasa aquí y el plan la bloquea.
 
     Existe para que Biblioteca, el Panel, Recomendaciones y Peticiones no
     tengan que reimplementar cada uno la condición: esa expresión copiada en
