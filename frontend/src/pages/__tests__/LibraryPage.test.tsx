@@ -347,4 +347,29 @@ describe('Biblioteca: lo que se recarga sola tras una sincronización', () => {
     await esperar(() => texto().includes('Dune al día'))
     expect(vi.mocked(getLibraryItem).mock.calls.map(c => c[0])).toEqual([1, 1])
   })
+
+  const abrirFicha = async (titulo: string) => {
+    const enlace = [...document.querySelectorAll('a.lib-title-link')].find(a => a.textContent?.includes(titulo))!
+    await act(async () => { enlace.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })) })
+  }
+
+  it('dos recargas de la ficha que responden al revés: se queda la más nueva', async () => {
+    vi.mocked(getLibraryItem).mockResolvedValue(DUNE)
+    localStorage.setItem('emuwarez_uploadrr_library_view', 'list')
+    await montar(<ConMarca />)
+    await esperar(() => texto().includes('Alien'))
+    await abrirFicha('Dune')
+    await esperar(() => vi.mocked(getLibraryItem).mock.calls.length === 1)
+    let soltarVieja: () => void = () => {}
+    vi.mocked(getLibraryItem)
+      .mockImplementationOnce(() => new Promise(r => { soltarVieja = () => r({ ...DUNE, display_title: 'Dune vieja' } as LibraryItemResponse) }))
+      .mockResolvedValueOnce({ ...DUNE, display_title: 'Dune nueva' } as LibraryItemResponse)
+    await act(async () => { invalidar() })
+    await act(async () => { invalidar() })
+    await esperar(() => texto().includes('Dune nueva'))
+    await act(async () => { soltarVieja() })
+    await act(async () => { await new Promise(r => setTimeout(r, 20)) })
+    expect(texto()).toContain('Dune nueva')
+    expect(texto()).not.toContain('Dune vieja')
+  })
 })

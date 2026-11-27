@@ -573,4 +573,44 @@ describe('Peticiones: lo que se recarga sola tras una sincronización', () => {
     await act(async () => { invalidar() })
     await esperar(() => texto().includes('503'))
   })
+
+  it('dos recargas de la ficha que responden al revés: se queda la más nueva', async () => {
+    const detalle = (title: string) => ({
+      ...DATOS[1], title, match: { status: 'Compatible', library_item_id: 40, library_target_id: 41 },
+    }) as unknown as RequestDetailResponse
+    vi.mocked(getReadiness).mockResolvedValue(null as never)
+    vi.mocked(getRequestDetail).mockResolvedValue(detalle('Petición 2'))
+    await montar(<ConMarca />)
+    await esperar(() => document.querySelector('table.data-table tbody tr'))
+    await pulsar([...document.querySelectorAll('tr.clickable .lib-title-link')].find(t => t.textContent === 'Petición 2'))
+    await esperar(() => document.querySelector('.pet-veredicto'))
+    let soltarVieja: () => void = () => {}
+    vi.mocked(getRequestDetail)
+      .mockImplementationOnce(() => new Promise(r => { soltarVieja = () => r(detalle('Petición 2 vieja')) }))
+      .mockResolvedValueOnce(detalle('Petición 2 nueva'))
+    await act(async () => { invalidar() })
+    await act(async () => { invalidar() })
+    await esperar(() => texto().includes('Petición 2 nueva'))
+    await act(async () => { soltarVieja() })
+    await act(async () => { await new Promise(r => setTimeout(r, 20)) })
+    expect(texto()).toContain('Petición 2 nueva')
+    expect(texto()).not.toContain('Petición 2 vieja')
+  })
+
+  it('una recarga que falla mientras se abre la ficha no la deja sin abrir', async () => {
+    vi.mocked(getReadiness).mockResolvedValue(null as never)
+    let abrirla: () => void = () => {}
+    vi.mocked(getRequestDetail)
+      .mockImplementationOnce(() => new Promise(r => {
+        abrirla = () => r({ ...DATOS[1], match: { status: 'Compatible', library_item_id: 40, library_target_id: 41 } } as never)
+      }))
+      .mockRejectedValueOnce(new Error('503'))
+    await montar(<ConMarca />)
+    await esperar(() => document.querySelector('table.data-table tbody tr'))
+    await pulsar([...document.querySelectorAll('tr.clickable .lib-title-link')].find(t => t.textContent === 'Petición 2'))
+    await act(async () => { invalidar() })
+    await act(async () => { await new Promise(r => setTimeout(r, 20)) })
+    await act(async () => { abrirla() })
+    await esperar(() => document.querySelector('.pet-veredicto'))
+  })
 })
