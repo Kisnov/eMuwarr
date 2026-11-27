@@ -1099,6 +1099,8 @@ def _renombrar_si_esta_en_subidas(job_id: int, item_id: int, origen: str | None,
     from .nomenclature import renombrar_en_subidas
     from .upload_execution import append_upload_log
     from .uploadrr_contract import get_allowed_roots
+    from ..database import get_json_state
+    from .upload_execution.ciclo_de_vida import ENLACES_SEMBRADOS_SIN_FILA
     if not origen or not en_carpeta_de_subidas(origen):
         return origen
     # Con la carpeta de subidas abarcando la biblioteca, «en la carpeta de subidas» puede ser el original.
@@ -1112,9 +1114,13 @@ def _renombrar_si_esta_en_subidas(job_id: int, item_id: int, origen: str | None,
     with ENLACES:
         # Si otra subida siembra desde ahí, renombrarlo le quita el fichero a qBittorrent.
         otra = _subida_que_lo_usa(conn, origen, job_id)
-        r = None if otra is not None else renombrar_en_subidas(item_id, origen, destino, conn=conn, **kw)
+        # O una ya borrada cuyo enlace otra subida compartía (enlaces_sembrados_sin_fila), suelto o su pack.
+        borrada = otra is None and any(origen == ruta or origen.startswith(ruta + "/") for ruta in
+                                       get_json_state(conn, ENLACES_SEMBRADOS_SIN_FILA) or [])
+        r = None if otra is not None or borrada else renombrar_en_subidas(item_id, origen, destino, conn=conn, **kw)
     if r is None:
-        append_upload_log(job_id, "info", f"No se renombra «{os.path.basename(origen)}»: la subida #{otra} "
+        quien = f"la subida #{otra}" if otra is not None else "una subida borrada de la lista"
+        append_upload_log(job_id, "info", f"No se renombra «{os.path.basename(origen)}»: {quien} "
                                           "siembra desde ahí. Se enlaza con el nombre de eMuwarez.",
                           stream="system", conn=conn)
         return origen

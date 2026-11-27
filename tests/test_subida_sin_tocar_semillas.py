@@ -523,6 +523,24 @@ def test_en_la_carpeta_de_subidas_se_renombra_y_se_titula_en_su_sitio(entorno, m
     assert r["refrescos"] == [peli["id"]]
 
 
+def test_no_se_renombra_un_capitulo_del_pack_que_sembraba_una_subida_borrada(entorno, mkv_base, monkeypatch):
+    """Sin fila, el rastro es enlaces_sembrados_sin_fila (la borrada lo compartía con otra subida)."""
+    from emuwarez_uploadrr.database import set_json_state
+    from emuwarez_uploadrr.services import carpeta_subida
+    from emuwarez_uploadrr.services.upload_execution.ciclo_de_vida import ENLACES_SEMBRADOS_SIN_FILA
+    monkeypatch.setattr(carpeta_subida, "clonar", _reflink("no"))
+    _modo(entorno, "ninguno")
+    pack = entorno["uploads"] / "Serie S01 2020 1080p WEB-DL"
+    peli = _pelicula(entorno, mkv_base, carpeta=pack, nombre="Serie.S01E01.mkv", semilla=False)
+    set_json_state(entorno["conn"], ENLACES_SEMBRADOS_SIN_FILA, [str(pack)])
+    entorno["conn"].commit()
+
+    r = _subir(entorno, peli["id"], peli["proposal_id"])
+
+    assert sorted(os.listdir(pack)) == ["Serie.S01E01.mkv"], r["logs"]
+    assert any("una subida borrada de la lista siembra desde ahí" in m for m in r["logs"])
+
+
 def test_con_la_carpeta_de_subidas_abarcando_la_biblioteca_no_se_renombra_ni_se_prepara(entorno, mkv_base, monkeypatch):
     """UPLOADRR_UPLOADS_DIR=/data: todo el original de Radarr contaba como «en la carpeta de subidas» y se renombraba."""
     from emuwarez_uploadrr.services import carpeta_subida
