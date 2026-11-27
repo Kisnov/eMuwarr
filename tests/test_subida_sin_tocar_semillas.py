@@ -786,6 +786,48 @@ def test_tras_borrar_la_subida_completada_no_se_rehace_el_fichero_que_aun_siembr
     assert _subir(entorno, peli["id"], peli["proposal_id"])["visto"]["status"] == "ready"
 
 
+def test_sin_poder_probar_el_enlace_el_original_no_se_edita(entorno, mkv_base, monkeypatch):
+    """Con la carpeta de subidas sin poder crearse no se sabe si un enlace simbólico de antes lo siembra."""
+    from emuwarez_uploadrr.services import carpeta_subida
+    fichero = entorno["tmp"] / "no-es-carpeta"
+    fichero.write_text("x")
+    monkeypatch.setattr(carpeta_subida, "RAIZ_SUBIDAS", str(fichero / "uploads"))   # no se puede crear
+    _modo(entorno, "solo_renombrar")
+    peli = _pelicula(entorno, mkv_base, carpeta=entorno["tmp"] / "media" / "Peli (2024)", semilla=False)
+    assert peli["f"].stat().st_nlink == 1
+    antes = _sha(peli["f"])
+
+    assert "no se puede comprobar el enlace" in uq._motivo_para_no_tocar(str(peli["f"]), entorno["conn"])
+    _subir(entorno, peli["id"], peli["proposal_id"])
+
+    assert _sha(peli["f"]) == antes
+
+
+def test_un_enlace_simbolico_de_cuando_la_carpeta_estaba_en_otro_disco_veta_la_edicion(entorno, mkv_base):
+    """Hoy la prueba da «duro», pero lo subido antes con enlaces simbólicos sigue sembrando el original."""
+    _modo(entorno, "solo_renombrar")
+    peli = _pelicula(entorno, mkv_base, carpeta=entorno["tmp"] / "media" / "Peli (2024)", semilla=False)
+    conn = entorno["conn"]
+    for nombre, es_pack in (("suelto.mkv", False), ("Pack S01", True)):
+        conn.execute("DELETE FROM upload_jobs")
+        destino = entorno["uploads"] / nombre
+        if es_pack:
+            destino.mkdir(parents=True)
+            os.symlink(peli["f"], destino / "Serie.S01E01.mkv")
+        else:
+            entorno["uploads"].mkdir(exist_ok=True)
+            os.symlink(peli["f"], destino)
+        conn.execute("INSERT INTO upload_jobs (library_item_id, status, stage, title, path, source_path, "
+                     "prepared_path, created_at, updated_at) VALUES (?, 'completed', 'completed', 'X', '', '', ?, "
+                     "'x', 'x')", (peli["id"], str(destino)))
+        conn.commit()
+        assert peli["f"].stat().st_nlink == 1
+        assert "enlace simbólico" in uq._motivo_para_no_tocar(str(peli["f"]), conn)
+    conn.execute("UPDATE upload_jobs SET status = 'failed'")     # una fallida sin torrent no siembra
+    conn.commit()
+    assert uq._motivo_para_no_tocar(str(peli["f"]), conn) is None
+
+
 # ---------------------------------------------------------------------------
 # Las demás ramas de _preparar_fichero
 # ---------------------------------------------------------------------------

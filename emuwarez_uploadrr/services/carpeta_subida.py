@@ -319,18 +319,48 @@ def asegurar_raiz(raiz: Optional[str] = None) -> bool:
         return False
 
 
-def motivo_para_no_editar(fichero: str) -> Optional[str]:
+def _sembrado_por_un_simbolico(fichero: str, conn) -> bool:
+    """Si una subida que siembra (o la de un enlace sembrado sin fila) apunta a `fichero` con un enlace simbólico: el
+    fichero suelto que es su `prepared_path`, o un capítulo de la carpeta del pack."""
+    from ..database import db, get_json_state
+    from .upload_execution.ciclo_de_vida import ENLACES_SEMBRADOS_SIN_FILA
+    if conn is None:
+        with db() as propia:
+            return _sembrado_por_un_simbolico(fichero, propia)
+    real = os.path.realpath(fichero)
+    rutas = {f["prepared_path"] for f in conn.execute(
+        "SELECT prepared_path FROM upload_jobs WHERE prepared_path IS NOT NULL "
+        "AND (status NOT IN ('cancelled', 'failed') OR torrent_subido = 1)")}
+    rutas |= set(get_json_state(conn, ENLACES_SEMBRADOS_SIN_FILA) or [])
+    for ruta in rutas:
+        try:
+            enlaces = ([e.path for e in os.scandir(ruta)] if os.path.isdir(ruta) and not os.path.islink(ruta)
+                       else [ruta])
+        except OSError:
+            continue
+        if any(os.path.islink(e) and os.path.realpath(e) == real for e in enlaces):
+            return True
+    return False
+
+
+def motivo_para_no_editar(fichero: str, conn) -> Optional[str]:
     """Por qué no se edita `fichero` en su sitio (un torrent puede sembrarlo), o None.
 
     Un enlace simbólico de la carpeta de subidas no suma a `st_nlink`: con la carpeta en otro disco, el original
-    parece no compartido aunque otra subida lo siembre a través de él."""
+    parece no compartido aunque otra subida lo siembre a través de él. Sin poder probar el enlace no se sabe, y no se
+    edita; y un simbólico de una subida de cuando la carpeta estaba en otro disco tampoco lo dice la prueba de hoy."""
     with _PROBANDO:  # el enlace de prueba de otro hilo no se cuenta como enlace duro
         enlaces = os.stat(fichero).st_nlink
         if enlaces > 1:
             return f"lo comparten {enlaces} enlaces duros (un torrent que siembra o una subida anterior)"
-        if comprobar_enlace(fichero)["tipo"] == "simbólico":
-            return ("se enlaza con un enlace simbólico (la carpeta de subidas está en otro disco), que no cuenta como "
-                    "enlace: puede sembrarlo un torrent")
+        prueba = comprobar_enlace(fichero)
+    if not prueba["ok"]:
+        return f"no se puede comprobar el enlace en la carpeta de subidas ({prueba['error']})"
+    if prueba["tipo"] == "simbólico":
+        return ("se enlaza con un enlace simbólico (la carpeta de subidas está en otro disco), que no cuenta como "
+                "enlace: puede sembrarlo un torrent")
+    if _sembrado_por_un_simbolico(fichero, conn):
+        return "lo siembra una subida a través de un enlace simbólico"
     return None
 
 

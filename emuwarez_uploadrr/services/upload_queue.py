@@ -1153,10 +1153,10 @@ def _destino_sin_dueno(conn, destino: str, job_id: int, origenes: list[str]) -> 
                         (destino, job_id)).fetchone() is None
 
 
-def _motivo_para_no_tocar(origen: str) -> str | None:
+def _motivo_para_no_tocar(origen: str, conn) -> str | None:
     """None si se puede escribir en el original; si no, por qué no."""
     from .carpeta_subida import motivo_para_no_editar
-    motivo = motivo_para_no_editar(origen)
+    motivo = motivo_para_no_editar(origen, conn)
     if motivo:
         return motivo
     if not (os.access(origen, os.W_OK) and os.access(os.path.dirname(origen), os.W_OK)):
@@ -1215,7 +1215,7 @@ def _preparar_fichero(job_id: int, item_id: int, origen: str, destino: str, modo
     if not origen.lower().endswith(".mkv"):
         return fin([], False, None, "no es MKV")
 
-    motivo = _motivo_para_no_tocar(origen)
+    motivo = _motivo_para_no_tocar(origen, conn)
     # Con el idioma elegido para una pista sin idioma: si solo cambia eso, también hay que escribirlo.
     plan = build_remux_plan(item_id, conn=conn, ruta=origen, reordenar=motivo is None,
                             idiomas=idiomas_elegidos(overrides))
