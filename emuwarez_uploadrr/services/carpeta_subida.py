@@ -53,6 +53,7 @@ import errno
 import logging
 import os
 import shutil
+import stat
 import threading
 from typing import Callable, Iterable, Optional
 
@@ -329,7 +330,7 @@ def asegurar_raiz(raiz: Optional[str] = None) -> bool:
 def _sembrado_por_un_simbolico(fichero: str, conn) -> Optional[str]:
     """Por qué no se edita `fichero` si una subida que siembra (o la de un enlace sembrado sin fila) apunta a él con
     un enlace simbólico: el fichero suelto que es su `prepared_path`, o un capítulo de la carpeta del pack. También si
-    no se pudo mirar una de esas carpetas (una que ya no existe no siembra nada). None si no."""
+    no se pudo mirar una de esas rutas (una que ya no existe no siembra nada). None si no."""
     from ..database import db, get_json_state
     from .upload_execution.ciclo_de_vida import ENLACES_SEMBRADOS_SIN_FILA
     if conn is None:
@@ -343,8 +344,7 @@ def _sembrado_por_un_simbolico(fichero: str, conn) -> Optional[str]:
     dudosa = None
     for ruta in rutas:
         try:
-            enlaces = ([e.path for e in os.scandir(ruta)] if os.path.isdir(ruta) and not os.path.islink(ruta)
-                       else [ruta])
+            enlaces = [e.path for e in os.scandir(ruta)] if stat.S_ISDIR(os.lstat(ruta).st_mode) else [ruta]
         except FileNotFoundError:
             continue
         except OSError as e:

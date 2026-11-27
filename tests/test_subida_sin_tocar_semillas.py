@@ -876,6 +876,28 @@ def test_un_pack_registrado_que_no_se_puede_mirar_veta_la_edicion_y_uno_que_no_e
     assert motivo and "no se pudo mirar" in motivo and str(pack) in motivo
 
 
+def test_una_ruta_registrada_que_no_se_puede_consultar_veta_la_edicion(entorno, mkv_base, monkeypatch):
+    """Si ni siquiera se puede consultar la ruta (un directorio padre sin permiso) no se da por fichero sin enlace."""
+    _modo(entorno, "solo_renombrar")
+    peli = _pelicula(entorno, mkv_base, carpeta=entorno["tmp"] / "media" / "Peli (2024)", semilla=False)
+    conn = entorno["conn"]
+    pack = entorno["uploads"] / "Pack S01"
+    pack.mkdir(parents=True)
+    conn.execute("INSERT INTO upload_jobs (library_item_id, status, stage, title, path, source_path, prepared_path, "
+                 "created_at, updated_at) VALUES (?, 'completed', 'completed', 'X', '', '', ?, 'x', 'x')",
+                 (peli["id"], str(pack)))
+    conn.commit()
+    lstat = os.lstat
+
+    def sin_permiso(ruta, *a, **k):
+        if os.fspath(ruta) == str(pack):
+            raise PermissionError(13, "Permission denied", str(pack))
+        return lstat(ruta, *a, **k)
+    monkeypatch.setattr(os, "lstat", sin_permiso)
+    motivo = uq._motivo_para_no_tocar(str(peli["f"]), conn)
+    assert motivo and "no se pudo mirar" in motivo and str(pack) in motivo
+
+
 def test_un_capitulo_del_pack_sembrado_sin_fila_se_reconoce_por_componentes(entorno):
     """«uploads/./Pack/E01» es del pack «uploads/Pack»; «uploads/Pack2/E01», no."""
     from emuwarez_uploadrr.services.carpeta_subida import dentro_de
