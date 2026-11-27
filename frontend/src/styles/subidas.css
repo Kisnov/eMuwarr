@@ -766,6 +766,11 @@ input.sub-confirmar.sub-confirmar-ok:not([type="checkbox"]):not([type="radio"]):
     padding-left: 28px;
   }
 
+  /* La celda del título no hace caja aquí: la sangría de una subida de una serie desplegada va en la fila. */
+  .sub-scroll .data-table tr.sub-tarjeta.sub-de-serie {
+    padding-left: 28px;
+  }
+
   .sub-scroll .data-table tr.sub-tarjeta:not(.sub-fila-antigua):has(+ tr.sub-fila-tracker) {
     border-bottom-color: transparent;
   }
