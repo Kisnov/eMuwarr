@@ -5,6 +5,7 @@ import {
   runUploadChecks, getUploadChecksProgress, type AjustesComprobacion, type UploadChecksResult, type UploadCheck,
 } from '../../api/uploads'
 import { seguirProgreso } from '../../api/eventos'
+import { getSeasonPlanProgress } from '../../api/seasonPack'
 import { proveedorParaServidor, type ProveedoresElegidos } from '../../utils/origenProveedor'
 
 // `tracker`: de quién son las normas de idioma (el primero de los elegidos en el Resumen); eMuwarez, las de siempre.
@@ -80,7 +81,7 @@ export function useComprobaciones(targetId: number | null, proveedorElegido: Pro
 //
 // `tracker`: de quién son las normas (el primero de los elegidos); con otro, todo se vuelve a comprobar.
 export function useComprobacionesTanda({
-  step, batchQueue, batchPhase, proveedorElegido, ajustesDe, minimo = 2, tracker = 'emu', trackerDe,
+  step, batchQueue, batchPhase, proveedorElegido, ajustesDe, minimo = 2, tracker = 'emu', trackerDe, sonPacks = false,
 }: {
   step: 0 | 1 | 2
   batchQueue: readonly number[]
@@ -91,12 +92,16 @@ export function useComprobacionesTanda({
   tracker?: string
   // El de las comprobaciones de contenido de cada uno (el primero que lo admite); sin él, `tracker`.
   trackerDe?: (id: number) => string
+  // Temporadas: su comprobación repasa cada capítulo y el servidor avisa de por cuál va.
+  sonPacks?: boolean
 }) {
   const trackerDeCada = (id: number) => trackerDe?.(id) ?? tracker
   const [batchEnvChecks, setBatchEnvChecks] = useState<UploadChecksResult | null>(null)
   const [batchContentChecks, setBatchContentChecks] = useState<Map<number, UploadChecksResult>>(new Map())
   const [batchChecksLoading, setBatchChecksLoading] = useState(false)
   const [batchChecksIndex, setBatchChecksIndex] = useState(0)
+  // Por qué capítulo va el pack que se está comprobando.
+  const [batchProgreso, setBatchProgreso] = useState<{ id: number; done: number; total: number } | null>(null)
   // Cuál se está mirando en el desplegable de arriba a la derecha.
   const [batchViewId, setBatchViewId] = useState<number | null>(null)
   // Una petición que no llegó (red, eMuwarez caído): sin su resultado no se puede subir.
@@ -156,11 +161,25 @@ export function useComprobacionesTanda({
           const proveedor = proveedorParaServidor(proveedorElegido, batchQueue[i])
           const ajustes = ajustesDe?.(batchQueue[i])
           const suyo = trackerDeCada(batchQueue[i])
-          const resultado = suyo !== 'emu'
-            ? await runUploadChecks(batchQueue[i], 'content', proveedor, ajustes, suyo)
-            : ajustes
-            ? await runUploadChecks(batchQueue[i], 'content', proveedor, ajustes)
-            : await runUploadChecks(batchQueue[i], 'content', proveedor)
+          const id = batchQueue[i]
+          // El servidor guarda el progreso del último plan de la temporada: uno ya completo (done = total) es de antes,
+          // y una respuesta que llega tarde no hace retroceder la cuenta ni la repone cuando este pack ya acabó.
+          let enCurso = true
+          const dejarDeSeguir = sonPacks ? seguirProgreso('plan-temporada-progreso', a => a.season_id === id, async () => {
+            try {
+              const p = await getSeasonPlanProgress(id)
+              if (!alive || !enCurso || p.done >= p.total) return
+              setBatchProgreso(prev => prev?.id === id && prev.done > p.done ? prev : { id, done: p.done, total: p.total })
+            } catch { /* fallo pasajero */ }
+          }, 400) : undefined
+          let resultado: UploadChecksResult
+          try {
+            resultado = suyo !== 'emu'
+              ? await runUploadChecks(id, 'content', proveedor, ajustes, suyo)
+              : ajustes
+              ? await runUploadChecks(id, 'content', proveedor, ajustes)
+              : await runUploadChecks(id, 'content', proveedor)
+          } finally { enCurso = false; dejarDeSeguir?.() }
           // Una pasada abandonada que responde tarde no pisa a la que la sustituyó.
           if (!alive) return
           acc.set(batchQueue[i], resultado)
@@ -171,11 +190,11 @@ export function useComprobacionesTanda({
       } catch (e: unknown) {
         if (alive) setBatchChecksError(e instanceof Error ? e.message : 'Error comprobando')
       } finally {
-        if (alive) setBatchChecksLoading(false)
+        if (alive) { setBatchChecksLoading(false); setBatchProgreso(null) }
       }
     }
     run()
-    return () => { alive = false; setBatchChecksLoading(false) }
+    return () => { alive = false; setBatchChecksLoading(false); setBatchProgreso(null) }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- se relanza al cambiar la tanda o su fase, no con cada elección
   }, [step, batchQueue.length, batchPhase, intento, tracker, trackersDeLaCola])
 
@@ -186,7 +205,7 @@ export function useComprobacionesTanda({
   }
 
   return {
-    batchEnvChecks, batchContentChecks, batchChecksLoading, batchChecksIndex, batchViewId, setBatchViewId,
+    batchEnvChecks, batchContentChecks, batchChecksLoading, batchChecksIndex, batchProgreso, batchViewId, setBatchViewId,
     batchChecksError, repetir: () => setIntento(n => n + 1),
     mergedChecksFor, olvidar,
   }

@@ -21,7 +21,7 @@ export function ResumenSubida({ a }: { a: Asistente }) {
     preview, seasonDisplayTitle, seasonPlan, fields, remuxPreview, remuxEdits, modoPistasAjuste,
     checks, batchContentChecks, nombresTanda, requestId, preselect,
     anonimoMarcado, personalReleaseMarcado, marcasMixtas, elegirAnonimo, elegirPersonalRelease, opcionesTracker, uploading,
-    sources, elegirTipo, trackersParaSubir, trackersElegidos, elegirTracker, destinos, reglas, reglasDe, batchChecksLoading,
+    sources, elegirTipo, trackersParaSubir, trackersElegidos, elegirTracker, destinos, reglas, reglasDe, batchChecksLoading, batchChecksIndex, batchProgreso, batchChecksError,
     descripcion, escribirDescripcion, descripcionPorTracker, descripcionPropia, editarDescripcionDe,
   } = a
   const esTanda = batchQueue.length > 1
@@ -67,6 +67,16 @@ export function ResumenSubida({ a }: { a: Asistente }) {
     const c = batchContentChecks.get(id)
     return c ? c.nombre ?? null : undefined
   }
+  // Mientras no hay nombre: el pack que se comprueba ahora dice por qué capítulo va; los de después, que esperan; y si
+  // la pasada se cortó, que se quedó sin comprobar.
+  const esperaDeLaTanda = (id: number): string | undefined => {
+    if (batchIsEpisodes) return undefined
+    if (!batchChecksLoading) return batchChecksError ? 'Sin comprobar' : undefined
+    if (batchQueue[batchChecksIndex] !== id) return 'En cola'
+    return batchProgreso?.id === id && batchProgreso.total > 0
+      ? `Calculando el nombre… capítulo ${Math.min(batchProgreso.done + 1, batchProgreso.total)} de ${batchProgreso.total}`
+      : undefined
+  }
   // Sin un tipo que eMuwarez conozca no se sube (la comprobación «tipo»): aquí se elige, con el Source.
   const tipoDesconocido = !esTanda && checks?.checks.some(c => c.id === 'tipo' && c.status === 'fail')
   const idTitulo = useId()
@@ -82,7 +92,11 @@ export function ResumenSubida({ a }: { a: Asistente }) {
               return (
                 <li key={id}>
                   <span className="asist-lista-titulo">{batchItemTitle(id)}</span>
-                  <NombreDeLaTanda nombre={nombreDeLaTanda(id)} />
+                  <NombreDeLaTanda nombre={nombreDeLaTanda(id)} espera={esperaDeLaTanda(id)} />
+                  {/* Con nombre pero sin pasar sus comprobaciones: se salta, y aquí se ve cuál es. */}
+                  {!batchChecksLoading && nombreDeLaTanda(id) && batchContentChecks.get(id)?.ready === false && (
+                    <span className="asist-lista-nombre asist-lista-bloqueo">✗ No se subirá</span>
+                  )}
                   {solo && <span className="asist-dato-nota asist-aviso-dato">Solo a {solo}</span>}
                 </li>
               )
@@ -234,8 +248,8 @@ function PanelYaHay({ tracker, yaHay }: { tracker: string; yaHay: YaHay }) {
 }
 
 // El nombre del torrent de un elemento de la tanda, bajo su título.
-export function NombreDeLaTanda({ nombre }: { nombre: string | null | undefined }) {
-  if (nombre === undefined) return <span className="asist-lista-nombre asist-lista-espera">Calculando el nombre…</span>
+export function NombreDeLaTanda({ nombre, espera }: { nombre: string | null | undefined; espera?: string }) {
+  if (nombre === undefined) return <span className="asist-lista-nombre asist-lista-espera">{espera ?? 'Calculando el nombre…'}</span>
   if (nombre === null) return <span className="asist-lista-nombre asist-aviso-dato">Sin nombre: este elemento no se podrá subir</span>
   return <span className="asist-lista-nombre" translate="no">{nombre}</span>
 }
