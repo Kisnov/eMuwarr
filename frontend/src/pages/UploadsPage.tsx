@@ -38,7 +38,7 @@ import { SubirTambienModal } from '../components/SubirTambien'
 import { BannerSinTrailer, ChipSinTrailer, faltaTrailer } from '../components/AvisoTrailer'
 import { FilasVirtuales } from '../components/FilasVirtuales'
 import { UMBRAL_VIRTUAL } from '../utils/ventana'
-import { agruparPorSerie, esBloqueSerie, estadosDeSerie, type Bloque, type BloqueSerie } from '../utils/subidasPorSerie'
+import { agruparPorSerie, estadosDeSerie, filasDeLista, type BloqueSerie, type FilaDeLista } from '../utils/subidasPorSerie'
 
 // Backend-real gates — mirror cancel_upload_job()/queue_retry_for_job() in
 // services/upload_execution.py / upload_queue.py exactly, so the button is
@@ -65,7 +65,7 @@ const COLUMNAS = 9
 // Lo que mide una fila antes de pintarla (FilasVirtuales la corrige con la media de las que va midiendo).
 const ALTO_FILA = 65
 // Los ids de subida son positivos: una serie va con el suyo en negativo.
-const claveDeBloque = (b: Bloque) => (esBloqueSerie(b) ? -b.serieId : b[0].id!)
+const claveDeFila = (f: FilaDeLista) => ('serie' in f ? -f.serie.serieId : f.grupo[0].id!)
 
 // Only real upload states — a job now only exists once the user uploads, so
 // the preparatory "ready"/"blocked" states no longer appear here. 'preparing'
@@ -428,7 +428,7 @@ function FilaSerie({ bloque, abierta, onToggle }: { bloque: BloqueSerie; abierta
               : <span className="sub-poster-icono"><IconoTipo serie /></span>}
           </span>
           <span className="sub-titulo">{bloque.titulo}</span>
-          <span className="sub-muted sub-t12 sub-no-encoge">{bloque.elementos.length} subidas</span>
+          <span className="sub-muted sub-t12 sub-no-encoge">{bloque.elementos.flat().length} subidas</span>
           <span className="sub-serie-estados">
             {estados.map(([estado, n]) => (
               <span key={estado} className={STATUS_CLASS[estado] || 'badge req-unknown'}>{n} · {statusLabel(estado)}</span>
@@ -985,16 +985,11 @@ export function UploadsPage({ onNavigate }: { onNavigate?: (page: string) => voi
       ...(abiertos ? otras.flatMap(o => pintarCadena(o, 'otra', primera.lote_id, undefined, undefined, deSerie)) : []),
     ]
   }
-  // Una serie con varias subidas: su fila y, desplegada, las de sus elementos.
-  const pintarBloque = (b: Bloque) => {
-    if (!esBloqueSerie(b)) return pintarGrupo(b)
-    const abierta = seriesAbiertas.has(b.serieId)
-    return [
-      <FilaSerie key={`serie-${b.serieId}`} bloque={b} abierta={abierta} onToggle={toggleSerie} />,
-      ...(abierta ? b.elementos.flatMap(g => pintarGrupo(g, true)) : []),
-    ]
-  }
-  const bloques = useMemo(() => agruparPorSerie(grupos), [grupos])
+  // La fila de una serie, o las de un elemento (suelto o de una serie desplegada).
+  const pintarFila = (f: FilaDeLista) => ('serie' in f
+    ? [<FilaSerie key={`serie-${f.serie.serieId}`} bloque={f.serie} abierta={f.abierta} onToggle={toggleSerie} />]
+    : pintarGrupo(f.grupo, f.deSerie))
+  const filas = useMemo(() => filasDeLista(agruparPorSerie(grupos), seriesAbiertas), [grupos, seriesAbiertas])
   const scrollRef = useRef<HTMLDivElement>(null)
   const theadRef = useRef<HTMLTableSectionElement>(null)
 
@@ -1184,18 +1179,18 @@ export function UploadsPage({ onNavigate }: { onNavigate?: (page: string) => voi
               )}
               {/* Pasadas las UMBRAL_VIRTUAL subidas solo se pintan las que se ven: cada elemento es la fila del último
                   intento de cada tracker con sus intentos anteriores desplegados, en su propio <tbody>. */}
-              {bloques.length > UMBRAL_VIRTUAL ? (
+              {filas.length > UMBRAL_VIRTUAL ? (
                 <FilasVirtuales
-                  items={bloques}
-                  clave={claveDeBloque}
+                  items={filas}
+                  clave={claveDeFila}
                   alturaEstimada={ALTO_FILA}
                   columnas={COLUMNAS}
                   contenedor={scrollRef}
                   cabecera={theadRef}
-                  pintar={pintarBloque}
+                  pintar={pintarFila}
                 />
               ) : (
-                <tbody>{bloques.flatMap(pintarBloque)}</tbody>
+                <tbody>{filas.flatMap(pintarFila)}</tbody>
               )}
             </table>
           </div>

@@ -32,9 +32,20 @@ export function agruparPorSerie(grupos: UploadJob[][]): Bloque[] {
   return salida
 }
 
-/** Cuántos elementos de la serie hay en cada estado, por el de su primera subida. */
+/** Cuántas subidas de la serie hay en cada estado, contando la de cada tracker. */
 export function estadosDeSerie(bloque: BloqueSerie): [string, number][] {
   const cuenta = new Map<string, number>()
-  for (const g of bloque.elementos) cuenta.set(g[0].status, (cuenta.get(g[0].status) ?? 0) + 1)
+  for (const j of bloque.elementos.flat()) cuenta.set(j.status, (cuenta.get(j.status) ?? 0) + 1)
   return [...cuenta.entries()]
+}
+
+/** Lo que pinta la lista, fila a fila: una serie abierta suelta sus elementos, para que se pinten solo los que se ven. */
+export type FilaDeLista = { serie: BloqueSerie; abierta: boolean } | { grupo: UploadJob[]; deSerie: boolean }
+
+export function filasDeLista(bloques: Bloque[], abiertas: ReadonlySet<number>): FilaDeLista[] {
+  return bloques.flatMap((b): FilaDeLista[] => {
+    if (!esBloqueSerie(b)) return [{ grupo: b, deSerie: false }]
+    const abierta = abiertas.has(b.serieId)
+    return [{ serie: b, abierta }, ...(abierta ? b.elementos.map(grupo => ({ grupo, deSerie: true })) : [])]
+  })
 }

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { UploadJob } from '../../types/api'
-import { agruparPorSerie, esBloqueSerie, estadosDeSerie } from '../subidasPorSerie'
+import { agruparPorSerie, esBloqueSerie, estadosDeSerie, filasDeLista } from '../subidasPorSerie'
 
 const subida = (id: number, extra: Partial<UploadJob> = {}) =>
   [{ id, status: 'completed', title: `T${id}`, ...extra } as UploadJob]
@@ -22,10 +22,17 @@ describe('agruparPorSerie', () => {
     expect(bloques.every(b => !esBloqueSerie(b))).toBe(true)
   })
 
-  it('cuenta los elementos por el estado de su primera subida', () => {
-    const [serie] = agruparPorSerie([
-      subida(1, { serie_id: 7 }), subida(2, { serie_id: 7, status: 'queued' }), subida(3, { serie_id: 7 }),
-    ])
-    expect(esBloqueSerie(serie) && estadosDeSerie(serie)).toEqual([['completed', 2], ['queued', 1]])
+  it('cuenta las subidas de cada estado, también las de los otros trackers de un elemento', () => {
+    const conOtroTracker = [...subida(2, { serie_id: 7 }), ...subida(4, { serie_id: 7, status: 'failed' })]
+    const [serie] = agruparPorSerie([subida(1, { serie_id: 7 }), conOtroTracker, subida(3, { serie_id: 7, status: 'queued' })])
+    expect(esBloqueSerie(serie) && estadosDeSerie(serie)).toEqual([['completed', 2], ['failed', 1], ['queued', 1]])
+  })
+
+  it('una serie abierta suelta sus elementos como filas propias; cerrada, solo la suya', () => {
+    const bloques = agruparPorSerie([subida(1, { serie_id: 7 }), subida(2, { serie_id: 7 }), subida(3)])
+    expect(filasDeLista(bloques, new Set())).toHaveLength(2)
+    const abiertas = filasDeLista(bloques, new Set([7]))
+    expect(abiertas.map(f => ('serie' in f ? 'serie' : `${f.grupo[0].id}${f.deSerie ? '*' : ''}`)))
+      .toEqual(['serie', '1*', '2*', '3'])
   })
 })
