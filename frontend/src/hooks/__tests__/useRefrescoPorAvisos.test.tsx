@@ -28,6 +28,8 @@ vi.mock('../../api/eventos', () => ({
 }))
 
 import { useRefrescoPorAvisos } from '../useRefrescoPorAvisos'
+import { SeccionVisible } from '../../context/SeccionVisible'
+import { SyncContext } from '../../context/SyncContext'
 
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
@@ -92,6 +94,25 @@ describe('al arrancar', () => {
     expect(cargar).toHaveBeenCalledTimes(1)
     canal(true, false)                // ya había estado vivo antes de montarse esta sección
     expect(cargar).toHaveBeenCalledTimes(2)
+  })
+
+  it('una sección oculta mientras el canal se cae y vuelve recarga al volver a verse', () => {
+    const cargar = vi.fn()
+    const oculta = (visible: boolean) => (
+      <SyncContext.Provider value={{ lastInvalidatedAt: 0 } as never}>
+        <SeccionVisible visible={visible}><Seccion cargar={cargar} /></SeccionVisible>
+      </SyncContext.Provider>
+    )
+    render(oculta(false))
+    canal(true, true)
+    canal(false, false)
+    canal(true, false)
+    expect(cargar).toHaveBeenCalledTimes(1)   // oculta: no recarga
+    act(() => { raiz!.render(oculta(true)) })
+    expect(cargar).toHaveBeenCalledTimes(2)   // al verse, lo que se perdió mientras el canal estaba caído
+    act(() => { raiz!.render(oculta(false)) })
+    act(() => { raiz!.render(oculta(true)) })
+    expect(cargar).toHaveBeenCalledTimes(2)   // una sola vez: entrar con el canal vivo no recarga
   })
 })
 
