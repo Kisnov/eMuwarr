@@ -49,7 +49,7 @@ def test_emu_request_sync_is_daily_with_an_hourly_floor(db_conn):
     """Cada 24 h, que son ≤ 9 llamadas a la API por sincronización; el botón sigue valiendo."""
     tarea = {t["task_key"]: t for t in list_scheduled_tasks(db_conn)}[TASK_EMU_SYNC]
     assert (tarea["interval_minutes"], tarea["min_interval_minutes"], tarea["manual_allowed"]) == (1440, 60, 1)
-    assert tarea["name"] == "Sincronizar peticiones eMuwarez"
+    assert tarea["name"] == "Sincronizar peticiones"
     with pytest.raises(ValueError, match="mínimo"):
         set_task_interval(db_conn, TASK_EMU_SYNC, 30)
 
@@ -185,8 +185,6 @@ def test_tick_due_tasks_second_tick_runs_nothing(isolated_db):
 @pytest.mark.parametrize("resultado, estado, texto", [
     ({"status": "ok", "imported": 12, "matched": 3}, "completed", "12 peticiones importadas, 3 cruces"),
     ({"status": "throttled", "wait_seconds": 90}, "skipped", "Esperando 90s"),
-    ({"status": "busy", "message": "Hay una subida en marcha; vuelve a probar cuando termine."},
-     "skipped", "Hay una subida en marcha"),
 ])
 def test_emu_request_sync_records_what_happened(db_conn, resultado, estado, texto):
     with patch("emuwarez_uploadrr.services.requests.sync_emu_requests", return_value=resultado) as mock_emu:
@@ -196,6 +194,17 @@ def test_emu_request_sync_records_what_happened(db_conn, resultado, estado, text
     assert run["status"] == estado
     assert texto in run["summary"]
     assert get_scheduled_task(db_conn, TASK_EMU_SYNC)["last_status"] == estado
+
+
+def test_emu_request_sync_waits_for_an_upload_and_runs_next_tick(db_conn):
+    db_conn.execute("INSERT INTO upload_jobs (title, path, status) VALUES ('X', '/x', 'running')")
+    db_conn.commit()
+    run = run_scheduled_task(db_conn, TASK_EMU_SYNC)
+
+    assert (run["status"], "subida en marcha" in run["summary"]) == ("skipped", True)
+    tarea = get_scheduled_task(db_conn, TASK_EMU_SYNC)
+    assert tarea["last_run_at"] is None  # no cuenta como ejecución
+    assert TASK_EMU_SYNC in claim_due_tasks(db_conn)  # y se reintenta en el siguiente tick
 
 
 def test_emu_request_sync_failure_is_recorded_with_its_message(db_conn):
@@ -262,3 +271,29 @@ def test_full_catalog_sync_skipped_while_uploading_then_runs_next_tick(isolated_
         from emuwarez_uploadrr.services import emu_catalog
         emu_catalog._set_progress(active=False)
         conn.close()
+
+
+def test_full_catalog_sync_waits_for_a_catalog_sync_already_running(db_conn):
+    from emuwarez_uploadrr.services import emu_catalog
+    emu_catalog._set_progress(active=True)
+    try:
+        with patch("emuwarez_uploadrr.services.emu_catalog.threading") as hilo_mod:
+            run = run_scheduled_task(db_conn, TASK_EMU_CATALOG_FULL)
+            hilo_mod.Thread.assert_not_called()
+        assert run["status"] == "skipped"
+        assert get_scheduled_task(db_conn, TASK_EMU_CATALOG_FULL)["last_run_at"] is None
+        assert TASK_EMU_CATALOG_FULL in claim_due_tasks(db_conn)
+    finally:
+        emu_catalog._set_progress(active=False)
+
+
+def test_el_nombre_de_una_tarea_ya_instalada_se_pone_al_dia_sin_tocar_cada_cuanto_corre(db_conn):
+    from emuwarez_uploadrr.services.scheduler import ensure_default_tasks
+    set_task_interval(db_conn, TASK_EMU_SYNC, 720)
+    db_conn.execute("UPDATE scheduled_tasks SET name = 'Sincronizar peticiones eMuwarez', description = 'vieja' "
+                    "WHERE task_key = ?", (TASK_EMU_SYNC,))
+    db_conn.commit()
+    ensure_default_tasks(db_conn)
+    tarea = {t["task_key"]: t for t in list_scheduled_tasks(db_conn)}[TASK_EMU_SYNC]
+    assert tarea["name"] == "Sincronizar peticiones" and "cada otro tracker con clave" in tarea["description"]
+    assert tarea["interval_minutes"] == 720

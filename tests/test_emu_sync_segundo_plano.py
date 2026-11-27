@@ -36,7 +36,7 @@ def sync_falsa(monkeypatch):
     Falsa.soltar = threading.Event()
     Falsa.soltar.set()
 
-    def sync(conn, *, force=False, mode="incremental"):
+    def sync(conn, *, force=False, mode="incremental", tracker=None):
         Falsa.llamadas.append({"force": force, "mode": mode})
         Falsa.soltar.wait(5)
         if Falsa.fallo:

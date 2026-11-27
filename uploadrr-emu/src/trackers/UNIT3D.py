@@ -49,6 +49,18 @@ def _same_content(downloaded: bytes, base: Path) -> bool:
     return all(theirs.get(key) == ours.get(key) for key in ("name", "piece length", "pieces", "length", "files"))
 
 
+def _ya_existe(response: httpx.Response) -> bool:
+    """Si el tracker rechaza la subida porque el nombre o el info_hash ya están, en cualquier idioma: la validación de
+    UNIT3D da el campo como clave de `data`."""
+    if "has already been taken" in response.text:
+        return True
+    try:
+        errores = response.json().get("data")
+    except (ValueError, AttributeError):
+        return False
+    return isinstance(errores, dict) and bool({"name", "info_hash"} & errores.keys())
+
+
 class Unit3d:
     """
     Base class for Unit3D trackers.
@@ -79,6 +91,8 @@ class Unit3d:
 
     # Ids que compiten por el mismo hueco en la búsqueda de duplicados: 1080p y 1080i.
     resolution_groups = [["3", "4"]]
+    # Comentario del .torrent firmado que se guarda y se añade al cliente (se ve en qBittorrent).
+    comentario_torrent = COMENTARIO_TORRENT
 
     # fmt: off
     async def get_cat_id(self, meta: Dict[str, Any]) -> str:
@@ -268,7 +282,7 @@ class Unit3d:
         # Un intento sin respuesta o con 5xx pudo entrar igualmente: lo busco antes de darlo por fallido. El
         # siguiente intento, en cambio, choca con el nombre ya usado. El tracker reescribe el .torrent y no da un
         # id de la subida, así que solo vale uno nuevo con este nombre, este tamaño y las mismas piezas.
-        if response is None or response.status_code in RETRY_STATUSES or (attempts > 1 and (response.status_code == 429 or "has already been taken" in response.text)):
+        if response is None or response.status_code in RETRY_STATUSES or (attempts > 1 and (response.status_code == 429 or _ya_existe(response))):
             size = extract_size_from_torrent(meta["base_dir"], meta["uuid"])
             current = await self._links_named(meta, name) if previous is not None and size else None
             new = sorted(link for link, found in current - previous if found == size) if current is not None else []
@@ -333,7 +347,8 @@ class Unit3d:
         """Guarda el .torrent firmado como [TRACKER]<clean_name>.torrent, con el comentario y la ficha que se ven en el cliente."""
         new_torrent = Path(meta["base_dir"]) / "tmp" / meta["uuid"] / f"[{self.tracker}]{meta['clean_name']}.torrent"
         new_torrent.write_bytes(content)
-        await edit_torrent(torrent_path=new_torrent, comment=f"{COMENTARIO_TORRENT}\n{url}" if url else COMENTARIO_TORRENT)
+        comentario = self.comentario_torrent
+        await edit_torrent(torrent_path=new_torrent, comment=f"{comentario}\n{url}" if url else comentario)
         return new_torrent
 
     async def descargar_subido(self, meta: Dict[str, Any], torrent_id: int) -> Tuple[Optional[Path], str]:

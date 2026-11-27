@@ -1,4 +1,4 @@
-"""Una subida a eMuwarez de punta a punta, como la lanza emuwarez-uploadrr: ``upload.main()`` con su argv.
+"""Una subida a eMuwarez de punta a punta, como la lanza eMuwarr: ``upload.main()`` con su argv.
 
 Es de verdad todo lo del repositorio (argumentos, preparación, nombre, capturas, duplicados, torrent, POST, cliente).
 Lo que se sustituye está en el borde con el mundo:
@@ -315,7 +315,6 @@ class Flujo:
         mp.setattr(ffmpeg, "probe", lambda *_a, **_k: {"format": {"duration": "5400.0"}})
         mp.setattr(clients.qbittorrentapi, "Client", Qbit)
         mp.setattr(imdb, "get_movie", _imdb_get_movie)
-        mp.setattr(imdb, "get_akas", lambda _id: SimpleNamespace(akas=[]))
         mp.setattr(Qbit, "anadidos", [])
 
         original = httpx.AsyncHTTPTransport.handle_async_request
@@ -363,7 +362,7 @@ def comparar_con_golden(nombre: str, obtenido: str) -> None:
     if obtenido != esperado:
         diff = "\n".join(difflib.unified_diff(esperado.split("\n"), obtenido.split("\n"), "golden", "obtenido", lineterm="", n=2))
         pytest.fail(
-            f"La salida de {nombre} ha cambiado. emuwarez-uploadrr lee estas líneas tal cual: si el cambio es a propósito, "
+            f"La salida de {nombre} ha cambiado. eMuwarr lee estas líneas tal cual: si el cambio es a propósito, "
             f"actualiza la app y regenera con REGENERAR_GOLDEN=1.\n{diff}",
             pytrace=False,
         )

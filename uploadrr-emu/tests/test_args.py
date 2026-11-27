@@ -21,7 +21,7 @@ def _meta(argv, config=None):
     ],
 )
 def test_el_argv_de_emuwarez_uploadrr_llega_al_meta(tmp_path, extra, esperado):
-    # El mismo orden que build_uploadrr_emu_command en emuwarez-uploadrr.
+    # El mismo orden que build_uploadrr_emu_command en eMuwarr.
     video = tmp_path / "Peli.mkv"
     video.write_bytes(b"")
     nombre = "Peli 2020 1080p BluRay REMUX-GRP"
@@ -45,7 +45,7 @@ def test_el_argv_de_emuwarez_uploadrr_llega_al_meta(tmp_path, extra, esperado):
 def test_solo_cliente_lleva_el_id_y_conserva_tmp_como_resume(tmp_path):
     video = tmp_path / "Peli.mkv"
     video.write_bytes(b"")
-    # Lo que añade emuwarez-uploadrr al argv de siempre.
+    # Lo que añade eMuwarr al argv de siempre.
     items, global_argv = group_args_by_path([str(video), "-tk", "EMU", "-ua", "--resume", "-sc", "123"])
     meta = apply_special_logic(normalize_args(build_parser({}).parse_args(global_argv)))
 
@@ -53,6 +53,25 @@ def test_solo_cliente_lleva_el_id_y_conserva_tmp_como_resume(tmp_path):
     assert meta["solo_cliente"] == 123 and meta["resume"] is True
     assert _meta(["--solo-cliente", "7"])["resume"] is True  # sin --resume tampoco se borra tmp/<uuid>
     assert _meta([])["solo_cliente"] is None and _meta([])["resume"] is False
+
+
+def test_base_desde_lleva_el_tracker_en_mayusculas_y_el_id(tmp_path):
+    video = tmp_path / "Peli.mkv"
+    video.write_bytes(b"")
+    # Lo que añade la app a una subida a N.O.B.S de algo que ya está en eMuwarez, cuando falta el BASE.torrent.
+    items, global_argv = group_args_by_path([str(video), "-tk", "NOBS", "-ua", "--resume", "--base-desde", "EMU:123"])
+    meta = apply_special_logic(normalize_args(build_parser({}).parse_args(global_argv)))
+
+    assert items == [([], str(video.resolve()))]
+    assert meta["base_desde"] == "EMU:123" and meta["trackers"] == ["NOBS"]
+    assert _meta(["-bd", "emu:007"])["base_desde"] == "EMU:7"
+    assert _meta([])["base_desde"] is None
+
+
+@pytest.mark.parametrize("valor", ["EMU", "EMU:", ":12", "EMU:abc", "EMU:0", "EMU:-3", "E/MU:4"])
+def test_base_desde_sin_tracker_e_id_no_se_acepta(valor):
+    with pytest.raises(SystemExit):
+        _meta(["--base-desde", valor])
 
 
 def test_config_es_global_y_se_lee_antes_que_el_resto(tmp_path):

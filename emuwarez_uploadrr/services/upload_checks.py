@@ -22,6 +22,7 @@ _CHECKS_LOCK = threading.Lock()
 _CHECKS_PROGRESS: dict[int, dict] = {}
 
 from .eventos import EVENTO_COMPROBACIONES, publicar
+from .trackers import POR_DEFECTO
 
 
 def get_checks_progress(item_id: int) -> dict:
@@ -45,28 +46,9 @@ def _set_checks_progress(item_id: int, *, checks: list[dict], done: bool = False
 # salida, qBittorrent, hosts de imágenes, eMuwarez) y dan lo mismo para todos:
 # con 30 capítulos elegidos, preguntarle 30 veces a eMuwarez si está vivo no
 # aporta nada y multiplica por 30 la espera.
-CONTENT_CHECK_IDS = ("accesible", "season_pack", "capitulos_accesibles",
-                     "carpeta_subida", "renameable", "spanish", "tipo")
+CONTENT_CHECK_IDS = ("accesible", "season_pack", "idioma_audio", "capitulos_accesibles",
+                     "carpeta_subida", "renameable", "formato", "spanish", "tipo")
 ENVIRONMENT_CHECK_IDS = ("output", "qbittorrent", "imghosts", "emuwarez")
-
-
-def _short_langs(value: Optional[str], limit: int = 3) -> str:
-    """Los primeros idiomas de una lista "spa/eng/fre/…" y cuántos quedan.
-
-    Se repiten los duplicados que trae el fichero (dos pistas en inglés
-    llegan como "eng/eng"), así que se colapsan: nombrar "eng, eng, ara" no
-    dice nada que "eng, ara" no diga ya.
-    """
-    vistos: list[str] = []
-    for part in str(value or "").split("/"):
-        part = part.strip()
-        if part and part not in vistos:
-            vistos.append(part)
-    if not vistos:
-        return "sin detectar"
-    if len(vistos) <= limit:
-        return ", ".join(vistos)
-    return f"{', '.join(vistos[:limit])} y {len(vistos) - limit} más"
 
 
 def _se_puede_leer(ruta: str | None) -> bool:
@@ -87,11 +69,19 @@ def _se_puede_leer(ruta: str | None) -> bool:
         return False
 
 
+# Con las pistas en «Ninguno», «Ver pistas» no deja elegir el idioma: lo que hay que cambiar para poder.
+_EN_NINGUNO = " Con «Renombrar/Ordenar pistas» en «Ninguno» (Configuración) no se puede poner: cámbialo para elegirlo."
+
+
 def run_upload_checks(conn: sqlite3.Connection, item_id: int, *, scope: str = "all",
-                      provider_override: str | None = None, ajustes: dict | None = None) -> dict:
-    """`ajustes` (solo una temporada): lo que el asistente editó a mano para el pack, con las claves de la cola
-    (`source`, `tag`, `title`, `idiomas`), para que el plan y su `nombre` sean los que saldrán de verdad. El
-    Proveedor va aparte, en `provider_override`.
+                      provider_override: str | None = None, ajustes: dict | None = None,
+                      tracker: str = POR_DEFECTO) -> dict:
+    """`ajustes`: lo que el asistente editó a mano para el pack, con las claves de la cola (`source`, `tag`, `title`,
+    `idiomas`), para que el plan y su `nombre` sean los que saldrán de verdad. El Proveedor va aparte, en
+    `provider_override`. De un fichero suelto solo cuenta `idiomas`: los elegidos en «Ver pistas», por posición.
+
+    `tracker`: el de la subida (services/trackers.py). Sus normas de idioma (services/reglas_tracker.py) deciden la
+    comprobación «spanish» de un fichero y la de cada capítulo de un pack; eMuwarez, el de por defecto, las de siempre.
 
     `scope`:
 
@@ -137,6 +127,25 @@ def run_upload_checks(conn: sqlite3.Connection, item_id: int, *, scope: str = "a
         checks.append({"id": cid, "label": label, "status": "skip", "message": message})
         _set_checks_progress(item_id, checks=checks)
 
+    # Si se puede enlazar `ruta` en la carpeta de subidas (carpeta_subida.comprobar_enlace). Un enlace simbólico no
+    # bloquea, pero avisa: la carpeta de subidas está en otro disco que la biblioteca.
+    def carpeta_subida(prueba: dict, ruta: str | None) -> bool:
+        from .carpeta_subida import RAIZ_SUBIDAS, abarca_la_biblioteca, en_carpeta_de_subidas
+        from .uploadrr_contract import get_allowed_roots
+        amplia = ruta and en_carpeta_de_subidas(ruta) and abarca_la_biblioteca(get_allowed_roots(conn))
+        if amplia:
+            return add("carpeta_subida", "Se puede preparar la carpeta de subida",
+                       "No se puede preparar la carpeta de subida", False, amplia)
+        if prueba["tipo"] == "simbólico":
+            add_skip("carpeta_subida", "La carpeta de subidas está en otro disco",
+                     f"{RAIZ_SUBIDAS} (enlace simbólico): está en otro disco que la biblioteca. Un archivo suelto se "
+                     "subiría con el nombre de la biblioteca y qBittorrent sembraría el original, y las pistas y el "
+                     "título interno no se editan. Pon UPLOADRR_UPLOADS_DIR en el mismo disco que la biblioteca.")
+            return True
+        return add("carpeta_subida", "Se puede preparar la carpeta de subida",
+                   "No se puede preparar la carpeta de subida", prueba["ok"],
+                   f"{RAIZ_SUBIDAS} (enlace {prueba['tipo']})" if prueba["ok"] else prueba["error"] or "")
+
     def done(complete: bool = False) -> dict:
         # Skips don't block: only a real failure (red) does. `complete` dice si
         # se llegó al final del grupo pedido — antes se deducía mirando que la
@@ -164,6 +173,10 @@ def run_upload_checks(conn: sqlite3.Connection, item_id: int, *, scope: str = "a
     #
     # Es barata: existe y se puede abrir, sin leer el contenido.
 
+    from .mkv_remux import modo_pistas, toca_el_fichero
+    # Con las pistas en «Ninguno» el idioma elegido en «Ver pistas» no se escribe en el archivo: no cuenta.
+    escribe = toca_el_fichero(modo_pistas(conn))
+
     if scope == "environment":
         pass                                     # solo entorno: nada del elemento
     elif item.get("item_type") == "season":
@@ -181,7 +194,8 @@ def run_upload_checks(conn: sqlite3.Connection, item_id: int, *, scope: str = "a
         plan = build_season_pack_plan(
             item_id, conn=conn, provider_override=provider_override,
             source_override=aj.get("source") or None, tag_override=aj.get("tag") or None,
-            title_override=aj.get("title") or None, idiomas_audio=aj.get("idiomas") or None)
+            title_override=aj.get("title") or None, idiomas_audio=(aj.get("idiomas") if escribe else None) or None,
+            **({} if tracker == POR_DEFECTO else {"tracker": tracker}))
         ok = plan["status"] == "valid"
         if ok:
             nombre = plan.get("season_pack_title") or None
@@ -195,6 +209,9 @@ def run_upload_checks(conn: sqlite3.Connection, item_id: int, *, scope: str = "a
         formato = plan.get("source")  # el `-t` del pack (upload_queue._populate_ready)
         if not add("season_pack", "Se puede preparar el pack de temporada",
                    "No se puede preparar el pack de temporada", ok, msg):
+            return done()
+        if not add("idioma_audio", "Todas las pistas de audio tienen idioma", "Hay pistas de audio sin idioma",
+                   not sin_idioma, (audio + ("" if escribe else _EN_NINGUNO)) if audio else ""):
             return done()
 
         # Y TODOS sus capítulos, uno a uno. Un pack se nombra leyendo cada
@@ -217,23 +234,26 @@ def run_upload_checks(conn: sqlite3.Connection, item_id: int, *, scope: str = "a
                    ", ".join(ilegibles) if ilegibles else f"{cuantos} capítulo(s) legibles"):
             return done()
 
+        from .uploadrr_contract import motivo_formato_no_subible
+        no_subibles = [f"Capítulo {ep.get('episode_number') or ep.get('episode_id')}: {motivo}"
+                       for ep in plan.get("episodes", [])
+                       if (motivo := motivo_formato_no_subible(ep.get("source_path") or ep.get("raw_source_path")))]
+        if not add("formato", "El formato de los capítulos se puede subir",
+                   "Hay capítulos en un formato que no se sube", not no_subibles, " ".join(no_subibles)):
+            return done()
+
         # Y que se pueda enlazar en la carpeta de subidas. Es lo que se le
         # entrega a Uploadrr para que el torrent se llame como el release sin
         # tocar la carpeta de Sonarr (ver services/carpeta_subida.py). Se
         # prueba haciendo un enlace de verdad y deshaciéndolo, no mirando
         # números de dispositivo: hay montajes donde coinciden y el enlace
         # falla igual.
-        from .carpeta_subida import RAIZ_SUBIDAS, comprobar_enlace
+        from .carpeta_subida import comprobar_enlace
         muestra = next((ep.get("source_path") for ep in plan.get("episodes", [])
                         if ep.get("source_path")), None)
         prueba = comprobar_enlace(muestra) if muestra else {
             "ok": False, "tipo": None, "error": "El pack no tiene ningún capítulo con ruta."}
-        if not add("carpeta_subida",
-                   "Se puede preparar la carpeta de subida",
-                   "No se puede preparar la carpeta de subida",
-                   prueba["ok"],
-                   (f"{RAIZ_SUBIDAS} (enlace {prueba['tipo']})" if prueba["ok"]
-                    else prueba["error"] or "")):
+        if not carpeta_subida(prueba, muestra):
             return done()
         # Falls through to the shared checks below (output dir/qBittorrent/
         # image hosts/eMuwarez) — those don't depend on item_type.
@@ -257,14 +277,9 @@ def run_upload_checks(conn: sqlite3.Connection, item_id: int, *, scope: str = "a
         # 0b. Y que se pueda enlazar en la carpeta de subidas, igual que un
         # pack: desde 2026-08-04 TODO lo que se sube se enlaza ahí, no solo los
         # packs, para que la biblioteca no aparezca en ninguna ruta de subida.
-        from .carpeta_subida import RAIZ_SUBIDAS, comprobar_enlace
+        from .carpeta_subida import comprobar_enlace
         prueba = comprobar_enlace(local_path)
-        if not add("carpeta_subida",
-                   "Se puede preparar la carpeta de subida",
-                   "No se puede preparar la carpeta de subida",
-                   prueba["ok"],
-                   (f"{RAIZ_SUBIDAS} (enlace {prueba['tipo']})" if prueba["ok"]
-                    else prueba["error"] or "")):
+        if not carpeta_subida(prueba, local_path):
             return done()
 
         # 1. Renameable — write permission on the file's directory. Solo cuenta
@@ -278,39 +293,43 @@ def run_upload_checks(conn: sqlite3.Connection, item_id: int, *, scope: str = "a
                      bool(parent) and os.access(parent, os.W_OK), parent):
             return done()
 
-        # 1b. Castilian — eMuwarez wants it present, dubbed or at least
-        # subtitled. The audio alone is enough: a film in Castilian needs no
-        # subtitles. Without Castilian audio, Castilian subtitles are what
-        # makes it acceptable. Same rule a season pack applies per episode
-        # (services/season_pack.py::_spanish_errors), which is why it reuses
-        # the same predicate.
-        #
-        # Unknown blocks: an item whose MediaInfo was never read can't be
-        # confirmed either way, and "we didn't look" is not evidence that the
-        # rule is met.
-        from .emu_format import has_castellano
-        audio_langs = item.get("audio_languages")
-        sub_langs = item.get("subtitle_languages")
-        has_audio_es = has_castellano(audio_langs) == 1
-        has_subs_es = has_castellano(sub_langs) == 1
-        if has_audio_es:
-            spanish_msg = "Audio en castellano. No son obligatorios subtítulos en castellano."
-        elif has_subs_es:
-            # Sin la lista de subtítulos: un release puede traer 37 pistas y
-            # volcarlas aquí no dice nada que el mensaje no diga ya. El audio
-            # sí se nombra, porque ahí lo que importa es en qué idioma está.
-            spanish_msg = f"Sin audio en castellano ({audio_langs or 'desconocido'}), pero subtítulos en castellano."
+        # 1b. Cada pista de audio con su idioma, contando los elegidos en «Ver pistas». Sin leer las pistas de un MKV,
+        # lo que diga la biblioteca. Fuera de un MKV la app no puede etiquetarlas: no bloquea (reglas_tracker.aviso_no_mkv).
+        from .emu_format import audio_sin_idioma
+        from .mkv_remux import idiomas_de_las_pistas
+        from .reglas_tracker import aviso_no_mkv, motivo_audio_sin_idioma
+        elegidos = (ajustes or {}).get("idiomas") if escribe else None
+        pistas = idiomas_de_las_pistas(local_path, idiomas=elegidos)
+        sin_lengua = [i for i, c in enumerate(pistas or [], 1) if c == "UND"]
+        falta = bool(sin_lengua) or (pistas is None and audio_sin_idioma(item.get("audio_languages")))
+        if falta and not (local_path or "").lower().endswith(".mkv"):
+            aviso = aviso_no_mkv(local_path)
+            if aviso:
+                add_skip("idioma_audio", "Hay pistas de audio sin idioma (no es MKV)", aviso)
+        elif not add("idioma_audio", "Todas las pistas de audio tienen idioma", "Hay pistas de audio sin idioma",
+                     not falta, (motivo_audio_sin_idioma(sin_lengua) + ("" if escribe else _EN_NINGUNO))
+                     if falta else ""):
+            return done()
+        if elegidos and pistas:
+            item = {**item, "audio_languages": " / ".join(dict.fromkeys(pistas))}
+
+        from .uploadrr_contract import motivo_formato_no_subible
+        motivo = motivo_formato_no_subible(local_path)
+        if not add("formato", "El formato del archivo se puede subir", "El formato del archivo no se puede subir",
+                   not motivo, motivo or ""):
+            return done()
+
+        # 1c. Idiomas — las normas del tracker (services/reglas_tracker.py). eMuwarez: castellano en el audio o, si
+        # no, en los subtítulos; sin MediaInfo leído no se puede confirmar y bloquea.
+        from .reglas_tracker import es_anime, reglas_de
+        from .trackers import EMU, obtener
+        reglas = reglas_de(tracker, item, anime=tracker != EMU.id and es_anime(conn, item))
+        if tracker == EMU.id:
+            etiquetas = ("Tiene castellano", "No tiene castellano")
         else:
-            # Aquí la comprobación FALLA y bloquea la subida, así que saber qué
-            # idiomas hay ayuda a decidir qué hacer. Pero un release puede
-            # traer 37 pistas de subtítulos y volcarlas enteras convierte el
-            # aviso en un muro: se nombran las primeras y se cuenta el resto.
-            spanish_msg = (
-                f"Ni el audio ({_short_langs(audio_langs)}) ni los subtítulos "
-                f"({_short_langs(sub_langs)}) están en castellano."
-            )
-        if not add("spanish", "Tiene castellano", "No tiene castellano",
-                   has_audio_es or has_subs_es, spanish_msg):
+            nombre_tracker = obtener(tracker).nombre
+            etiquetas = (f"Idiomas admitidos en {nombre_tracker}", f"Idiomas no admitidos en {nombre_tracker}")
+        if not add("spanish", *etiquetas, reglas.permitido, reglas.motivo):
             return done()
 
         # El formato del `-t` de la subida: el Source elegido en el asistente, el que leerá el comando de la propuesta
@@ -323,12 +342,16 @@ def run_upload_checks(conn: sqlite3.Connection, item_id: int, *, scope: str = "a
 
     # Sin tipo, Uploadrr-EMU lo adivina del nombre y eMuwarez puede recibir el tipo 0.
     if scope != "environment":
-        from .uploadrr_contract import tipo_de_subida
+        from .trackers import obtener
+        from .uploadrr_contract import motivo_sin_tipo, tipo_de_subida
         donde = "elígelo en el resumen" if scope == "all" else "elige su Source en el asistente de subida"
         cual = f"Source «{formato}»" if formato else "sin Source"
-        if not add("tipo", "Se sabe el tipo de la copia", "No se sabe el tipo de la copia",
-                   bool(tipo_de_subida(formato)),
-                   formato if tipo_de_subida(formato) else f"No se sabe el tipo de esta copia ({cual}): {donde}"):
+        sin_tipo = motivo_sin_tipo(tracker, formato)  # N.O.B.S y Milnueve no tienen «SD»
+        if not tipo_de_subida(formato):
+            fallo, mensaje = "No se sabe el tipo de la copia", f"No se sabe el tipo de esta copia ({cual}): {donde}"
+        else:
+            fallo, mensaje = f"{obtener(tracker).nombre} no tiene este tipo", sin_tipo or formato
+        if not add("tipo", "Se sabe el tipo de la copia", fallo, bool(tipo_de_subida(formato)) and not sin_tipo, mensaje):
             return done()
 
     if scope == "content":
@@ -384,6 +407,11 @@ def run_upload_checks(conn: sqlite3.Connection, item_id: int, *, scope: str = "a
     # automático) queued within the same minute would always make the second
     # one's "eMuwarez disponible" check fail with "Espera Ns…" even though
     # eMuwarez itself was never actually asked twice in a way it would mind.
+    # Solo si la subida va a eMuwarez: con eMuwarez caído o sin clave, una subida solo a N.O.B.S o Milnueve no se para.
+    from .trackers import EMU, obtener
+    if tracker != EMU.id:
+        add_skip("emuwarez", "eMuwarez no se comprueba", f"La subida va a {obtener(tracker).nombre}.")
+        return done(complete=True)
     r = test_emuwarez_connection(conn=conn, enforce_rate_limit=False)
     add("emuwarez", "eMuwarez disponible", "eMuwarez no disponible", bool(r.get("ok")), r.get("message", ""))
     return done(complete=True)

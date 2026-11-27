@@ -1,25 +1,46 @@
 import { useState } from 'react'
 import { tapar, usePerfilEmu } from '../context/PerfilEmuContext'
 import { useCooldown } from '../hooks/useCooldown'
+import type { EmuPerfil } from '../types/api'
 import { decimalEs, enlacesCuentaEmu, ratioBajo } from '../utils/cuentaEmu'
 import { formatNumero, timeAgo } from '../utils/format'
 import { IconoAviso, IconoSubida } from './Iconos'
-import { ServiceIcon } from './ServiceIcon'
+import { LogoTracker } from './LogoTracker'
 import { Tooltip } from './Tooltip'
 
 const AVISO_RATIO = 'Con ratio por debajo de 1, eMuwarez desactiva la API key: la app deja de poder sincronizar y subir.'
 const OTRA_PESTANA = <span className="solo-lector"> (se abre en otra pestaña)</span>
+const ETIQUETAS = ['Ratio', 'Subido', 'Bajado', 'Buffer', 'Sembrando', 'Descargando', 'BON', 'H&R'] as const
 
-// Tu cuenta y el enlace a «Mis subidas» (la API no lo da); mensajes y notificaciones están en la barra superior y el cajón móvil.
+// Sin usuario aún (la primera lectura ha fallado) se enseña al menos el error.
+const seEnsena = (perfil: EmuPerfil) => !!(perfil.username || perfil.error)
+
+// Tu cuenta en cada tracker con clave y el enlace a «Mis subidas» (la API no lo da); mensajes y notificaciones están en
+// la barra superior y el cajón móvil.
 export function CuentaEmu() {
-  const { perfil, actualizar, ocultarNombre } = usePerfilEmu()
+  const { perfil } = usePerfilEmu()
+  // La de cada tracker que tiene algo que enseñar, aunque la de eMuwarez no lo tenga.
+  const cuentas = perfil ? [perfil, ...(perfil.otros ?? [])].filter(seEnsena) : []
+  return <Cuentas cuentas={cuentas} />
+}
+
+// Las cuentas que se piden, sean cuantas sean: con una, su fila de tabla; con varias, una tarjeta por tracker.
+export function Cuentas({ cuentas }: { cuentas: EmuPerfil[] }) {
+  if (!cuentas.length) return null
+  if (cuentas.length > 1) return <CuentasEnTarjetas cuentas={cuentas} />
+  return <CuentasEnTabla cuentas={cuentas} />
+}
+
+// Lo que comparten las dos disposiciones: enlaces, avisos, cifras y el botón de volver a leer.
+function useCuenta(perfil: EmuPerfil, alturaLogo: 20 | 24) {
+  const { actualizar, ocultarNombre } = usePerfilEmu()
   const espera = useCooldown()
   const [actualizando, setActualizando] = useState(false)
-  // Sin usuario aún (la primera lectura ha fallado) se enseña al menos el error.
-  if (!perfil || (!perfil.username && !perfil.error)) return null
-
-  const enlaces = perfil.username ? { usuario: perfil.username, ...enlacesCuentaEmu(perfil.username) } : null
-  const bajo = ratioBajo(perfil.ratio)
+  const emu = !perfil.tracker || perfil.tracker === 'emu'
+  const nombre = perfil.nombre ?? 'eMuwarez'
+  const enlaces = perfil.username ? { usuario: perfil.username, ...enlacesCuentaEmu(perfil.username, perfil.url) } : null
+  // La regla del ratio por debajo de 1 es la de eMuwarez.
+  const bajo = emu && ratioBajo(perfil.ratio)
   const hr = perfil.hit_and_runs ?? 0
 
   const pulsar = async () => {
@@ -30,58 +51,115 @@ export function CuentaEmu() {
     }
   }
 
-  const cifra = (etiqueta: string, valor: React.ReactNode, clase = '') => (
-    <div className={`cuenta-emu-cifra ${clase}`}><dt>{etiqueta}</dt><dd>{valor}</dd></div>
-  )
+  // Una por etiqueta, en el orden de ETIQUETAS; null si el tracker no la da.
+  const cifras: { valor: React.ReactNode; clase: string }[] | null = perfil.ratio == null ? null : [
+    { valor: bajo
+      ? <Tooltip content={AVISO_RATIO}><span tabIndex={0}><IconoAviso /> {decimalEs(perfil.ratio)}</span></Tooltip>
+      : decimalEs(perfil.ratio), clase: bajo ? 'es-malo' : '' },
+    { valor: perfil.uploaded && decimalEs(perfil.uploaded), clase: '' },
+    { valor: perfil.downloaded && decimalEs(perfil.downloaded), clase: '' },
+    { valor: perfil.buffer && decimalEs(perfil.buffer), clase: '' },
+    { valor: formatNumero(perfil.seeding), clase: '' },
+    { valor: formatNumero(perfil.leeching), clase: '' },
+    { valor: formatNumero(perfil.seedbonus), clase: '' },
+    { valor: hr > 0 ? <><IconoAviso /> {formatNumero(hr)}</> : formatNumero(hr), clase: hr > 0 ? 'es-aviso' : '' },
+  ]
 
-  return (
-    <section className="cuenta-emu" aria-label="Tu cuenta en eMuwarez">
+  const usuario = enlaces ? (
+    <a className="cuenta-emu-usuario hover-link" href={enlaces.perfil} target="_blank" rel="noreferrer">
+      <LogoTracker tracker={perfil.tracker} nombre={nombre} size={alturaLogo} />
+      <span className="cuenta-emu-nombre">{ocultarNombre ? tapar(enlaces.usuario) : enlaces.usuario}</span>
+      <span className="solo-lector"> (tu perfil en {nombre}, se abre en otra pestaña)</span>
+    </a>
+  ) : <span className="cuenta-emu-usuario"><LogoTracker tracker={perfil.tracker} nombre={nombre} size={alturaLogo} /></span>
+
+  const acciones = (
+    <div className="cuenta-emu-acciones">
       {enlaces && (
-        <a className="cuenta-emu-usuario hover-link" href={enlaces.perfil} target="_blank" rel="noreferrer">
-          <ServiceIcon type="emu" size={16} />
-          {ocultarNombre ? tapar(enlaces.usuario) : enlaces.usuario}
-          <span className="solo-lector"> (tu perfil en eMuwarez, se abre en otra pestaña)</span>
-        </a>
+        <Tooltip content={`Mis subidas en ${nombre}`}>
+          <a className="cuenta-emu-enlace hover-link" href={enlaces.subidas} target="_blank" rel="noreferrer">
+            <IconoSubida /> <span className="cuenta-emu-enlace-texto">Mis subidas</span>{OTRA_PESTANA}
+          </a>
+        </Tooltip>
       )}
-      {perfil.group && <span className="badge cuenta-emu-rol">{perfil.group}</span>}
-
-      {perfil.ratio != null && (
-        <dl className="cuenta-emu-cifras">
-          {cifra('Ratio', bajo
-            ? <Tooltip content={AVISO_RATIO}><span tabIndex={0}><IconoAviso /> {decimalEs(perfil.ratio)}</span></Tooltip>
-            : decimalEs(perfil.ratio), bajo ? 'es-malo' : '')}
-          {perfil.uploaded && cifra('Subido', decimalEs(perfil.uploaded))}
-          {perfil.downloaded && cifra('Bajado', decimalEs(perfil.downloaded))}
-          {perfil.buffer && cifra('Buffer', decimalEs(perfil.buffer))}
-          {cifra('Sembrando', formatNumero(perfil.seeding))}
-          {cifra('Descargando', formatNumero(perfil.leeching))}
-          {cifra('BON', formatNumero(perfil.seedbonus))}
-          {cifra('H&R', hr > 0 ? <><IconoAviso /> {formatNumero(hr)}</> : formatNumero(hr), hr > 0 ? 'es-aviso' : '')}
-        </dl>
-      )}
-
-      {perfil.error && (
-        <span className="cuenta-emu-error" role="status"><IconoAviso /> {perfil.error}</span>
-      )}
-
-      {enlaces && (
-        <nav className="cuenta-emu-enlaces" aria-label="Tus subidas en eMuwarez">
-          <Tooltip content="Mis subidas en eMuwarez">
-            <a className="hover-link" href={enlaces.subidas} target="_blank" rel="noreferrer">
-              <IconoSubida /> <span className="cuenta-emu-enlace-texto">Mis subidas</span>{OTRA_PESTANA}
-            </a>
-          </Tooltip>
-        </nav>
-      )}
-
       {perfil.configured && (
-        <Tooltip content={`${perfil.updated_at ? `Leído de eMuwarez ${timeAgo(perfil.updated_at)}` : 'Aún sin leer de eMuwarez'}. Se vuelve a leer solo cada hora.`}>
+        <Tooltip content={`${perfil.updated_at ? `Leído de ${nombre} ${timeAgo(perfil.updated_at)}` : `Aún sin leer de ${nombre}`}. Se vuelve a leer solo cada hora.`}>
           <button type="button" className="btn btn-ghost btn-sm" onClick={pulsar}
-            disabled={actualizando || espera.active} aria-label="Actualizar tu cuenta de eMuwarez">
+            disabled={actualizando || espera.active} aria-label={`Actualizar tu cuenta de ${nombre}`}>
             {actualizando ? <span className="spinner emusync-spinner" /> : '↻'}
           </button>
         </Tooltip>
       )}
+    </div>
+  )
+
+  const rol = perfil.group && <span className="badge cuenta-emu-rol">{perfil.group}</span>
+  const error = perfil.error && <span className="cuenta-emu-error" role="status"><IconoAviso /> {perfil.error}</span>
+  return { nombre, usuario, rol, cifras, error, acciones }
+}
+
+// Una tarjeta por tracker, una al lado de otra, y saltan de línea cuando no caben.
+function CuentasEnTarjetas({ cuentas }: { cuentas: EmuPerfil[] }) {
+  return (
+    <div className="cuentas cuentas-tarjetas">
+      {cuentas.map(b => <Tarjeta key={b.tracker ?? 'emu'} perfil={b} />)}
+    </div>
+  )
+}
+
+function Tarjeta({ perfil }: { perfil: EmuPerfil }) {
+  const c = useCuenta(perfil, 24)
+  return (
+    <section className="cuenta-emu cuenta-tarjeta" aria-label={`Tu cuenta en ${c.nombre}`}>
+      <div className="cuenta-tarjeta-cuerpo">
+        <div className="cuenta-tarjeta-cabecera">{c.usuario}{c.rol}</div>
+        {c.acciones}
+        {c.cifras && (
+          <dl className="cuenta-emu-cifras">
+            {c.cifras.map((x, i) => x.valor != null && x.valor !== '' && (
+              <div key={ETIQUETAS[i]} className={`cuenta-emu-cifra ${x.clase}`}><dt>{ETIQUETAS[i]}</dt><dd>{x.valor}</dd></div>
+            ))}
+          </dl>
+        )}
+        {c.error}
+      </div>
     </section>
+  )
+}
+
+// Una tabla, una fila por tracker y las cifras en columnas alineadas, con las etiquetas una sola vez.
+function CuentasEnTabla({ cuentas }: { cuentas: EmuPerfil[] }) {
+  return (
+    <div className="cuentas cuentas-tabla-caja">
+      <table className="cuentas-tabla">
+        <caption className="solo-lector">Tus cuentas en los trackers</caption>
+        <thead>
+          <tr>
+            <th scope="col" className="cuentas-tabla-cuenta">Cuenta</th>
+            {ETIQUETAS.map(e => <th key={e} scope="col">{e}</th>)}
+            <th scope="col"><span className="solo-lector">Acciones</span></th>
+          </tr>
+        </thead>
+        <tbody>
+          {cuentas.map(b => <Fila key={b.tracker ?? 'emu'} perfil={b} />)}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+function Fila({ perfil }: { perfil: EmuPerfil }) {
+  const c = useCuenta(perfil, 20)
+  return (
+    <tr className="cuenta-emu" aria-label={`Tu cuenta en ${c.nombre}`}>
+      <th scope="row" className="cuentas-tabla-cuenta">
+        <div className="cuentas-tabla-quien">{c.usuario}{c.rol}</div>
+        {c.cifras && c.error}
+      </th>
+      {c.cifras
+        ? c.cifras.map((x, i) => <td key={ETIQUETAS[i]} className={`cuenta-emu-cifra ${x.clase}`}>{x.valor || '—'}</td>)
+        : <td colSpan={ETIQUETAS.length} className="cuentas-tabla-sin-cifras">{c.error}</td>}
+      <td className="cuentas-tabla-acciones">{c.acciones}</td>
+    </tr>
   )
 }

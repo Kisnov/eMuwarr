@@ -59,10 +59,9 @@ def _por_que_no_se_escribe(ruta: str | None, conn) -> str | None:
     from .mkv_remux import modo_pistas, toca_el_fichero
     if not toca_el_fichero(modo_pistas(conn)):
         return TITULO_CON_NINGUNO
-    enlaces = Path(ruta).stat().st_nlink if ruta and Path(ruta).exists() else 1
-    if enlaces > 1:
-        return f"No se edita {Path(ruta).name}: lo comparten {enlaces} enlaces duros."
-    return None
+    from .carpeta_subida import motivo_para_no_editar
+    motivo = motivo_para_no_editar(ruta, conn) if ruta and Path(ruta).exists() else None
+    return f"No se edita {Path(ruta).name}: {motivo}." if motivo else None
 
 
 def check_mkvpropedit_available() -> dict:

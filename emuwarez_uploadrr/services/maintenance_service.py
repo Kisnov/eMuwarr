@@ -282,6 +282,34 @@ def podar_tmp_de_uploadrr(conn: sqlite3.Connection, dias: int, ahora: Optional[d
     return borradas
 
 
+def podar_remux_abandonados(conn: sqlite3.Connection, ahora: Optional[datetime] = None) -> int:
+    """Borra los `.remux.mkv.part` que dejó un reordenado de pistas matado (docker restart, OOM) junto a un archivo que
+    nadie volvió a reordenar: solo en las carpetas de los elementos y de las subidas, y pasado el timeout de mkvmerge."""
+    from .mkv_remux import _RESTO_ABANDONADO_S, _SUFIJO_PARTE
+    from .path_mapping import get_path_mappings, resolve_local_path
+    mapeos = get_path_mappings(conn)
+    carpetas = {os.path.dirname(resolve_local_path(ruta, mappings=mapeos)) for (ruta,) in conn.execute(
+        "SELECT path FROM library_items WHERE path IS NOT NULL AND path != ''")}
+    for (ruta,) in conn.execute("SELECT DISTINCT prepared_path FROM upload_jobs WHERE prepared_path IS NOT NULL"):
+        carpetas.add(ruta if os.path.isdir(ruta) else os.path.dirname(ruta))
+    limite = (ahora or datetime.now(timezone.utc)).timestamp() - _RESTO_ABANDONADO_S
+    borrados = 0
+    for carpeta in carpetas:
+        try:
+            entradas = list(os.scandir(carpeta))
+        except OSError:
+            continue
+        for entrada in entradas:
+            try:
+                if (entrada.name.endswith(_SUFIJO_PARTE) and entrada.is_file(follow_symlinks=False)
+                        and entrada.stat(follow_symlinks=False).st_mtime < limite):
+                    os.remove(entrada.path)
+                    borrados += 1
+            except OSError as exc:
+                logger.warning("No se pudo borrar un temporal de remux: %s", type(exc).__name__)
+    return borrados
+
+
 def podar_propuestas_caducadas(conn: sqlite3.Connection, ahora: Optional[datetime] = None) -> int:
     """Borra las propuestas de nombre que otra más nueva dejó caducadas hace más de _DIAS_PROPUESTAS, salvo las que
     una subida guarda como la suya: cada vez que se rehace una propuesta, la anterior se quedaba para siempre."""
@@ -333,6 +361,7 @@ def ejecutar_mantenimiento(conn: sqlite3.Connection, ahora: Optional[datetime] =
         ("carpetas temporales de subidas", lambda: podar_tmp_de_uploadrr(conn, dias_tmp, ahora)),
         ("propuestas de nombre caducadas", lambda: podar_propuestas_caducadas(conn, ahora)),
         ("restos sin uso", lambda: podar_restos(conn, ahora)),
+        ("temporales de remux abandonados", lambda: podar_remux_abandonados(conn, ahora)),
     )
     borrados: list[str] = []
     fallos: list[str] = []

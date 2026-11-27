@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useUnsavedGuard } from '../../../utils/unsavedGuard'
-import { fetchSettings, updateSettings, type SettingsData } from '../../../api/settings'
+import { fetchSettings, updateSettings, type MarcasTracker, type SettingsData } from '../../../api/settings'
 import { usePerfilEmu } from '../../../context/PerfilEmuContext'
 import { isValidHttpUrl, isValidPublicUrl } from '../../../utils/validation'
 import { MODO_PISTAS_POR_DEFECTO, normalizarModo, type ModoPistas } from '../../../utils/modoPistas'
@@ -14,15 +14,15 @@ import { enfocarPrimerError } from '../Campo'
 // Los valores del formulario, uno por campo, serializados para comparar el estado actual con el cargado.
 function configSignature(v: {
   tags: string[]; gruposPR: string[]; gruposAnon: string[]; providerOrder: string[]; region: string
-  emuUsername: string; ignoreSpecials: boolean; sourceEngine: boolean; addLogo: boolean; capturasPorCapitulo: boolean; modoDePistas: ModoPistas; sinCopiasReflink: boolean; sincronizarAlVolver: boolean
+  emuUsername: string; ignoreSpecials: boolean; sourceEngine: boolean; addLogo: boolean; capturasPorCapitulo: boolean; plantillaDescripcion: string; modoDePistas: ModoPistas; sinCopiasReflink: boolean; sincronizarAlVolver: boolean
   recentLimit: number; uploadMaxConcurrent: number; qbitUrl: string; qbitPublicUrl: string; qbitTag: string; qbitUser: string
-  imgEnabled: string[]; allowedRoots: string
-  newKey?: string; newEmuKey?: string; qbitPass?: string; qbitQui?: string; quitarQui?: boolean; quitarQbitPass?: boolean
+  imgEnabled: string[]; allowedRoots: string; marcasTrackers: Record<string, MarcasTracker>
+  newKey?: string; newEmuKey?: string; newNobsKey?: string; newMnvKey?: string; quitarNobs?: boolean; quitarMnv?: boolean; qbitPass?: string; qbitQui?: string; quitarQui?: boolean; quitarQbitPass?: boolean
 }): Record<string, string> {
   const campos: Record<string, unknown> = {
     tags: v.tags, gruposPR: v.gruposPR, gruposAnon: v.gruposAnon, providerOrder: v.providerOrder, region: v.region, emuUsername: v.emuUsername,
-    ignoreSpecials: v.ignoreSpecials, sourceEngine: v.sourceEngine, addLogo: v.addLogo, capturasPorCapitulo: v.capturasPorCapitulo, modoDePistas: v.modoDePistas, sinCopiasReflink: v.sinCopiasReflink, sincronizarAlVolver: v.sincronizarAlVolver, recentLimit: v.recentLimit, uploadMaxConcurrent: v.uploadMaxConcurrent, qbitUrl: v.qbitUrl, qbitPublicUrl: v.qbitPublicUrl, qbitTag: v.qbitTag, qbitUser: v.qbitUser, imgEnabled: v.imgEnabled, allowedRoots: v.allowedRoots,
-    newKey: v.newKey ?? '', newEmuKey: v.newEmuKey ?? '', qbitPass: v.qbitPass ?? '', qbitQui: v.qbitQui ?? '', quitarQui: v.quitarQui ?? false, quitarQbitPass: v.quitarQbitPass ?? false,
+    ignoreSpecials: v.ignoreSpecials, sourceEngine: v.sourceEngine, addLogo: v.addLogo, capturasPorCapitulo: v.capturasPorCapitulo, plantillaDescripcion: v.plantillaDescripcion, modoDePistas: v.modoDePistas, sinCopiasReflink: v.sinCopiasReflink, sincronizarAlVolver: v.sincronizarAlVolver, recentLimit: v.recentLimit, uploadMaxConcurrent: v.uploadMaxConcurrent, qbitUrl: v.qbitUrl, qbitPublicUrl: v.qbitPublicUrl, qbitTag: v.qbitTag, qbitUser: v.qbitUser, imgEnabled: v.imgEnabled, allowedRoots: v.allowedRoots, marcasTrackers: v.marcasTrackers,
+    newKey: v.newKey ?? '', newEmuKey: v.newEmuKey ?? '', newNobsKey: v.newNobsKey ?? '', newMnvKey: v.newMnvKey ?? '', quitarNobs: v.quitarNobs ?? false, quitarMnv: v.quitarMnv ?? false, qbitPass: v.qbitPass ?? '', qbitQui: v.qbitQui ?? '', quitarQui: v.quitarQui ?? false, quitarQbitPass: v.quitarQbitPass ?? false,
   }
   return Object.fromEntries(Object.entries(campos).map(([k, x]) => [k, JSON.stringify(x)]))
 }
@@ -31,11 +31,29 @@ const ERROR_URL_QBIT = 'La URL de qBittorrent debe empezar por http:// o https:/
 const ERROR_URL_PUBLICA = 'La URL pública debe empezar por http:// o https://, incluir un host válido y no llevar usuario ni contraseña'
 const ERROR_URL_QUI = 'La URL del proxy de qui debe empezar por http:// o https:// e incluir un host válido'
 
+// Los grupos de `tags` marcados en `marcados`, con su escritura actual: el backend compara sin distinguir mayúsculas.
+export const marcadosEn = (marcados: string[], tags: string[]) =>
+  tags.filter(t => marcados.some(g => g.trim().toLowerCase() === t.trim().toLowerCase()))
+
 // Las marcas guardadas de los grupos que existen, igual que las compara el formulario (ver prAGuardar).
 function marcasDe(s: SettingsData, cual: 'pr' | 'anon'): string[] {
   const tags = s.upload_tags?.length ? s.upload_tags : [s.default_release_tag]
   const marcados = (cual === 'pr' ? s.upload_tags_personal_release : s.upload_tags_anonimos) ?? []
-  return marcados.filter(g => tags.includes(g))
+  return marcadosEn(marcados, tags)
+}
+
+// Marca o desmarca un grupo en una lista de marcas.
+export const alternar = (lista: string[], tag: string, si: boolean) => (si ? [...lista.filter(g => g !== tag), tag] : lista.filter(g => g !== tag))
+
+// Los trackers que no son eMuwarez, con el nombre que ve el usuario.
+export const OTROS_TRACKERS = [{ id: 'nobs', nombre: 'N.O.B.S' }, { id: 'mnv', nombre: 'Milnueve' }] as const
+
+// Las marcas de cada otro tracker, solo de los grupos que existen (como marcasDe).
+function marcasTrackersDe(s: SettingsData, tags: string[]): Record<string, MarcasTracker> {
+  return Object.fromEntries(OTROS_TRACKERS.map(({ id }) => {
+    const m = s.marcas_por_tracker?.[id]
+    return [id, m ? { personal_release: marcadosEn(m.personal_release, tags), anonimos: marcadosEn(m.anonimos, tags) } : null]
+  }))
 }
 
 // Cuántos campos difieren de lo cargado.
@@ -64,6 +82,11 @@ export function useConfigForm() {
   const [region, setRegion] = useState('')
   const [newKey, setNewKey] = useState('')
   const [newEmuKey, setNewEmuKey] = useState('')
+  // Las claves de NOBS y Milnueve: como las demás, no se cargan; quitar una se pide aparte.
+  const [newNobsKey, setNewNobsKey] = useState('')
+  const [newMnvKey, setNewMnvKey] = useState('')
+  const [quitarNobs, setQuitarNobs] = useState(false)
+  const [quitarMnv, setQuitarMnv] = useState(false)
   const [emuUsername, setEmuUsername] = useState('')
   const [ignoreSpecials, setIgnoreSpecials] = useState(true)
   // Internal Source Tool: apagada por defecto, sigue en desarrollo.
@@ -72,6 +95,8 @@ export function useConfigForm() {
   const [addLogo, setAddLogo] = useState(true)
   // Capturas de un pack: solo del primer capítulo por defecto.
   const [capturasPorCapitulo, setCapturasPorCapitulo] = useState(false)
+  // La descripción con la que empieza el Resumen de cada subida (BBCode).
+  const [plantillaDescripcion, setPlantillaDescripcion] = useState('')
   // Reordenar pistas: apagado por defecto, reescribe el contenedor entero.
   const [modoDePistas, setModoDePistas] = useState<ModoPistas>(MODO_PISTAS_POR_DEFECTO)
   // Copias por reflink de un archivo compartido: se hacen por defecto.
@@ -95,6 +120,8 @@ export function useConfigForm() {
   // Uploadrr sandboxing: folder(s) where THIS container reaches the media,
   // comma-separated. Empty means real uploads fail closed until it's set.
   const [allowedRoots, setAllowedRoots] = useState('')
+  // Las marcas de los grupos de los otros trackers (null: las de eMuwarez).
+  const [marcasTrackers, setMarcasTrackers] = useState<Record<string, MarcasTracker>>({})
 
   // Unsaved-changes tracking: compare current form values to the loaded ones.
   const [baseline, setBaseline] = useState<Record<string, string> | null>(null)
@@ -102,12 +129,15 @@ export function useConfigForm() {
   const borrador = nuevoTag.trim()
   const tagsAGuardar = borrador && !tags.includes(borrador) ? [...tags, borrador] : tags
   // Solo los de grupos que siguen en la lista: quitar un grupo quita también sus marcas.
-  const prAGuardar = gruposPR.filter(g => tags.includes(g))
-  const anonAGuardar = gruposAnon.filter(g => tags.includes(g))
+  const prAGuardar = marcadosEn(gruposPR, tags)
+  const anonAGuardar = marcadosEn(gruposAnon, tags)
+  const marcasAGuardar = Object.fromEntries(Object.entries(marcasTrackers).map(([id, m]) => [id, m && {
+    personal_release: marcadosEn(m.personal_release, tags), anonimos: marcadosEn(m.anonimos, tags),
+  }]))
   const currentSig = configSignature({
     tags: tagsAGuardar, gruposPR: prAGuardar, gruposAnon: anonAGuardar, providerOrder, region, emuUsername,
-    ignoreSpecials, sourceEngine, addLogo, capturasPorCapitulo, modoDePistas, sinCopiasReflink, sincronizarAlVolver, recentLimit, uploadMaxConcurrent, qbitUrl, qbitPublicUrl, qbitTag, qbitUser, imgEnabled, allowedRoots,
-    newKey, newEmuKey, qbitPass, qbitQui, quitarQui, quitarQbitPass,
+    ignoreSpecials, sourceEngine, addLogo, capturasPorCapitulo, plantillaDescripcion, modoDePistas, sinCopiasReflink, sincronizarAlVolver, recentLimit, uploadMaxConcurrent, qbitUrl, qbitPublicUrl, qbitTag, qbitUser, imgEnabled, allowedRoots, marcasTrackers: marcasAGuardar,
+    newKey, newEmuKey, newNobsKey, newMnvKey, quitarNobs, quitarMnv, qbitPass, qbitQui, quitarQui, quitarQbitPass,
   })
   const cambios = baseline ? contarCambios(baseline, currentSig) : 0
   // Validación en el sitio: un campo con una URL mal escrita lo dice al salir de él o al intentar guardar.
@@ -137,6 +167,7 @@ export function useConfigForm() {
         setSourceEngine(s.source_engine_enabled ?? false)
         setAddLogo(s.emu_add_logo ?? true)
         setCapturasPorCapitulo(s.emu_per_episode_screens ?? false)
+        setPlantillaDescripcion(s.descripcion_plantilla ?? '')
         setModoDePistas(normalizarModo(s.remux_track_mode))
         setSinCopiasReflink(s.remux_no_reflink_copies ?? false)
         setSincronizarAlVolver(s.sincronizar_al_volver_instancia ?? true)
@@ -148,17 +179,19 @@ export function useConfigForm() {
         setQbitUser(s.qbit_username ?? '')
         setImgEnabled(s.image_hosts_enabled ?? [])
         setAllowedRoots((s.uploadrr_allowed_roots ?? []).join(', '))
+        setMarcasTrackers(marcasTrackersDe(s, s.upload_tags?.length ? s.upload_tags : [s.default_release_tag]))
         setBaseline(configSignature({
           tags: s.upload_tags?.length ? s.upload_tags : [s.default_release_tag],
           gruposPR: marcasDe(s, 'pr'), gruposAnon: marcasDe(s, 'anon'), providerOrder: s.provider_priority_order,
           region: s.tmdb_watch_region,
           emuUsername: s.emu_username ?? '',
-          ignoreSpecials: s.series_ignore_specials ?? true, sourceEngine: s.source_engine_enabled ?? false, addLogo: s.emu_add_logo ?? true, capturasPorCapitulo: s.emu_per_episode_screens ?? false, modoDePistas: normalizarModo(s.remux_track_mode), sinCopiasReflink: s.remux_no_reflink_copies ?? false, sincronizarAlVolver: s.sincronizar_al_volver_instancia ?? true,
+          ignoreSpecials: s.series_ignore_specials ?? true, sourceEngine: s.source_engine_enabled ?? false, addLogo: s.emu_add_logo ?? true, capturasPorCapitulo: s.emu_per_episode_screens ?? false, plantillaDescripcion: s.descripcion_plantilla ?? '', modoDePistas: normalizarModo(s.remux_track_mode), sinCopiasReflink: s.remux_no_reflink_copies ?? false, sincronizarAlVolver: s.sincronizar_al_volver_instancia ?? true,
           recentLimit: s.recent_activity_limit ?? 100,
           uploadMaxConcurrent: s.upload_max_concurrent ?? 1,
           qbitUrl: s.qbit_url ?? '', qbitPublicUrl: s.qbit_public_url ?? '', qbitTag: s.qbit_tag ?? '', qbitUser: s.qbit_username ?? '',
           imgEnabled: s.image_hosts_enabled ?? [],
           allowedRoots: (s.uploadrr_allowed_roots ?? []).join(', '),
+          marcasTrackers: marcasTrackersDe(s, s.upload_tags?.length ? s.upload_tags : [s.default_release_tag]),
         }))
       })
       .catch((e: unknown) => {
@@ -178,6 +211,10 @@ export function useConfigForm() {
     setNuevoTag('')
     setNewKey('')
     setNewEmuKey('')
+    setNewNobsKey('')
+    setNewMnvKey('')
+    setQuitarNobs(false)
+    setQuitarMnv(false)
     setQbitPass('')
     setQuitarQbitPass(false)
     setQbitQui('')
@@ -220,6 +257,7 @@ export function useConfigForm() {
         source_engine_enabled: sourceEngine,
         emu_add_logo: addLogo,
         emu_per_episode_screens: capturasPorCapitulo,
+        descripcion_plantilla: plantillaDescripcion,
         remux_track_mode: modoDePistas,
         remux_no_reflink_copies: sinCopiasReflink,
         sincronizar_al_volver_instancia: sincronizarAlVolver,
@@ -231,18 +269,28 @@ export function useConfigForm() {
         qbit_username: qbitUser.trim(),
         image_hosts_enabled: imgEnabled,
         uploadrr_allowed_roots: allowedRoots,
+        marcas_por_tracker: marcasAGuardar,
       }
       if (newKey.trim()) payload.tmdb_api_key = newKey.trim()
       if (newEmuKey.trim()) payload.emu_api_key = newEmuKey.trim()
+      if (newNobsKey.trim()) payload.nobs_api_key = newNobsKey.trim()
+      if (newMnvKey.trim()) payload.mnv_api_key = newMnvKey.trim()
+      const quitar: string[] = []
       if (qbitPass.trim()) payload.qbit_password = qbitPass.trim()
-      else if (quitarQbitPass) payload.clear = ['qbit_password']
+      else if (quitarQbitPass) quitar.push('qbit_password')
+      if (!newNobsKey.trim() && quitarNobs) quitar.push('nobs_api_key')
+      if (!newMnvKey.trim() && quitarMnv) quitar.push('mnv_api_key')
+      if (quitar.length) payload.clear = quitar
       if (quitarQui) payload.qbit_qui_proxy_clear = true
       else if (qbitQui.trim()) payload.qbit_qui_proxy_url = qbitQui.trim()
       // Las API keys de imágenes ya NO viajan aquí: cada una se guarda desde
       // su propia tarjeta, en el momento, sin depender del Guardar global.
       const updated = await updateSettings(payload)
-      // Con otra clave, el servidor descarta el perfil guardado y lo pide ya: el Panel no espera a la hora.
-      if (payload.emu_api_key) actualizarPerfilEmu().catch(() => { /* lo intenta la próxima lectura */ })
+      // Con otra clave (o sin la de N.O.B.S o Milnueve), el servidor descarta el perfil guardado y lo pide ya: el
+      // Panel no espera a la hora.
+      if (payload.emu_api_key || payload.nobs_api_key || payload.mnv_api_key || quitar.some(k => k.endsWith('_api_key'))) {
+        actualizarPerfilEmu().catch(() => { /* lo intenta la próxima lectura */ })
+      }
       setSettings(updated)
       setTags(updated.upload_tags?.length ? updated.upload_tags : [updated.default_release_tag])
       setGruposPR(updated.upload_tags_personal_release ?? [])
@@ -266,18 +314,24 @@ export function useConfigForm() {
       setImgEnabled(updated.image_hosts_enabled ?? [])
       setNewKey('')
       setNewEmuKey('')
+      setNewNobsKey('')
+      setNewMnvKey('')
+      setQuitarNobs(false)
+      setQuitarMnv(false)
       setAllowedRoots((updated.uploadrr_allowed_roots ?? []).join(', '))
+      setMarcasTrackers(marcasTrackersDe(updated, updated.upload_tags?.length ? updated.upload_tags : [updated.default_release_tag]))
       setBaseline(configSignature({
         tags: updated.upload_tags?.length ? updated.upload_tags : [updated.default_release_tag],
         gruposPR: marcasDe(updated, 'pr'), gruposAnon: marcasDe(updated, 'anon'), providerOrder: updated.provider_priority_order,
         region: updated.tmdb_watch_region,
         emuUsername: updated.emu_username ?? '',
-        ignoreSpecials: updated.series_ignore_specials ?? true, sourceEngine: updated.source_engine_enabled ?? false, addLogo: updated.emu_add_logo ?? true, capturasPorCapitulo: updated.emu_per_episode_screens ?? false, modoDePistas: normalizarModo(updated.remux_track_mode), sinCopiasReflink: updated.remux_no_reflink_copies ?? false, sincronizarAlVolver: updated.sincronizar_al_volver_instancia ?? true,
+        ignoreSpecials: updated.series_ignore_specials ?? true, sourceEngine: updated.source_engine_enabled ?? false, addLogo: updated.emu_add_logo ?? true, capturasPorCapitulo: updated.emu_per_episode_screens ?? false, plantillaDescripcion: updated.descripcion_plantilla ?? '', modoDePistas: normalizarModo(updated.remux_track_mode), sinCopiasReflink: updated.remux_no_reflink_copies ?? false, sincronizarAlVolver: updated.sincronizar_al_volver_instancia ?? true,
         recentLimit: updated.recent_activity_limit ?? 100,
         uploadMaxConcurrent: updated.upload_max_concurrent ?? 1,
         qbitUrl: updated.qbit_url ?? '', qbitPublicUrl: updated.qbit_public_url ?? '', qbitTag: updated.qbit_tag ?? '', qbitUser: updated.qbit_username ?? '',
         imgEnabled: updated.image_hosts_enabled ?? [],
         allowedRoots: (updated.uploadrr_allowed_roots ?? []).join(', '),
+        marcasTrackers: marcasTrackersDe(updated, updated.upload_tags?.length ? updated.upload_tags : [updated.default_release_tag]),
       }))
       setMsg({ ok: true, text: '✓ Configuración guardada' })
     } catch (e: unknown) {
@@ -291,13 +345,15 @@ export function useConfigForm() {
     tags, setTags, nuevoTag, setNuevoTag, borrador, gruposPR, setGruposPR, gruposAnon, setGruposAnon,
     providerOrder, setProviderOrder, region, setRegion,
     newKey, setNewKey, newEmuKey, setNewEmuKey, emuUsername, setEmuUsername,
+    newNobsKey, setNewNobsKey, newMnvKey, setNewMnvKey, quitarNobs, setQuitarNobs, quitarMnv, setQuitarMnv,
     ignoreSpecials, setIgnoreSpecials, sourceEngine, setSourceEngine, addLogo, setAddLogo,
-    capturasPorCapitulo, setCapturasPorCapitulo, modoDePistas, setModoDePistas,
+    capturasPorCapitulo, setCapturasPorCapitulo, plantillaDescripcion, setPlantillaDescripcion, modoDePistas, setModoDePistas,
     sinCopiasReflink, setSinCopiasReflink, sincronizarAlVolver, setSincronizarAlVolver, recentLimit, setRecentLimit,
     uploadMaxConcurrent, setUploadMaxConcurrent,
     qbitUrl, setQbitUrl, qbitPublicUrl, setQbitPublicUrl, qbitTag, setQbitTag, qbitUser, setQbitUser, qbitPass, setQbitPass,
     quitarQbitPass, setQuitarQbitPass, qbitQui, setQbitQui, quitarQui, setQuitarQui,
     imgEnabled, setImgEnabled, allowedRoots, setAllowedRoots,
+    marcasTrackers, setMarcasTrackers,
   }
 }
 

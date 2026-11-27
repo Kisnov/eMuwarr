@@ -22,8 +22,8 @@ def db_conn(isolated_db):
 def _movie(conn, path: str) -> int:
     conn.execute(
         """INSERT INTO library_items (item_type, title, local_status, request_status, nomenclature_status, path,
-                                      size_bytes, updated_at)
-           VALUES ('movie', 'X', 'Disponible', 'Sin petición', 'N/A', ?, 100, CURRENT_TIMESTAMP)""",
+                                      size_bytes, audio_languages, updated_at)
+           VALUES ('movie', 'X', 'Disponible', 'Sin petición', 'N/A', ?, 100, 'spa', CURRENT_TIMESTAMP)""",
         (path,),
     )
     conn.commit()
@@ -63,6 +63,22 @@ def test_guardar_limpia_vacios_y_repetidos(db_conn):
     ot.guardar_grupos(db_conn, anonimos=["C"])          # la otra lista no se toca
     assert ot.grupos_personal_release(db_conn) == ["A", "B"]
     assert ot.grupos_anonimos(db_conn) == ["C"]
+
+
+def test_otro_tracker_sigue_las_marcas_de_emuwarez_hasta_tener_las_suyas(db_conn):
+    ot.guardar_grupos(db_conn, personal_release=["MiGrupo"], anonimos=["MiGrupo"])
+    assert ot.marcas_propias(db_conn, "nobs") is None
+    assert ot.opciones_de_subida(db_conn, "MiGrupo", tracker="nobs") == {"anon": True, "personal_release": True}
+
+    ot.guardar_marcas_propias(db_conn, "nobs", {"personal_release": ["MiGrupo"], "anonimos": []})
+    assert ot.marcas_propias(db_conn, "nobs") == {"personal_release": ["MiGrupo"], "anonimos": []}
+    assert ot.opciones_de_subida(db_conn, "MiGrupo", tracker="nobs") == {"anon": False, "personal_release": True}
+    assert ot.opciones_de_subida(db_conn, "MiGrupo") == {"anon": True, "personal_release": True}  # eMuwarez, igual
+    assert ot.opciones_de_subida(db_conn, "MiGrupo", tracker="mnv")["anon"] is True  # Milnueve sigue a eMuwarez
+
+    ot.guardar_marcas_propias(db_conn, "nobs", None)
+    assert ot.marcas_propias(db_conn, "nobs") is None
+    assert ot.opciones_de_subida(db_conn, "MiGrupo", tracker="nobs")["anon"] is True
 
 
 # --- El comando de Uploadrr-EMU -----------------------------------------------------------------------------------
@@ -108,6 +124,21 @@ def test_marcar_lista_aplica_la_regla_y_lo_elegido(db_conn, tmp_path):
     assert guardado["command_args"][-2:] == ["-a", "-pr"]
 
 
+def test_marcar_lista_usa_las_marcas_del_tracker_del_trabajo(db_conn, tmp_path):
+    ot.guardar_grupos(db_conn, anonimos=["MiGrupo"])
+    ot.guardar_marcas_propias(db_conn, "nobs", {"personal_release": [], "anonimos": []})
+    iid = _movie(db_conn, str(tmp_path / "m.mkv"))
+    cur = db_conn.execute(
+        """INSERT INTO upload_jobs (library_item_id, status, stage, title, path, tracker, created_at, updated_at)
+           VALUES (?, 'queued', 'queued', 'X', '', 'nobs', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)""", (iid,))
+    db_conn.commit()
+    preview = {"runtime_type": "uploadrr_emu", "command_args": ["python", "upload.py", "/data/x.mkv"]}
+    assert uq._marcar_lista(cur.lastrowid, preview, db_conn, grupo="MiGrupo", tracker="nobs")
+    guardado = json.loads(db_conn.execute(
+        "SELECT uploadrr_command_json FROM upload_jobs WHERE id = ?", (cur.lastrowid,)).fetchone()[0])
+    assert guardado["anon"] is False and "-a" not in guardado["command_args"]
+
+
 def test_el_reintento_conserva_lo_elegido(db_conn, tmp_path):
     f = tmp_path / "m.mkv"
     f.write_bytes(b"x" * 100)
@@ -133,6 +164,28 @@ def test_ajustes_ida_y_vuelta(client, auth_headers):
     s = client.get("/api/settings", headers=auth_headers).json()
     assert s["upload_tags_personal_release"] == ["MiGrupo"]
     assert s["upload_tags_anonimos"] == ["EMUWAREZ", "MiGrupo"]
+
+
+def test_ajustes_de_los_otros_trackers(client, auth_headers):
+    s = client.get("/api/settings", headers=auth_headers).json()
+    assert s["marcas_por_tracker"] == {"nobs": None, "mnv": None}
+
+    r = client.put("/api/settings", json={
+        "marcas_por_tracker": {"nobs": {"personal_release": [], "anonimos": ["A"]}},
+    }, headers=auth_headers)
+    assert r.status_code == 200, r.text
+    assert r.json()["marcas_por_tracker"] == {"nobs": {"personal_release": [], "anonimos": ["A"]}, "mnv": None}
+
+    r = client.put("/api/settings", json={"marcas_por_tracker": {"nobs": None}}, headers=auth_headers)
+    assert r.json()["marcas_por_tracker"]["nobs"] is None
+
+
+@pytest.mark.parametrize("cuerpo", [
+    {"marcas_por_tracker": {"emu": None}}, {"marcas_por_tracker": {"otro": None}},
+    {"marcas_por_tracker": {"nobs": {"anonimos": ["A"]}}},
+])
+def test_ajustes_de_los_otros_trackers_que_no_valen(client, auth_headers, cuerpo):
+    assert client.put("/api/settings", json=cuerpo, headers=auth_headers).status_code == 422
 
 
 def test_la_cola_acepta_las_casillas(client, auth_headers, isolated_db, tmp_path):

@@ -13,10 +13,11 @@ vi.mock('../../api/nomenclature', () => ({
 }))
 vi.mock('../../api/uploads', () => ({
   queueUpload: vi.fn(), getExistingJobForItem: vi.fn(), runUploadChecks: vi.fn(), getUploadChecksProgress: vi.fn(),
+  fetchTrackersParaSubir: vi.fn(), fetchReglasTracker: vi.fn(), fetchElegibilidad: vi.fn(),
 }))
 vi.mock('../../api/library', () => ({
   getLibrary: vi.fn(), getMediaInfoReport: vi.fn(), suggestProvider: vi.fn(),
-  getEmuComparison: vi.fn(), getEmuSyncStatus: vi.fn(), getLibraryItem: vi.fn(),
+  getEmuComparisons: vi.fn(), getEmuSyncStatus: vi.fn(), getLibraryItem: vi.fn(),
 }))
 vi.mock('../../api/requests', () => ({ getRequestDetail: vi.fn() }))
 vi.mock('../../api/seasonPack', () => ({
@@ -39,6 +40,12 @@ import { UploadWizardModal } from '../UploadWizardModal'
 import { boton, campo, tarjeta, desmontar, diferida, elegir, escribir, esperar, montar, pulsar, texto } from './dom'
 
 const m = vi.mocked
+
+// La respuesta de /library/emu-comparisons para un elemento, con la conclusión que diría el servidor.
+const una = (c: biblioteca.EmuComparison, conclusion: biblioteca.ConclusionDuplicados | null = null) => ({ comparaciones: [c], conclusion })
+const DUPLICADO: biblioteca.ConclusionDuplicados = {
+  nivel: 'duplicado', clase: 'igual', texto: 'Ya hay 1 torrent con tu misma calidad: la subida sería un duplicado.', ya_lo_tiene: true,
+}
 
 /** El modal abierto encima de los demás (los de MediaInfo, pistas y nombres se abren sobre el asistente). */
 const dialogoDeArriba = () => [...document.querySelectorAll<HTMLElement>('[role="dialog"]')].pop()!
@@ -146,13 +153,18 @@ beforeEach(() => {
   m(nom.saveNomenclatureFields).mockResolvedValue({} as never)
   m(nom.previewTrackRemux).mockResolvedValue(PISTAS)
   // El Resumen: catálogo sin nada, sin petición en la ficha.
-  m(biblioteca.getEmuComparison).mockResolvedValue({ available: true, message: null, matches: [], in_catalog: 0 })
-  m(biblioteca.getEmuSyncStatus).mockResolvedValue({ last_sync_at: null } as never)
+  m(biblioteca.getEmuComparisons).mockResolvedValue(una({ available: true, message: null, matches: [], in_catalog: 0 }))
   m(biblioteca.getLibraryItem).mockResolvedValue(elemento({ peticion: null }))
   m(subidas.getExistingJobForItem).mockResolvedValue(null)
   m(subidas.runUploadChecks).mockImplementation(async (_id, alcance) => (alcance === 'environment' ? ENTORNO : LISTO) as never)
   m(subidas.getUploadChecksProgress).mockResolvedValue({ checks: [] } as never)
   m(subidas.queueUpload).mockResolvedValue({ status: 'queued', job: { id: 99 } } as never)
+  // Solo eMuwarez: sin otro tracker con clave, el Resumen no enseña la elección.
+  m(subidas.fetchTrackersParaSubir).mockResolvedValue([{ id: 'emu', nombre: 'eMuwarez' }])
+  m(subidas.fetchReglasTracker).mockImplementation(async (_id, tracker) =>
+    ({ tracker, permitido: true, motivo: 'Audio en castellano.', variante: null }))
+  // Sin respuesta de /upload/elegibilidad, todo sigue con la regla de eMuwarez.
+  m(subidas.fetchElegibilidad).mockRejectedValue(new Error('sin elegibilidad'))
   m(temporada.previewSeasonPack).mockResolvedValue(plan())
   m(temporada.getSeasonPlanProgress).mockResolvedValue({ done: 0, total: 0, current_title: null })
   m(temporada.previewSeasonPackFields).mockImplementation(async (_id, f) => ({
@@ -205,7 +217,7 @@ describe('película', () => {
     await esperar(() => onClose.mock.calls.length > 0)
     expect(subidas.queueUpload).toHaveBeenCalledWith(
       10, {}, LISTO, { ordered_tracks: PISTAS.ordered_tracks }, undefined, undefined, undefined,
-      { anonimo: null, personalRelease: null })
+      { anonimo: null, personalRelease: null }, undefined, '')
     expect(onDone).toHaveBeenCalled()
     expect(onNavigate).toHaveBeenCalledWith('uploads')
   })
@@ -228,7 +240,240 @@ describe('película', () => {
     await esperar(() => onClose.mock.calls.length > 0)
     expect(subidas.queueUpload).toHaveBeenCalledWith(
       10, {}, LISTO, { ordered_tracks: PISTAS.ordered_tracks }, undefined, undefined, undefined,
-      { anonimo: true, personalRelease: null })
+      { anonimo: true, personalRelease: null }, undefined, '')
+  })
+
+  it('las casillas siguen las marcas de cada tracker elegido; si no coinciden, cada subida lleva las del suyo', async () => {
+    m(subidas.fetchTrackersParaSubir).mockResolvedValue([{ id: 'emu', nombre: 'eMuwarez' }, { id: 'nobs', nombre: 'N.O.B.S' }])
+    m(fetchSettings).mockResolvedValue({
+      upload_tags: ['GRP'], upload_tags_personal_release: [], upload_tags_anonimos: [],
+      marcas_por_tracker: { nobs: { personal_release: [], anonimos: ['GRP'] } },
+    } as unknown as Awaited<ReturnType<typeof fetchSettings>>)
+    await abrir(PELICULA)
+    await esperar(() => texto().includes('Dune WEB-DL AMZN [GRP]'))
+    await pulsar(boton('Continuar'))
+    await esperar(() => texto().includes('✓ Todo listo para subir'))
+    const casilla = (nombre: string) => [...document.querySelectorAll<HTMLLabelElement>('.asist-marcas label')]
+      .find(l => l.textContent?.includes(nombre))!.querySelector('input')!
+    expect(casilla('Anónimo').checked).toBe(false)
+    expect(texto()).toContain('aquí cambia solo esta subida')
+
+    await pulsar(casilla('eMuwarez'))
+    await pulsar(casilla('N.O.B.S'))
+    expect(casilla('Anónimo').checked).toBe(true)  // solo N.O.B.S: sus marcas
+
+    await pulsar(casilla('eMuwarez'))
+    expect(casilla('Anónimo').indeterminate).toBe(true)
+    expect(casilla('Personal release').indeterminate).toBe(false)
+    expect(texto()).toContain('cada subida lleva lo que tenga marcado su grupo en Configuración para su tracker')
+    await pulsar(boton('Subir a eMuwarez y N.O.B.S'))
+    await esperar(() => onClose.mock.calls.length > 0)
+    expect(m(subidas.queueUpload).mock.calls.map(c => c[7])).toEqual(
+      [{ anonimo: null, personalRelease: null }, { anonimo: null, personalRelease: null }])
+  })
+
+  it('con otro tracker con clave, se elige en el Resumen y sale una subida por tracker, eMuwarez primero', async () => {
+    m(subidas.fetchTrackersParaSubir).mockResolvedValue([{ id: 'emu', nombre: 'eMuwarez' }, { id: 'nobs', nombre: 'N.O.B.S' }])
+    await abrir(PELICULA)
+    await esperar(() => texto().includes('Dune WEB-DL AMZN [GRP]'))
+    await pulsar(boton('Continuar'))
+    await esperar(() => texto().includes('✓ Todo listo para subir'))
+    const casilla = (nombre: string) => [...document.querySelectorAll<HTMLLabelElement>('.asist-marcas label')]
+      .find(l => l.textContent?.includes(nombre))!.querySelector('input')!
+    expect(casilla('eMuwarez').checked).toBe(true)
+    expect(casilla('N.O.B.S').checked).toBe(false)
+
+    await pulsar(casilla('N.O.B.S'))
+    expect(texto()).toContain('a eMuwarez y N.O.B.S?')
+    await pulsar(boton('Subir a eMuwarez y N.O.B.S'))
+    await esperar(() => onClose.mock.calls.length > 0)
+    const llamadas = m(subidas.queueUpload).mock.calls
+    expect(llamadas.map(c => c[8])).toEqual([undefined, 'nobs'])
+    expect(llamadas.every(c => c[0] === 10)).toBe(true)
+  })
+
+  it('el Resumen dice lo que ya hay en cada tracker elegido, con su catálogo', async () => {
+    m(subidas.fetchTrackersParaSubir).mockResolvedValue([{ id: 'emu', nombre: 'eMuwarez' }, { id: 'nobs', nombre: 'N.O.B.S' }])
+    m(biblioteca.getEmuComparisons).mockImplementation(async (_ids, _tuya, tracker) => (tracker === 'nobs'
+      ? una({
+        available: true, message: null,
+        matches: [{ name: 'Dune 2021 2160p', resolution: '2160p', source: 'WEB-DL', codec: null, has_spanish: 1, size: 1, veredicto: 'peor' }],
+      }, { nivel: 'peor', clase: 'peor', texto: 'Tu copia es peor que todo lo que ya hay: N.O.B.S probablemente la rechace.', ya_lo_tiene: true })
+      : una({ available: true, message: null, matches: [] })))
+    await abrir(PELICULA)
+    await esperar(() => texto().includes('Dune WEB-DL AMZN [GRP]'))
+    await pulsar(boton('Continuar'))
+    await esperar(() => texto().includes('Nada de esto está en eMuwarez todavía.'))
+    const titulos = () => [...document.querySelectorAll('.asist-resumen-yahay .asist-panel-titulo')].map(h => h.textContent)
+    expect(titulos()).toEqual(['En eMuwarez ya hay'])
+
+    const casilla = (nombre: string) => [...document.querySelectorAll<HTMLLabelElement>('.asist-marcas label')]
+      .find(l => l.textContent?.includes(nombre))!.querySelector('input')!
+    await pulsar(casilla('N.O.B.S'))
+    await esperar(() => texto().includes('N.O.B.S probablemente la rechace'))
+    expect(titulos()).toEqual(['En eMuwarez ya hay', 'En N.O.B.S ya hay'])
+    expect(biblioteca.getEmuComparisons).toHaveBeenCalledWith([10], { resolution: '1080p', source: 'WEB-DL' }, 'nobs')
+  })
+
+  it('el Resumen dice las normas de idioma de cada otro tracker y no sube a uno que no lo admite', async () => {
+    m(subidas.fetchTrackersParaSubir).mockResolvedValue([{ id: 'emu', nombre: 'eMuwarez' }, { id: 'nobs', nombre: 'N.O.B.S' }])
+    m(subidas.fetchReglasTracker).mockResolvedValue(
+      { tracker: 'nobs', permitido: false, motivo: 'N.O.B.S no lo admite: el audio (cat) no está en castellano ni latino.', variante: null })
+    await abrir(PELICULA)
+    await esperar(() => texto().includes('Dune WEB-DL AMZN [GRP]'))
+    await pulsar(boton('Continuar'))
+    await esperar(() => texto().includes('✓ Todo listo para subir'))
+    await esperar(() => texto().includes('N.O.B.S: ✗ N.O.B.S no lo admite'))
+    expect(subidas.fetchReglasTracker).toHaveBeenCalledWith(10, 'nobs', undefined)
+    const casilla = [...document.querySelectorAll<HTMLLabelElement>('.asist-marcas label')]
+      .find(l => l.textContent?.includes('N.O.B.S'))!.querySelector('input')!
+    await pulsar(casilla)
+    expect(boton('Subir a eMuwarez y N.O.B.S')!.disabled).toBe(true)
+  })
+
+  it('sin eMuwarez, las comprobaciones se rehacen con las normas del tracker elegido', async () => {
+    m(subidas.fetchTrackersParaSubir).mockResolvedValue([{ id: 'emu', nombre: 'eMuwarez' }, { id: 'mnv', nombre: 'Milnueve' }])
+    await abrir(PELICULA)
+    await esperar(() => texto().includes('Dune WEB-DL AMZN [GRP]'))
+    await pulsar(boton('Continuar'))
+    await esperar(() => texto().includes('✓ Todo listo para subir'))
+    const casilla = (nombre: string) => [...document.querySelectorAll<HTMLLabelElement>('.asist-marcas label')]
+      .find(l => l.textContent?.includes(nombre))!.querySelector('input')!
+    await pulsar(casilla('Milnueve'))
+    await pulsar(casilla('eMuwarez'))
+    await esperar(() => m(subidas.runUploadChecks).mock.calls.some(c => c[4] === 'mnv'))
+    await esperar(() => texto().includes('✓ Todo listo para subir'))
+    await pulsar(boton('Subir a Milnueve'))
+    await esperar(() => onClose.mock.calls.length > 0)
+    expect(m(subidas.queueUpload).mock.calls.map(c => c[8])).toEqual(['mnv'])
+  })
+
+  it('sin ningún tracker elegido no se puede subir', async () => {
+    m(subidas.fetchTrackersParaSubir).mockResolvedValue([{ id: 'emu', nombre: 'eMuwarez' }, { id: 'mnv', nombre: 'Milnueve' }])
+    await abrir(PELICULA)
+    await esperar(() => texto().includes('Dune WEB-DL AMZN [GRP]'))
+    await pulsar(boton('Continuar'))
+    await esperar(() => texto().includes('✓ Todo listo para subir'))
+    const emu = [...document.querySelectorAll<HTMLLabelElement>('.asist-marcas label')]
+      .find(l => l.textContent?.includes('eMuwarez'))!.querySelector('input')!
+    await pulsar(emu)
+    expect(texto()).toContain('Elige al menos uno.')
+    expect(boton('Subir')!.disabled).toBe(true)
+  })
+
+  it('si eMuwarez no responde, se puede subir solo a N.O.B.S', async () => {
+    m(subidas.fetchTrackersParaSubir).mockResolvedValue([{ id: 'emu', nombre: 'eMuwarez' }, { id: 'nobs', nombre: 'N.O.B.S' }])
+    m(subidas.runUploadChecks).mockResolvedValue({ ready: false, checks: [...LISTO.checks,
+      { id: 'emuwarez', label: 'eMuwarez no disponible', status: 'fail', message: 'Sin clave' }] } as never)
+    await abrir(PELICULA)
+    await esperar(() => texto().includes('Dune WEB-DL AMZN [GRP]'))
+    await pulsar(boton('Continuar'))
+    await esperar(() => texto().includes('eMuwarez no disponible'))
+    const casilla = (nombre: string) => [...document.querySelectorAll<HTMLLabelElement>('.asist-marcas label')]
+      .find(l => l.textContent?.includes(nombre))!.querySelector('input')!
+    expect(boton('Subir a eMuwarez')!.disabled).toBe(true)
+
+    await pulsar(casilla('eMuwarez'))
+    await pulsar(casilla('N.O.B.S'))
+    expect(boton('Subir a N.O.B.S')!.disabled).toBe(false)
+    await pulsar(boton('Subir a N.O.B.S'))
+    await esperar(() => onClose.mock.calls.length > 0)
+    expect(m(subidas.queueUpload).mock.calls.map(c => c[8])).toEqual(['nobs'])
+  })
+
+  it('si eMuwarez se encola y N.O.B.S no, reintentar sube solo a N.O.B.S', async () => {
+    m(subidas.fetchTrackersParaSubir).mockResolvedValue([{ id: 'emu', nombre: 'eMuwarez' }, { id: 'nobs', nombre: 'N.O.B.S' }])
+    m(subidas.queueUpload)
+      .mockResolvedValueOnce({ status: 'queued', job: { id: 99 } } as never)
+      .mockResolvedValueOnce({ status: 'blocked', errors: ['N.O.B.S no responde'] } as never)
+      .mockResolvedValueOnce({ status: 'queued', job: { id: 100 } } as never)
+    await abrir(PELICULA)
+    await esperar(() => texto().includes('Dune WEB-DL AMZN [GRP]'))
+    await pulsar(boton('Continuar'))
+    await esperar(() => texto().includes('✓ Todo listo para subir'))
+    const casilla = (nombre: string) => [...document.querySelectorAll<HTMLLabelElement>('.asist-marcas label')]
+      .find(l => l.textContent?.includes(nombre))!.querySelector('input')!
+    await pulsar(casilla('N.O.B.S'))
+    await pulsar(boton('Subir a eMuwarez y N.O.B.S'))
+    await esperar(() => texto().includes('Ya en cola: eMuwarez'))
+    expect(onClose).not.toHaveBeenCalled()
+    expect(casilla('eMuwarez').checked).toBe(false)
+
+    await pulsar(boton('Subir a N.O.B.S'))
+    await esperar(() => onClose.mock.calls.length > 0)
+    expect(m(subidas.queueUpload).mock.calls.map(c => c[8])).toEqual([undefined, 'nobs', 'nobs'])
+  })
+
+  it('la descripción del Resumen va a todos los trackers, salvo al que tenga la suya', async () => {
+    m(subidas.fetchTrackersParaSubir).mockResolvedValue([
+      { id: 'emu', nombre: 'eMuwarez' }, { id: 'nobs', nombre: 'N.O.B.S' }, { id: 'mnv', nombre: 'Milnueve' }])
+    await abrir(PELICULA)
+    await esperar(() => texto().includes('Dune WEB-DL AMZN [GRP]'))
+    await pulsar(boton('Continuar'))
+    await esperar(() => texto().includes('✓ Todo listo para subir'))
+    const casilla = (nombre: string) => [...document.querySelectorAll<HTMLLabelElement>('label.asist-casilla')]
+      .find(l => l.textContent?.trim() === nombre)!.querySelector('input')!
+    const area = (nombre: string) => document.querySelector<HTMLTextAreaElement>(`textarea[aria-label="${nombre}"]`)!
+    const escribirEn = async (el: HTMLTextAreaElement, valor: string) => {
+      await act(async () => {
+        Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(el, valor)
+        el.dispatchEvent(new Event('input', { bubbles: true }))
+      })
+    }
+    await pulsar(casilla('N.O.B.S'))
+    await pulsar(casilla('Milnueve'))
+    await escribirEn(area('Descripción propia (BBCode)'), '[b]Común[/b]')
+    await pulsar(casilla('Otra para Milnueve'))
+    expect(area('Descripción para Milnueve').value).toBe('[b]Común[/b]')  // empieza con la común
+    await escribirEn(area('Descripción para Milnueve'), '[b]Solo Milnueve[/b]')
+
+    await pulsar(boton('Subir a eMuwarez, N.O.B.S y Milnueve'))
+    await esperar(() => onClose.mock.calls.length > 0)
+    expect(m(subidas.queueUpload).mock.calls.map(c => [c[8], c[9]])).toEqual([
+      [undefined, '[b]Común[/b]'], ['nobs', '[b]Común[/b]'], ['mnv', '[b]Solo Milnueve[/b]']])
+  })
+
+  it('la plantilla de Configuración llena la descripción y se sube con lo que se le añada', async () => {
+    m(fetchSettings).mockResolvedValue({
+      upload_tags: ['GRP'], descripcion_plantilla: '[i]firma[/i]',
+    } as unknown as Awaited<ReturnType<typeof fetchSettings>>)
+    await abrir(PELICULA)
+    await esperar(() => texto().includes('Dune WEB-DL AMZN [GRP]'))
+    await pulsar(boton('Continuar'))
+    await esperar(() => texto().includes('✓ Todo listo para subir'))
+    const area = document.querySelector<HTMLTextAreaElement>('textarea[aria-label="Descripción propia (BBCode)"]')!
+    expect(area.value).toBe('[i]firma[/i]')
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(area, 'Notas\n[i]firma[/i]')
+      area.dispatchEvent(new Event('input', { bubbles: true }))
+    })
+
+    await pulsar(boton('Subir a eMuwarez'))
+    await esperar(() => onClose.mock.calls.length > 0)
+    expect(m(subidas.queueUpload).mock.calls.map(c => c[9])).toEqual(['Notas\n[i]firma[/i]'])
+  })
+
+  it('con un solo tracker se sube la común, aunque antes tuviera la suya', async () => {
+    m(subidas.fetchTrackersParaSubir).mockResolvedValue([{ id: 'emu', nombre: 'eMuwarez' }, { id: 'nobs', nombre: 'N.O.B.S' }])
+    await abrir(PELICULA)
+    await esperar(() => texto().includes('Dune WEB-DL AMZN [GRP]'))
+    await pulsar(boton('Continuar'))
+    await esperar(() => texto().includes('✓ Todo listo para subir'))
+    const casilla = (nombre: string) => [...document.querySelectorAll<HTMLLabelElement>('label.asist-casilla')]
+      .find(l => l.textContent?.trim() === nombre)!.querySelector('input')!
+    await pulsar(casilla('N.O.B.S'))
+    await pulsar(casilla('Otra para N.O.B.S'))
+    const propia = document.querySelector<HTMLTextAreaElement>('textarea[aria-label="Descripción para N.O.B.S"]')!
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(propia, 'Solo N.O.B.S')
+      propia.dispatchEvent(new Event('input', { bubbles: true }))
+    })
+    await pulsar(casilla('eMuwarez'))
+    expect(document.querySelector('textarea[aria-label="Descripción para N.O.B.S"]')).toBeNull()
+
+    await pulsar(boton('Subir a N.O.B.S'))
+    await esperar(() => onClose.mock.calls.length > 0)
+    expect(m(subidas.queueUpload).mock.calls.map(c => [c[8], c[9]])).toEqual([['nobs', '']])
   })
 
   it('sin tipo conocido, el Resumen deja elegirlo con el Source, lo guarda y vuelve a comprobar', async () => {
@@ -250,6 +495,55 @@ describe('película', () => {
     await pulsar(boton('Subir a eMuwarez'))
     await esperar(() => onClose.mock.calls.length > 0)
     expect(nom.saveNomenclatureFields).toHaveBeenLastCalledWith(10, expect.objectContaining({ source: 'BluRay' }))
+  })
+
+  it('si eMuwarez se encola y N.O.B.S no, reintentar le sube la descripción que tenía para él', async () => {
+    m(subidas.fetchTrackersParaSubir).mockResolvedValue([{ id: 'emu', nombre: 'eMuwarez' }, { id: 'nobs', nombre: 'N.O.B.S' }])
+    m(subidas.queueUpload)
+      .mockResolvedValueOnce({ status: 'queued', job: { id: 99 } } as never)
+      .mockResolvedValueOnce({ status: 'blocked', errors: ['N.O.B.S no responde'] } as never)
+      .mockResolvedValueOnce({ status: 'queued', job: { id: 100 } } as never)
+    await abrir(PELICULA)
+    await esperar(() => texto().includes('Dune WEB-DL AMZN [GRP]'))
+    await pulsar(boton('Continuar'))
+    await esperar(() => texto().includes('✓ Todo listo para subir'))
+    const casilla = (nombre: string) => [...document.querySelectorAll<HTMLLabelElement>('label.asist-casilla')]
+      .find(l => l.textContent?.trim() === nombre)!.querySelector('input')!
+    const area = (nombre: string) => document.querySelector<HTMLTextAreaElement>(`textarea[aria-label="${nombre}"]`)!
+    const escribirEn = async (el: HTMLTextAreaElement, valor: string) => {
+      await act(async () => {
+        Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(el, valor)
+        el.dispatchEvent(new Event('input', { bubbles: true }))
+      })
+    }
+    await pulsar(casilla('N.O.B.S'))
+    await escribirEn(area('Descripción propia (BBCode)'), 'Común')
+    await pulsar(casilla('Otra para N.O.B.S'))
+    await escribirEn(area('Descripción para N.O.B.S'), 'Solo N.O.B.S')
+    await pulsar(boton('Subir a eMuwarez y N.O.B.S'))
+    await esperar(() => texto().includes('Ya en cola: eMuwarez'))
+    // Con un solo destino el Resumen enseña solo la común: pasa a ser la de N.O.B.S.
+    expect(area('Descripción propia (BBCode)').value).toBe('Solo N.O.B.S')
+
+    await pulsar(boton('Subir a N.O.B.S'))
+    await esperar(() => onClose.mock.calls.length > 0)
+    expect(m(subidas.queueUpload).mock.calls.map(c => [c[8], c[9]])).toEqual([
+      [undefined, 'Común'], ['nobs', 'Solo N.O.B.S'], ['nobs', 'Solo N.O.B.S']])
+  })
+
+  it('la vista previa del nombre que responde tarde no pisa la de lo último editado', async () => {
+    await abrir(PELICULA)
+    await esperar(() => texto().includes('Dune WEB-DL AMZN [GRP]'))
+    const lenta = diferida<Awaited<ReturnType<typeof nom.previewNomenclatureFields>>>()
+    m(nom.previewNomenclatureFields).mockImplementationOnce(() => lenta.promesa)
+    await elegir(campo('Tag'), 'OTRO')
+    await esperar(() => m(nom.previewNomenclatureFields).mock.calls.some(c => c[1].tag === 'OTRO'))
+    await elegir(campo('Tag'), 'GRP')
+    await esperar(() => m(nom.previewNomenclatureFields).mock.calls.filter(c => c[1].tag === 'GRP').length === 2)
+    await act(async () => { lenta.resolver({ torrent_name: 'Dune WEB-DL AMZN [OTRO]', internal_mkv_title: 'Dune.mkv' } as never) })
+    await act(async () => { await new Promise(r => setTimeout(r, 20)) })
+    expect(texto()).toContain('Dune WEB-DL AMZN [GRP]')
+    expect(texto()).not.toContain('AMZN [OTRO]')
   })
 
   it('un source que no es WEB-DL quita el proveedor', async () => {
@@ -334,6 +628,21 @@ describe('cerrar', () => {
     expect(onClose).toHaveBeenCalledTimes(1)
   })
 
+  it('con solo una descripción escrita también pregunta', async () => {
+    await abrir(PELICULA)
+    await esperar(() => texto().includes('Dune WEB-DL AMZN [GRP]'))
+    await pulsar(boton('Continuar'))
+    await esperar(() => texto().includes('✓ Todo listo para subir'))
+    const area = document.querySelector<HTMLTextAreaElement>('textarea[aria-label="Descripción propia (BBCode)"]')!
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(area, 'Notas')
+      area.dispatchEvent(new Event('input', { bubbles: true }))
+    })
+    await pulsar(document.querySelector('[aria-label="Cerrar"]') ?? undefined)
+    expect(onClose).not.toHaveBeenCalled()
+    expect(texto()).toContain('¿Descartar los cambios?')
+  })
+
   it('cerrar mientras se prepara el pack se lo dice al servidor', async () => {
     m(biblioteca.getLibrary).mockResolvedValue({ items: [E1, E2], total: 2 } as never)
     m(temporada.previewSeasonPack).mockReturnValue(new Promise(() => {}))
@@ -373,7 +682,8 @@ describe('pack de temporada', () => {
     await pulsar(boton('Continuar'))
     await esperar(() => texto().includes('✓ Todo listo para subir'))
     expect(nom.saveNomenclatureFields).not.toHaveBeenCalled()
-    expect(subidas.runUploadChecks).toHaveBeenCalledWith(20, undefined, undefined)
+    // Las comprobaciones cuentan el idioma elegido: sin él, la pista sin idioma bloquearía.
+    expect(subidas.runUploadChecks).toHaveBeenCalledWith(20, undefined, undefined, { idiomas: { 1: 'spa' } })
     expect(texto()).toContain('2 capítulos en una carpeta')
 
     await pulsar(boton('Subir a eMuwarez'))
@@ -381,7 +691,7 @@ describe('pack de temporada', () => {
     expect(subidas.queueUpload).toHaveBeenCalledWith(
       20, {}, LISTO, null,
       { source: 'WEB-DL', tag: 'GRP', title: 'Serie', provider: undefined, idiomas: { 1: 'spa' } },
-      undefined, undefined, { anonimo: null, personalRelease: null })
+      undefined, undefined, { anonimo: null, personalRelease: null }, undefined, '')
   })
 
   it('«Ver nombre de todos los capítulos» pide los nombres con lo elegido', async () => {
@@ -442,6 +752,23 @@ describe('pack de temporada', () => {
       await esperar(() => texto().includes('Castellano del capítulo nuevo'))
       expect(temporada.getSeasonEpisodeRemuxPreview).toHaveBeenLastCalledWith(20, { 1: 'spa' })
     })
+  })
+
+  it('un plan bloqueado que pasa con el idioma elegido se vuelve a pedir con él', async () => {
+    m(temporada.previewSeasonPack)
+      .mockResolvedValueOnce(plan({ status: 'blocked', errors: ['El capítulo 1 no tiene castellano.'] }))
+      .mockResolvedValueOnce(plan())
+    m(temporada.getSeasonPackAudio).mockResolvedValue({
+      audio_summary: 'Castellano DD 5.1', custom: false, audio_warning: null, pistas_sin_idioma: [],
+      idiomas_audio: { 1: 'spa' },
+    } as never)
+    await abrir(TEMPORADA, { preselect: { season: 1 } })
+    await pulsar(await esperar(() => boton('Continuar')))
+    await esperar(() => texto().includes('El capítulo 1 no tiene castellano.'))
+    await elegir(campo('Pista de audio 1'), 'spa')
+    await esperar(() => texto().includes('✓ 2 capítulo(s) listos'))
+    expect(temporada.previewSeasonPack).toHaveBeenLastCalledWith(20, undefined, { 1: 'spa' })
+    await esperar(() => !boton('Continuar')!.disabled)
   })
 
   it('un plan bloqueado por proveedores distintos deja elegir uno y lo vuelve a pedir', async () => {
@@ -518,6 +845,31 @@ describe('varios capítulos de una temporada', () => {
   })
 })
 
+describe('varios capítulos: respuestas tardías al cambiar de capítulo', () => {
+  it('el proveedor que TMDb sugiere para un capítulo no cae en el siguiente', async () => {
+    m(biblioteca.getLibrary).mockResolvedValue({ items: [E1, E2], total: 2 } as never)
+    m(nom.getNomenclatureFields).mockImplementation(async id => respuestaCampos({
+      title: 'Serie', tag: `G${id}`, provider: id === 21 ? undefined : 'AMZN' }) as never)
+    const sugerencia = diferida<Awaited<ReturnType<typeof biblioteca.suggestProvider>>>()
+    m(biblioteca.suggestProvider).mockImplementation(() => sugerencia.promesa)
+    await abrir(TEMPORADA)
+    await pulsar(await esperar(() => tarjeta('Selección de capítulos')))
+    await pulsar(boton('E01'))
+    await pulsar(boton('E02'))
+    await pulsar(boton('Continuar'))
+    await esperar(() => texto().includes('Serie WEB-DL [G21]'))
+    await esperar(() => m(biblioteca.suggestProvider).mock.calls.length === 1, 3000)
+    expect(biblioteca.suggestProvider).toHaveBeenCalledWith(21)
+
+    await elegir(document.querySelector<HTMLSelectElement>('.modal-body > div > select') ?? undefined, '22')
+    await esperar(() => texto().includes('Serie WEB-DL AMZN [G22]'))
+    await act(async () => { sugerencia.resolver({ suggested: 'NF' } as never) })
+    await act(async () => { await new Promise(r => setTimeout(r, 20)) })
+    expect(campo('Proveedor')!.value).toBe('AMZN')
+    expect(texto()).toContain('Serie WEB-DL AMZN [G22]')
+  })
+})
+
 describe('varias temporadas de una serie', () => {
   beforeEach(() => {
     m(biblioteca.getLibrary).mockResolvedValue({ items: [T1, T2], total: 2 } as never)
@@ -552,6 +904,50 @@ describe('varias temporadas de una serie', () => {
     expect(m(subidas.queueUpload).mock.calls.map(c => c[0])).toEqual([31])
     expect(m(subidas.queueUpload).mock.calls[0][4]).toEqual({ source: 'WEB-DL', provider: undefined, tag: 'GRP', title: 'Serie' })
     expect(m(subidas.queueUpload).mock.calls[0][5]).toBeUndefined()
+    mismoLote()
+  })
+
+  it('desde una petición de la temporada 2, subir solo la 1 no la enlaza a la petición', async () => {
+    m(getRequestDetail).mockResolvedValue({ title: 'Serie S02', points: null } as never)
+    await abrir(SERIE, { preselect: { season: 2 }, requestId: 8 })
+    await pulsar(await esperar(() => boton('Temporada 2')))
+    await pulsar(boton('Temporada 1'))
+    await pulsar(boton('Continuar'))
+    await esperar(() => texto().includes('✓ 2 capítulo(s) listos'))
+    expect(temporada.previewSeasonPack).toHaveBeenCalledWith(31, undefined, undefined)
+    await pulsar(boton('Continuar'))
+    await esperar(() => texto().includes('✓ Todo listo para subir'))
+    const peticion = () => [...document.querySelectorAll('.asist-datos dt')].find(d => d.textContent === 'Petición')
+      ?.nextElementSibling?.textContent ?? ''
+    await esperar(() => peticion())
+    expect(peticion()).not.toContain('Cubre')
+
+    await pulsar(boton('Subir a eMuwarez'))
+    await esperar(() => onClose.mock.calls.length > 0)
+    expect(m(subidas.queueUpload).mock.calls.map(c => [c[0], c[5]])).toEqual([[31, undefined]])
+  })
+
+  it('a varios trackers: una subida por temporada y tracker en el mismo lote; la que uno no admite se salta para él', async () => {
+    m(subidas.fetchTrackersParaSubir).mockResolvedValue([{ id: 'emu', nombre: 'eMuwarez' }, { id: 'nobs', nombre: 'N.O.B.S' }])
+    m(subidas.queueUpload).mockImplementation(async (id, ...resto) => (id === 32 && resto[7] === 'nobs'
+      ? { status: 'blocked', errors: ['N.O.B.S no lo admite.'] }
+      : { status: 'queued', job: { id: 99 } }) as never)
+    await abrir(SERIE, { preselect: { season: 1 } })
+    await pulsar(await esperar(() => boton('Temporada 2')))
+    await pulsar(boton('Continuar'))
+    await esperar(() => texto().includes('✓ 2 capítulo(s) listos'))
+    await pulsar(boton('Continuar'))
+    await esperar(() => texto().includes('✓ Todo listo: 2 temporadas'))
+    const casilla = (nombre: string) => [...document.querySelectorAll<HTMLLabelElement>('.asist-marcas label')]
+      .find(l => l.textContent?.includes(nombre))!.querySelector('input')!
+    expect(casilla('eMuwarez').checked).toBe(true)
+
+    await pulsar(casilla('N.O.B.S'))
+    await pulsar(boton('Subir todas a eMuwarez y N.O.B.S'))
+    await esperar(() => texto().includes('3 de 4 subida(s) encolada(s)'))
+    expect(m(subidas.queueUpload).mock.calls.map(c => [c[0], c[8]])).toEqual(
+      [[31, undefined], [31, 'nobs'], [32, undefined], [32, 'nobs']])
+    expect(texto()).toContain('✗ Serie - Temporada 2 (N.O.B.S): N.O.B.S no lo admite.')
     mismoLote()
   })
 
@@ -892,7 +1288,7 @@ describe('los pasos y el Resumen', () => {
       expect(dato('Petición')).toBe('Ninguna abierta para esta película')
       expect(dato('Copia')).toContain('Se decide al preparar los ficheros')
       // Con el nombre y la calidad de lo que se sube, no con lo que dijo Radarr.
-      expect(biblioteca.getEmuComparison).toHaveBeenCalledWith(10, { resolution: '1080p', source: 'WEB-DL' })
+      expect(biblioteca.getEmuComparisons).toHaveBeenCalledWith([10], { resolution: '1080p', source: 'WEB-DL' }, 'emu')
       expect(boton('← Volver')).toBeDefined()
       expect(boton('Subir a eMuwarez')!.disabled).toBe(false)
     })
@@ -950,14 +1346,13 @@ describe('los pasos y el Resumen', () => {
 
     it('«En eMuwarez ya hay» pone mejor, igual o peor a cada torrent del catálogo local', async () => {
       const hace3h = new Date(Date.now() - 3 * 3600_000).toISOString()
-      m(biblioteca.getEmuSyncStatus).mockResolvedValue({ last_sync_at: hace3h } as never)
-      m(biblioteca.getEmuComparison).mockResolvedValue({
-        available: true, message: null, in_catalog: 1, matches: [
+      m(biblioteca.getEmuComparisons).mockResolvedValue(una({
+        available: true, message: null, synced_at: hace3h, in_catalog: 1, matches: [
           { name: 'Dune 2021 720p HDTV', resolution: '720p', source: 'HDTV', codec: null, has_spanish: 1, size: 1, veredicto: 'mejor' },
           { name: 'Dune 2021 1080p WEB-DL', resolution: '1080p', source: 'WEB-DL', codec: null, has_spanish: 1, size: 1, veredicto: 'igual' },
           { name: 'Dune 2021 2160p BluRay', resolution: '2160p', source: 'BluRay', codec: null, has_spanish: 1, size: 1, veredicto: 'peor' },
         ],
-      })
+      }, DUPLICADO))
       await alResumenDePelicula()
       const filas = await esperar(() => {
         const f = [...document.querySelectorAll('.asist-tabla-yahay tbody tr')]
@@ -969,16 +1364,21 @@ describe('los pasos y el Resumen', () => {
         ['Dune 2021 2160p BluRay', '2160p BluRay', 'peor'],
       ])
       expect(texto()).toContain('Del catálogo local, sincronizado hace 3 h. No cuenta como permiso: revisa las reglas de trumps.')
-      // Con una calidad igual a alguna, la conclusión dice que sería un duplicado.
-      expect(document.querySelector('[data-testid="conclusion-duplicados"]')!.textContent).toContain('duplicado')
+      // La conclusión es la del servidor, con su clase.
+      const conclusion = document.querySelector('[data-testid="conclusion-duplicados"]')!
+      expect(conclusion.textContent).toBe(DUPLICADO.texto)
+      expect(conclusion.className).toContain('asist-veredicto-igual')
     })
 
     it('si lo tuyo mejora todo lo que hay, la conclusión dice que puede ser un trump', async () => {
-      m(biblioteca.getEmuComparison).mockResolvedValue({
+      m(biblioteca.getEmuComparisons).mockResolvedValue(una({
         available: true, message: null, in_catalog: 1, matches: [
           { name: 'Dune 2021 720p HDTV', resolution: '720p', source: 'HDTV', codec: null, has_spanish: 1, size: 1, veredicto: 'mejor' },
         ],
-      })
+      }, {
+        nivel: 'trump', clase: 'mejor', ya_lo_tiene: false,
+        texto: 'Tu copia mejora el torrent que hay: puede ser un trump. Revisa las reglas de trumps antes de subir.',
+      }))
       await alResumenDePelicula()
       const c = await esperar(() => document.querySelector('[data-testid="conclusion-duplicados"]'))
       expect(c.textContent).toContain('puede ser un trump')
@@ -990,14 +1390,14 @@ describe('los pasos y el Resumen', () => {
     })
 
     it('sin catálogo local sincronizado no afirma que sea único', async () => {
-      m(biblioteca.getEmuComparison).mockResolvedValue({ available: false, message: 'Sincroniza con eMuwarez para ver la comparación.', matches: [] })
+      m(biblioteca.getEmuComparisons).mockResolvedValue(una({ available: false, message: 'Sincroniza con eMuwarez para ver la comparación.', matches: [] }))
       await alResumenDePelicula()
       await esperar(() => texto().includes('Sin catálogo local: sincroniza con eMuwarez'))
       expect(texto()).not.toContain('Nada de esto está en eMuwarez')
     })
 
     it('si el catálogo no responde, el resto del Resumen sigue ahí', async () => {
-      m(biblioteca.getEmuComparison).mockRejectedValue(new Error('500'))
+      m(biblioteca.getEmuComparisons).mockRejectedValue(new Error('500'))
       await alResumenDePelicula()
       await esperar(() => texto().includes('No se pudo leer el catálogo local.'))
       expect(dato('Categoría')).toBe('Película · WEB-DL · 1080p')
@@ -1037,7 +1437,7 @@ describe('los pasos y el Resumen', () => {
       expect(dato('Categoría')).toBe('Serie · WEB-DL · 1080p')
       expect(dato('Petición')).toBe('Ninguna abierta para esta temporada')
       expect(dato('Pistas')).toBe('Solo renombrar')
-      expect(biblioteca.getEmuComparison).toHaveBeenCalledWith(20, { resolution: '1080p', source: 'WEB-DL' })
+      expect(biblioteca.getEmuComparisons).toHaveBeenCalledWith([20], { resolution: '1080p', source: 'WEB-DL' }, 'emu')
     })
   })
 
@@ -1045,12 +1445,16 @@ describe('los pasos y el Resumen', () => {
     it('varios capítulos: los lista, cuenta cuáles no están en eMuwarez y pide el catálogo de cada uno', async () => {
       m(biblioteca.getLibrary).mockResolvedValue({ items: [E1, E2], total: 2 } as never)
       m(nom.getNomenclatureFields).mockImplementation(async id => respuestaCampos({ title: 'Serie', tag: `G${id}` }) as never)
-      m(biblioteca.getEmuComparison).mockImplementation(async id => ({
-        available: true, message: null, in_catalog: id === 21 ? 1 : 0,
-        matches: id === 21
-          ? [{ name: 'Serie S01E01 1080p', resolution: '1080p', source: 'WEB-DL', codec: null, has_spanish: 1, size: 1, veredicto: 'igual' }]
-          : [],
-      }))
+      m(biblioteca.getEmuComparisons).mockResolvedValue({
+        comparaciones: [
+          {
+            available: true, message: null, in_catalog: 1,
+            matches: [{ name: 'Serie S01E01 1080p', resolution: '1080p', source: 'WEB-DL', codec: null, has_spanish: 1, size: 1, veredicto: 'igual' }],
+          },
+          { available: true, message: null, in_catalog: 0, matches: [] },
+        ],
+        conclusion: DUPLICADO,
+      })
       m(getRequestDetail).mockResolvedValue({ title: 'Serie S01', points: null } as never)
       await abrir(TEMPORADA, { preselect: { season: 1 }, requestId: 8 })
       await pulsar(await esperar(() => tarjeta('Selección de capítulos')))
@@ -1067,7 +1471,7 @@ describe('los pasos y el Resumen', () => {
       await esperar(() => dato('Petición').includes('Cubre'))
       expect(dato('Petición')).toBe('Cubre «Serie S01»')
       await esperar(() => texto().includes('1 de 2 no están en eMuwarez.'))
-      expect(m(biblioteca.getEmuComparison).mock.calls).toEqual([[21, undefined], [22, undefined]])
+      expect(m(biblioteca.getEmuComparisons).mock.calls).toEqual([[[21, 22], undefined, 'emu']])
       expect(textos()).toEqual(['✓ 1 · Contenido (hecho)', '✓ 2 · Nombre y pistas (hecho)', '3 · Resumen'])
     })
 
@@ -1470,5 +1874,120 @@ describe('el Resumen de una tanda lista el nombre de cada torrent', () => {
         'Serie (2021) - S01E02 | Sin nombre: este elemento no se podrá subir',
       ])
     })
+  })
+})
+
+describe('varios trackers con clave: el paso «Contenido» mira las normas de cada uno', () => {
+  // Detective Conan T1: anime solo en catalán. Solo Milnueve lo admite («Anime en Catalan»).
+  const SIN_CASTELLANO = { has_spanish_ok: 0, has_spanish_audio: 0, has_spanish_subs: 0, audio_languages: 'cat/jpn' }
+  const TEMPORADA_CAT = elemento({ ...TEMPORADA, ...SIN_CASTELLANO })
+  const CAPITULOS_CAT = [elemento({ ...E1, ...SIN_CASTELLANO }), elemento({ ...E2, ...SIN_CASTELLANO })]
+  const TRES = [{ id: 'emu', nombre: 'eMuwarez' }, { id: 'nobs', nombre: 'N.O.B.S' }, { id: 'mnv', nombre: 'Milnueve' }]
+  const reglas = (permite: Record<string, boolean>) => TRES.map(t => ({
+    tracker: t.id, nombre: t.nombre, permitido: permite[t.id] ?? false,
+    motivo: permite[t.id] ? 'Audio en catalán, sin castellano.' : `${t.nombre} no lo admite.`,
+    variante: permite[t.id] && t.id === 'mnv' ? 'anime_catalan' : null,
+  }))
+  const SOLO_MNV = reglas({ mnv: true })
+
+  beforeEach(() => {
+    m(biblioteca.getLibrary).mockResolvedValue({ items: CAPITULOS_CAT, total: 2 } as never)
+    m(subidas.fetchTrackersParaSubir).mockResolvedValue(TRES)
+    m(subidas.fetchElegibilidad).mockResolvedValue({
+      trackers: SOLO_MNV, capitulos: [{ item_id: 21, trackers: SOLO_MNV }, { item_id: 22, trackers: SOLO_MNV }],
+    })
+    m(subidas.fetchReglasTracker).mockImplementation(async (_id, tracker) => ({
+      tracker, permitido: tracker === 'mnv', motivo: tracker === 'mnv' ? 'Audio en catalán, sin castellano.' : 'No.',
+      variante: tracker === 'mnv' ? 'anime_catalan' : null,
+    }))
+  })
+
+  it('con solo Milnueve admitiéndolo, deja elegir el pack y los capítulos y dice quién lo admite', async () => {
+    await abrir(TEMPORADA_CAT)
+    await esperar(() => texto().includes('Milnueve ✓ (Anime en Catalan) · eMuwarez ✗ sin castellano · N.O.B.S ✗'))
+    expect(subidas.fetchElegibilidad).toHaveBeenCalledWith(20)
+    expect(tarjeta('Temporada entera')!.disabled).toBe(false)
+    expect(tarjeta('Selección de capítulos')!.disabled).toBe(false)
+    expect(texto()).toContain('Milnueve ✓ 2 de 2 · eMuwarez ✗ sin castellano · N.O.B.S ✗')
+    expect(texto()).not.toContain('eMuwarez lo exige')
+    expect(texto()).not.toContain('Ningún capítulo de esta temporada cumple las condiciones de subida.')
+
+    await pulsar(tarjeta('Selección de capítulos'))
+    expect([...document.querySelectorAll<HTMLButtonElement>('.asist-opcion-capitulo')].every(b => !b.disabled)).toBe(true)
+  })
+
+  it('el pack se prepara con las normas de Milnueve y el Resumen lo marca solo a él, sin eMuwarez', async () => {
+    await abrir(TEMPORADA_CAT)
+    await esperar(() => texto().includes('Milnueve ✓ (Anime en Catalan)'))
+    await pulsar(tarjeta('Temporada entera'))
+    await pulsar(boton('Continuar'))
+    await esperar(() => texto().includes('Serie S01 WEB-DL DD 5.1 [GRP]'))
+    expect(temporada.previewSeasonPack).toHaveBeenCalledWith(20, undefined, undefined, 'mnv')
+
+    await pulsar(boton('Continuar'))
+    await esperar(() => texto().includes('✓ Todo listo para subir'))
+    const casilla = (nombre: string) => [...document.querySelectorAll<HTMLLabelElement>('.asist-marcas label')]
+      .find(l => l.textContent?.includes(nombre))!.querySelector('input')!
+    expect(casilla('Milnueve').checked).toBe(true)
+    expect(casilla('eMuwarez').checked).toBe(false)
+    expect(casilla('N.O.B.S').checked).toBe(false)
+    expect(texto()).toContain('eMuwarez: ✗ no lo admite. eMuwarez no lo admite.')
+    expect(texto()).toContain('Milnueve: ✓ Audio en catalán, sin castellano.')
+    expect(m(subidas.runUploadChecks).mock.calls.some(c => c[0] === 20 && c[4] === 'mnv')).toBe(true)
+
+    await pulsar(boton('Subir a Milnueve'))
+    await esperar(() => onClose.mock.calls.length > 0)
+    expect(m(subidas.queueUpload).mock.calls.map(c => c[8])).toEqual(['mnv'])
+  })
+
+  it('si no lo admite ninguno, el pack no se puede elegir y no habla de eMuwarez', async () => {
+    const NINGUNO = reglas({})
+    m(subidas.fetchElegibilidad).mockResolvedValue({
+      trackers: NINGUNO, capitulos: [{ item_id: 21, trackers: NINGUNO }, { item_id: 22, trackers: NINGUNO }],
+    })
+    await abrir(TEMPORADA_CAT)
+    await esperar(() => texto().includes('Ningún tracker con clave admite los idiomas de todos los capítulos'))
+    expect(tarjeta('Temporada entera')!.disabled).toBe(true)
+    expect(tarjeta('Selección de capítulos')!.disabled).toBe(true)
+    expect(texto()).not.toContain('eMuwarez lo exige')
+  })
+
+  it('una tanda de temporadas: la que solo admite Milnueve entra, se comprueba con sus normas y solo va a él', async () => {
+    const T2_CAT = elemento({ ...T2, ...SIN_CASTELLANO })
+    const TODOS = reglas({ emu: true, nobs: true, mnv: true })
+    m(biblioteca.getLibrary).mockResolvedValue({ items: [T1, T2_CAT], total: 2 } as never)
+    m(subidas.fetchElegibilidad).mockImplementation(async id => ({ trackers: id === 32 ? SOLO_MNV : TODOS, capitulos: [] }))
+    await abrir(SERIE)
+    await esperar(() => !boton('Temporada 2')!.disabled)
+    expect(texto()).toContain('Milnueve ✓ (Anime en Catalan) · eMuwarez ✗ sin castellano · N.O.B.S ✗')
+    expect(subidas.fetchElegibilidad).not.toHaveBeenCalledWith(30)
+    await pulsar(boton('Temporada 1'))
+    await pulsar(boton('Temporada 2'))
+    await pulsar(boton('Continuar'))
+    await esperar(() => texto().includes('✓ 2 capítulo(s) listos'))
+    await pulsar(boton('Continuar'))
+    await esperar(() => texto().includes('✓ Todo listo: 2 temporadas'))
+    // De entrada, eMuwarez para la 1 y Milnueve para la 2; cada una con las normas del primero que la admite.
+    const casilla = (nombre: string) => [...document.querySelectorAll<HTMLLabelElement>('.asist-marcas label')]
+      .find(l => l.textContent?.includes(nombre))!.querySelector('input')!
+    expect([casilla('eMuwarez').checked, casilla('N.O.B.S').checked, casilla('Milnueve').checked]).toEqual([true, false, true])
+    expect(m(subidas.runUploadChecks).mock.calls.filter(c => c[1] === 'content').map(c => [c[0], c[4]]))
+      .toEqual([[31, undefined], [32, 'mnv']])
+    expect(document.querySelectorAll('.asist-lista-subida li')[1].textContent).toContain('Solo a Milnueve')
+    expect(document.querySelectorAll('.asist-lista-subida li')[0].textContent).not.toContain('Solo a')
+
+    await pulsar(boton('Subir todas a eMuwarez y Milnueve'))
+    await esperar(() => texto().includes('3 de 4 subida(s) encolada(s)'))
+    expect(m(subidas.queueUpload).mock.calls.map(c => [c[0], c[8]])).toEqual([[31, undefined], [31, 'mnv'], [32, 'mnv']])
+    expect(texto()).toContain('✗ Serie - Temporada 2 (eMuwarez): eMuwarez no lo admite.')
+  })
+
+  it('solo con eMuwarez no se pide la elegibilidad y sale el mensaje de siempre', async () => {
+    m(subidas.fetchTrackersParaSubir).mockResolvedValue([{ id: 'emu', nombre: 'eMuwarez' }])
+    await abrir(TEMPORADA_CAT)
+    await esperar(() => texto().includes('eMuwarez lo exige en todos para aceptar el pack.'))
+    expect(texto()).toContain('Ningún capítulo de esta temporada cumple las condiciones de subida.')
+    expect(tarjeta('Temporada entera')!.disabled).toBe(true)
+    expect(subidas.fetchElegibilidad).not.toHaveBeenCalled()
   })
 })

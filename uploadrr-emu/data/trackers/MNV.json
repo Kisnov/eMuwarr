@@ -1,0 +1,43 @@
+{
+  "version": 1,
+  "tracker": "MNV",
+  "description": "Ids de UNIT3D de Milnueve (tracker.milnueve.cc), de su formulario de subida el 22/11/2026 (docs/trackers-ids.md). Uploadrr-EMU envía el id del token que recibe; una entrada sin tokens solo se etiqueta, nunca se envía. Las de anime, «Anime en Catalan» y las Latino tienen token <categoría>_<variante> (--variante, la elige la app con services/reglas_tracker.py); VHS / Retro y Documentales no se eligen solas.",
+  "categories": [
+    {"id": 1, "label": "Películas", "tokens": ["movie"]},
+    {"id": 2, "label": "Series", "tokens": ["tv"]},
+    {"id": 3, "label": "Películas Anime", "tokens": ["movie_anime"]},
+    {"id": 4, "label": "Series Anime", "tokens": ["tv_anime"]},
+    {"id": 5, "label": "Música", "tokens": []},
+    {"id": 6, "label": "Manga", "tokens": []},
+    {"id": 7, "label": "VHS / Retro", "tokens": []},
+    {"id": 8, "label": "Anime en Catalan", "tokens": ["movie_anime_catalan", "tv_anime_catalan"]},
+    {"id": 9, "label": "Zona Documentales", "tokens": []},
+    {"id": 10, "label": "Peliculas Latino", "tokens": ["movie_latino"]},
+    {"id": 11, "label": "Libros", "tokens": []},
+    {"id": 12, "label": "Cómics", "tokens": []},
+    {"id": 13, "label": "Juegos/ROMSets", "tokens": []},
+    {"id": 14, "label": "Series latino", "tokens": ["tv_latino"]}
+  ],
+  "types": [
+    {"id": 1, "label": "Full Disc", "tokens": ["disc"]},
+    {"id": 2, "label": "Remux", "tokens": ["remux"]},
+    {"id": 3, "label": "Encode", "tokens": ["encode"]},
+    {"id": 4, "label": "WEB-DL", "tokens": ["webdl", "web-dl"]},
+    {"id": 5, "label": "WEBRip", "tokens": ["webrip"]},
+    {"id": 6, "label": "HDTV", "tokens": ["hdtv"]}
+  ],
+  "resolutions": [
+    {"id": 1, "label": "4320p", "tokens": ["4320p"]},
+    {"id": 2, "label": "2160p", "tokens": ["2160p"]},
+    {"id": 3, "label": "1080p", "tokens": ["1080p", "1440p"]},
+    {"id": 4, "label": "1080i", "tokens": ["1080i"]},
+    {"id": 5, "label": "720p", "tokens": ["720p"]},
+    {"id": 6, "label": "576p", "tokens": ["576p"]},
+    {"id": 7, "label": "576i", "tokens": ["576i"]},
+    {"id": 8, "label": "480p", "tokens": ["480p"]},
+    {"id": 9, "label": "480i", "tokens": ["480i"]},
+    {"id": 10, "label": "Other", "tokens": ["other"]}
+  ],
+  "defaults": {"categories": 0, "types": 0, "resolutions": 10},
+  "search": {"resolution_groups": [[3, 4]]}
+}

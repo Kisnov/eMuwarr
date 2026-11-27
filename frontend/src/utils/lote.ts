@@ -6,7 +6,6 @@
 import type { DashboardRecommendationItem } from '../api/dashboard'
 import type { LibraryItemResponse, RequestItemResponse } from '../types/api'
 import { seasonNotReadyReason } from './libraryItem'
-import type { NivelDuplicado } from './resumenSubida'
 
 // Copia de services/lotes.py::MAX_ELEMENTOS_LOTE: test_copias_frontend.py vigila que coincidan.
 export const MAX_ELEMENTOS_LOTE = 50
@@ -91,12 +90,13 @@ export const RAZON_POR_IDENTIFICAR = 'Identifica la ficha en TMDb antes de subir
  * Por qué un elemento no puede entrar en un lote, o null si puede. Una temporada, si no se puede subir como pack
  * (la regla de `seasonNotReadyReason`). Una película o un capítulo, la regla de `episodeNotReadyReason`
  * (utils/libraryItem.ts: en disco y con castellano), pero con su propio texto, que aquel habla de «el capítulo».
- * Una serie no entra tal cual: se cambia por sus temporadas. Nada por identificar entra.
+ * Una serie no entra tal cual: se cambia por sus temporadas. Nada por identificar entra. `admiten`: como en aquellos,
+ * los trackers con clave que lo admiten (/upload/elegibilidad); sin él, la regla de eMuwarez.
  */
-export function razonNoSubible(item: LibraryItemResponse): string | null {
+export function razonNoSubible(item: LibraryItemResponse, admiten?: readonly string[]): string | null {
   if (item.por_identificar) return RAZON_POR_IDENTIFICAR
   if (item.item_type === 'series') return 'Una serie se sube por temporadas.'
-  if (item.item_type === 'season') return seasonNotReadyReason(item)
+  if (item.item_type === 'season') return seasonNotReadyReason(item, admiten)
   const esCapitulo = item.item_type === 'episode'
   if (item.item_type !== 'movie' && !esCapitulo) return 'Esto no se sube por lotes.'
   if (item.local_status !== 'Disponible' && item.local_status !== 'Subido') {
@@ -109,31 +109,34 @@ export function razonNoSubible(item: LibraryItemResponse): string | null {
       ? `El capítulo está «${estado}»: ahora no se puede subir.`
       : `La película está «${estado}»: ahora no se puede subir.`
   }
-  if (item.has_spanish_ok !== 1) {
-    return item.has_spanish_ok === 0
-      ? 'No tiene castellano ni en el audio ni en los subtítulos.'
-      : 'No se han podido leer sus pistas: no se puede confirmar que tenga castellano.'
-  }
+  if (admiten) return admiten.length ? null : 'Ningún tracker con clave admite sus idiomas.'
+  if (item.has_spanish_ok == null) return 'No se han podido leer sus pistas: no se puede confirmar que tenga castellano.'
+  if (item.has_spanish_ok !== 1) return 'No tiene castellano ni en el audio ni en los subtítulos.'
   return null
 }
+
+// Para no mirar los idiomas: «lo admite alguno».
+const ALGUNO = ['alguno']
 
 /**
  * Por qué una casilla de Biblioteca no se puede marcar, o null si se puede: lo que `razonNoSubible` ya dice, salvo la
  * serie, que sí se marca (se cambia por sus temporadas, y las que no se pueden subir las dice el primer paso del lote)
- * si no está por identificar.
+ * si no está por identificar. Con `variosTrackers` (más de uno con clave) tampoco mira los idiomas: lo que admite
+ * cada uno lo dice el primer paso.
  */
-export function razonNoMarcable(item: LibraryItemResponse): string | null {
-  return item.item_type === 'series' && !item.por_identificar ? null : razonNoSubible(item)
+export function razonNoMarcable(item: LibraryItemResponse, variosTrackers = false): string | null {
+  return item.item_type === 'series' && !item.por_identificar ? null : razonNoSubible(item, variosTrackers ? ALGUNO : undefined)
 }
 
 /**
  * Lo que entra en «Subir por lotes»: el elemento de Biblioteca y, desde el Panel, la petición que cubre y su alcance
- * (como la preselección del asistente: `season` y, si la petición es de un capítulo, `episode`). Desde Biblioteca
- * solo va `item`.
+ * (como la preselección del asistente: `season` y, si la petición es de un capítulo, `episode`) y su tracker, al que
+ * el lote propone subirlo. Desde Biblioteca solo va `item`.
  */
 export interface EntradaLote {
   item: LibraryItemResponse
   requestId?: number
+  tracker?: string
   alcance?: { season?: number | null; episode?: number | null }
 }
 
@@ -193,14 +196,6 @@ export function expandirEntradas(
 }
 
 /**
- * Si un elemento llega marcado al Resumen según lo que ya hay en eMuwarez: un duplicado o una copia peor que todo
- * lo que hay, desmarcados (se pueden marcar a mano); sin nada con lo que comparar (`null`) o el resto, marcados.
- */
-export function marcadaPorDefecto(nivel: NivelDuplicado | null): boolean {
-  return nivel !== 'duplicado' && nivel !== 'peor'
-}
-
-/**
  * Los ids de las filas cuyo nombre final de torrent sale más de una vez en el lote. Dos copias con el mismo nombre
  * irían a la misma carpeta de Uploadrr-EMU y la segunda fallaría, así que se marcan las dos. Sin nombre no cuenta.
  */
@@ -231,7 +226,8 @@ export function claveDelPanel(fila: DashboardRecommendationItem): string {
  */
 export function entradaDelPanel(fila: DashboardRecommendationItem, item: LibraryItemResponse): EntradaLote {
   return entradaConPeticion(
-    item, fila.rec_request_id, fila.season_number, fila.item_type === 'episode' ? fila.episode_number : null)
+    item, fila.rec_request_id, fila.season_number, fila.item_type === 'episode' ? fila.episode_number : null,
+    fila.rec_request_tracker)
 }
 
 /**
@@ -240,10 +236,10 @@ export function entradaDelPanel(fila: DashboardRecommendationItem, item: Library
  */
 function entradaConPeticion(
   item: LibraryItemResponse, requestId: number | null | undefined,
-  season: number | null | undefined, episode: number | null | undefined,
+  season: number | null | undefined, episode: number | null | undefined, tracker: string | null | undefined,
 ): EntradaLote {
   if (requestId == null) return { item }
-  return { item, requestId, alcance: { season: season ?? null, episode: episode ?? null } }
+  return { item, requestId, alcance: { season: season ?? null, episode: episode ?? null }, ...(tracker ? { tracker } : {}) }
 }
 
 // ── «Subir seleccionadas» desde Peticiones ──────────────────────────────────────────────────────────────────────
@@ -267,8 +263,10 @@ export function peticionSeleccionableEnLote(
  * la petición y su alcance (la temporada y, si la petición es de un capítulo, el capítulo).
  */
 export function entradaDePeticion(
-  peticion: Pick<RequestItemResponse, 'id' | 'req_scope' | 'req_season' | 'req_episode'>, item: LibraryItemResponse,
+  peticion: Pick<RequestItemResponse, 'id' | 'req_scope' | 'req_season' | 'req_episode' | 'tracker'>,
+  item: LibraryItemResponse,
 ): EntradaLote {
   return entradaConPeticion(
-    item, peticion.id, peticion.req_season, peticion.req_scope === 'episode' ? peticion.req_episode : null)
+    item, peticion.id, peticion.req_season, peticion.req_scope === 'episode' ? peticion.req_episode : null,
+    peticion.tracker)
 }

@@ -39,17 +39,35 @@ or report their errors unless they break an eMuwarez upload.
 - `--aviso-baja-calidad` (`-avbc`, per item, `meta["aviso_baja_calidad"]`, in `overwrite_keys`): the app passes it
   when the video is below 720p, and `edit_desc` puts `AVISO_BAJA_CALIDAD` (`src/utils/descgen.py`) at the top of
   `[EMU]DESCRIPTION.txt`, also with `# USE: as-is`. The app keeps the threshold; this repo keeps the text.
+- `--variante anime|latino|anime_catalan` (per item, `meta["variante"]`, in `overwrite_keys`): the category variant the
+  app picks with `services/reglas_tracker.py` (only when it is not the plain one). `Unit3dConTabla.get_cat_id` looks up the
+  token `<CATEGORY>_<VARIANTE>` (`MOVIE_ANIME`, `TV_LATINO`…) in `data/trackers/<TRACKER>.json` and falls back to the plain
+  category when the table has none (EMU has no anime categories: its ids never change).
+- `-df FILE` (`--descfile`, `meta["descfile"]`, in `overwrite_keys`): the upload's own BBCode description from the app.
+  `gen_desc` adds it to `DESCRIPTION.txt` as is, so `edit_desc` keeps trailer, logo, screenshots and signature around it
+  unless the text has a `# USE:` line of its own (then that marker rules). Prep runs on `--resume` too, so each tracker's
+  job gets its own.
 - `--solo-cliente ID` (`-sc`, `meta["solo_cliente"]`, an int, in `overwrite_keys`): the app adds it (plus `--resume`) to
-  the usual argv when the torrent is already on eMuwarez but not in qBittorrent. After prep (and the TMDb check) the item
+  the usual argv when the torrent is already on the `-tk` tracker (EMU, NOBS, MNV: any one UNIT3D tracker; more than one, or one
+  without `descargar_subido`, is the `cliente` reason `sin_emu`) but not in qBittorrent. After prep (and the TMDb check) the item
   skips screenshots, dupe search, confirmation, hashing and upload; it implies `resume` (no wipe). It reads
   `attributes.download_link` from `GET /api/torrents/ID` (with or without the `data` wrapper; a 404 there, which is what eMuwarez
   answers while the torrent waits for moderation, is the `cliente` reason `no_visible`, anything else `sin_torrent`), saves
-  `[EMU]<clean_name>.torrent` like an upload, checks its root name, file names and sizes against `PATH` (hardlinks into
+  `[<TRACKER>]<clean_name>.torrent` like an upload, checks its root name, file names and sizes against `PATH` (hardlinks into
   the library: a mismatch deletes it and exits 1) and calls `add_to_client`. Only in this mode qBittorrent gets it
   stopped and unchecked-skip (`is_stopped=True`, `is_skip_checking=False`), it is rechecked, and it is started only at
   100 %; otherwise it stays stopped (starting it would download into the hardlinks). Other clients are refused, and so
   is a torrent already in qBittorrent (its 100 % would be an old one). Exit 0 only if `add_to_client`
   returned True (only qBittorrent reports it); any failure prints a reason, puts it in the summary and exits 1. `Torrent URL:` and `Torrent upload succeeded, but failed to` are never printed here.
+- `--base-desde TRACKER:ID` (`-bd`, per item, `meta["base_desde"]`, the string `"EMU:123"` with the tracker upper-cased, in
+  `overwrite_keys`): the app adds it (plus `--resume`) to an upload to another tracker of something already on `TRACKER`
+  when the shared `tmp/<uuid>/BASE.torrent` is gone. After prep (and the TMDb check), before screenshots, it downloads that
+  torrent with `TRACKER`'s adapter (`descargar_subido`, which needs its key in the config), checks it against `PATH`
+  (`fichero_distinto`) and writes `BASE.torrent` from it with `TorrentMaker.from_existing` (same `name`, `files`, `pieces`,
+  `piece length`; `source` becomes `Uploadrr`, so the info-hash differs), deletes the downloaded `[TRACKER]` file and marks
+  `torrent` done, so it is never hashed again. Then the normal upload to `-tk` (dupe check included). Failures end the item
+  with `resultado` `base_sin_torrent` (not a UNIT3D tracker, 404 or no link, BASE.torrent not written) or `base_no_coincide`
+  (other files or sizes; nothing is uploaded), exit 1.
 - Done steps: `meta["pasos_hechos"]` (list in `meta.json`) holds `screenshots` and `torrent`. Each is marked and
   saved first, then printed with plain `print(..., flush=True)` as `Step done: screenshots` / `Step done: torrent`
   (also when the step is reused in a `--resume`; nothing is printed for a step that did not run, e.g. a skipped item).
@@ -84,7 +102,8 @@ or report their errors unless they break an eMuwarez upload.
   the app pass it, with the absolute path of a per-job file it creates before launching and deletes afterwards.
 - `config.yaml` keys the app writes into that per-job file (it no longer launches a checkout without `--config`): `DEFAULT.tmdb`,
   `DEFAULT.add_logo`, `DEFAULT.always_anon`, `TRACKERS.EMU.anon` and `AUTO.keep_quiet` (all three forced to `false`: only `-a` makes an upload
-  anonymous, and the app needs the console output), `TRACKERS.EMU.api_key`, `TRACKERS.BLU.useAPI` (forced to `false`), `SCREENS.img_hosts`,
+  anonymous, and the app needs the console output), `TRACKERS.EMU.api_key`, `TRACKERS.<NOBS|MNV>.api_key` / `anon` (`false`),
+  `TRACKERS.BLU.useAPI` (forced to `false`), `SCREENS.img_hosts`,
   `SCREENS.API_KEYS`, `SCREENS.per_episode` (`0`, only the first episode of a pack, unless the app is set to screenshot
   every episode), `SCREENS.use_oxipng` (`true`) and `SCREENS.oxipng_level` (`2`; lossless PNG optimisation, falls back to ffmpeg when `pyoxipng` is missing), `TORRENT_CLIENTS.qbit.*`. When `torrent_storage_dir` doesn't exist (it resolves against this
   repo's cwd), the app drops it from `TORRENT_CLIENTS.qbit` and sets `enable_search: False`.
@@ -95,7 +114,7 @@ or report their errors unless they break an eMuwarez upload.
   stay free on purpose: the app installs this file into the same environment as its own FastAPI stack.
   `pip install -r requirements.txt` on `python:3.12-slim` needs nothing else; running `upload.py` also needs
   `ffmpeg` and `mediainfo` (the `Dockerfile` installs them).
-- Tests: `pip install pytest pytest-cov`, then `python -m pytest tests -q -p no:cacheprovider` (in Docker; ~10 s).
+- Tests: `pip install pytest pytest-cov`, then `python -m pytest tests -q -p no:cacheprovider` (in Docker; ~580 tests).
   `tests/conftest.py` blocks network, DNS and subprocesses; known bugs are `xfail`. `tests/test_unit3d.py`
   runs the dupe search and the upload against a fake UNIT3D tracker on localhost. Anything else: focused scripts in
   Docker (`upload.py` on a test folder, exit code).

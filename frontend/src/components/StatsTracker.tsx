@@ -3,13 +3,14 @@ import { getTrackerStats, type TrackerStats } from '../api/trackerStats'
 import type { UploadJob } from '../types/api'
 import { formatDateTimeSeconds, formatNumero } from '../utils/format'
 
-// Solo la subida completada que llegó a eMuwarez tiene ficha (`result_tracker`) de la que pedir sus contadores.
+// Solo la subida completada que llegó a su tracker tiene ficha (`result_tracker`) de la que pedir sus contadores.
 const tieneFicha = (job: UploadJob) => job.status === 'completed' && !!job.result_tracker
 
-// El bloque «En eMuwarez» del detalle de una subida: seeders, leechers y veces completado. Se pide al entrar y con
+// El bloque «En <tracker>» del detalle de una subida: seeders, leechers y veces completado. Se pide al entrar y con
 // «Actualizar», nunca por reloj: la clave de eMuwarez se comparte con Sonarr, Radarr y otras aplicaciones.
 export function StatsTrackerBloque({ job }: { job: UploadJob }) {
   const aplica = tieneFicha(job)
+  const nombre = job.tracker_nombre ?? 'eMuwarez'
   const [datos, setDatos] = useState<TrackerStats | null>(null)
   const [cargando, setCargando] = useState(false)
   const ultima = useRef(0)
@@ -36,13 +37,13 @@ export function StatsTrackerBloque({ job }: { job: UploadJob }) {
   return (
     <div className="dsub-panel" data-testid="stats-tracker">
       <h2 className="dsub-panel-titulo">
-        En eMuwarez
+        En {nombre}
         {cargando && <span className="spinner dsub-spinner-13" />}
       </h2>
       <div className="detail-card dsub-caja seeding-caja">
         {sinDatos ? (
           <div className="seeding-sin-datos">
-            <strong>{datos?.pendiente_moderacion ? 'Pendiente de moderación' : 'Sin datos de eMuwarez'}</strong>
+            <strong>{datos?.pendiente_moderacion ? 'Pendiente de moderación' : `Sin datos de ${nombre}`}</strong>
             <span className="sub-muted sub-t12">
               {datos?.mensaje ?? (cargando ? 'Consultando…' : 'No se pudo consultar. Esto no afecta a la subida.')}
             </span>

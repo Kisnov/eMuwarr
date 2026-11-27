@@ -132,6 +132,13 @@ describe('«Necesita atención»', () => {
     expect(avisos[2]).toMatchObject({ titulo: 'Versión nueva 0.14.1 publicada' })
   })
 
+  it('una subida fallida a otro tracker lo dice', () => {
+    const avisos = avisosDeAtencion({ servicios: [], instancias: [], versionNueva: null,
+      fallidas: [job({ id: 9, status: 'failed', title: 'Youjo Senki S01E12', tracker: 'nobs', tracker_nombre: 'N.O.B.S' })],
+    })
+    expect(avisos[0].titulo).toBe('Subida fallida a N.O.B.S · Youjo Senki S01E12')
+  })
+
   it('eMuwarez o TMDb con error van antes que todo, con la primera línea del motivo', () => {
     const avisos = avisosDeAtencion({
       servicios: [{ nombre: 'TMDb', error: 'API key de TMDb inválida o no autorizada\ndetalle' }],

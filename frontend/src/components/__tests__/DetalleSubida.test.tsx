@@ -65,7 +65,9 @@ describe('detalle de una subida completada', () => {
     const chip = [...document.querySelectorAll('[role="status"] .badge')].find(b => b.textContent === 'Pendiente de moderación')!
     // La ayuda se abre también con el teclado o al tocarlo: el chip coge el foco y su descripción ya está montada.
     expect(chip.getAttribute('tabindex')).toBe('0')
-    expect(document.body.textContent).toContain('cada 6 horas')
+    // La cadencia de «Leer tus subidas» se cambia en Tareas: la ayuda no da una cifra fija.
+    expect(document.body.textContent).toContain('la tarea «Leer tus subidas»')
+    expect(document.body.textContent).not.toContain('cada 6 horas')
     expect(boton('Ver registro')).toBeDefined()
   })
 
@@ -268,6 +270,16 @@ describe('el aviso «Falta el trailer»', () => {
     await pulsar(boton('Ya lo he añadido')!)
     expect(marcarTrailerAMano).toHaveBeenCalledWith(7, true)
     await esperar(() => onTrailerCambiado.mock.calls.length === 1)
+  })
+
+  it('en una subida a otro tracker, el texto y el botón dicen ese tracker', async () => {
+    const enNobs = { ...completada, trailer_estado: 'falta' as const, tracker: 'nobs', tracker_nombre: 'N.O.B.S', result_url: 'https://nobs.example/torrents/15729' }
+    await montar(pagina(enNobs))
+    const aviso = document.querySelector('.dsub-trailer-aviso')
+    expect(aviso?.textContent).toContain('Edita el torrent en N.O.B.S')
+    expect(aviso?.textContent).not.toContain('eMuwarez')
+    const editar = [...aviso!.querySelectorAll('a')].find(a => a.textContent === 'Editar en N.O.B.S')
+    expect(editar?.getAttribute('href')).toBe('https://nobs.example/torrents/15729/edit')
   })
 
   it('marcada a mano solo queda una línea para deshacerlo', async () => {

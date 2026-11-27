@@ -15,6 +15,8 @@ import torf
 import src.trackers.UNIT3D as unit3d
 import upload
 from src.trackers.EMU import EMU
+from src.trackers.MNV import MNV
+from src.trackers.NOBS import NOBS
 from src.trackers.UNIT3D import DupeSearchError
 from src.utils import limitador
 from tracker_falso import FakeTracker
@@ -440,6 +442,50 @@ def test_upload_timeout_that_landed_is_recovered(tracker, emu, upload_meta, sign
     assert run(emu.upload(upload_meta)) is True
     assert saved_torrent(upload_meta).exists()
     assert "Torrent uploaded successfully" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("errores", [
+    {"name": ["El nombre ya ha sido registrado."]},
+    {"info_hash": ["El valor del campo info hash ya está en uso."]},
+], ids=["nombre", "info_hash"])
+def test_upload_timeout_that_landed_is_recovered_in_another_language(tracker, emu, upload_meta, signed_torrent, errores, sleeps):
+    emu.timeout = httpx.Timeout(0.5)
+    landed = []
+
+    def upload(query):
+        if not landed:
+            landed.append(NAME)
+            time.sleep(1)  # entra, pero contesta tarde
+            return 200, {"success": True, "data": download_url(tracker)}
+        return 404, {"success": False, "message": "Error de validación.", "data": errores}
+
+    tracker.routes[("POST", UPLOAD)] = upload
+    tracker.routes[("GET", SEARCH)] = lambda q: (
+        200,
+        {"data": [item(n, SIZE, download_link=download_url(tracker)) for n in landed if n == q["name"][0]], "links": {"next": None}},
+    )
+    serve_download(tracker, resigned(signed_torrent))
+
+    assert run(emu.upload(upload_meta)) is True
+    assert saved_torrent(upload_meta).exists()
+    assert len(tracker.calls("POST", UPLOAD)) == 2
+
+
+def test_upload_timeout_then_another_validation_error_is_not_recovered(tracker, emu, upload_meta, sleeps):
+    emu.timeout = httpx.Timeout(0.2)
+
+    def upload(query):
+        if len(tracker.calls("POST", UPLOAD)) == 1:
+            time.sleep(0.5)  # no contesta a tiempo
+            return 500, b""
+        return 404, {"success": False, "message": "Error de validación.", "data": {"category_id": ["No válido."]}}
+
+    tracker.routes[("POST", UPLOAD)] = upload
+    tracker.routes[("GET", SEARCH)] = lambda q: (200, {"data": [], "links": {"next": None}})
+
+    assert run(emu.upload(upload_meta)) is False
+    assert len(tracker.calls("POST", UPLOAD)) == 2
+    assert len(tracker.calls("GET", SEARCH)) == 1  # solo la foto de antes de subir
 
 
 def test_upload_never_recovers_same_name_and_size_with_other_pieces(tracker, emu, upload_meta, tmp_path):
@@ -981,3 +1027,115 @@ def test_solo_cliente_dice_por_que_no_bajo_el_torrent(tracker, upload_meta, emu,
     assert run(emu.descargar_subido(upload_meta, 42)) == (None, motivo)
     if motivo == "no_visible":
         assert "pendiente de moderación" in capsys.readouterr().out
+
+
+# NOBS y Milnueve: los mismos ids de vídeo de UNIT3D de serie, con 576i y 480i propios y sin 540p ni SD
+
+def _instancia(cls, tracker, monkeypatch):
+    monkeypatch.setattr(unit3d, "UPLOAD_RETRY_DELAYS", (0, 0))
+    monkeypatch.setattr(unit3d, "DOWNLOAD_RETRY_DELAYS", (0, 0, 0))
+    instance = cls(config={"TRACKERS": {cls.__name__: {"api_key": TOKEN}}, "DEFAULT": {}})
+    instance.domain = tracker.url
+    return instance
+
+
+@pytest.fixture(params=[NOBS, MNV], ids=["NOBS", "MNV"])
+def otro(request, tracker, monkeypatch):
+    return _instancia(request.param, tracker, monkeypatch)
+
+
+RESOLUCIONES_UNIT3D = {
+    "8640p": "10", "4320p": "1", "2160p": "2", "1440p": "3", "1080p": "3", "1080i": "4", "720p": "5", "576p": "6",
+    "576i": "7", "540p": "10", "480p": "8", "480i": "9", "other": "10", "OTHER": "10", "": "10",
+}
+TIPOS_UNIT3D = {**TIPOS_ENVIADOS, "SD": "0"}
+CATEGORIAS_UNIT3D = {**CATEGORIAS_ENVIADAS, "MUSIC": "0"}
+
+
+def test_ids_enviados_a_nobs_y_milnueve(otro, meta):
+    assert {c: run(otro.get_cat_id({**meta, "category": c})) for c in CATEGORIAS_UNIT3D} == CATEGORIAS_UNIT3D
+    assert {t: run(otro.get_type_id({**meta, "type": t})) for t in TIPOS_UNIT3D} == TIPOS_UNIT3D
+    assert {r: run(otro.get_res_id({**meta, "resolution": r})) for r in RESOLUCIONES_UNIT3D} == RESOLUCIONES_UNIT3D
+
+
+# --variante (la elige la app con services/reglas_tracker.py): token <CATEGORÍA>_<VARIANTE> de cada tabla
+VARIANTES_ENVIADAS = {
+    "EMU": {(c, v): {"MOVIE": "1", "TV": "2"}[c] for c in ("MOVIE", "TV") for v in ("anime", "latino", "anime_catalan")},
+    "NOBS": {("MOVIE", "anime"): "4", ("TV", "anime"): "5",
+             ("MOVIE", "latino"): "1", ("TV", "latino"): "2", ("MOVIE", "anime_catalan"): "1", ("TV", "anime_catalan"): "2"},
+    "MNV": {("MOVIE", "anime"): "3", ("TV", "anime"): "4", ("MOVIE", "latino"): "10", ("TV", "latino"): "14",
+            ("MOVIE", "anime_catalan"): "8", ("TV", "anime_catalan"): "8"},
+}
+
+
+@pytest.mark.parametrize("cls", [EMU, NOBS, MNV], ids=["EMU", "NOBS", "MNV"])
+def test_ids_de_categoria_de_cada_variante(cls, tracker, monkeypatch, meta):
+    """Una variante sin token en la tabla (eMuwarez no tiene anime; N.O.B.S, latino) va a la categoría normal."""
+    instancia = _instancia(cls, tracker, monkeypatch)
+    enviados = {(c, v): run(instancia.get_cat_id({**meta, "category": c, "variante": v}))
+                for c, v in VARIANTES_ENVIADAS[cls.__name__]}
+    assert enviados == VARIANTES_ENVIADAS[cls.__name__]
+    # Sin variante, la de siempre.
+    assert [run(instancia.get_cat_id({**meta, "category": c, "variante": None})) for c in ("MOVIE", "TV")] == ["1", "2"]
+
+
+@pytest.mark.parametrize("cls, variante, categoria, cat_id", [
+    (NOBS, "anime", "TV", "5"), (MNV, "latino", "MOVIE", "10"), (MNV, "anime_catalan", "TV", "8"),
+], ids=["NOBS-serie-anime", "MNV-pelicula-latino", "MNV-anime-catalan"])
+def test_la_variante_llega_al_formulario_de_subida(tracker, monkeypatch, upload_meta, signed_torrent,
+                                                   cls, variante, categoria, cat_id):
+    instancia = _instancia(cls, tracker, monkeypatch)
+    (Path(upload_meta["base_dir"]) / "tmp" / "u" / f"[{cls.__name__}]DESCRIPTION.txt").write_text("descripción")
+    tracker.routes[("POST", UPLOAD)] = lambda q: (200, {"success": True, "data": download_url(tracker)})
+    serve_download(tracker, signed_torrent)
+
+    extra = {"season_int": 1, "episode_int": 1} if categoria == "TV" else {}
+    assert run(instancia.upload({**upload_meta, "category": categoria, "variante": variante, **extra})) is True
+
+    (fields, _files), = tracker.bodies
+    assert fields["category_id"] == cat_id
+
+
+def test_las_tablas_no_se_mezclan(tracker, emu, monkeypatch, meta):
+    """Cargar NOBS no cambia los ids de EMU: cada clase guarda los suyos."""
+    nobs = _instancia(NOBS, tracker, monkeypatch)
+    assert run(nobs.get_res_id({**meta, "resolution": "576i"})) == "7"
+    assert run(emu.get_res_id({**meta, "resolution": "576i"})) == "6"
+
+
+def test_subida_a_nobs_y_milnueve(tracker, otro, upload_meta, signed_torrent, capsys):
+    nombre = type(otro).__name__
+    (Path(upload_meta["base_dir"]) / "tmp" / "u" / f"[{nombre}]DESCRIPTION.txt").write_text("descripción")
+    tracker.routes[("POST", UPLOAD)] = lambda q: (200, {"success": True, "data": download_url(tracker)})
+    serve_download(tracker, signed_torrent)
+
+    assert run(otro.upload({**upload_meta, "resolution": "576i", "type": "ENCODE"})) is True
+
+    (fields, files), = tracker.bodies
+    assert (fields["name"], fields["category_id"], fields["type_id"], fields["resolution_id"]) == (NAME, "1", "3", "7")
+    assert files["torrent"] == signed_torrent
+    guardado = Path(upload_meta["base_dir"]) / "tmp" / "u" / f"[{nombre}]Peli.torrent"
+    assert torf.Torrent.read(guardado).comment == f"{otro.comentario_torrent}\n{tracker.url}/torrents/42"
+    assert "eMuwarez" not in otro.comentario_torrent
+    assert f"Torrent URL: {tracker.url}/torrents/42" in capsys.readouterr().out
+
+
+# El nombre: el de eMuwarez en los tres trackers (Unit3dConTabla.edit_name)
+
+@pytest.mark.parametrize("cls", [EMU, NOBS, MNV], ids=["EMU", "NOBS", "MNV"])
+def test_el_nombre_es_el_de_emuwarez_en_los_tres(cls):
+    instancia = cls(config={"TRACKERS": {cls.__name__: {"api_key": TOKEN}}, "DEFAULT": {}})
+    espanola = {"name": "The Sea Inside AKA Mar adentro 2004 1080p", "title": "The Sea Inside", "aka": "AKA Mar adentro",
+                "original_title": "Mar adentro", "original_language": "es"}
+    assert instancia.edit_name(espanola) == "Mar adentro 2004 1080p"
+    assert instancia.edit_name({"name": NAME, "title": "Peli", "original_language": "en"}) == NAME
+
+
+def test_el_nombre_largo_pierde_aka_resolucion_y_tipo_hasta_caber():
+    largo = "T" * 240
+    meta = {"name": f"{largo} AKA Otro 2160p REMUX", "title": largo, "aka": "AKA Otro", "resolution": "2160p",
+            "type": "REMUX", "original_language": "en"}
+    nombre = EMU(config={"TRACKERS": {"EMU": {"api_key": TOKEN}}, "DEFAULT": {}}).edit_name(meta)
+    assert len(nombre) <= 255 and "AKA Otro" not in nombre
+    muy_largo = {**meta, "name": "X" * 300, "title": "X"}
+    assert len(EMU(config={"TRACKERS": {"EMU": {"api_key": TOKEN}}, "DEFAULT": {}}).edit_name(muy_largo)) == 255

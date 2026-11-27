@@ -231,7 +231,8 @@ export function PasoArchivo({ a }: { a: Asistente }) {
                       nameEditable={!enTanda && renombra(normalizarModo(remuxPreview.track_mode))}
                       edits={remuxEdits}
                       onEdit={setRemuxEdit}
-                      onIdioma={enTanda ? undefined : elegirIdioma}
+                      // Con las pistas en «Ninguno» el idioma no se escribe: no se ofrece.
+                      onIdioma={enTanda || !tocaElFichero(normalizarModo(remuxPreview.track_mode)) ? undefined : elegirIdioma}
                     />
                   </>
                 )}

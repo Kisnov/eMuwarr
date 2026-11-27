@@ -11,7 +11,10 @@ import {
   previewTrackRemux,
   applyTrackRemux,
 } from '../../api/nomenclature'
-import { queueUpload, getExistingJobForItem, runUploadChecks, type OpcionesTracker } from '../../api/uploads'
+import {
+  queueUpload, getExistingJobForItem, runUploadChecks, fetchReglasTracker, fetchElegibilidad,
+  type OpcionesTracker, type ReglasDeTracker, type ElegibilidadSubida, type ReglasConNombre,
+} from '../../api/uploads'
 import { nuevoLoteId } from '../../utils/lote'
 import { getLibrary, getMediaInfoReport, suggestProvider } from '../../api/library'
 import type { MediaInfoReport } from '../../api/library'
@@ -23,7 +26,7 @@ import type { LibraryItemResponse, SeasonPackPlanResponse, UploadJob } from '../
 import { isSeasonReady, seasonNotReadyReason, episodeNotReadyReason, listDisplayTitle } from '../../utils/libraryItem'
 import { ACTIVE_JOB_STATUSES } from '../../utils/uploadStatus'
 import { seguirProgreso } from '../../api/eventos'
-import { fetchSettings } from '../../api/settings'
+import { fetchSettings, type MarcasTracker } from '../../api/settings'
 import { ajustesDeTemporada, proveedorParaServidor, type ProveedoresElegidos } from '../../utils/origenProveedor'
 import {
   SIN_SELECCION, seleccionUnica, seleccionTemporadas, seleccionCapitulos,
@@ -31,12 +34,16 @@ import {
   cacheCubre, conAjustes, peticionCubre, type Seleccion, type Ajustes,
 } from '../../utils/seleccionSubida'
 import {
-  SIN_IDIOMAS, conIdioma, idiomasDelServidor, idiomasParaServidor, type IdiomasPorPosicion,
+  SIN_IDIOMAS, conIdioma, idiomasDePistas, idiomasDelServidor, idiomasParaServidor, type IdiomasPorPosicion,
 } from '../../utils/idiomasPack'
 import { avisoSourceVisible } from '../../utils/avisoSource'
+import { segunDestinos } from '../../utils/comprobaciones'
+import { destinosDeEntradaDeVarios, destinosQueAdmiten } from '../../utils/elegibilidad'
 import { PROVIDER_SOURCES } from './constantes'
 import { mergeRemuxTracks } from './RemuxTable'
+import { useElegibilidadLote } from '../lote/useLote'
 import { useComprobaciones, useComprobacionesTanda } from './useComprobaciones'
+import { useDestinos } from './useDestinos'
 import { useDetallesTemporada } from './useDetallesTemporada'
 import { useNombresTanda } from './useNombresTanda'
 
@@ -52,11 +59,14 @@ export interface PropsAsistente {
   onNavigate?: (page: string) => void
   // Optional pre-selection (e.g. from a request's scope): season number and,
   // for a single episode, its episode number. Used to auto-fill step 0.
-  preselect?: { season?: number | null; episode?: number | null }
+  preselect?: PreseleccionDePeticion
   // La petición desde la que se abrió, si fue así: todo lo que se suba aquí la
   // cubre, y Subidas lo enseña.
   requestId?: number
 }
+
+// Lo que una petición deja elegido en el asistente: su temporada o capítulo, y su tracker como destino.
+export type PreseleccionDePeticion = { season?: number | null; episode?: number | null; tracker?: string | null }
 
 export function useAsistente({ item, onClose: onCloseProp, onDone, onNavigate, preselect, requestId }: PropsAsistente) {
   const isSeries = item.item_type === 'series'
@@ -155,6 +165,8 @@ export function useAsistente({ item, onClose: onCloseProp, onDone, onNavigate, p
   // Los grupos marcados en Configuración como Personal release / anónimos: dan el valor de las casillas del Resumen.
   const [gruposPersonalRelease, setGruposPersonalRelease] = useState<string[]>([])
   const [gruposAnonimos, setGruposAnonimos] = useState<string[]>([])
+  // Las de los otros trackers con marcas propias (null o sin entrada: las de eMuwarez).
+  const [marcasPorTracker, setMarcasPorTracker] = useState<Record<string, MarcasTracker>>({})
   // Anónimo / Personal release: lo cambiado a mano en el Resumen (null mientras no se toque: entonces manda el grupo,
   // aquí para enseñarlo y en el servidor para cada subida, también las de una tanda con grupos distintos). Otra
   // selección lo vuelve a null (elegirSeleccion).
@@ -165,8 +177,61 @@ export function useAsistente({ item, onClose: onCloseProp, onDone, onNavigate, p
       setModoPistasAjuste(s.remux_track_mode)
       setGruposPersonalRelease(s.upload_tags_personal_release ?? [])
       setGruposAnonimos(s.upload_tags_anonimos ?? [])
+      setMarcasPorTracker(s.marcas_por_tracker ?? {})
+      plantilla.current = s.descripcion_plantilla ?? ''
+      setDescripcion(d => d || plantilla.current)
     }).catch(() => { /* quedan los de siempre */ })
   }, [])
+  const { trackersParaSubir, trackersElegidos, setTrackersElegidos, elegirTracker, destinos, destinoSubida } = useDestinos()
+  // Con más de un tracker, qué admite cada uno (el pack, cada capítulo, la película): el paso «Contenido» deja elegir
+  // lo que admite alguno, no solo eMuwarez, y el Resumen marca de entrada los que lo admiten. Solo con eMuwarez no se
+  // pide: todo sigue con su regla, como siempre.
+  const [elegibilidad, setElegibilidad] = useState<ElegibilidadSubida | null>(null)
+  const variosTrackers = trackersParaSubir.length > 1
+  useEffect(() => {
+    // Una serie se sube en tanda de temporadas: lo que un tracker no admite lo salta el servidor al encolar.
+    if (!variosTrackers || isSeries) return
+    let vigente = true
+    fetchElegibilidad(item.id)
+      .then(r => { if (vigente) setElegibilidad(r) })
+      .catch(() => { /* sin respuesta, la regla de eMuwarez, como siempre */ })
+    return () => { vigente = false }
+  }, [item.id, variosTrackers, isSeries])
+  // Lo de cada temporada de la serie: la tanda deja elegir las que admite alguno.
+  const { reglas: elegibilidadTemporadas, listo: temporadasMiradas } = useElegibilidadLote({
+    activo: variosTrackers && isSeries, ids: seasons.map(s => s.id),
+  })
+  // Las normas de cada tracker para un elemento de este asistente (el abierto, una temporada o un capítulo suyo);
+  // undefined si no se sabe (un solo tracker, o aún sin respuesta).
+  const reglasDe = (id: number | null): ReglasConNombre[] | undefined => {
+    if (id == null) return undefined
+    if (elegibilidadTemporadas.has(id)) return elegibilidadTemporadas.get(id)
+    if (!elegibilidad) return undefined
+    if (id === item.id) return elegibilidad.trackers
+    return elegibilidad.capitulos.find(c => c.item_id === id)?.trackers
+  }
+  // Una película o un capítulo abierto solo: los destinos de entrada en cuanto se sabe qué trackers lo admiten.
+  useEffect(() => {
+    if (!needsSelection && elegibilidad) setTrackersElegidos(destinosDeEntradaDeVarios([elegibilidad.trackers], preselect?.tracker))
+  }, [needsSelection, elegibilidad, setTrackersElegidos, preselect?.tracker])
+  // La descripción propia (BBCode) del Resumen: la misma para todos los trackers, salvo los que tengan la suya.
+  const [descripcion, setDescripcion] = useState('')
+  // La plantilla de Configuración: con ella empieza la de cada contenido.
+  const plantilla = useRef('')
+  const [descripcionPorTracker, setDescripcionPorTracker] = useState<Record<string, string>>({})
+  // Marcar «otra para X» la empieza con la común; desmarcarla vuelve a la común.
+  const descripcionPropia = (id: string, si: boolean) => setDescripcionPorTracker(d => {
+    const { [id]: _quitada, ...resto } = d
+    return si ? { ...resto, [id]: descripcion } : resto
+  })
+  // Escribirla cuenta como un cambio: cerrar el asistente pide confirmación antes de perderla.
+  const escribirDescripcion = (texto: string) => { editado.current = true; setDescripcion(texto) }
+  const editarDescripcionDe = (id: string, texto: string) => {
+    editado.current = true
+    setDescripcionPorTracker(d => ({ ...d, [id]: texto }))
+  }
+  // La propia de un tracker solo cuenta mientras se ve: con un solo destino, el Resumen enseña solo la común.
+  const descripcionDe = (id: string) => (destinos.length > 1 ? descripcionPorTracker[id] : undefined) ?? descripcion
   const opcionesTag = Array.from(new Set([fields.tag, initialTag, ...(gruposDeSubida.length ? gruposDeSubida : ['EMUWAREZ'])].filter(Boolean))) as string[]
   const [titleWarning, setTitleWarning] = useState<string | null>(null)
   const [titleOptions, setTitleOptions] = useState<{ value: string; kind: string; label: string }[]>([])
@@ -261,7 +326,19 @@ export function useAsistente({ item, onClose: onCloseProp, onDone, onNavigate, p
   const [preparing, setPreparing] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [uploadMsg, setUploadMsg] = useState<string | null>(null)
-  const { checks, checksLoading, checksError, liveChecks, runChecks: comprobar } = useComprobaciones(targetId, proveedorElegido)
+  // Las comprobaciones van con las normas del primero de los elegidos (eMuwarez si está); las de los demás, en `reglas`.
+  const trackerPrincipal = destinos[0]?.id ?? 'emu'
+  // En una tanda, las de cada uno van con las del primero que lo admite (sin ninguno, del primero, que dicen por qué).
+  const trackerDe = (id: number) => (destinosQueAdmiten(destinos, reglasDe(id))[0] ?? destinos[0])?.id ?? 'emu'
+  // El plan del pack de la tanda, igual: el de una temporada que solo admite Milnueve, con las de Milnueve.
+  const trackerDelPack = esTanda(seleccion) && targetId != null ? trackerDe(targetId) : trackerPrincipal
+  const {
+    checks: checksDelServidor, checksLoading, checksError, liveChecks, runChecks: comprobar,
+  } = useComprobaciones(targetId, proveedorElegido, trackerPrincipal)
+  // Sin eMuwarez entre los destinos, que no responda no bloquea la subida a los demás.
+  const checks = segunDestinos(checksDelServidor, destinos.some(d => d.id === 'emu'))
+  // Las normas de idioma de cada otro tracker para este elemento (sin red, en el Resumen junto a su casilla).
+  const [reglas, setReglas] = useState<Map<string, ReglasDeTracker>>(new Map())
 
   // --- Step 0: load seasons (series) or episodes (season) ---
   useEffect(() => {
@@ -310,7 +387,7 @@ export function useAsistente({ item, onClose: onCloseProp, onDone, onNavigate, p
     batchEnvChecks, batchContentChecks, batchChecksLoading, batchChecksIndex, batchViewId, setBatchViewId,
     batchChecksError, repetir: repetirComprobacionesTanda, mergedChecksFor, olvidar: olvidarComprobacionesTanda,
   } = useComprobacionesTanda({
-    step, batchQueue, batchPhase, proveedorElegido,
+    step, batchQueue, batchPhase, proveedorElegido, tracker: trackerPrincipal, trackerDe,
     // Un pack da su nombre con lo editado a mano (no los capítulos, que lo calculan useNombresTanda).
     ajustesDe: id => batchIsEpisodes ? sourceEditado(id) : ajustesDeLaTanda(id),
   })
@@ -364,6 +441,8 @@ export function useAsistente({ item, onClose: onCloseProp, onDone, onNavigate, p
       setBatchPhase('idle'); setBatchResults([])
       camposDe.current = null
       cargadoPara.current = null
+      // Los destinos de entrada de lo elegido: si eMuwarez no lo admite, los que sí; de una tanda, los de cada uno.
+      setTrackersElegidos(destinosDeEntradaDeVarios((esTanda(nueva) ? nueva.ids : [nueva.objetivo]).map(reglasDe), preselect?.tracker))
     }
     setStep(1)
   }
@@ -541,13 +620,14 @@ export function useAsistente({ item, onClose: onCloseProp, onDone, onNavigate, p
   // it's in flight (real work per episode — build_nomenclature_proposal()).
   // `proveedor`: el elegido a mano para salir de un plan bloqueado por
   // proveedores distintos; si no, el que ya se eligió para esta temporada.
-  const loadSeasonPlan = useCallback(async (proveedor?: string) => {
+  // `idiomas`: los recién confirmados, que el estado aún no tiene.
+  const loadSeasonPlan = useCallback(async (proveedor?: string, idiomas?: IdiomasPorPosicion) => {
     if (targetId == null) return
     if (proveedor) elegirProveedor(targetId, proveedor)
     const yaElegido = proveedorElegido.has(targetId)
     const proveedorPedido = proveedor ?? proveedorParaServidor(proveedorElegido, targetId)
     // Lo ya elegido para esta temporada (al volver a ella desde el desplegable).
-    const idiomasPedidos = idiomasPorTemporada.get(targetId)
+    const idiomasPedidos = idiomas ?? idiomasPorTemporada.get(targetId)
     const pedido = ++planPedido.current
     setSeasonPlanLoading(true); setSeasonPlanError(null)
     buildingPlanFor.current = targetId
@@ -560,7 +640,11 @@ export function useAsistente({ item, onClose: onCloseProp, onDone, onNavigate, p
       'plan-temporada-progreso', a => a.season_id === targetId, pedirPlan, 400)
     try {
       const [plan, srcResp, prvResp] = await Promise.all([
-        previewSeasonPack(targetId, proveedorPedido, idiomasParaServidor(idiomasPedidos)), getEmuSources(), getEmuProviders(),
+        // Con las normas del primero de los destinos que lo admite: un pack que solo admite otro tracker no se bloquea
+        // por las de eMuwarez.
+        previewSeasonPack(targetId, proveedorPedido, idiomasParaServidor(idiomasPedidos),
+          ...(trackerDelPack === 'emu' ? [] : [trackerDelPack])),
+        getEmuSources(), getEmuProviders(),
       ])
       if (pedido !== planPedido.current) return
       setSeasonPlan(plan)
@@ -614,7 +698,7 @@ export function useAsistente({ item, onClose: onCloseProp, onDone, onNavigate, p
         setSeasonPlanLoading(false)
       }
     }
-  }, [targetId, ajustesPorId, proveedorElegido, idiomasPorTemporada, sharedTitle])
+  }, [targetId, ajustesPorId, proveedorElegido, idiomasPorTemporada, sharedTitle, trackerDelPack])
 
   // Closing the wizard while a season plan is being built has to stop the
   // server too: it runs one real nomenclature proposal per episode, so a 24
@@ -654,6 +738,8 @@ export function useAsistente({ item, onClose: onCloseProp, onDone, onNavigate, p
     // anterior sin decírtelo.
     setRemuxPreview(null); setRemuxError(null); setRemuxEdits({}); setRemuxLoading(false)
     setSeasonPlan(null); setSeasonPlanError(null)
+    // Ni la descripción: las notas de un capítulo no son las del siguiente.
+    setDescripcion(plantilla.current); setDescripcionPorTracker({})
   }, [targetId])
 
   const detalles = useDetallesTemporada({
@@ -689,7 +775,7 @@ export function useAsistente({ item, onClose: onCloseProp, onDone, onNavigate, p
       try {
         const res = await suggestProvider(targetId)
         // Como setField('provider', …, false) fuera de una temporada, sin depender de él: se recrea en cada pintado.
-        if (res.suggested) setFields(prev => ({ ...prev, provider: res.suggested }))
+        if (res.suggested && objetivoActual.current === targetId) setFields(prev => ({ ...prev, provider: res.suggested }))
       } catch { /* non-blocking — leave "Sin provider" */ }
       finally { setDetectingProvider(false) }
     }, 500)
@@ -763,12 +849,9 @@ export function useAsistente({ item, onClose: onCloseProp, onDone, onNavigate, p
     setRemuxEdits(nuevas)
     // Solo vale la respuesta de la última elección: una anterior que llegue tarde no la pisa.
     const version = ++versionIdioma.current
-    const audio = (remuxPreview?.tracks ?? []).filter(t => t.type === 'audio')
-    const idiomas: Record<number, string> = {}
-    audio.forEach((t, i) => { const c = nuevas[t.id]?.language; if (c) idiomas[i + 1] = c })
     try {
       const [campos, plan] = await Promise.all([
-        getNomenclatureFields(id, idiomas),
+        getNomenclatureFields(id, idiomasDePistas(remuxPreview?.tracks, nuevas)),
         applyTrackRemux(id, { dryRun: true, overrides: nuevas }),
       ])
       if (objetivoActual.current !== id || version !== versionIdioma.current) return
@@ -825,6 +908,8 @@ export function useAsistente({ item, onClose: onCloseProp, onDone, onNavigate, p
       })
       setAudioWarning(null)
       detalles.olvidarPorIdioma()
+      // Un plan bloqueado puede dejar de estarlo con el idioma (la norma del castellano lo cuenta): se vuelve a pedir.
+      if (seasonPlan?.status !== 'valid') void loadSeasonPlan(undefined, idiomasDelServidor(r.idiomas_audio))
     } catch {
       if (objetivoActual.current !== id || version !== versionIdioma.current) return
       setAudioWarning('No se pudo recalcular el nombre con ese idioma; se queda lo que había. Vuelve a elegirlo.')
@@ -842,10 +927,15 @@ export function useAsistente({ item, onClose: onCloseProp, onDone, onNavigate, p
   useEffect(() => {
     if (targetIsSeason) return
     if (targetId == null || !Object.keys(fields).length) return
+    // Una respuesta lenta de lo editado antes no pisa la de ahora.
+    let vigente = true
     const t = setTimeout(async () => {
-      try { setPreview(await previewNomenclatureFields(targetId, fields, false)) } catch { /* non-blocking */ }
+      try {
+        const r = await previewNomenclatureFields(targetId, fields, false)
+        if (vigente) setPreview(r)
+      } catch { /* non-blocking */ }
     }, 400)
-    return () => clearTimeout(t)
+    return () => { vigente = false; clearTimeout(t) }
   }, [targetId, targetIsSeason, fields])
 
   // Season target: same debounced live recompute, but cheap (no disk/DB
@@ -931,15 +1021,33 @@ export function useAsistente({ item, onClose: onCloseProp, onDone, onNavigate, p
 
   const tagActual = (fields.tag ?? '').trim().toLowerCase()
   const enGrupo = (lista: string[]) => !!tagActual && lista.some(g => g.trim().toLowerCase() === tagActual)
-  const anonimoMarcado = opcionesTracker.anonimo ?? enGrupo(gruposAnonimos)
-  const personalReleaseMarcado = opcionesTracker.personalRelease ?? enGrupo(gruposPersonalRelease)
+  // Lo que dice el grupo en cada tracker elegido; null si no coinciden (entonces cada subida lleva la del suyo).
+  const marcaDelGrupo = (cual: 'anonimos' | 'personal_release') => {
+    const deEmu = cual === 'anonimos' ? gruposAnonimos : gruposPersonalRelease
+    const valores = new Set(trackersElegidos.map(t => enGrupo(marcasPorTracker[t]?.[cual] ?? deEmu)))
+    return valores.size > 1 ? null : valores.size ? [...valores][0] : enGrupo(deEmu)
+  }
+  const anonimoDelGrupo = marcaDelGrupo('anonimos')
+  const personalReleaseDelGrupo = marcaDelGrupo('personal_release')
+  // Sin tocar y sin coincidir, la casilla sale a medias (indeterminate).
+  const marcasMixtas = { anonimo: anonimoDelGrupo === null, personalRelease: personalReleaseDelGrupo === null }
+  const anonimoMarcado = opcionesTracker.anonimo ?? !!anonimoDelGrupo
+  const personalReleaseMarcado = opcionesTracker.personalRelease ?? !!personalReleaseDelGrupo
   const elegirAnonimo = (v: boolean) => setOpcionesTracker(o => ({ ...o, anonimo: v }))
   const elegirPersonalRelease = (v: boolean) => setOpcionesTracker(o => ({ ...o, personalRelease: v }))
 
   // Un pack no guarda sus campos antes de comprobar: si su Source no es el del plan, se le pasa, porque de él sale el
   // tipo de la copia.
-  const runChecks = (source = fields.source) =>
-    comprobar(targetIsSeason && source && source !== seasonPlan?.source ? { source } : undefined)
+  const runChecks = (source = fields.source) => {
+    const idiomas = idiomasElegidos()
+    const ajustes = { ...(targetIsSeason && source && source !== seasonPlan?.source ? { source } : {}),
+      ...(idiomas ? { idiomas } : {}) }
+    return comprobar(Object.keys(ajustes).length ? ajustes : undefined)
+  }
+  // Los idiomas elegidos para las pistas de audio sin idioma, por posición: los del pack o los de «Ver pistas».
+  const idiomasElegidos = () => targetIsSeason
+    ? idiomasParaServidor(targetId == null ? undefined : idiomasPorTemporada.get(targetId))
+    : idiomasDePistas(remuxPreview?.tracks, remuxEdits)
 
   // El tipo elegido en el Resumen cuando no se sabe: es el Source, el mismo que el del paso 1 (y el del nombre).
   const elegirTipo = async (source: string) => {
@@ -948,11 +1056,39 @@ export function useAsistente({ item, onClose: onCloseProp, onDone, onNavigate, p
     if (!targetIsSeason) {
       const nuevos = { ...fields, source, ...(PROVIDER_SOURCES.has(source) ? {} : { provider: null }) }
       try { await saveNomenclatureFields(targetId, nuevos) } catch { /* «Subir» lo vuelve a guardar */ }
+      setTipoGuardado(n => n + 1)
     }
     await runChecks(source)
   }
 
-  const canUpload = !!checks?.ready
+  // Las de los otros trackers para este elemento: se piden al llegar al paso 2 de una subida suelta, y otra vez al
+  // cambiar el tipo en el Resumen (N.O.B.S y Milnueve no tienen todos los de eMuwarez).
+  const [tipoGuardado, setTipoGuardado] = useState(0)
+  const otrosTrackers = trackersParaSubir.filter(t => t.id !== 'emu').map(t => t.id).join(',')
+  useEffect(() => {
+    setReglas(new Map())
+    if (step !== 2 || targetId == null || esTanda(seleccion) || !otrosTrackers) return
+    let vigente = true
+    for (const tracker of otrosTrackers.split(',')) {
+      fetchReglasTracker(targetId, tracker, idiomasElegidos())
+        .then(r => { if (vigente) setReglas(m => new Map(m).set(tracker, r)) })
+        .catch(() => { /* sin respuesta no se sabe: no deja subir a ese tracker */ })
+    }
+    return () => { vigente = false }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step, targetId, otrosTrackers, tipoGuardado])
+  // Si cambia el tracker principal (se desmarca eMuwarez), las comprobaciones se rehacen con sus normas.
+  const principalComprobado = useRef(trackerPrincipal)
+  useEffect(() => {
+    if (principalComprobado.current === trackerPrincipal) return
+    principalComprobado.current = trackerPrincipal
+    if (step === 2 && !esTanda(seleccion)) void runChecks()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [trackerPrincipal])
+
+  // Cada otro tracker elegido tiene que admitirlo por sus normas de idioma.
+  const canUpload = !!checks?.ready && destinos.length > 0
+    && destinos.every(t => t.id === 'emu' || reglas.get(t.id)?.permitido === true)
   // Queues the upload and hands off to Subidas immediately — nomenclature
   // rename, track remux, and the actual Uploadrr start all run server-side
   // afterwards (services/upload_queue.py), against the SAME job the user
@@ -960,33 +1096,79 @@ export function useAsistente({ item, onClose: onCloseProp, onDone, onNavigate, p
   const doUpload = async () => {
     if (targetId == null || !canUpload) return
     setUploading(true); setUploadMsg(null)
+    // Los ya encolados, si uno posterior falla, salen de la elección: reintentar sube solo a los que faltan (volver
+    // a eMuwarez lo bloquearía la subida que ya tiene en cola, y el que faltaba no se intentaría).
+    const encolados: { id: string; nombre: string }[] = []
+    const yaEnCola = () => {
+      if (!encolados.length) return ''
+      setTrackersElegidos(t => t.filter(x => !encolados.some(e => e.id === x)))
+      // Si queda un solo destino con descripción propia, pasa a ser la común: con uno solo es la que se enseña y se sube.
+      const quedan = destinos.filter(d => !encolados.some(e => e.id === d.id))
+      const propia = quedan.length === 1 ? descripcionPorTracker[quedan[0].id] : undefined
+      if (propia !== undefined) { setDescripcion(propia); descripcionPropia(quedan[0].id, false) }
+      return ` Ya en cola: ${encolados.map(e => e.nombre).join(', ')}; «Subir» reintenta solo lo que falta.`
+    }
+    // Como en la tanda: una petición de otra temporada o capítulo no queda enlazada.
+    const fila = [item, ...seasons, ...episodes].find(x => x.id === targetId)
+    const peticion = !fila || peticionCubre(preselect, fila) ? requestId : undefined
     try {
       await saveNomenclatureFields(targetId, fields)
       const remuxSnapshot = remuxPreview
         ? { ordered_tracks: mergeRemuxTracks(remuxPreview, edicionesFinales()) }
         : null
-      const r = await queueUpload(
-        targetId, edicionesFinales(), checks, remuxSnapshot,
-        targetIsSeason
-          ? ajustesDeTemporada(
-              { source: fields.source, tag: fields.tag, title: fields.title }, proveedorElegido, targetId,
-              idiomasPorTemporada.get(targetId))
-          : undefined,
-        requestId,
-        undefined,
-        opcionesTracker,
-      )
-      if (r.status !== 'queued' || !r.job?.id) {
-        setUploadMsg(`✗ No se pudo encolar la subida (estado: ${r.status}). ${(r.errors || []).join(' ')}`)
-        return
+      // Una subida por tracker, en el orden de la lista (eMuwarez primero): el servidor hace esperar cada una a la
+      // anterior del mismo contenido y reutiliza su fichero, así que los torrents tienen las mismas piezas.
+      for (const { id: tracker, nombre } of destinos) {
+        const r = await queueUpload(
+          targetId, edicionesFinales(), checks, remuxSnapshot,
+          targetIsSeason
+            ? ajustesDeTemporada(
+                { source: fields.source, tag: fields.tag, title: fields.title }, proveedorElegido, targetId,
+                idiomasPorTemporada.get(targetId))
+            : undefined,
+          peticion,
+          undefined,
+          opcionesTracker,
+          // eMuwarez no lo manda: es lo de siempre.
+          tracker === 'emu' ? undefined : tracker,
+          descripcionDe(tracker),
+        )
+        if (r.status !== 'queued' || !r.job?.id) {
+          setUploadMsg(`✗ No se pudo encolar la subida a ${nombre} (estado: ${r.status}). ${(r.errors || []).join(' ')}${yaEnCola()}`)
+          return
+        }
+        encolados.push({ id: tracker, nombre })
       }
       onDone?.()
       onNavigate?.('uploads')
       onClose()
     } catch (e: unknown) {
-      setUploadMsg(`✗ ${e instanceof Error ? e.message : 'Error encolando la subida'}`)
+      setUploadMsg(`✗ ${e instanceof Error ? e.message : 'Error encolando la subida'}${yaEnCola()}`)
     } finally {
       setUploading(false)
+    }
+  }
+
+  // Una subida de la tanda por cada tracker elegido, en su orden, con lo que salió de cada una en `results` (con el
+  // nombre del tracker si son varios). Lo que un tracker no admite no se le manda, y dice por qué.
+  const encolarEnCadaTracker = async (
+    seasonId: number, title: string, results: typeof batchResults,
+    encolar: (tracker: string[]) => ReturnType<typeof queueUpload>,
+  ) => {
+    for (const { id, nombre } of destinos) {
+      const titulo = destinos.length > 1 ? `${title} (${nombre})` : title
+      // Sin idiomas elegidos a mano: /upload/elegibilidad no los ve, y con ellos deciden el servidor y el plan del pack.
+      const noLoAdmite = !idiomasParaServidor(idiomasPorTemporada.get(seasonId))
+        && reglasDe(seasonId)?.find(r => r.tracker === id && !r.permitido)
+      if (noLoAdmite) { results.push({ seasonId, title: titulo, status: 'failed', reason: noLoAdmite.motivo }); continue }
+      try {
+        const r = await encolar(id === 'emu' ? [] : [id])
+        results.push(r.status !== 'queued' || !r.job?.id
+          ? { seasonId, title: titulo, status: 'failed', reason: (r.errors || []).join(' ') || 'No se pudo encolar' }
+          : { seasonId, title: titulo, status: 'queued' })
+      } catch (e: unknown) {
+        results.push({ seasonId, title: titulo, status: 'failed', reason: e instanceof Error ? e.message : 'Error inesperado' })
+      }
     }
   }
 
@@ -1023,18 +1205,13 @@ export function useAsistente({ item, onClose: onCloseProp, onDone, onNavigate, p
         // Ya comprobado al entrar en el paso 2: el contenido de cada
         // temporada una vez, y el entorno una sola vez para toda la tanda. Si
         // por lo que sea no está cacheado, se hace la pasada completa.
-        const checksResult = mergedChecksFor(seasonId) ?? await runUploadChecks(seasonId, undefined, proveedorParaServidor(proveedorElegido, seasonId))
+        const checksResult = mergedChecksFor(seasonId) ?? await runUploadChecks(seasonId, undefined, proveedorParaServidor(proveedorElegido, seasonId), undefined, trackerDe(seasonId))
         if (!checksResult.ready) {
           const reason = checksResult.checks.find(c => c.status === 'fail')?.message || 'Alguna comprobación falló'
           results.push({ seasonId, title, status: 'failed', reason })
           continue
         }
-        const r = await queueUpload(seasonId, undefined, checksResult, null, ajustesDeTemporada(overridesMap.get(seasonId), proveedorElegido, seasonId, idiomasPorTemporada.get(seasonId)), s && peticionCubre(preselect, s) ? requestId : undefined, loteId, opcionesTracker)
-        if (r.status !== 'queued' || !r.job?.id) {
-          results.push({ seasonId, title, status: 'failed', reason: (r.errors || []).join(' ') || 'No se pudo encolar' })
-        } else {
-          results.push({ seasonId, title, status: 'queued' })
-        }
+        await encolarEnCadaTracker(seasonId, title, results, tracker => queueUpload(seasonId, undefined, checksResult, null, ajustesDeTemporada(overridesMap.get(seasonId), proveedorElegido, seasonId, idiomasPorTemporada.get(seasonId)), s && peticionCubre(preselect, s) ? requestId : undefined, loteId, opcionesTracker, tracker[0], plantilla.current))
       } catch (e: unknown) {
         results.push({ seasonId, title, status: 'failed', reason: e instanceof Error ? e.message : 'Error inesperado' })
       }
@@ -1093,18 +1270,13 @@ export function useAsistente({ item, onClose: onCloseProp, onDone, onNavigate, p
         }
         // Igual que las temporadas: se reutiliza lo comprobado al entrar en
         // el paso 2 en vez de repetir las 4 de entorno por cada capítulo.
-        const checksResult = mergedChecksFor(episodeId) ?? await runUploadChecks(episodeId)
+        const checksResult = mergedChecksFor(episodeId) ?? await runUploadChecks(episodeId, undefined, undefined, undefined, trackerDe(episodeId))
         if (!checksResult.ready) {
           const reason = checksResult.checks.find(c => c.status === 'fail')?.message || 'Alguna comprobación falló'
           results.push({ seasonId: episodeId, title, status: 'failed', reason })
           continue
         }
-        const r = await queueUpload(episodeId, undefined, checksResult, null, undefined, ep && peticionCubre(preselect, ep) ? requestId : undefined, loteId, opcionesTracker)
-        if (r.status !== 'queued' || !r.job?.id) {
-          results.push({ seasonId: episodeId, title, status: 'failed', reason: (r.errors || []).join(' ') || 'No se pudo encolar' })
-        } else {
-          results.push({ seasonId: episodeId, title, status: 'queued' })
-        }
+        await encolarEnCadaTracker(episodeId, title, results, tracker => queueUpload(episodeId, undefined, checksResult, null, undefined, ep && peticionCubre(preselect, ep) ? requestId : undefined, loteId, opcionesTracker, tracker[0], plantilla.current))
       } catch (e: unknown) {
         results.push({ seasonId: episodeId, title, status: 'failed', reason: e instanceof Error ? e.message : 'Error inesperado' })
       }
@@ -1121,7 +1293,7 @@ export function useAsistente({ item, onClose: onCloseProp, onDone, onNavigate, p
     item, onDone, onNavigate, onClose, needsSelection, allowMultiSeason, step, setStep, requestId, preselect, modoPistasAjuste,
     seleccion, targetId, targetIsSeason, seasonQueue, episodeQueue,
     // Paso 0
-    seasons, episodes, selError, multiSelected, setMultiSelected, seasonUploadMode, setSeasonUploadMode,
+    seasons, episodes, selError, multiSelected, setMultiSelected, seasonUploadMode, setSeasonUploadMode, temporadasMiradas,
     episodeSelected, setEpisodeSelected, confirmMultiSelection, confirmEpisodeSelection, confirmSeasonWhole,
     // Paso 1
     existingJob, existingJobBlocking, cambiarElemento,
@@ -1137,7 +1309,9 @@ export function useAsistente({ item, onClose: onCloseProp, onDone, onNavigate, p
     goToUpload, preparing,
     // Paso 2
     checks, checksLoading, checksError, liveChecks, runChecks, elegirTipo, canUpload, uploading, uploadMsg, doUpload,
-    anonimoMarcado, personalReleaseMarcado, elegirAnonimo, elegirPersonalRelease, opcionesTracker,
+    anonimoMarcado, personalReleaseMarcado, marcasMixtas, elegirAnonimo, elegirPersonalRelease, opcionesTracker,
+    trackersParaSubir, trackersElegidos, elegirTracker, destinos, destinoSubida, reglas, reglasDe,
+    descripcion, escribirDescripcion, descripcionPorTracker, descripcionPropia, editarDescripcionDe,
     batchQueue, batchIsEpisodes, batchItemTitle, batchPhase, batchIndex, batchResults,
     batchViewId, setBatchViewId, batchEnvChecks, batchContentChecks, batchChecksLoading, batchChecksIndex,
     batchChecksError, repetirComprobacionesTanda, uploadAllSeasons, uploadAllEpisodes, nombresTanda,

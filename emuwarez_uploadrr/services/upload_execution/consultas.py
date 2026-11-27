@@ -13,16 +13,12 @@ from ..uploadrr_contract import (
     RUNTIME_EMU,
     build_uploadrr_emu_command,
     get_runtime_settings,
+    motivo_formato_no_subible,
     render_command_preview,
 )
+from .. import trackers
 from .comun import _get_db_conn
-from .config import ruta_config
-
-
-VIDEO_EXTENSIONS = {
-    ".mkv", ".mp4", ".avi", ".mov", ".ts", ".m2ts",
-    ".wmv", ".flv", ".webm", ".iso", ".m4v",
-}
+from .config import ruta_config, ruta_descripcion
 
 
 def get_upload_job(job_id: int, conn=None) -> dict | None:
@@ -165,8 +161,8 @@ def validate_upload_job_start(job_id: int, conn=None) -> dict:
                 pass
             elif not p.is_file():
                 errors.append(f"La ruta no es un archivo regular: {active_path}")
-            elif p.suffix.lower() not in VIDEO_EXTENSIONS:
-                warnings.append(f"El archivo no tiene extensión de vídeo reconocida: {p.suffix}")
+            elif motivo := motivo_formato_no_subible(active_path):
+                errors.append(motivo)
 
         # Falls back to the bundled runtime's own default the same way
         # get_runtime_settings() always does — it needs no configuration.
@@ -178,9 +174,9 @@ def validate_upload_job_start(job_id: int, conn=None) -> dict:
             if not script.exists():
                 errors.append(f"Script de Uploadrr no encontrado: {script}")
 
-        emu_key = get_setting_canonical(conn, "emu.api_key")
-        if not emu_key:
-            errors.append("API key de eMuwarez no configurada.")
+        destino = tracker_del_trabajo(job)
+        if not trackers.tiene_clave(conn, destino):
+            errors.append(f"API key de {destino.nombre} no configurada.")
 
         tmdb_key = get_setting_canonical(conn, "tmdb.api_key")
         if not tmdb_key:
@@ -195,6 +191,58 @@ def validate_upload_job_start(job_id: int, conn=None) -> dict:
     finally:
         if own:
             conn.close()
+
+
+def tracker_del_trabajo(job: dict) -> trackers.Tracker:
+    """El tracker al que va una subida (`upload_jobs.tracker`); las de antes de la columna, eMuwarez."""
+    return trackers.obtener(job.get("tracker") or trackers.POR_DEFECTO)
+
+
+def subida_con_el_mismo_fichero(job: dict, conn) -> dict | None:
+    """La subida completada del mismo elemento a otro tracker que siembra el mismo fichero de la carpeta de subidas
+    (`prepared_path`) y tiene apuntado su torrent: la que da las piezas a una subida que reutiliza su preparación. La de
+    «Subir también a…» (`copia_de_job_id`) primero: es la que el usuario eligió."""
+    if not job.get("prepared_path") or not job.get("library_item_id"):
+        return None
+    return row_to_dict(conn.execute(
+        "SELECT * FROM upload_jobs WHERE library_item_id = ? AND prepared_path = ? AND tracker != ? AND id != ? "
+        "AND status = 'completed' AND result_torrent_id IS NOT NULL ORDER BY id = ? DESC, id LIMIT 1",
+        (job["library_item_id"], job["prepared_path"], job.get("tracker") or trackers.POR_DEFECTO, job.get("id") or 0,
+         job.get("copia_de_job_id") or 0),
+    ).fetchone())
+
+
+def base_torrent_de(uploadrr_path: str, prepared_path: str) -> Path:
+    """El BASE.torrent que Uploadrr-EMU deja en su `tmp/<nombre>` (nombre = el del fichero o carpeta que sube)."""
+    return Path(uploadrr_path) / "tmp" / Path(prepared_path).name / "BASE.torrent"
+
+
+def base_reutilizable(uploadrr_path: str, prepared_path: str) -> bool:
+    """Si Uploadrr-EMU reutilizará con --resume el BASE.torrent de `tmp/<nombre>` (torrentman.handle_torrent_creation):
+    solo si su meta.json tiene marcado el paso `torrent`, que se marca después de comprobar que el fichero es un .torrent
+    válido. Uno sin la marca (un `--base-desde` cortado entre escribirlo y marcarlo, un hash a medias) lo rehace."""
+    base = base_torrent_de(uploadrr_path, prepared_path)
+    try:
+        pasos = json.loads((base.parent / "meta.json").read_text(encoding="utf-8")).get("pasos_hechos")
+    except (OSError, ValueError, AttributeError):
+        return False
+    return isinstance(pasos, list) and "torrent" in pasos and base.is_file()
+
+
+def base_desde_para(job: dict, conn, uploadrr_path: str) -> str | None:
+    """`--base-desde` («EMU:<id>») para una subida que reutiliza la preparación de otra a otro tracker cuando su
+    BASE.torrent ya no vale (el mantenimiento borra `tmp/<nombre>` a los pocos días, o quedó sin la marca `torrent`):
+    sin él, Uploadrr-EMU lo volvería a hashear, y otro tamaño de pieza haría un torrent que no se siembra junto al otro.
+    None si no hace falta."""
+    if not job.get("reanuda_uploadrr") or not uploadrr_path or not job.get("prepared_path"):
+        return None
+    if base_reutilizable(uploadrr_path, job["prepared_path"]):
+        return None
+    otra = subida_con_el_mismo_fichero(job, conn)
+    if otra is None:
+        return None
+    torrent_id = str(otra["result_torrent_id"]).strip()
+    return f"{tracker_del_trabajo(otra).uploadrr}:{torrent_id}" if torrent_id.isdecimal() else None
 
 
 def build_uploadrr_execution_command(job: dict, conn=None, *, solo_cliente: str | None = None) -> dict:
@@ -244,6 +292,11 @@ def build_uploadrr_execution_command(job: dict, conn=None, *, solo_cliente: str 
         config = None
         if runtime["runtime_type"] == RUNTIME_EMU and job.get("id") and admite_config(uploadrr_path):
             config = str(ruta_config(job["id"], reenvio=bool(solo_cliente)))
+        # La descripción propia: el reenvío a qBittorrent no sube nada, no la necesita.
+        descripcion_texto = None if solo_cliente else (job.get("descripcion") or "").strip() or None
+        descripcion = None
+        if runtime["runtime_type"] == RUNTIME_EMU and job.get("id") and descripcion_texto:
+            descripcion = str(ruta_descripcion(job["id"]))
 
         if runtime["runtime_type"] == RUNTIME_EMU:
             python_path = runtime["python_path"] or sys.executable
@@ -263,13 +316,18 @@ def build_uploadrr_execution_command(job: dict, conn=None, *, solo_cliente: str 
                 anonimo=bool(cmd_data.get("anon")),
                 personal_release=bool(cmd_data.get("personal_release")),
                 solo_cliente=solo_cliente,
+                base_desde=None if solo_cliente else base_desde_para(job, conn, uploadrr_path),
                 eventos=eventos,
                 config=config,
+                tracker=tracker_del_trabajo(job).uploadrr,
+                # La guardó upload_queue._populate_ready con sus normas (reglas_tracker); eMuwarez nunca la lleva.
+                variante=None if tracker_del_trabajo(job).id == trackers.EMU.id else cmd_data.get("variante"),
+                descripcion=descripcion,
             )
             executable = full_argv[0]
             args = full_argv[1:]
         else:
-            tracker = cmd_data.get("tracker") or "EMU"
+            tracker = tracker_del_trabajo(job).uploadrr
             executable = sys.executable
             args = [script, active_path, "--tracker", tracker, "--category", category]
             if tmdb_id:
@@ -290,6 +348,8 @@ def build_uploadrr_execution_command(job: dict, conn=None, *, solo_cliente: str 
             "runtime_type": runtime["runtime_type"],
             "eventos": eventos,
             "config": config,
+            "descripcion": descripcion,
+            "descripcion_texto": descripcion_texto if descripcion else None,
         }
     finally:
         if own:

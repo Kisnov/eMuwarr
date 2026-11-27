@@ -4,9 +4,10 @@ from __future__ import annotations
 import json
 import logging
 
+from .. import seeding_qbit
 from ..uploadrr_contract import get_runtime_settings
 from .comun import _get_db_conn, logger
-from .consultas import get_upload_job
+from .consultas import get_upload_job, tracker_del_trabajo
 from .registro import append_upload_log, create_upload_artifact, get_upload_job_artifacts
 
 
@@ -25,7 +26,7 @@ def _avanzar_job(job_id: int, status: str, **kwargs) -> bool:
     return escribir_estado(job_id, salvo=("cancelled",), status=status, **kwargs)
 
 
-def _finalize_job_status(job_id: int, desired_status: str, **kwargs) -> None:
+def _finalize_job_status(job_id: int, desired_status: str, **kwargs) -> bool:
     """Atomically set the terminal status of a job, unless it was already
     cancelled — as a single conditional UPDATE, not a read-then-write, so
     there is no race window with cancel_upload_job() running concurrently
@@ -41,6 +42,8 @@ def _finalize_job_status(job_id: int, desired_status: str, **kwargs) -> None:
     (status ends as "cancelled" either way); if it lands after, the WHERE
     clause here blocks clobbering an already-cancelled job, and only the
     non-status bookkeeping fields (exit_code/finished_at/duration) are kept.
+
+    Devuelve si escribió el estado: False es una subida cancelada, que no se da por fallida.
     """
     from ..upload_states import escribir_estado
 
@@ -51,12 +54,15 @@ def _finalize_job_status(job_id: int, desired_status: str, **kwargs) -> None:
         if not escrito:
             # Already cancelled — keep status/stage, but still record the
             # bookkeeping fields (exit_code, finished_at, duration_seconds…)
-            # for observability.
-            extra = {k: v for k, v in kwargs.items() if k != "stage"}
+            # for observability. El error no: la canceló el usuario.
+            extra = {k: v for k, v in kwargs.items() if k not in ("stage", "error_message")}
             if extra:
                 escribir_estado(job_id, conn=conn, **extra)
     finally:
         conn.close()
+    if escrito and desired_status == "completed":
+        seeding_qbit.olvidar_cache()  # la lista de qBittorrent leída antes no tiene su torrent
+    return escrito
 
 
 def _check_trailer_and_log(job_id: int) -> None:
@@ -88,7 +94,8 @@ def _check_trailer_and_log(job_id: int) -> None:
                 pass
             candidate_names = [n for n in (snapshot.get("proposed_torrent_name"), snapshot.get("proposed_filename"), snapshot.get("proposed_title")) if n]
 
-            result = check_trailer_for_job(uploadrr_path, candidate_names, desde=job.get("started_at"))
+            result = check_trailer_for_job(uploadrr_path, candidate_names, desde=job.get("started_at"),
+                                           tracker=tracker_del_trabajo(job).uploadrr)
             if result["found"]:
                 create_upload_artifact(job_id, "trailer_url", name="Trailer", url=result["url"], conn=conn)
                 append_upload_log(job_id, "info", f"Trailer incluido en la descripción: {result['url']}", stream="system", conn=conn)
@@ -149,7 +156,7 @@ def _notify_upload_completed(job_id: int, result_url: str | None, aviso: str | N
             title = (job or {}).get("title") or "Subida"
             artifacts = get_upload_job_artifacts(job_id, conn=conn)
             has_trailer = any(a.get("artifact_type") == "trailer_url" for a in artifacts)
-            body = "Se ha subido a eMuwarez correctamente."
+            body = f"Se ha subido a {tracker_del_trabajo(job or {}).nombre} correctamente."
             if job and job.get("request_title"):
                 body += f" Petición: «{job['request_title']}»."
             if not has_trailer:
@@ -203,7 +210,7 @@ def _avisar_subida_fallida(job_id: int, error_message: str | None, result_url: s
             if _avisa_su_lote(conn, job):
                 return
             title = (job or {}).get("title") or "Subida"
-            body = "Ha fallado al subirse a eMuwarez."
+            body = f"Ha fallado al subirse a {tracker_del_trabajo(job or {}).nombre}."
             if result_url:
                 body += " El torrent sí llegó a subirse."
             if job and job.get("request_title"):

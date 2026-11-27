@@ -14,6 +14,7 @@ import threading
 from datetime import datetime, timezone
 from typing import Iterable
 
+from . import trackers
 from .upload_execution.consultas import CONDICION_PUNTA
 
 # Copia vigilada en el frontend (frontend/src/utils/lote.ts, test_copias_frontend.py).
@@ -308,6 +309,7 @@ def reintentar_fallidas(conn: sqlite3.Connection, lote_id: str, *, desde_el_prin
 #   vuelve, el lote se puede parar otra vez.
 # - encolar_lote mira la racha antes de crear cada trabajo, bajo el mismo candado: si los primeros ya han fallado
 #   seguidos mientras se encolaban los demás, el resto se salta en vez de lanzarse.
+# - La racha es de cada tracker: un lote a varios no para las subidas a uno porque otro esté caído.
 # - Lo dispara _notify_upload_failed (upload_execution/estado.py), por donde pasa todo fallo de una subida: _fail de
 #   la preparación y las cuatro salidas fallidas de Uploadrr-EMU. reconcile_interrupted_jobs, al arrancar, no pasa
 #   por ahí, y su motivo tampoco cuenta.
@@ -341,6 +343,7 @@ _MARCAS_DE_LA_APP: tuple[str, ...] = (
     "Error aplicando la nomenclatura",
     "No se pudo aplicar la nomenclatura",
     " es de la subida #",  # su carpeta en subidas es de otra subida que la siembra
+    " no tiene el tipo «",  # uploadrr_contract.motivo_sin_tipo: esa copia, no el resto del lote
     # reconcile_interrupted_jobs: la aplicación se paró; no habla de eMuwarez ni del resto del lote.
     "Interrumpido al pararse la aplicación",
 )
@@ -384,6 +387,10 @@ def _frase_de_parada(texto: str, paradas: int) -> str:
                             else f"{paradas} subidas no llegaron a empezar; «Reintentar fallidas» las relanza."))
 
 
+def _del_tracker(puntas: list[dict], tracker: str) -> list[dict]:
+    return [p for p in puntas if (p.get("tracker") or trackers.POR_DEFECTO) == tracker]
+
+
 def _paradas_por_el_freno(puntas: list[dict]) -> list[dict]:
     return [p for p in puntas if p.get("status") == "cancelled" and p.get("stage") == ETAPA_LOTE_PARADO]
 
@@ -411,8 +418,9 @@ def _racha_de_fallos(puntas: list[dict]) -> str | None:
 def _decidir_parada(conn: sqlite3.Connection, lote_id: str, job_id: int) -> tuple[str, list[int]] | None:
     """(motivo, ids de las puntas en cola que hay que parar) si el fallo de `job_id` completa la racha. None si no
     toca parar. Se llama bajo _FRENO."""
-    puntas = _puntas(conn, lote_id)
-    propio = next((p for p in puntas if p["id"] == job_id), None)
+    todas = _puntas(conn, lote_id)
+    propio = next((p for p in todas if p["id"] == job_id), None)
+    puntas = _del_tracker(todas, propio.get("tracker") or trackers.POR_DEFECTO) if propio else todas
     pendientes = [p["id"] for p in puntas if p.get("status") == "queued"]
     # El fallo que dispara tiene que contar: uno por elemento no cambia la racha.
     if (len(puntas) <= 1 or not propio or propio.get("status") != "failed" or not pendientes
@@ -530,16 +538,13 @@ class LoteRechazado(Exception):
         self.motivos = motivos
 
 
-class _LoteParado(Exception):
-    """Mientras se encolaba el lote, sus primeros elementos ya han fallado seguidos por el mismo motivo."""
-
-    def __init__(self, motivo: str):
-        super().__init__(motivo)
-        self.motivo = motivo
+_ERROR_INESPERADO = "Error inesperado al encolarlo; mira el registro."
 
 
-def _bloqueado(item_id: int, *motivos: str) -> dict:
-    return {"item_id": item_id, "status": "blocked", "job_id": None, "errors": list(motivos)}
+def _bloqueado(item_id: int, tracker_ids: list[str], *motivos: str) -> list[dict]:
+    """El elemento se salta, con el mismo motivo, para cada tracker de `tracker_ids`."""
+    return [{"item_id": item_id, "tracker": t, "status": "blocked", "job_id": None, "errors": list(motivos)}
+            for t in tracker_ids]
 
 
 def _primer_fallo(comprobaciones: dict) -> str:
@@ -549,20 +554,32 @@ def _primer_fallo(comprobaciones: dict) -> str:
     return "No pasó las comprobaciones previas."
 
 
-def _peticion_de(conn: sqlite3.Connection, item_id: int) -> int | None:
-    """Sin petición elegida (un lote desde Biblioteca): la abierta que cubre el elemento, si hay una sola. Enlazarla es
-    un extra: si falla la búsqueda, el elemento se sube igual, sin petición."""
+def _peticion_de(conn: sqlite3.Connection, item_id: int, tracker: str) -> int | None:
+    """Sin petición elegida (un lote desde Biblioteca): la abierta de ese tracker que cubre el elemento, si hay una
+    sola. Enlazarla es un extra: si falla la búsqueda, el elemento se sube igual, sin petición."""
     from .requests import peticion_que_enlazar
     try:
-        return peticion_que_enlazar(conn, item_id)
+        return peticion_que_enlazar(conn, item_id, tracker)
     except Exception:
         logger.exception("No se pudo buscar la petición del elemento %s; se sube sin enlazar", item_id)
         return None
 
 
-def _encolar_uno(conn: sqlite3.Connection, el: dict, lote_id: str, vistos: set[int], temporadas: set[int]) -> dict:
-    """Un elemento del lote. Todo lo que puede saltarlo va antes de escribir nada: guardar `campos` caduca la
-    propuesta vigente del elemento, y hacerlo para uno que luego se salta cambiaría el nombre de su subida en marcha."""
+def _saltados_por_el_freno(item_id: int, tracker_ids: list[str], parados: dict[str, str]) -> list[dict]:
+    """El elemento, saltado para cada tracker con el texto de su propia parada."""
+    return [r for t in tracker_ids for r in _bloqueado(item_id, [t], parados[t])]
+
+
+def _encolar_uno(conn: sqlite3.Connection, el: dict, lote_id: str, vistos: set[int], temporadas: set[int],
+                 tracker_ids: list[str], parados: dict[str, str]) -> list[dict]:
+    """Un elemento del lote, un trabajo por tracker. Todo lo que puede saltarlo va antes de escribir nada: guardar
+    `campos` caduca la propuesta vigente del elemento, y hacerlo para uno que luego se salta cambiaría el nombre de su
+    subida en marcha. Las comprobaciones van con las normas del primer tracker que lo admite (sin ninguno, del primero,
+    y dicen por qué); a los que no lo admiten no va.
+    `parados` (tracker → texto de su parada) es del lote entero: un tracker que se para aquí ya no vuelve."""
+    from .emu_catalog import motivo_ya_lo_tiene
+    from .library import get_library_item
+    from .reglas_tracker import reglas_para_subir
     from .source_assistant import update_nomenclature_fields_preview
     from .nomenclature import save_manual_nomenclature_fields
     from .upload_checks import run_upload_checks
@@ -570,71 +587,107 @@ def _encolar_uno(conn: sqlite3.Connection, el: dict, lote_id: str, vistos: set[i
 
     item_id = int(el["item_id"])
     if item_id in vistos:
-        return _bloqueado(item_id, "Repetido en el lote.")
+        return _bloqueado(item_id, tracker_ids, "Repetido en el lote.")
     vistos.add(item_id)
     fila = conn.execute("SELECT id, item_type, parent_id FROM library_items WHERE id = ?", (item_id,)).fetchone()
     if not fila:
-        return _bloqueado(item_id, "El elemento ya no está en la biblioteca.")
+        return _bloqueado(item_id, tracker_ids, "El elemento ya no está en la biblioteca.")
     tipo = fila["item_type"]
     if tipo not in TIPOS_DE_LOTE:
-        return _bloqueado(item_id, "Elige sus temporadas." if tipo == "series" else f"No se sube por lotes ({tipo}).")
+        return _bloqueado(item_id, tracker_ids,
+                          "Elige sus temporadas." if tipo == "series" else f"No se sube por lotes ({tipo}).")
     if tipo == "episode" and fila["parent_id"] in temporadas:
-        return _bloqueado(item_id, "Su temporada ya va en el lote.")
+        return _bloqueado(item_id, tracker_ids, "Su temporada ya va en el lote.")
     checks = el.get("checks") or {}
     if not checks.get("ready"):
-        return _bloqueado(item_id, _primer_fallo(checks))
+        return _bloqueado(item_id, tracker_ids, _primer_fallo(checks))
+    item = get_library_item(conn, item_id)
+    reglas = {t: reglas_para_subir(conn, item, t) for t in tracker_ids}
+    admiten = [t for t in tracker_ids if reglas[t].permitido] or tracker_ids[:1]
     if tipo != "season":
         # El castellano de una película o un capítulo no se vuelve a mirar al correr el trabajo (solo los packs):
-        # no basta con lo que dice el navegador. Es barato: abrir el fichero y leer columnas.
-        contenido = run_upload_checks(conn, item_id, scope="content")
+        # no basta con lo que dice el navegador. Es barato: abrir el fichero y leer columnas. Con las normas del
+        # primero que lo admite, como las comprobaciones del navegador.
+        contenido = run_upload_checks(conn, item_id, scope="content", tracker=admiten[0])
         if not contenido.get("ready"):
-            return _bloqueado(item_id, _primer_fallo(contenido))
+            return _bloqueado(item_id, tracker_ids, _primer_fallo(contenido))
     if trabajo_activo(conn, item_id):
-        return _bloqueado(item_id, "Ya hay una subida en curso para este contenido.")
+        return _bloqueado(item_id, tracker_ids, "Ya hay una subida en curso para este contenido.")
 
-    request_item_id = el.get("request_item_id")
-    if request_item_id is None:
-        request_item_id = _peticion_de(conn, item_id)
+    # La elegida, para la subida a su tracker; las demás, la abierta del suyo si hay una sola.
+    from .upload_queue import _peticion_de_su_tracker
+    elegida = el.get("request_item_id")
+    peticiones = {t: _peticion_de_su_tracker(conn, elegida, t) or _peticion_de(conn, item_id, t) for t in tracker_ids}
     campos = el.get("campos")
     # «¿Ya está parado el lote?» y crear el trabajo, sin que el freno se cuele entre medias (ver _FRENO). Antes de
     # escribir nada: un elemento que se salta no cambia su propuesta de nomenclatura.
     with _FRENO:
-        motivo = _racha_de_fallos(_puntas(conn, lote_id))
-        if motivo:
-            raise _LoteParado(motivo)
+        puntas = _puntas(conn, lote_id)
+        for t in tracker_ids:
+            if t not in parados and (motivo := _racha_de_fallos(_del_tracker(puntas, t))):
+                parados[t] = texto_de_parada(motivo)
+                logger.warning("Lote %s: %s en %s; no se encola el resto para él", lote_id, parados[t], t)
+        # Más los que no lo admiten y los que ya lo tienen (`omitir`): si no queda ninguno, tampoco se escribe nada.
+        saltos = {**{t: reglas[t].motivo for t in tracker_ids if t not in admiten},
+                  **{t: motivo_ya_lo_tiene(trackers.obtener(t)) for t in el.get("omitir", ()) if t in tracker_ids},
+                  **parados}
+        if len(saltos) == len(tracker_ids):
+            return _saltados_por_el_freno(item_id, tracker_ids, saltos)
         if campos and tipo != "season":
             preview = update_nomenclature_fields_preview(item_id, campos, conn=conn)
             save_manual_nomenclature_fields(item_id, campos, preview, conn=conn)
-        resultado = queue_upload_for_item(
-            item_id, request_item_id=request_item_id, checks=checks,
-            # El proveedor solo cuenta en un pack; el de una película va dentro de `campos`.
-            provider_override=el.get("provider") if tipo == "season" else None,
-            lote_id=lote_id, conn=conn,
-        )
-    job = resultado.get("job") or {}
-    if resultado.get("status") != "queued":
-        return _bloqueado(item_id, *(resultado.get("errors") or ["No se pudo encolar."]))
-    return {"item_id": item_id, "status": "queued", "job_id": job.get("id"), "errors": []}
+        resultados: list[dict] = []
+        # En el orden dado: cada uno espera al anterior del mismo contenido y reutiliza su preparación.
+        for tracker in tracker_ids:
+            if tracker in saltos:
+                resultados += _bloqueado(item_id, [tracker], saltos[tracker])
+                continue
+            try:
+                resultado = queue_upload_for_item(
+                    item_id, request_item_id=peticiones[tracker], checks=checks,
+                    # El proveedor solo cuenta en un pack; el de una película va dentro de `campos`.
+                    provider_override=el.get("provider") if tipo == "season" else None,
+                    lote_id=lote_id, tracker=tracker, conn=conn,
+                )
+            except Exception:
+                # Las de los trackers anteriores ya están en la cola: solo esta se da por saltada.
+                logger.exception("Lote %s: no se pudo encolar el elemento %s a %s", lote_id, item_id, tracker)
+                resultado = {"errors": [_ERROR_INESPERADO]}
+            job = resultado.get("job") or {}
+            if resultado.get("status") != "queued":
+                resultados += _bloqueado(item_id, [tracker], *(resultado.get("errors") or ["No se pudo encolar."]))
+            else:
+                resultados.append({"item_id": item_id, "tracker": tracker, "status": "queued", "job_id": job.get("id"),
+                                   "errors": []})
+    return resultados
 
 
-def encolar_lote(conn: sqlite3.Connection, elementos: list[dict]) -> dict:
-    """Encola varias subidas como un lote, en el orden dado (el de la cola). Cada elemento es
-    `{item_id, request_item_id?, checks, campos?, provider?}`: `request_item_id` la petición que cubre (la que eligió
-    el Panel; sin ella, la abierta del elemento si hay una sola, ver requests.peticion_que_enlazar), `checks` el
-    resultado de las comprobaciones que vio el
-    usuario, `campos` el juego completo de campos de nomenclatura (película o capítulo, solo si la interfaz sugirió
-    un proveedor), `provider` el proveedor elegido para un pack. Un elemento que no se puede subir se salta con su
-    motivo y el resto sigue. Si mientras se encola el freno ya ve una racha de fallos (los primeros fallaron seguidos
-    por el mismo motivo), ese elemento y los que quedan se saltan con «Lote parado: …». Si no se encola ninguno, no
-    queda lote (`lote_id` None)."""
+def encolar_lote(conn: sqlite3.Connection, elementos: list[dict],
+                 tracker_ids: Iterable[str] = (trackers.POR_DEFECTO,)) -> dict:
+    """Encola varias subidas como un lote, en el orden dado (el de la cola), una por elemento y tracker de
+    `tracker_ids` (eMuwarez primero y los demás en su orden; `checks` son las comprobaciones con las normas del
+    primero que admite el elemento). Cada elemento es `{item_id, request_item_id?, checks, campos?, provider?, omitir?}`:
+    `request_item_id` la petición que cubre (la que eligió el Panel; sin ella, la abierta del elemento si hay una sola,
+    ver requests.peticion_que_enlazar), `checks` el resultado de las comprobaciones que vio el usuario, `campos` el
+    juego completo de campos de nomenclatura (película o capítulo, solo si la interfaz sugirió un proveedor),
+    `provider` el proveedor elegido para un pack, `omitir` los trackers cuyo catálogo local ya lo tiene (se salta para
+    ellos). Un elemento que no se puede subir se salta con su motivo y el resto sigue; uno que un tracker no admite por
+    sus idiomas se salta solo para ese. Si mientras se encola el freno de un tracker ya ve una
+    racha de fallos (los primeros fallaron seguidos por el mismo motivo), ese elemento y los que quedan se saltan para
+    él con «Lote parado: …». Si no se encola ninguno, no queda lote (`lote_id` None)."""
     from .upload_queue import _season_upload_preconditions
 
     if not 1 <= len(elementos) <= MAX_ELEMENTOS_LOTE:
         raise ValueError(f"Un lote lleva entre 1 y {MAX_ELEMENTOS_LOTE} elementos.")
-    # Lo que haría fallar a todos en segundos, mirado una vez antes de crear nada.
-    motivos = _season_upload_preconditions(conn)
+    # eMuwarez primero, como en el Resumen.
+    tracker_ids = sorted(dict.fromkeys(tracker_ids), key=lambda t: t != trackers.POR_DEFECTO)
+    # Lo que haría fallar a todos en segundos, mirado una vez por tracker antes de crear nada.
+    motivos: list[str] = []
+    for tracker in tracker_ids:
+        motivo = trackers.motivo_para_no_subir(conn, tracker)
+        motivos += [motivo] if motivo else _season_upload_preconditions(conn, tracker)
     if motivos:
-        raise LoteRechazado(motivos)
+        raise LoteRechazado(list(dict.fromkeys(motivos)))
 
     ids = sorted({int(e["item_id"]) for e in elementos})
     temporadas = {fila[0] for fila in conn.execute(
@@ -642,25 +695,20 @@ def encolar_lote(conn: sqlite3.Connection, elementos: list[dict]) -> dict:
     lote_id = nuevo_lote_id()
     vistos: set[int] = set()
     resultados: list[dict] = []
-    parado: str | None = None
+    parados: dict[str, str] = {}
     for el in elementos:
-        if parado:
-            # El freno ya saltó: el resto no se crea (ni se lanza), con el mismo motivo que las paradas.
-            resultados.append(_bloqueado(int(el["item_id"]), parado))
+        if len(parados) == len(tracker_ids):
+            # El freno ya saltó en todos: el resto no se crea (ni se lanza), con el motivo de cada parada.
+            resultados += _saltados_por_el_freno(int(el["item_id"]), tracker_ids, parados)
             continue
         try:
-            resultado = _encolar_uno(conn, el, lote_id, vistos, temporadas)
+            resultado = _encolar_uno(conn, el, lote_id, vistos, temporadas, tracker_ids, parados)
             conn.commit()
-        except _LoteParado as exc:
-            conn.rollback()
-            parado = texto_de_parada(exc.motivo)
-            logger.warning("Lote %s: %s; no se encola el resto", lote_id, parado)
-            resultado = _bloqueado(int(el["item_id"]), parado)
         except Exception:
             logger.exception("Lote %s: no se pudo encolar el elemento %s", lote_id, el.get("item_id"))
             conn.rollback()
-            resultado = _bloqueado(int(el["item_id"]), "Error inesperado al encolarlo; mira el registro.")
-        resultados.append(resultado)
+            resultado = _bloqueado(int(el["item_id"]), tracker_ids, _ERROR_INESPERADO)
+        resultados += resultado
     encolados = sum(1 for r in resultados if r["status"] == "queued")
     return {"lote_id": lote_id if encolados else None, "encolados": encolados,
             "saltados": len(resultados) - encolados, "resultados": resultados}

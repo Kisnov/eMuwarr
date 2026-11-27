@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Callable, Optional
 
 from ..database import db_path
+from .trackers import EMU
 from .upload_result_parser import texto_aviso_pack
 
 logger = logging.getLogger("emuwarez.upload")
@@ -130,7 +131,7 @@ MOTIVOS_CLIENTE: dict[str, str] = {
     "sin_cliente": "Uploadrr-EMU no tiene cliente de torrents configurado",
     "solo_cliente_no_qbit": "el cliente de Uploadrr-EMU no es qBittorrent",
     "cliente_no_soportado": "el cliente de torrents no está soportado",
-    "sin_emu": "Uploadrr-EMU no tiene eMuwarez configurado",
+    "sin_emu": "Uploadrr-EMU no tiene ese tracker configurado",
     "no_coincide": "el .torrent de eMuwarez no coincide con los ficheros",
     "error": "error al hablar con qBittorrent",
 }
@@ -161,6 +162,9 @@ MENSAJES_RESULTADO: dict[str, str] = {
     "config_invalida": "El config.yaml de Uploadrr-EMU no es válido",
     "interrumpido": "Uploadrr-EMU fue interrumpido",
     "tipo_desconocido": "eMuwarez no tiene el tipo de esta copia (Unknown type on EMU)",
+    "base_sin_torrent": "No se pudo bajar el torrent del otro tracker para hacer el de esta subida con las mismas piezas",
+    "base_no_coincide": "El torrent del otro tracker no coincide con el fichero de la carpeta de subidas: no se sube "
+                        "para no crear un torrent que no se pueda sembrar junto al otro",
 }
 
 
@@ -242,17 +246,28 @@ def ficha_de_estado(estado: EstadoEventos) -> dict:
     return {"result_url": estado.url, "result_torrent_id": estado.torrent_id, "torrent_subido": 1}
 
 
-def mensaje_de_fallo(resultado: dict) -> str:
-    """El texto de un `resultado` con ok:false: el de su código y, si Uploadrr-EMU dio `detalle`, ese detalle."""
+def del_tracker(texto: str, nombre: str = EMU.nombre, tk: str = "") -> str:
+    """Los textos de este módulo y los de qBittorrent hablan de eMuwarez: en la subida a otro tracker, con su nombre
+    (`nombre`) y, en el fragmento en inglés que buscan los frenos del lote, con su `-tk` (`tk`)."""
+    if nombre != EMU.nombre:
+        texto = texto.replace(EMU.nombre, nombre)
+    return texto.replace(f" on {EMU.uploadrr})", f" on {tk})") if tk else texto
+
+
+def mensaje_de_fallo(resultado: dict, nombre: str = EMU.nombre, tk: str = "") -> str:
+    """El texto de un `resultado` con ok:false: el de su código y, si Uploadrr-EMU dio `detalle`, ese detalle.
+    `nombre` y `tk`: los del tracker de la subida (del_tracker)."""
     codigo = resultado.get("codigo")
-    texto = MENSAJES_RESULTADO.get(codigo) or f"Uploadrr-EMU terminó con el resultado «{codigo}»"
+    texto = del_tracker(MENSAJES_RESULTADO.get(codigo) or f"Uploadrr-EMU terminó con el resultado «{codigo}»",
+                        nombre, tk)
     detalle = resultado.get("detalle")
     if isinstance(detalle, str) and detalle.strip() and detalle.strip() not in texto:
         texto += f": {detalle.strip()}"
     return texto
 
 
-def clasificar_con_eventos(estado: EstadoEventos, returncode: int | None) -> dict:
+def clasificar_con_eventos(estado: EstadoEventos, returncode: int | None, nombre: str = EMU.nombre,
+                           tk: str = "") -> dict:
     """El veredicto de una ejecución con eventos, con las claves de `classify_upload_result` más `torrent_subido`.
 
     `resultado.ok` y el código de salida tienen que estar de acuerdo para que sea una subida buena; en cualquier
@@ -269,11 +284,11 @@ def clasificar_con_eventos(estado: EstadoEventos, returncode: int | None) -> dic
     elif r["ok"]:
         error = f"Uploadrr-EMU dijo que la subida fue bien, pero salió con {salida}: se da por fallida."
     else:
-        error = mensaje_de_fallo(r)
+        error = mensaje_de_fallo(r, nombre, tk)
         if returncode != 0:
             error += f"\nExit code: {returncode}"
     if error and estado.url:
-        error += " El torrent sí llegó a subirse a eMuwarez."
+        error += f" El torrent sí llegó a subirse a {nombre}."
     return {
         "status": "failed" if error else "completed",
         "result_url": estado.url,
@@ -346,5 +361,5 @@ class SeguidorEventos:
 
 __all__ = [
     "admite_eventos", "ruta_eventos", "preparar_fichero", "borrar_fichero", "EstadoEventos", "SeguidorEventos",
-    "clasificar_con_eventos", "ficha_de_estado", "mensaje_de_fallo", "MOTIVOS_CLIENTE", "MENSAJES_RESULTADO",
+    "clasificar_con_eventos", "ficha_de_estado", "mensaje_de_fallo", "del_tracker", "MOTIVOS_CLIENTE", "MENSAJES_RESULTADO",
 ]

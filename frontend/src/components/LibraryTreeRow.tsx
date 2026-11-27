@@ -49,6 +49,8 @@ interface LibraryTreeRowProps {
   seleccionado?: boolean
   loteLleno?: boolean
   onAlternar?: (item: LibraryItemResponse) => void
+  // Más de un tracker con clave: los idiomas los mira el lote (razonNoMarcable).
+  variosTrackers?: boolean
   // Solo en una serie: los ids de sus temporadas marcadas, separados por comas («» si ninguna). Un texto y no un
   // Set, para que el memo compare por valor: marcar algo de otra serie no repinta esta.
   temporadasMarcadas?: string
@@ -95,7 +97,7 @@ export function SpanishAudioCell({ item }: { item: LibraryItemResponse }) {
 // of them on every keystroke even though their own props hadn't changed —
 // this (plus onSelect/onAction/onReload staying referentially stable at the
 // call site) is what makes that skip actually happen.
-export const LibraryTreeRow = memo(function LibraryTreeRow({ item, depth, instances, onSelect, onAction, onReload, compact = false, priority = false, onExpandedChange, seleccionado = false, loteLleno = false, onAlternar, temporadasMarcadas = '', tituloCorto = false }: LibraryTreeRowProps) {
+export const LibraryTreeRow = memo(function LibraryTreeRow({ item, depth, instances, onSelect, onAction, onReload, compact = false, priority = false, onExpandedChange, seleccionado = false, loteLleno = false, onAlternar, variosTrackers = false, temporadasMarcadas = '', tituloCorto = false }: LibraryTreeRowProps) {
   const [expanded, setExpanded] = useState(false)
   const [children, setChildren] = useState<LibraryItemResponse[]>([])
   const [childTotal, setChildTotal] = useState(0)
@@ -200,7 +202,7 @@ export const LibraryTreeRow = memo(function LibraryTreeRow({ item, depth, instan
           {/* La sangría depende de la profundidad: se queda en línea. */}
           <div className="bib-titulo-fila" style={{ paddingLeft: indent }}>
             {onAlternar && seleccionableEnLote(item) && (
-              <CasillaLote item={item} seleccionado={seleccionado} bloqueada={loteLleno} motivo={razonNoMarcable(item)} onAlternar={onAlternar} />
+              <CasillaLote item={item} seleccionado={seleccionado} bloqueada={loteLleno} motivo={razonNoMarcable(item, variosTrackers)} onAlternar={onAlternar} />
             )}
             {canExpand ? (
               // Sin recuadro: el triángulo se ilumina él solo al pasar por
@@ -367,7 +369,7 @@ export const LibraryTreeRow = memo(function LibraryTreeRow({ item, depth, instan
           compact={compact}
           tituloCorto={tituloCorto}
           {...(isSeries && onAlternar
-            ? { onAlternar, loteLleno, seleccionado: marcadasHijas.has(child.id) }
+            ? { onAlternar, loteLleno, variosTrackers, seleccionado: marcadasHijas.has(child.id) }
             : {})}
         />
       ))}

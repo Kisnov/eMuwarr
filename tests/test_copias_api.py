@@ -15,14 +15,14 @@ from emuwarez_uploadrr.services import backup_service as bs
 
 
 def _base_sqlite() -> bytes:
-    """Una base SQLite de verdad: con la base viva en SQLite, una copia cuya base no lo es se rechaza."""
+    """Una base SQLite de verdad y con app_state: una que no es SQLite, o es de otra aplicación, se rechaza."""
     import sqlite3
     import tempfile
     from pathlib import Path
     with tempfile.TemporaryDirectory() as tmp:
         ruta = Path(tmp) / "b.db"
         conn = sqlite3.connect(ruta)
-        conn.execute("CREATE TABLE t (x)")
+        conn.execute("CREATE TABLE app_state (key TEXT PRIMARY KEY, value TEXT)")
         conn.commit()
         conn.close()
         return ruta.read_bytes()

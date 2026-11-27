@@ -3,16 +3,18 @@
  * afirmen nada que no saben (un catálogo sin sincronizar no es «contenido único»).
  */
 import { describe, it, expect } from 'vitest'
-import type { EmuComparison } from '../../api/library'
+import type { ConclusionDuplicados, EmuComparison } from '../../api/library'
 import {
-  conclusionDuplicados, resumirComparaciones, textoCategoria, textoCopia, textoFicheros, textoPeticion, textoPistas, tipoDeEnlace,
+  resumirComparaciones, textoCategoria, textoCopia, textoFicheros, textoPeticion, textoPistas, tipoDeEnlace,
 } from '../resumenSubida'
 
 const coincidencia = (nombre: string, extra: Partial<EmuComparison['matches'][number]> = {}) =>
   ({ name: nombre, resolution: '1080p', source: 'WEB-DL', codec: null, has_spanish: 1, size: 1, ...extra })
 
 const comparacion = (matches: EmuComparison['matches'], available = true): EmuComparison =>
-  ({ available, message: null, matches })
+  ({ available, message: null, matches, synced_at: '2026-11-23T10:00:00+00:00' })
+const juntas = (comparaciones: EmuComparison[], conclusion: ConclusionDuplicados | null = null) => ({ comparaciones, conclusion })
+const CONCLUSION: ConclusionDuplicados = { nivel: 'mixto', clase: 'igual', texto: 'Tu copia mejora 1 y empeora 1 de lo que hay: no es un trump claro.', ya_lo_tiene: false }
 
 describe('ficheros', () => {
   it('un fichero con su tamaño', () => {
@@ -60,11 +62,11 @@ describe('pistas', () => {
 })
 
 describe('copia', () => {
-  const check = (status: 'ok' | 'fail', message: string) => [{ id: 'carpeta_subida', label: '', status, message }] as never
+  const check = (status: 'ok' | 'skip' | 'fail', message: string) => [{ id: 'carpeta_subida', label: '', status, message }] as never
 
-  it('el tipo de enlace sale del mensaje de la comprobación, solo si pasó', () => {
+  it('el tipo de enlace sale del mensaje de la comprobación, si no falló', () => {
     expect(tipoDeEnlace(check('ok', '/config/Uploadrr/uploads (enlace duro)'))).toBe('duro')
-    expect(tipoDeEnlace(check('ok', '/config/Uploadrr/uploads (enlace simbólico)'))).toBe('simbólico')
+    expect(tipoDeEnlace(check('skip', '/config/Uploadrr/uploads (enlace simbólico): está en otro disco'))).toBe('simbólico')
     expect(tipoDeEnlace(check('fail', '/config (enlace duro)'))).toBeNull()
     expect(tipoDeEnlace(undefined)).toBeNull()
   })
@@ -104,21 +106,21 @@ describe('petición', () => {
 })
 
 describe('lo que ya hay en eMuwarez', () => {
-  it('sin ninguna respuesta no hay nada que decir; una que falla invalida la tabla entera', () => {
-    expect(resumirComparaciones([])).toEqual({ estado: 'error' })
-    expect(resumirComparaciones([comparacion([]), null])).toEqual({ estado: 'error' })
+  it('sin respuesta o sin comparaciones no hay nada que decir', () => {
+    expect(resumirComparaciones(null)).toEqual({ estado: 'error' })
+    expect(resumirComparaciones(juntas([]))).toEqual({ estado: 'error' })
   })
   it('un catálogo sin sincronizar no es «contenido único»', () => {
-    expect(resumirComparaciones([comparacion([], false)])).toEqual({ estado: 'sin-catalogo' })
+    expect(resumirComparaciones(juntas([comparacion([], false)]))).toEqual({ estado: 'sin-catalogo' })
   })
-  it('las filas llevan el nombre, la calidad y el veredicto del servidor', () => {
-    const r = resumirComparaciones([comparacion([
+  it('las filas llevan el nombre, la calidad y el veredicto del servidor, y la conclusión es la suya', () => {
+    const r = resumirComparaciones(juntas([comparacion([
       coincidencia('Dune 720p', { resolution: '720p', source: 'HDTV', veredicto: 'mejor' }),
       coincidencia('Dune 2160p', { resolution: '2160p', source: null, veredicto: 'peor' }),
       coincidencia('Dune sin datos', { resolution: null, source: null }),
-    ])])
+    ])], CONCLUSION))
     expect(r).toEqual({
-      estado: 'listo', total: 1, sinNada: 0, filas: [
+      estado: 'listo', total: 1, sinNada: 0, sincronizado: '2026-11-23T10:00:00+00:00', conclusion: CONCLUSION, filas: [
         { clave: '0-0', nombre: 'Dune 720p', calidad: '720p HDTV', veredicto: 'mejor' },
         { clave: '0-1', nombre: 'Dune 2160p', calidad: '2160p', veredicto: 'peor' },
         { clave: '0-2', nombre: 'Dune sin datos', calidad: '', veredicto: null },
@@ -126,49 +128,8 @@ describe('lo que ya hay en eMuwarez', () => {
     })
   })
   it('en una tanda cuenta los elementos que no están y suma las filas de los que sí', () => {
-    const r = resumirComparaciones([comparacion([coincidencia('E01', { veredicto: 'igual' })]), comparacion([]), comparacion([], false)])
+    const r = resumirComparaciones(juntas([comparacion([coincidencia('E01', { veredicto: 'igual' })]), comparacion([]), comparacion([], false)]))
     expect(r).toMatchObject({ estado: 'listo', total: 2, sinNada: 1 })
     expect((r as { filas: unknown[] }).filas).toHaveLength(1)
-  })
-})
-
-describe('la conclusión de duplicados y trumps', () => {
-  const fila = (veredicto: 'mejor' | 'igual' | 'peor' | null) => ({ clave: String(Math.random()), nombre: 'T', calidad: '1080p', veredicto })
-
-  it('sin torrents en eMuwarez no hay conclusión que dar', () => {
-    expect(conclusionDuplicados([])).toBeNull()
-  })
-
-  it('una calidad igual a alguna es un duplicado, aunque otras sean peores', () => {
-    const c = conclusionDuplicados([fila('peor'), fila('igual')])!
-    expect(c.nivel).toBe('duplicado')
-    expect(c.texto).toContain('duplicado')
-  })
-
-  it('mejor que todo es un posible trump y manda revisar las reglas', () => {
-    const c = conclusionDuplicados([fila('mejor'), fila('mejor')])!
-    expect(c).toMatchObject({ nivel: 'trump', clase: 'mejor' })
-    expect(c.texto).toContain('reglas de trumps')
-  })
-
-  it('mejor que unos y peor que otros no es un trump claro', () => {
-    expect(conclusionDuplicados([fila('mejor'), fila('peor')])).toMatchObject({ nivel: 'mixto' })
-  })
-
-  it('peor que todo se dice como rechazo probable', () => {
-    expect(conclusionDuplicados([fila('peor')])).toMatchObject({ nivel: 'peor', clase: 'peor' })
-  })
-
-  it('si falta alguna comparación, la conclusión se dice parcial y no afirma «peor que todo»', () => {
-    const peor = conclusionDuplicados([fila('peor'), fila(null)])!
-    expect(peor.nivel).toBe('peor')
-    expect(peor.texto).toContain('parcial')
-    expect(peor.texto).not.toContain('que ya hay')
-    expect(conclusionDuplicados([fila('mejor'), fila(null)])!.texto).toContain('parcial')
-    expect(conclusionDuplicados([fila('peor')])!.texto).not.toContain('parcial')
-  })
-
-  it('sin nada comparable no afirma nada', () => {
-    expect(conclusionDuplicados([fila(null)])).toMatchObject({ nivel: 'sin-comparar', clase: null })
   })
 })

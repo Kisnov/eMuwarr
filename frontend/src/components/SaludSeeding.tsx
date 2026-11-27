@@ -57,8 +57,9 @@ function AccionesQbit({ job, url }: { job: UploadJob; url: string }) {
   )
 }
 
-const AYUDA_REENVIO = 'Ya está en eMuwarez, pero qBittorrent no lo tiene. Vuelve a añadir el torrent de eMuwarez sin '
-  + 'subir nada; qBittorrent comprueba los ficheros antes de sembrar.'
+// El tracker de la subida: «Reenviar a qBittorrent» pide el torrent al suyo (N.O.B.S, Milnueve…), no a eMuwarez.
+const ayudaReenvio = (tracker: string) => `Ya está en ${tracker}, pero qBittorrent no lo tiene. Vuelve a añadir el `
+  + `torrent de ${tracker} sin subir nada; qBittorrent comprueba los ficheros antes de sembrar.`
 
 // El bloque completo del detalle de una subida. Pide los datos al entrar (la caché del servidor evita machacar
 // a qBittorrent) y «Actualizar» se salta esa caché.
@@ -139,7 +140,7 @@ export function SeedingBloque({ job, seeding, onVerRegistro, onReenviado }: {
             sigue en su sitio y que qBittorrent la ve en la misma ruta.
           </p>
         )}
-        {(ofrecerReenvio || reenviando) && <p className="seeding-reenvio" id={idAyuda}>{AYUDA_REENVIO}</p>}
+        {(ofrecerReenvio || reenviando) && <p className="seeding-reenvio" id={idAyuda}>{ayudaReenvio(job.tracker_nombre || 'eMuwarez')}</p>}
         <p className="seeding-reenvio" aria-live="polite" data-testid="reenvio-resultado">
           {reenviando ? null : errorEnvio ? (
             <span className="seeding-reenvio-error">{errorEnvio}</span>

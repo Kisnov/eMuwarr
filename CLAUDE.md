@@ -39,10 +39,10 @@ came in from `Kisnov/Uploadrr-EMU` with `git subtree add`, history kept; that re
 ## Verify
 
 - Backend: run the tests in Linux (hardlinks, mediainfo, mkvtoolnix), e.g. `python:3.12-slim` with
-  `pip install -c constraints.txt -e ".[web,dev]"`, then `python -m pytest tests -q -p no:cacheprovider` (~2180 tests, ~7 min).
+  `pip install -c constraints.txt -e ".[web,dev]"`, then `python -m pytest tests -q -p no:cacheprovider` (~5200 tests, ~7 min).
   On Windows, copy the tree into the container (`cp -r /src/. /w/`) rather than running on the bind mount.
 - Uploadrr-EMU: from `uploadrr-emu/`, `pip install -r requirements.txt pytest pytest-cov`, then
-  `python -m pytest tests -q -p no:cacheprovider` (~460 tests, ~1 min; its `conftest.py` blocks network and subprocesses).
+  `python -m pytest tests -q -p no:cacheprovider` (~580 tests; its `conftest.py` blocks network and subprocesses).
   The root `pytest` only collects `tests/` (`testpaths`), and the root ruff skips `uploadrr-emu/`: its CI job checks
   only `E9,F63,F7,F82`, because the inherited code does not pass `F` yet.
 - Frontend: `cd frontend && npm ci && npx tsc --noEmit && npm run lint && npx vitest run && npx vite build`.
@@ -70,10 +70,16 @@ came in from `Kisnov/Uploadrr-EMU` with `git subtree add`, history kept; that re
 
 ## Not obvious
 
+- Audio languages: `und`/empty (and `mis`/`mul`) is missing data. In an MKV it blocks the upload until the real language
+  is set in «Ver pistas» (`upload_checks` «idioma_audio», and the prepared file in `upload_queue._populate_ready`); in
+  another container the app can't tag it, so an MP4/AVI/TS… only warns to convert it to MKV and an ISO passes. `zxx` is a
+  deliberate «no dialogue» tag, valid on every tracker and left out of the release name. Never group the two
+  (`emu_format._SIN_IDIOMA` vs `SIN_DIALOGO`).
 - Push events: call `eventos.publicar` from the one place that writes the data, not from its callers; it
   must never raise. The server stays a single process (no extra uvicorn workers): the event bus is in memory.
   A new `setInterval` in the frontend fails `test_no_han_aparecido_sondeos_nuevos` unless it is listed in
-  `SONDEOS_ESPERADOS` or `RELOJES`: push from the server instead of polling.
+  `SONDEOS_ESPERADOS` or `RELOJES`: push from the server instead of polling. It only sees `setInterval(`, so a
+  poll built from chained `setTimeout` calls has to be listed by hand too.
 - CI on a PR that only touches `frontend/`, `docs/` or `.md` runs just the test files that contain the word
   `frontend` (`grep -l frontend tests/test_*.py`). A test that reads frontend files must name `frontend` in its own file.
 
@@ -96,11 +102,14 @@ came in from `Kisnov/Uploadrr-EMU` with `git subtree add`, history kept; that re
   Uploadrr-EMU subprocess. Uploadrr hands that same folder to qBittorrent as the save path, so qBittorrent
   must see it at the same path. `_enlazar` hardlinks and falls back to a symlink across filesystems; keep the
   folder on the media's filesystem (e.g. under `/data`): a symlink only seeds if qBittorrent resolves its target.
-- Contract with Uploadrr-EMU, change both sides in the same PR: argv in `services/uploadrr_contract.py` (below 720p it
-  adds `-avbc`, and Uploadrr-EMU puts its `AVISO_BAJA_CALIDAD` notice at the top of the description;
+- Contract with Uploadrr-EMU, change both sides in the same PR: argv in `services/uploadrr_contract.py` (`--variante` only for a non-plain category of
+  `services/reglas_tracker.py`, never for eMuwarez; below 720p it
+  adds `-avbc`, and Uploadrr-EMU puts its `AVISO_BAJA_CALIDAD` notice at the top of the description; a job's own
+  description (`upload_jobs.descripcion`, typed in the Resumen) goes as `-df config_uploadrr/<job>-descripcion.txt`,
+  written before launch and deleted with the job's config;
   `test_contrato_uploadrr_real.py` parses the app's argv with the real `uploadrr-emu/src/args.py`);
   `config.yaml` keys set by `upload_execution/config.py` with `uploadrr_config.py` / `uploadrr_yaml.py` (among them the stock signature image, replaced by the current one, `AUTO.keep_quiet`, `SCREENS.use_oxipng`/`oxipng_level`, `DEFAULT.always_anon`
-  and `TRACKERS.EMU.anon`, all `false`: only the `-a` flag makes an upload anonymous), on top of the user's
+  and `TRACKERS.<X>.anon`, all `false`: only the `-a` flag makes an upload anonymous; NOBS/MNV also get `api_key`), on top of the user's
   `config.yaml`, go into the job's own file,
   `config_uploadrr/<job>.yaml` next to the DB (`<job>-reenvio.yaml` for «Reenviar a qBittorrent»; dir 0700, file 0600 via `O_EXCL`,
   deleted after the process, swept at startup, never in a backup), passed as `--config <absolute path>` (global, like `--eventos`),
@@ -121,16 +130,41 @@ came in from `Kisnov/Uploadrr-EMU` with `git subtree add`, history kept; that re
   the app stores them (`upload_jobs.pasos_uploadrr_json`, with `Torrent URL:` as `tracker`); a retry that reuses the
   previous job's prepared files, when that job itself launched Uploadrr-EMU, sets `reanuda_uploadrr` and launches with `--resume` (`subida_pasos.py`). Without
   `--resume`, Uploadrr-EMU wipes its `tmp/<name>` first, so a re-prepared file never meets a stale `BASE.torrent`.
+  One job per tracker: `-tk` comes from `upload_jobs.tracker` (`services/trackers.py`, `uploadrr` field; `-avbc` only for EMU).
+  `-a`/`-pr` come from the group's marks in that tracker (`opciones_tracker.py`: eMuwarez's are `upload.tags_*`, another
+  tracker's `<prefijo>.tags_*`, which follow eMuwarez's until saved). A
+  job for the same item waits for an earlier live one of any tracker (`upload_queue._esperar_a_la_anterior`: they share the
+  uploads-folder file and `tmp/<name>`), then reuses a completed other-tracker job's preparation and launches with `--resume`.
   The nightly maintenance deletes a `tmp/<name>` nobody touched for `mantenimiento.dias_tmp` days (7) unless its job is
-  running; `--resume` and `--solo-cliente` then start from nothing and regenerate it.
+  running; `--resume` and `--solo-cliente` then start from nothing and regenerate it, except that a job reusing another
+  tracker's preparation whose `BASE.torrent` is gone or not reusable (no `torrent` step in its meta.json) launches with `--base-desde <TK>:<id>` (`consultas.base_desde_para`):
+  Uploadrr-EMU builds it from that tracker's torrent (same pieces; `base_no_coincide` / `base_sin_torrent` otherwise).
+  «Subir también a…» (`services/subir_tambien.py`) creates those jobs for a completed upload to any tracker, to any other
+  with a key, never its own (`copia_de_job_id`: same file and name or fail, no fingerprints needed for old uploads; a copy
+  to eMuwarez gets its language rule at enqueue, since it skips the wizard) after checking qBittorrent has that torrent
+  at 100 % with the uploads-folder file as `content_path` (`seeding_qbit.completo_en_qbit`).
   «Reenviar a qBittorrent» (`upload_execution/reenvio_qbit.py`) launches the same argv plus `--resume --solo-cliente <id>`:
-  Uploadrr-EMU only re-adds that eMuwarez torrent to qBittorrent, exits 0 only if it was added and never prints `Torrent URL:`.
+  Uploadrr-EMU only re-adds that torrent of the `-tk` tracker to qBittorrent, exits 0 only if it was added and never prints `Torrent URL:`.
   eMuwarez hides every new upload until a moderator approves it (up to a day): `/api/torrents/<id>` is a 404 and the
   `uploader=` search leaves it out, so `mis_torrents.pendiente_de_moderacion` flags a completed, non-anonymous upload
   missing from a later «Tus subidas» read, without asking the tracker anything else.
   The 30-calls-a-minute eMuwarez budget is shared by the server, the CLI and every Uploadrr-EMU: `_lanzar_uploadrr` sets
   `LIMITADOR_DIR` (`CONFIG_DIR/limitador`), and `integrations/limitador_compartido.py` and `uploadrr-emu/src/utils/limitador.py`
   must stay byte-identical (`test_limitador_compartido.py`); without `fcntl` or a usable directory each process counts alone.
+  Each tracker counts in its own file (`tracker` = its Uploadrr-EMU name: `emu.cliente(..., tracker="NOBS")`).
+- The catalog sync (`services/emu_catalog.py`, button and weekly full task) reads eMuwarez and then, one after
+  another, every other tracker with a key into `emu_catalog` under its `tracker`, each with its own key and API budget.
+  One 1/hour and 1/day throttle covers the whole run; another tracker's failure goes to `error_otros` and doesn't undo
+  eMuwarez's. `library_items.emu_in_catalog`/`emu_aportes` stay eMuwarez's; «is it on X» is
+  `filas_del_catalogo(..., tracker)` / `get_item_comparison(..., tracker)` (`?tracker=` on
+  `/library/{id}/emu-comparison`; `/library/emu-comparisons?ids=…` for several, with one conclusion for all), used by
+  the wizard's «En <tracker> ya hay» panels, the batch Resumen (a tracker that already has it is skipped for that
+  one: `omitir`), «Subir también a…» and the library detail card. The duplicate/trump rule lives only in
+  `emu_catalog.conclusion_duplicados` (each available comparison carries its `conclusion`: level, class, sentence,
+  `ya_lo_tiene`); the frontend only shows it. It counts quality (`veredicto`) and audio (`aporta_audio`: Spanish no
+  torrent has is an improvement even at equal or worse quality). `emu_aportes` comes from it too (`_aportes`, at each
+  catalog or library sync): non-empty only when the conclusion is a trump (or, for a season eMuwarez only has as
+  loose episodes, when you have them all: the pack), so «Aportas», the Panel and requests agree with the card.
 - One UNIT3D client: every eMuwarez request, the app's (`emu.cliente`) and Uploadrr-EMU's (`Unit3d._cliente`), goes through
   `integrations/cliente_unit3d.py`. It builds URL and headers (`User-Agent: emuwarr/<version>`; `_lanzar_uploadrr` passes the
   version as `EMUWARR_VERSION`), sends the key only to the tracker's own origin and takes a slot in the limiter first. The key goes
@@ -143,11 +177,11 @@ came in from `Kisnov/Uploadrr-EMU` with `git subtree add`, history kept; that re
   commits) merged since the last `__version__` change) runs
   the full CI on dev's tip, bumps `__version__` (`auto`: minor if any `feat/` PR, else patch), pushes that commit to `dev`, fast-forwards
   `main` to it and pushes `vX.Y.Z` (all atomic), builds `:X.Y.Z`, `:<sha>`, `:latest` and `:dev`, publishes the manifest (secret
-  `UPLOADRR_VERSION_TOKEN`) and creates the GitHub release with the PRs merged since the previous tag. Release when Gabriel asks: `gh workflow run publicar.yml -f notas="…"`, with a
-  neutral public note. Every push to `dev` (except docs/`.md`-only) and `solo_prueba=true` build `:dev` from dev's tip only (no tests). The long-lived branch `multitracker` (Gabriel's multi-tracker work, `docs/PLAN.md`; its PRs target it, `dev` is merged into it, never rebased) builds `:multitracker` the same way and can never publish a version. `ref=<commit|branch|tag>` publishes that commit's version instead (no tests; the version commit and tag go to `release/vX.Y.Z`, to merge into dev afterwards; neither `main` nor `:dev` moves). `scripts/desplegar.sh` is
+  `UPLOADRR_VERSION_TOKEN`) and creates the GitHub release with the PRs merged since the previous tag; after a failure, "Re-run failed jobs" (or a new run on the already tagged version commit) completes that same version. Release when Gabriel asks: `gh workflow run publicar.yml -f notas="…"`, with a
+  neutral public note. Every push to `dev` (except docs/`.md`-only) and `solo_prueba=true` build `:dev` from dev's tip only (no tests). The long-lived branch `multitracker` (Gabriel's multi-tracker work, `docs/PLAN.md`; its PRs target it, `dev` is merged into it, never rebased) builds `:multitracker` the same way and can never publish a version; `auto` only sees the one merge of it into `dev`, not its PRs, so publish that merge with `escala=minor`. `ref=<commit|branch|tag>` publishes that commit's version instead (no tests; the version commit and tag go to `release/vX.Y.Z`, to merge into dev afterwards; neither `main` nor `:dev` moves). `scripts/desplegar.sh` is
   the local fallback (no Actions minutes, no tests, amd64 only: a version published with it leaves `:latest` without
   arm64, so prefer `publicar.yml`, which builds amd64 and arm64 via QEMU) and pushes in the same order; `--solo-prueba` pushes only
-  `:dev`. The image copies `uploadrr-emu/` from the same commit (`.dockerignore` keeps out its tests and any local
+  `:dev`. It refuses a commit that is not in GitHub's `dev` (`--fuera-de-dev` to do it on purpose). The image copies `uploadrr-emu/` from the same commit (`.dockerignore` keeps out its tests and any local
   `config.yaml` or cookies), so a feat/fix PR there counts towards a release like any other.
 - Version manifest: the Diagnóstico card compares the image's `APP_COMMIT` with `latest.json` in the public
   repo `Kisnov/uploadrr-version` (a fork of `Rovaal-code/uploadrr-version`); to test against another

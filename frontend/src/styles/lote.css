@@ -112,6 +112,7 @@
 .lote-fila-tipo { font-size: 12px; color: var(--text-secondary); }
 .lote-fila-calidad { font-size: 12px; color: var(--text-muted); }
 .lote-motivo { grid-column: 1 / -1; display: flex; align-items: center; gap: 5px; padding-left: 26px; font-size: 12px; color: var(--color-warning-soft); }
+.lote-fila-trackers { grid-column: 1 / -1; padding-left: 26px; }
 .lote-total { margin: 12px 0 0; font-size: 12.5px; color: var(--text-secondary); }
 /* Desde el Panel: la petición que cubre la fila, o cuál de las que cubre se enlaza. */
 .lote-fila-peticion { font-size: 12px; color: var(--text-accent); }
@@ -154,9 +155,9 @@
 .lote-error { margin-top: 4px; font-size: 12px; color: var(--color-error-pale); }
 .lote-salta { margin-top: 4px; font-size: 12px; color: var(--color-error-pale); }
 .lote-nota { margin-top: 4px; font-size: 12px; color: var(--text-muted); white-space: normal; }
-.data-table td.lote-emu-mal { color: var(--color-error-pale); }
-.data-table td.lote-emu-aviso { color: var(--color-warning-soft); }
-.data-table td.lote-emu-bien { color: var(--color-available-soft); }
+.data-table .lote-emu-mal { color: var(--color-error-pale); }
+.data-table .lote-emu-aviso { color: var(--color-warning-soft); }
+.data-table .lote-emu-bien { color: var(--color-available-soft); }
 
 .lote-paralelo { margin: 12px 0 0; font-size: 12.5px; color: var(--text-secondary); }
 .lote-paralelo.lote-paralelo-aviso { color: var(--color-warning); }
@@ -164,6 +165,8 @@
 
 /* Paso 2: el recuento sobre la tabla. */
 .lote-cifras { display: flex; flex-wrap: wrap; gap: 6px 10px; margin: 0 0 12px; }
+/* Paso 2: a qué trackers, entre el recuento y la tabla. */
+.lote-trackers { margin: 0 0 12px; }
 .lote-cifra {
   padding: 3px 10px;
   border-radius: var(--radius-badge);
@@ -178,7 +181,7 @@
 .lote-cifra.lote-cifra-mal { color: var(--color-error-pale); border-color: color-mix(in srgb, var(--color-error) 35%, transparent); }
 
 /* En un móvil la tabla del resumen no cabe (la casilla «Incluir» quedaba fuera de la vista): cada elemento pasa a
-   ser un bloque con el título y la casilla arriba, y debajo su comprobación y lo que hay en eMuwarez. */
+   ser un bloque con el título y la casilla arriba, y debajo su comprobación y lo que hay en cada tracker. */
 @media (max-width: 640px) {
   .data-table.lote-tabla thead { display: none; }
   .data-table.lote-tabla tbody tr {
@@ -193,8 +196,8 @@
   .data-table.lote-tabla td.lote-celda-incluir { grid-column: 2; grid-row: 1; text-align: right; }
   .data-table.lote-tabla td:nth-child(2),
   .data-table.lote-tabla td:nth-child(3) { grid-column: 1 / -1; overflow-wrap: anywhere; }
-  /* Sin la cabecera, un «—» suelto no dice de qué es: el nombre que aún no hay se quita y lo de eMuwarez lleva su
+  /* Sin la cabecera, un «—» suelto no dice de qué es: el nombre que aún no hay se quita y lo de un solo tracker lleva su
      etiqueta. */
   .data-table.lote-tabla .lote-nombre-vacio { display: none; }
-  .data-table.lote-tabla td.lote-celda-emu::before { content: "En eMuwarez: "; color: var(--text-muted); }
+  .data-table.lote-tabla td.lote-celda-emu::before { content: attr(data-etiqueta); color: var(--text-muted); }
 }

@@ -1,5 +1,5 @@
 """Avisos de tu cuenta de eMuwarez: lo que cambia entre una lectura del perfil y la siguiente (cada hora, con la tarea
-«Leer tu cuenta de eMuwarez»).
+«Leer tu cuenta»).
 
 Sin llamadas nuevas: compara el perfil recién leído con el anterior. Cada aviso salta una vez, cuando cambia algo, y no
 en cada lectura mientras sigue igual. Van a la campana y, si se activan en Ajustes → Notificaciones, a Discord/Telegram.

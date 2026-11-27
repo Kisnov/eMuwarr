@@ -14,7 +14,7 @@ import re
 
 logger = logging.getLogger("emuwarez.settings")
 
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, Field, field_validator
 
 from ..dependencies import require_auth
 from ..runtime import _db_path
@@ -24,7 +24,10 @@ from ...services.uploadrr_contract import DEFAULT_ALLOWED_ROOTS
 from ...services.source_assistant import EMU_PROVIDERS
 from ...services.notification_center import EVENT_TYPES, channel_events
 from ...services.mkv_remux import modo_pistas, reordena
-from ...services.opciones_tracker import grupos_anonimos, grupos_personal_release, guardar_grupos
+from ...services.opciones_tracker import (
+    grupos_anonimos, grupos_personal_release, guardar_grupos, guardar_marcas_propias, marcas_propias,
+)
+from ...services.trackers import EMU, TRACKERS
 from ...services.integration_tests import test_tmdb_connection, test_emuwarez_connection
 from ...database import get_setting_canonical
 
@@ -38,7 +41,7 @@ router = APIRouter(tags=["settings"])
 # partir de otros ajustes y las órdenes de un PUT. Lo comprueba
 # tests/test_ajustes_registro.py.
 FUERA_DEL_REGISTRO: frozenset[str] = frozenset({
-    "upload_tags", "upload_tags_personal_release", "upload_tags_anonimos", "provider_priority_order", "uploadrr_allowed_roots", "path_mappings",
+    "upload_tags", "upload_tags_personal_release", "upload_tags_anonimos", "marcas_por_tracker", "provider_priority_order", "uploadrr_allowed_roots", "path_mappings",
     "image_hosts_available", "image_hosts_enabled", "image_host_keys_configured", "image_host_keys",
     "notify_event_types", "notify_ui_events", "notify_discord_events", "notify_telegram_events",
     # Calculado: hay host de qBittorrent o proxy de qui.
@@ -53,6 +56,11 @@ FUERA_DEL_REGISTRO: frozenset[str] = frozenset({
 _VALID_PROVIDER_CODES: frozenset[str] = frozenset(p["code"] for p in EMU_PROVIDERS)
 
 _DEFAULT_PRIORITY: list[str] = ["AMZN", "NF", "DSNP", "MAX", "ATVP"]
+
+
+class MarcasTracker(BaseModel):
+    personal_release: list[str]
+    anonimos: list[str]
 
 
 class SettingsResponse(BaseModel):
@@ -70,6 +78,13 @@ class SettingsResponse(BaseModel):
     # Phase 11A: Emuwarez API key, editable from Settings (not just setup wizard).
     emu_api_key_configured: bool = False
     emu_api_key_masked: Optional[str] = None
+    # Otros trackers (fase B del plan multitracker): opcionales.
+    nobs_api_key_configured: bool = False
+    nobs_api_key_masked: Optional[str] = None
+    mnv_api_key_configured: bool = False
+    mnv_api_key_masked: Optional[str] = None
+    # Las marcas de los grupos en cada otro tracker ({id: {personal_release, anonimos}}); None: las de eMuwarez.
+    marcas_por_tracker: dict[str, Optional[MarcasTracker]] = {}
     # qBittorrent (torrent client used by Uploadrr)
     qbit_url: Optional[str] = None
     qbit_tag: Optional[str] = None
@@ -119,6 +134,8 @@ class SettingsResponse(BaseModel):
     emu_add_logo: bool = True
     # Capturas de todos los capítulos de un pack. Por defecto, solo del primero.
     emu_per_episode_screens: bool = False
+    # La descripción propia con la que empieza el Resumen de cada subida.
+    descripcion_plantilla: Optional[str] = None
     # Qué se le hace a las pistas: uno de mkv_remux.MODOS_PISTAS. De fábrica
     # solo se renombran, que es lo barato (ver mkv_remux.MODO_PISTAS_POR_DEFECTO).
     remux_track_mode: str = AJUSTES["remux_track_mode"].defecto
@@ -144,6 +161,10 @@ class SettingsUpdateRequest(BaseModel):
     tmdb_api_key: Optional[str] = None
     # Phase 11A
     emu_api_key: Optional[str] = None
+    nobs_api_key: Optional[str] = None
+    mnv_api_key: Optional[str] = None
+    # Los trackers que llegan cambian sus marcas; None: vuelven a las de eMuwarez.
+    marcas_por_tracker: Optional[dict[str, Optional[MarcasTracker]]] = None
     # qBittorrent
     qbit_url: Optional[str] = None
     qbit_tag: Optional[str] = None
@@ -181,6 +202,7 @@ class SettingsUpdateRequest(BaseModel):
     source_engine_enabled: Optional[bool] = None
     emu_add_logo: Optional[bool] = None
     emu_per_episode_screens: Optional[bool] = None
+    descripcion_plantilla: Optional[str] = Field(None, max_length=30000)
     remux_track_mode: Optional[str] = None
     remux_no_reflink_copies: Optional[bool] = None
     recent_activity_limit: Optional[int] = None
@@ -316,6 +338,7 @@ def _build_response(conn) -> SettingsResponse:
         upload_tags=_read_upload_tags(conn),
         upload_tags_personal_release=grupos_personal_release(conn),
         upload_tags_anonimos=grupos_anonimos(conn),
+        marcas_por_tracker={t: marcas_propias(conn, t) for t in TRACKERS if t != EMU.id},
         provider_priority_order=priority,
         uploadrr_allowed_roots=allowed_roots,
         qbit_configured=qbit_configured,
@@ -379,6 +402,10 @@ def update_settings(
         error = error_de_url_publica(body.qbit_public_url)
         if error:
             errors.append(error)
+
+    sin_marcas = set(body.marcas_por_tracker or ()) - (set(TRACKERS) - {EMU.id})
+    if sin_marcas:
+        errors.append(f"marcas_por_tracker: trackers desconocidos: {', '.join(sorted(sin_marcas))}")
 
     # TMDb y eMuwarez son integraciones obligatorias: si se manda el campo,
     # no puede quedar vacío (borrar la key sin poner una nueva no está permitido).
@@ -455,6 +482,9 @@ def update_settings(
         if body.upload_tags_personal_release is not None or body.upload_tags_anonimos is not None:
             guardar_grupos(conn, personal_release=body.upload_tags_personal_release,
                            anonimos=body.upload_tags_anonimos)
+
+        for tracker, marcas in (body.marcas_por_tracker or {}).items():
+            guardar_marcas_propias(conn, tracker, marcas and marcas.model_dump())
 
         if body.provider_priority_order is not None:
             codes = [c.strip() for c in body.provider_priority_order]

@@ -52,14 +52,14 @@ DEFAULT_TASKS: list[tuple[str, str, str, int, int, int, Optional[str]]] = [
     ),
     (
         TASK_EMU_SYNC,
-        "Sincronizar peticiones eMuwarez",
-        "Descarga las peticiones abiertas de eMuwarez y las cruza con tu biblioteca. Una vez al día, para gastar pocas llamadas de la API.",
+        "Sincronizar peticiones",
+        "Descarga las peticiones abiertas de eMuwarez y de cada otro tracker con clave, y las cruza con tu biblioteca. Una vez al día, para gastar pocas llamadas de la API.",
         1440, 60, 1, None,
     ),
     (
         TASK_EMU_CATALOG_FULL,
-        "Sincronizar catálogo eMuwarez (completo)",
-        "Vuelve a descargar todo el catálogo de eMuwarez, lo único que detecta los torrents borrados del tracker. Una vez por semana, para gastar pocas llamadas de la API.",
+        "Sincronizar catálogo (completo)",
+        "Vuelve a descargar todo el catálogo de eMuwarez y de cada otro tracker con clave, lo único que detecta los torrents borrados del tracker. Una vez por semana, para gastar pocas llamadas de la API.",
         10080, 1440, 1, None,
     ),
     (
@@ -70,14 +70,14 @@ DEFAULT_TASKS: list[tuple[str, str, str, int, int, int, Optional[str]]] = [
     ),
     (
         TASK_EMU_CUENTA,
-        "Leer tu cuenta de eMuwarez",
-        "Lee tu perfil de eMuwarez (una llamada a la API) para que Estadísticas tenga el dato de cada día aunque no abras la interfaz. Si el Panel ya lo leyó hace menos de una hora, no vuelve a llamar.",
+        "Leer tu cuenta",
+        "Lee tu perfil de eMuwarez y de cada otro tracker con clave (una llamada a la API por tracker) para que Estadísticas tenga el dato de cada día aunque no abras la interfaz. Si el Panel ya lo leyó hace menos de una hora, no vuelve a llamar.",
         60, 60, 1, None,
     ),
     (
         TASK_EMU_MIS_SUBIDAS,
-        "Leer tus subidas en eMuwarez",
-        "Lee los seeders, leechers y veces completada de tus subidas en eMuwarez, para Estadísticas: una llamada a la API por cada 100 subidas. No corre con una subida en marcha.",
+        "Leer tus subidas",
+        "Lee los seeders, leechers y veces completada de tus subidas en eMuwarez y en cada otro tracker con clave, para Estadísticas: una llamada a la API por cada 100 subidas. No corre con una subida en marcha.",
         360, 180, 1, None,
     ),
     (
@@ -167,6 +167,11 @@ def ensure_default_tasks(conn: sqlite3.Connection) -> None:
                (task_key, name, description, interval_minutes, min_interval_minutes, manual_allowed, run_at)
                VALUES (?, ?, ?, ?, ?, ?, ?)""",
             (task_key, name, description, interval, min_interval, manual_allowed, run_at),
+        )
+        # El nombre y la descripción son de la app y pueden cambiar entre versiones; cada cuánto corre es del usuario.
+        conn.execute(
+            "UPDATE scheduled_tasks SET name = ?, description = ? WHERE task_key = ? AND (name != ? OR description != ?)",
+            (name, description, task_key, name, description),
         )
     # Prune tasks that used to be scheduled but no longer are.
     for task_key in OBSOLETE_TASKS:
@@ -277,13 +282,16 @@ def _run_emu_sync(conn: sqlite3.Connection) -> tuple[str, str]:
     if result.get("status") == "throttled":
         return "skipped", f"Esperando {result.get('wait_seconds', 0)}s (mínimo 1 hora entre sincronizaciones)"
     if result.get("status") == "busy":
-        return "skipped", str(result["message"])
+        return "busy", str(result["message"])
     return "completed", f"{result.get('imported', 0)} peticiones importadas, {result.get('matched', 0)} cruces"
 
 
 def _run_emu_catalog_full(conn: sqlite3.Connection) -> tuple[str, str]:
     from .emu_catalog import start_emu_sync_background
     result = start_emu_sync_background(mode="full")
+    # Con otra del catálogo en marcha no lanza nada (el botón se engancha a esa): la completa espera.
+    if result.get("ya_en_marcha"):
+        return "busy", "Ya hay una sincronización del catálogo en marcha"
     if result.get("status") == "throttled":
         return "skipped", f"Esperando {result.get('wait_seconds', 0)}s (mínimo 1 día entre descargas completas)"
     if result.get("status") == "busy":
@@ -299,13 +307,16 @@ def _run_instance_watch(conn: sqlite3.Connection) -> tuple[str, str]:
 
 def _run_emu_cuenta(conn: sqlite3.Connection) -> tuple[str, str]:
     # Sin fila en task_runs, como vigilar-instancias: cada hora llenaría «Últimas tareas ejecutadas».
-    from .emu_perfil import perfil_emu
-    perfil = perfil_emu(conn)
-    if not perfil["configured"]:
+    # eMuwarez y luego cada otro tracker con clave: el fallo de uno no para a los demás.
+    from .emu_perfil import perfiles
+    perfil = perfiles(conn)
+    todos = [p for p in (perfil, *perfil["otros"]) if p["configured"]]
+    if not todos:
         return "skipped", "Sin API key de eMuwarez en Configuración"
-    if perfil["error"]:
-        return "failed", perfil["error"]
-    return "completed", f"Ratio {perfil['ratio']} · bonus {perfil['seedbonus']}"
+    textos = [p["error"] or f"Ratio {p['ratio']} · bonus {p['seedbonus']}" for p in todos]
+    if len(todos) > 1:
+        textos = [f"{p['nombre']}: {texto}" for p, texto in zip(todos, textos)]
+    return ("failed" if any(p["error"] for p in todos) else "completed"), " · ".join(textos)
 
 
 def _run_emu_mis_subidas(conn: sqlite3.Connection) -> tuple[str, str]:

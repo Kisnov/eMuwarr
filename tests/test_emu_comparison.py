@@ -15,6 +15,7 @@ from emuwarez_uploadrr.services.emu_catalog import (
     SYNC_STATE_KEY,
     get_item_comparison,
 )
+from emuwarez_uploadrr.services.trackers import EMU
 
 
 @pytest.fixture
@@ -133,6 +134,18 @@ def test_a_igual_resolucion_decide_el_source(db_conn):
     assert get_item_comparison(db_conn, item_id)["matches"][0]["veredicto"] == "mejor"
 
 
+def test_un_nombre_sin_source_o_sin_codec_se_mejora(db_conn):
+    """Source y códec son obligatorios en el nombre: el torrent que no los dice pierde frente a una copia que sí."""
+    item_id = _movie(db_conn, "Película", tmdb_id=564, resolution="1080p", source="WEB-DL", video_codec="x265")
+    _catalogo_con(db_conn, 564, "1080p", None, "Película 1080p x265", codec="H.265")
+    _catalogo_con(db_conn, 564, "1080p", "WEB-DL", "Película 1080p WEB-DL", codec=None)
+    _catalogo_con(db_conn, 564, "2160p", None, "Película 2160p", codec=None)
+    set_state(db_conn, SYNC_COMPLETED_STATE_KEY, "2026-01-01T00:00:00Z")
+    db_conn.commit()
+    veredictos = {m["name"]: m["veredicto"] for m in get_item_comparison(db_conn, item_id)["matches"]}
+    assert veredictos == {"Película 1080p x265": "mejor", "Película 1080p WEB-DL": "mejor", "Película 2160p": "peor"}
+
+
 def test_sin_nada_que_comparar_no_hay_veredicto(db_conn):
     """Si la copia no dice resolución, source ni códec, no se inventa un «igual»."""
     item_id = _movie(db_conn, "Película", tmdb_id=562, resolution=None, source=None, video_codec=None)
@@ -160,9 +173,9 @@ def test_el_endpoint_pasa_resolucion_y_source_a_la_comparacion(client, auth_head
                return_value={"available": False, "message": None, "matches": []}) as comparar:
         resp = client.get("/api/library/7/emu-comparison?resolution=2160p&source=WEB-DL", headers=auth_headers)
         assert resp.status_code == 200
-        assert comparar.call_args.kwargs == {"resolution": "2160p", "source": "WEB-DL"}
+        assert comparar.call_args.kwargs == {"resolution": "2160p", "source": "WEB-DL", "tracker": EMU}
         client.get("/api/library/7/emu-comparison", headers=auth_headers)
-        assert comparar.call_args.kwargs == {"resolution": None, "source": None}
+        assert comparar.call_args.kwargs == {"resolution": None, "source": None, "tracker": EMU}
 
 
 def test_un_capitulo_suelto_no_se_compara_con_el_pack_de_la_temporada(db_conn):

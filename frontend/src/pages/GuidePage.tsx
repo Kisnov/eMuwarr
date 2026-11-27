@@ -36,7 +36,7 @@ const FIELD_SOURCES: { field: string; example: string; source: string }[] = [
   {
     field: 'Resolución',
     example: '2160p 4K UHD',
-    source: 'Perfil de calidad de Radarr/Sonarr ("quality.name"), normalizado a la nomenclatura eMuwarez (ver tabla técnica abajo). No se recalcula con MediaInfo.',
+    source: 'Resolución real del fichero según MediaInfo, normalizada a la nomenclatura eMuwarez (ver tabla técnica abajo). Si no se puede leer, el perfil de calidad de Radarr/Sonarr ("quality.name").',
   },
   {
     field: 'Proveedor',
@@ -424,6 +424,14 @@ const SPANISH_ROWS: SpanishRow[] = [
     why: 'Ni doblada ni subtitulada al castellano: no cumple por ninguna de las dos vías. Necesita que le añadas una pista de subtítulos en castellano, o una de audio.',
   },
   {
+    kind: 'Película', audio: 'spa / und', subs: 'cualquiera', verdict: 'blocked', verdictLabel: 'Bloqueado',
+    why: 'Una pista sin idioma (und o vacía) es un dato que falta: en un MKV, hasta que le pongas el suyo en «Ver pistas» no se sube, y se escribe en la pista al preparar la subida. Un MP4 o un TS solo avisa de convertirlo a MKV; los demás (AVI, M2TS…) no se suben: Uploadrr-EMU solo sube MKV, MP4 y TS. Un ISO (imagen de disco) todavía no se puede subir.',
+  },
+  {
+    kind: 'Película', audio: 'zxx', subs: 'ninguno', verdict: 'ok',
+    why: 'zxx no es «sin idioma»: es una pista etiquetada a propósito sin diálogo (Flow, 2024). No hay nada que doblar, así que vale en todos los trackers, y el nombre lleva su códec sin idioma.',
+  },
+  {
     kind: 'Película o capítulo', audio: 'sin detectar', subs: 'cualquiera', verdict: 'blocked',
     verdictLabel: 'Bloqueado',
     why: (
@@ -456,7 +464,7 @@ const OTHER_CONDITION_ROWS: OtherRow[] = [
   {
     applies: 'Pack de temporada', condition: 'Los capítulos están en carpetas distintas',
     verdict: 'blocked', verdictLabel: 'Bloquea',
-    why: 'El pack se arma sobre la carpeta que los capítulos ya comparten, renombrándolos ahí mismo. No se mueven archivos de sitio, así que si están repartidos no hay carpeta que usar. Muévelos a una común.',
+    why: 'El pack se arma sobre la carpeta que los capítulos ya comparten, con un enlace por capítulo. No se mueven archivos de sitio, así que si están repartidos no hay carpeta que usar. Muévelos a una común.',
   },
   {
     applies: 'Pack de temporada',
@@ -482,9 +490,9 @@ const OTHER_CONDITION_ROWS: OtherRow[] = [
     why: 'El botón Subir aparece deshabilitado: no tienes el archivo en disco, así que no hay nada que subir.',
   },
   {
-    applies: 'Cualquiera', condition: 'La carpeta del archivo no permite escritura',
-    verdict: 'blocked', verdictLabel: 'Bloquea',
-    why: 'La subida renombra el archivo a la nomenclatura de eMuwarez en su sitio, sin copiarlo. Sin permiso de escritura en su carpeta, ese renombrado no se puede hacer.',
+    applies: 'Cualquiera', condition: 'La carpeta de la biblioteca no permite escritura',
+    verdict: 'warn', verdictLabel: 'No bloquea',
+    why: 'El archivo de la biblioteca conserva su nombre: el de eMuwarez lo lleva su enlace. Sin permiso de escritura no se editan las pistas ni el título de un MKV de la biblioteca (se usa una copia o se omite).',
   },
   {
     applies: 'Cualquiera', condition: 'El directorio de salida de Uploadrr no permite escritura',
@@ -492,9 +500,9 @@ const OTHER_CONDITION_ROWS: OtherRow[] = [
     why: 'Es donde se generan el .torrent, las capturas y la descripción antes de enviarlos. Sin poder escribir ahí no hay nada que subir.',
   },
   {
-    applies: 'Cualquiera', condition: 'eMuwarez no responde',
+    applies: 'Cualquiera', condition: 'eMuwarez no responde (si subes a eMuwarez)',
     verdict: 'blocked', verdictLabel: 'Bloquea',
-    why: 'Es el destino de la subida. Suele ser la API key mal puesta o el tracker caído.',
+    why: 'Es el destino de la subida. Suele ser la API key mal puesta o el tracker caído. La conexión con N.O.B.S y Milnueve no se comprueba antes: un fallo suyo se ve al subir.',
   },
   {
     applies: 'Cualquiera', condition: 'El repositorio de imágenes no responde',
@@ -520,12 +528,13 @@ function VerdictCell({ verdict, label }: { verdict: Verdict; label?: string }) {
 function UploadConditionsContent() {
   return (
     <>
-      <h3 className="guia-h4">Castellano</h3>
+      <h3 className="guia-h4">Castellano (eMuwarez)</h3>
       <p className="guia-texto guia-texto-inicio">
         eMuwarez exige castellano, pero no importa por dónde venga. Si el audio está en castellano,
         la condición ya se cumple y los subtítulos no se piden. Si el audio no está en castellano,
         entonces hacen falta subtítulos en castellano. El latino (<code>es-419</code>) es un idioma
-        distinto y no vale como castellano.
+        distinto y no vale como castellano. N.O.B.S acepta castellano o latino en el audio, o subtítulos
+        en español; Milnueve acepta además catalán en el audio.
       </p>
       <div className="guia-desborde-x">
         <table className="data-table guia-tabla">

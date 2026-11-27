@@ -141,7 +141,7 @@ def _torrents(n):
 
 
 def _descarga(monkeypatch, torrents, total=None):
-    def falso(api_key, progress=None, stop_after_id=None, **kw):
+    def falso(api_key, base_url=None, progress=None, stop_after_id=None, **kw):
         if progress:
             progress(1, None, len(torrents), total)
         return torrents

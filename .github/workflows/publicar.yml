@@ -168,6 +168,10 @@ jobs:
           subida=""
           if [ -z "$REF" ]; then
             subida="$(git log --first-parent --reverse --format='%H %P %s' "$GITHUB_SHA"..origin/dev | head -n1 | grep -E "^[0-9a-f]{40} $GITHUB_SHA chore: versión " | cut -d' ' -f1)"
+            # Una ejecución nueva lanzada sobre esa versión, que ya lleva su etiqueta: también se completa, no se sube otra.
+            if [ -z "$subida" ] && git tag --points-at "$GITHUB_SHA" | grep -qx "v$(python3 scripts/subir_version.py --ver)"; then
+              subida="$GITHUB_SHA"
+            fi
           elif git log -1 --format=%s | grep -q '^chore: versión '; then
             # Reanudar una publicación con ref que falló tras subir la versión: ref=release/vX.Y.Z, que ya es la versión.
             subida="$(git rev-parse HEAD)"

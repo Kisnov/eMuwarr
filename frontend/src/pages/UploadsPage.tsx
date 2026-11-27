@@ -1,5 +1,5 @@
 import { memo, useState, useEffect, useMemo, useRef, useCallback } from 'react'
-import { getUploads, countUploads, contarSinTrailer, getUploadJob, startUploadJob, retryUploadJobQueued, cancelUploadJob, getLote } from '../api/uploads'
+import { getUploads, countUploads, contarSinTrailer, getUploadJob, startUploadJob, retryUploadJobQueued, cancelUploadJob, getLote, fetchTrackersParaSubir, getSubirTambien } from '../api/uploads'
 import { useInstancias } from '../hooks/useInstancias'
 import { ApiClientError } from '../api/client'
 import type { UploadJob, InstanceSafeResponse, LoteResumen } from '../types/api'
@@ -8,6 +8,8 @@ import { LoadingState } from '../components/LoadingState'
 import { GruposDeRelease } from '../components/GruposDeRelease'
 import { ErrorState } from '../components/ErrorState'
 import { HeaderFilter } from '../components/HeaderFilter'
+import { ChipTracker } from '../components/ChipTracker'
+import { LogoTracker } from '../components/LogoTracker'
 import { UploadJobDetailPage } from '../components/UploadJobDetailPage'
 import { DeleteUploadModal } from '../components/DeleteUploadModal'
 import { PeticionDeSubida } from '../components/PeticionDeSubida'
@@ -32,6 +34,7 @@ import { useAlSalir, useSeccionVisible } from '../context/SeccionVisible'
 import { IconoDesplegar, IconoSubida, IconoTipo } from '../components/Iconos'
 import { Modal } from '../components/Modal'
 import { BannerLote } from '../components/BannerLote'
+import { SubirTambienModal } from '../components/SubirTambien'
 import { BannerSinTrailer, ChipSinTrailer, faltaTrailer } from '../components/AvisoTrailer'
 import { FilasVirtuales } from '../components/FilasVirtuales'
 import { UMBRAL_VIRTUAL } from '../utils/ventana'
@@ -60,7 +63,7 @@ const CONFIRMATION_TOKEN = 'INICIAR_UPLOADRR'
 const COLUMNAS = 9
 // Lo que mide una fila antes de pintarla (FilasVirtuales la corrige con la media de las que va midiendo).
 const ALTO_FILA = 65
-const claveDeSubida = (job: UploadJob) => job.id!
+const claveDeGrupo = (grupo: UploadJob[]) => grupo[0].id!
 
 // Only real upload states — a job now only exists once the user uploads, so
 // the preparatory "ready"/"blocked" states no longer appear here. 'preparing'
@@ -119,9 +122,9 @@ function StartModal({ job, onClose, onDone }: { job: UploadJob; onClose: () => v
         <p className="sub-mb-8"><strong>{job.title || '—'}</strong></p>
         <div className="sub-aviso">
           <ul className="sub-aviso-lista">
-            <li>Esta acción puede publicar/subir contenido a eMuwarez.</li>
+            <li>Esta acción puede publicar/subir contenido al tracker.</li>
             <li>No se crearán peticiones automáticamente.</li>
-            <li>No se modificará el archivo original ni el título MKV.</li>
+            <li>El nombre del archivo de la biblioteca no se cambia.</li>
           </ul>
         </div>
         <label className="sub-etiqueta">
@@ -167,7 +170,7 @@ function EstadoDeFila({ job }: { job: UploadJob }) {
   const viva = job.status === 'preparing' || job.status === 'running'
   const pct = Math.max(0, Math.min(100, job.progress?.global_pct ?? 0))
   const phaseInfo = viva ? currentPhaseInfo(job) : null
-  const fase = phaseInfo?.label ?? (viva ? phaseLabel(job.progress_phase) : null)
+  const fase = phaseInfo?.label ?? (viva ? phaseLabel(job.progress_phase, job) : null)
   const transcurrido = viva ? progressCounter(job) : null
   const clase = STATUS_CLASS[job.status] || 'badge req-unknown'
   const parpadea = job.status === 'preparing' || job.status === 'running'
@@ -217,12 +220,19 @@ function AccionDeFila({ etiqueta, tono, clase, onClick, children }: {
 // Va memorizada: con el progreso real llegando cada medio segundo, solo tiene que repintarse la fila cuya subida
 // cambió. Para que el memo sirva, todas las props son valores o funciones con identidad estable (nada de objetos o
 // flechas hechos en cada pintado del padre): por eso el chip de reintentos son dos valores y `onOpen` recibe el id.
-const JobRow = memo(function JobRow({ job, instances, seeding, onOpen, indent, intentosAnteriores, desplegada, onToggleCadena, onCancel, onRetry, onDelete, onFiltrarLote }: {
+const JobRow = memo(function JobRow({ job, instances, seeding, onOpen, indent, enGrupo, otrosTrackers, trackersAbiertos, otroFallido, onToggleTrackers, intentosAnteriores, desplegada, onToggleCadena, onCancel, onRetry, onDelete, onFiltrarLote, subirTambienId, onSubirTambien }: {
   job: UploadJob
   seeding: SeedingEstado
   instances: InstanceSafeResponse[]
   onOpen: (jobId: number) => void
   indent?: boolean
+  // El mismo elemento subido a varios trackers: la primera fila lleva el título; las otras, solo su tracker.
+  enGrupo?: 'primera' | 'otra'
+  // En la primera: los otros trackers («N.O.B.S · eMuwarez»), si se ven sus filas y si alguna no terminó bien.
+  otrosTrackers?: string
+  trackersAbiertos?: boolean
+  otroFallido?: boolean
+  onToggleTrackers?: (elementoId: number, abiertos: boolean) => void
   // Cuántos intentos anteriores tiene la cadena y si están desplegados (solo en la fila del último intento).
   intentosAnteriores?: number
   desplegada?: boolean
@@ -232,13 +242,16 @@ const JobRow = memo(function JobRow({ job, instances, seeding, onOpen, indent, i
   onRetry: (job: UploadJob) => void
   // Pulsar el chip «Lote · N»: ver solo las subidas de ese lote.
   onFiltrarLote?: (loteId: string) => void
+  // La subida del elemento que se puede subir también a otro tracker (puede ser otra fila del grupo).
+  subirTambienId?: number
+  onSubirTambien?: (jobId: number) => void
 }) {
   const canCancel = CANCELLABLE_STATUSES.has(job.status)
   const canDelete = DELETABLE_STATUSES.has(job.status)
   // Un intento anterior de una cadena ya se reintentó: el servidor solo acepta reintentar el último.
   const canRetry = !indent && RETRYABLE_STATUSES.has(job.status)
   const deepLink = buildDeepLink(job, instances)
-  const { triggerProps: emuTip, tooltipNode: emuTooltip } = useTooltip(job.result_url ? 'Ver en eMuwarez' : null)
+  const { triggerProps: emuTip, tooltipNode: emuTooltip } = useTooltip(job.result_url ? `Ver en ${job.tracker_nombre || 'eMuwarez'}` : null)
   const { triggerProps: originTip, tooltipNode: originTooltip } = useTooltip(deepLink ? `Abrir en ${job.instance_name ?? job.instance_type}` : null)
   const hayCadena = !!intentosAnteriores && !!onToggleCadena
   const retryToggleTip = useTooltip(hayCadena ? (desplegada ? 'Ocultar intentos anteriores' : 'Ver intentos anteriores') : null)
@@ -247,13 +260,15 @@ const JobRow = memo(function JobRow({ job, instances, seeding, onOpen, indent, i
   // intentos anteriores, que van debajo de la fila que ya lo lleva.
   const loteId = !indent && job.lote_id && (job.lote_total ?? 0) > 1 ? job.lote_id : null
   const loteTip = useTooltip(loteId ? 'Ver solo las subidas de este lote' : null)
+  const otra = enGrupo === 'otra'
+  const trackersTip = useTooltip(otrosTrackers ? (trackersAbiertos ? 'Ocultar las subidas a los otros trackers' : 'Ver las subidas a los otros trackers') : null)
   return (
     // Por debajo de 760 px la fila es una tarjeta (subidas.css): título y la acción que toca, el estado, y en gris
     // tipo · origen · fecha y los chips. Las clases sub-col-* y sub-meta dicen qué va en cada línea.
-    <tr className={indent ? 'sub-tarjeta sub-fila-antigua' : 'sub-tarjeta'}>
+    <tr className={indent ? 'sub-tarjeta sub-fila-antigua' : otra ? 'sub-tarjeta sub-fila-tracker' : 'sub-tarjeta'}>
       <td className="sub-celda-titulo">
-        <div className={`sub-titulo-fila${indent ? ' sub-titulo-fila-antigua' : ''}`}>
-          <div className="poster-thumb sub-poster">
+        <div className={`sub-titulo-fila${indent ? ' sub-titulo-fila-antigua' : otra ? ' sub-titulo-fila-tracker' : ''}`}>
+          {!otra && <div className="poster-thumb sub-poster">
             {job.poster_url ? (
               <img
                 src={posterUrl(job.poster_url, 'w92')}
@@ -268,16 +283,38 @@ const JobRow = memo(function JobRow({ job, instances, seeding, onOpen, indent, i
                 <IconoTipo serie={job.media_type === 'series' || job.media_type === 'episode'} />
               </span>
             )}
-          </div>
+          </div>}
           <div className="sub-titulo-texto">
             {indent && <span className="sub-muted sub-no-encoge">↳</span>}
-            <HoverTitle as="span" className="lib-title-link sub-titulo" href={`/uploads/${job.id}`} onClick={abrir} tip="Ver progreso / detalle">
-              {job.title || '—'}
+            <HoverTitle as="span" className={otra ? 'lib-title-link sub-titulo sub-tracker-chip' : 'lib-title-link sub-titulo'}
+              href={`/uploads/${job.id}`} onClick={abrir} tip="Ver progreso / detalle"
+              aria-label={otra ? `${job.title} en ${job.tracker_nombre}` : undefined}>
+              {otra ? <LogoTracker tracker={job.tracker} nombre={job.tracker_nombre ?? ''} size={14} conNombre /> : job.title || '—'}
             </HoverTitle>
-            {job.year ? <span className="sub-muted sub-t11 sub-no-encoge sub-anio">({job.year})</span> : null}
+            {!otra && job.year ? <span className="sub-muted sub-t11 sub-no-encoge sub-anio">({job.year})</span> : null}
           </div>
           {/* Aparte del título: en la tarjeta de móvil bajan a la última línea. */}
           <div className="sub-chips">
+            {/* En la primera de un grupo, su tracker abre su detalle, como el de las otras filas. */}
+            {enGrupo === 'primera' ? (
+              <HoverTitle as="span" className="lib-title-link sub-tracker-chip" href={`/uploads/${job.id}`} onClick={abrir}
+                tip="Ver progreso / detalle" aria-label={`${job.title} en ${job.tracker_nombre}`}>
+                <LogoTracker tracker={job.tracker} nombre={job.tracker_nombre ?? ''} size={14} conNombre />
+              </HoverTitle>
+            ) : !otra && <ChipTracker tracker={job.tracker} nombre={job.tracker_nombre} />}
+            {otrosTrackers && onToggleTrackers && (
+              <button
+                type="button"
+                className={`sub-reintentos-chip sub-toggle-trackers${otroFallido ? ' sub-toggle-trackers-fallido' : ''}`}
+                aria-expanded={!!trackersAbiertos}
+                onClick={() => onToggleTrackers(job.library_item_id!, !!trackersAbiertos)}
+                {...trackersTip.triggerProps}
+              >
+                + {otrosTrackers}
+                <IconoDesplegar abierto={!!trackersAbiertos} size={10} />
+                {trackersTip.tooltipNode}
+              </button>
+            )}
             {loteId && onFiltrarLote && (
               <button
                 type="button"
@@ -311,7 +348,7 @@ const JobRow = memo(function JobRow({ job, instances, seeding, onOpen, indent, i
             {!indent && faltaTrailer(job) && <ChipSinTrailer job={job} onAbrir={abrir} />}
             {job.result_url && (
               <a className="hover-link sub-enlace-emu" href={job.result_url} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()}
-                aria-label="Ver en eMuwarez" {...emuTip}>
+                aria-label={`Ver en ${job.tracker_nombre || 'eMuwarez'}`} {...emuTip}>
                 <ExternalLinkButtonIcon />
                 {emuTooltip}
               </a>
@@ -319,6 +356,7 @@ const JobRow = memo(function JobRow({ job, instances, seeding, onOpen, indent, i
           </div>
         </div>
       </td>
+      {otra ? <><td className="sub-sec" /><td className="sub-sec" /></> : <>
       <td className="sub-nowrap sub-sec sub-meta sub-col-tipo">
         {job.media_type
           ? <PlainValue icon={<TypeValueIcon />}>{UPLOAD_TYPE_LABEL[job.media_type] ?? job.media_type}</PlainValue>
@@ -333,6 +371,7 @@ const JobRow = memo(function JobRow({ job, instances, seeding, onOpen, indent, i
           )
           : <span className="sub-muted">—</span>}
       </td>
+      </>}
       <td className="col-prioridad-baja sub-nowrap">
         <GruposDeRelease grupos={job.release_groups ?? []} junto />
       </td>
@@ -347,6 +386,9 @@ const JobRow = memo(function JobRow({ job, instances, seeding, onOpen, indent, i
       <td className="col-actions">
         <div className="sub-acciones-fila">
           <RellenarPeticion job={job} compacto />
+          {subirTambienId != null && onSubirTambien && (
+            <AccionDeFila etiqueta="Subir también a otro tracker" onClick={() => onSubirTambien(subirTambienId)}><IconoSubida size={14} /></AccionDeFila>
+          )}
           {canRetry && (
             <AccionDeFila etiqueta="Reintentar" onClick={() => onRetry(job)}><RetryButtonIcon /></AccionDeFila>
           )}
@@ -394,6 +436,31 @@ export function UploadsPage({ onNavigate }: { onNavigate?: (page: string) => voi
   // El lote que el servidor ya no conoce (404): se borraron todas sus subidas, por ejemplo con «Borrar lote».
   const [loteSinSubidas, setLoteSinSubidas] = useState<string | null>(null)
   const [selectedJobId, setSelectedJobId] = useState<number | null>(null)
+  // «Subir también a…»: el modal para elegir varias subidas a eMuwarez y subirlas a N.O.B.S o Milnueve.
+  // `inicial`: abierto desde una fila, con esa subida marcada.
+  const [subirTambien, setSubirTambien] = useState<{ inicial?: number } | null>(null)
+  const abrirSubirTambien = useCallback((jobId: number) => setSubirTambien({ inicial: jobId }), [])
+  // Solo se ofrece con la clave de otro tracker puesta: quien solo usa eMuwarez no ve nada nuevo.
+  const [hayOtrosTrackers, setHayOtrosTrackers] = useState(false)
+  // Si la sección se ve: la sección sigue montada al ir a Configuración, así que se pregunta otra vez al volver (una
+  // clave puesta allí entretanto enseña el botón sin recargar la página).
+  const subidasALaVista = useSeccionVisible()
+  useEffect(() => {
+    if (!subidasALaVista) return
+    let vigente = true
+    fetchTrackersParaSubir().then(t => { if (vigente) setHayOtrosTrackers(t.some(x => x.id !== 'emu')) }, () => {})
+    return () => { vigente = false }
+  }, [subidasALaVista])
+  // Las subidas que llevan el botón de la fila: se vuelve a preguntar cuando aparece, desaparece o cambia de estado
+  // alguna subida (encolar, borrar, terminar), no con cada tic de progreso.
+  const [paraSubirTambien, setParaSubirTambien] = useState<Set<number>>(new Set())
+  const estados = useMemo(() => jobs.map(j => `${j.id}:${j.status}`).join(','), [jobs])
+  useEffect(() => {
+    if (!subidasALaVista || !hayOtrosTrackers) return
+    let vigente = true
+    getSubirTambien().then(d => { if (vigente) setParaSubirTambien(new Set(d.subidas.map(s => s.job_id))) }, () => {})
+    return () => { vigente = false }
+  }, [subidasALaVista, hayOtrosTrackers, estados])
   // Cuántas se piden (las más recientes), cuántas hay en total con el filtro de estado, y si ya llegó la primera
   // respuesta (hasta entonces «no está en la lista» no quiere decir nada).
   const [limite, setLimite] = useState(PAGINA)
@@ -423,6 +490,11 @@ export function UploadsPage({ onNavigate }: { onNavigate?: (page: string) => voi
   // Retry chains: which terminal (latest-attempt) job ids currently have
   // their older attempts expanded below them.
   const [expandedChains, setExpandedChains] = useState<Set<number>>(new Set())
+  // Plegado elegido a mano de las subidas a otros trackers, por elemento de la biblioteca.
+  const [trackersElegidos, setTrackersElegidos] = useState<Map<number, boolean>>(new Map())
+  const toggleTrackers = useCallback((elementoId: number, abiertos: boolean) => {
+    setTrackersElegidos(prev => new Map(prev).set(elementoId, !abiertos))
+  }, [])
 
   // Guards against out-of-order responses: the 2.5s background poll (below)
   // and an explicit load() (e.g. right after deleting a job) can both be
@@ -507,7 +579,6 @@ export function UploadsPage({ onNavigate }: { onNavigate?: (page: string) => voi
   // cada visita, así que sin eso solo se recogía el salto si los datos
   // llegaban justo después (ver context/SeccionVisible). Se abre aunque no esté
   // en la lista (una antigua): la ficha la pide por su id.
-  const subidasALaVista = useSeccionVisible()
   //
   // También el lote recién encolado desde «Subir por lotes» (Biblioteca): la tabla, filtrada por él.
   useEffect(() => {
@@ -719,7 +790,7 @@ export function UploadsPage({ onNavigate }: { onNavigate?: (page: string) => voi
   }, [])
 
   // Client-side filter + sort over the loaded jobs (status stays server-side).
-  const visibleJobs = useMemo(() => {
+  const grupos = useMemo(() => {
     const q = search.trim().toLowerCase()
     const out = jobs.filter(j => {
       if (HIDDEN_STATES.has(j.status)) return false
@@ -729,7 +800,7 @@ export function UploadsPage({ onNavigate }: { onNavigate?: (page: string) => voi
       return titleOk && typeOk
     })
     const dt = (s?: string | null) => (s ? new Date(s).getTime() : 0)
-    out.sort((a, b) => {
+    const comparar = (a: UploadJob, b: UploadJob) => {
       switch (sortBy) {
         case 'created_asc': return dt(a.created_at) - dt(b.created_at)
         case 'title': return (a.title || '').localeCompare(b.title || '')
@@ -737,9 +808,28 @@ export function UploadsPage({ onNavigate }: { onNavigate?: (page: string) => voi
         case 'duration_desc': return (b.duration_seconds ?? -1) - (a.duration_seconds ?? -1)
         default: return dt(b.created_at) - dt(a.created_at) // created_desc
       }
-    })
-    return out
-  }, [jobs, search, sortBy, typeFilter, hasNewerRetry])
+    }
+    // Hay una cadena por elemento y tracker: las puntas del mismo elemento son sus subidas a cada tracker y van juntas;
+    // el grupo va donde va la primera en el orden elegido. Dos del mismo tracker (un filtro de estado deja ver un
+    // intento anterior como punta) no se juntan.
+    const porElemento = new Map<number, UploadJob[]>()
+    for (const j of out.sort(comparar)) {
+      const grupo = j.library_item_id != null ? porElemento.get(j.library_item_id) : undefined
+      if (grupo && !grupo.some(o => o.tracker === j.tracker)) grupo.push(j)
+      else porElemento.set(grupo || j.library_item_id == null ? -j.id! : j.library_item_id, [j])
+    }
+    // Dentro del grupo, arriba la subida de la que salen las demás: la que empezó antes. Los ids van en el orden en que
+    // se crean, y de un reintento se sabe el id del anterior aunque no esté cargado (el filtro por lote solo trae puntas).
+    const inicio = (j: UploadJob) => {
+      let id = j.id!
+      for (let c: UploadJob | undefined = j; c?.retry_of_job_id != null; c = jobById.get(c.retry_of_job_id)) {
+        id = Math.min(id, c.retry_of_job_id)
+      }
+      return id
+    }
+    return [...porElemento.values()].map(g => (g.length > 1 ? [...g].sort((a, b) => inicio(a) - inicio(b)) : g))
+  }, [jobs, jobById, search, sortBy, typeFilter, hasNewerRetry])
+  const subidasVisibles = grupos.reduce((n, g) => n + g.length, 0)
 
   // La de la lista o, si es más antigua que las cargadas (enlace /uploads/123, notificación, Panel), la pedida por su id.
   const [jobSuelto, setJobSuelto] = useState<UploadJob | null>(null)
@@ -769,6 +859,7 @@ export function UploadsPage({ onNavigate }: { onNavigate?: (page: string) => voi
   const recargarSubida = () => {
     load({ silent: true })
     recargarSuelta()
+    setVezSubirTambien(n => n + 1)
   }
   // Los avisos solo recargan la lista: la ficha suelta se pide otra vez cuando cambia (un reenvío que termina).
   useRefrescoPorAvisos(AVISOS_SUBIDA, recargarSuelta, {
@@ -780,19 +871,37 @@ export function UploadsPage({ onNavigate }: { onNavigate?: (page: string) => voi
   // parent-walk query per list row — so fetch it once per selection and
   // merge just that field into the (still live-polled) list-derived job,
   // instead of replacing it outright and losing further progress updates.
-  const [selectedTitle, setSelectedTitle] = useState<{ id: number; display_title: string | null } | null>(null)
+  // Lo mismo con `subir_tambien_a` (los trackers a los que se puede subir también) y sus avisos: solo los trae el
+  // GET de una.
+  // Se vuelve a pedir cuando la subida se completa (solo entonces lo trae) y tras encolar una copia.
+  const [selectedTitle, setSelectedTitle] = useState<{
+    id: number; display_title: string | null
+    subir_tambien_a: UploadJob['subir_tambien_a']; subir_tambien_avisos: UploadJob['subir_tambien_avisos']
+  } | null>(null)
+  const [vezSubirTambien, setVezSubirTambien] = useState(0)
+  const completadaLaElegida = selectedJob?.status === 'completed'
   useEffect(() => {
     if (selectedJobId == null) { setSelectedTitle(null); return }
     let alive = true
-    getUploadJob(selectedJobId).then(j => { if (alive) setSelectedTitle({ id: selectedJobId, display_title: j.display_title ?? null }) }).catch(() => {})
+    getUploadJob(selectedJobId).then(j => {
+      if (alive) {
+        setSelectedTitle({
+          id: selectedJobId, display_title: j.display_title ?? null,
+          subir_tambien_a: j.subir_tambien_a, subir_tambien_avisos: j.subir_tambien_avisos,
+        })
+      }
+    }).catch(() => {})
     return () => { alive = false }
-  }, [selectedJobId])
+  }, [selectedJobId, completadaLaElegida, vezSubirTambien])
   const selectedJobWithTitle = selectedJob && selectedTitle && selectedTitle.id === selectedJob.id
-    ? { ...selectedJob, display_title: selectedTitle.display_title }
+    ? {
+      ...selectedJob, display_title: selectedTitle.display_title,
+      subir_tambien_a: selectedTitle.subir_tambien_a, subir_tambien_avisos: selectedTitle.subir_tambien_avisos,
+    }
     : selectedJob
 
   // La fila del último intento de una cadena y, si está desplegada, sus intentos anteriores.
-  const pintarCadena = (job: UploadJob) => {
+  const pintarCadena = (job: UploadJob, enGrupo?: 'primera' | 'otra', loteArriba?: string | null, otras?: UploadJob[], trackersAbiertos?: boolean) => {
     const ancestors = ancestorsOf(job)
     const expanded = expandedChains.has(job.id!)
     return [
@@ -802,18 +911,37 @@ export function UploadsPage({ onNavigate }: { onNavigate?: (page: string) => voi
         instances={instances}
         seeding={seeding}
         onOpen={openUpload}
+        enGrupo={enGrupo}
+        otrosTrackers={otras?.map(o => o.tracker_nombre).join(' · ')}
+        trackersAbiertos={trackersAbiertos}
+        otroFallido={otras?.some(o => RETRYABLE_STATUSES.has(o.status))}
+        onToggleTrackers={otras ? toggleTrackers : undefined}
         intentosAnteriores={ancestors.length > 0 ? ancestors.length : undefined}
         desplegada={expanded}
         onToggleCadena={toggleChain}
         onCancel={alCancelar}
         onDelete={setDeleteJob}
         onRetry={alReintentar}
+        // En la fila que se ve del elemento, aunque la que vale de origen sea otra del grupo.
+        subirTambienId={enGrupo === 'otra' || !hayOtrosTrackers ? undefined : [job, ...(otras ?? [])].find(j => j.id != null && paraSubirTambien.has(j.id))?.id}
+        onSubirTambien={abrirSubirTambien}
         // Con la lista ya filtrada por ese lote, el banner lo dice: la chapa en cada fila sobra.
-        onFiltrarLote={job.lote_id === loteFiltro ? undefined : setLoteFiltro}
+        // Y debajo de otra del mismo lote, también.
+        onFiltrarLote={job.lote_id === loteFiltro || (enGrupo === 'otra' && job.lote_id === loteArriba) ? undefined : setLoteFiltro}
       />,
       ...(expanded ? ancestors.map(a => (
         <JobRow key={a.id} job={a} instances={instances} seeding={seeding} indent onOpen={openUpload} onCancel={alCancelar} onRetry={alReintentar} onDelete={setDeleteJob} />
       )) : []),
+    ]
+  }
+  // Un elemento: la cadena de cada tracker, una debajo de otra; las de los otros trackers, si el grupo está abierto.
+  const pintarGrupo = (grupo: UploadJob[]) => {
+    const [primera, ...otras] = grupo
+    if (!otras.length) return pintarCadena(primera)
+    const abiertos = trackersElegidos.get(primera.library_item_id!) ?? otras.some(o => o.status !== 'completed')
+    return [
+      ...pintarCadena(primera, 'primera', null, otras, abiertos),
+      ...(abiertos ? otras.flatMap(o => pintarCadena(o, 'otra', primera.lote_id)) : []),
     ]
   }
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -891,13 +1019,22 @@ export function UploadsPage({ onNavigate }: { onNavigate?: (page: string) => voi
         <div>
           <h1 className="page-title">Subidas</h1>
           <div className="page-subtitle">
-            {visibleJobs.length} subidas{total != null && jobs.length < total ? ` · ${jobs.length} de ${total} cargadas` : ''}
+            {subidasVisibles} subidas{grupos.length < subidasVisibles ? ` de ${grupos.length} ${grupos.length === 1 ? 'elemento' : 'elementos'}` : ''}{total != null && jobs.length < total ? ` · ${jobs.length} de ${total} cargadas` : ''}
           </div>
         </div>
         <div className="sub-fila">
           {hasLiveJob && <span className="sub-en-vivo"><span aria-hidden="true">●</span> actualizando en vivo</span>}
+          {hayOtrosTrackers && (
+            <button type="button" className="btn btn-secondary" onClick={() => setSubirTambien({})}>
+              Subir también a…
+            </button>
+          )}
         </div>
       </div>
+      {subirTambien && (
+        <SubirTambienModal inicial={subirTambien.inicial} onClose={() => setSubirTambien(null)}
+          onEncolado={loteId => { if (loteId) verLote(loteId); else load({ silent: true }) }} />
+      )}
 
       <div className="filters-bar sub-no-encoge">
         <input
@@ -969,7 +1106,7 @@ export function UploadsPage({ onNavigate }: { onNavigate?: (page: string) => voi
                   <th className="col-actions sub-th-acciones">Acciones</th>
                 </tr>
               </thead>
-              {visibleJobs.length === 0 && loteVacio && (
+              {grupos.length === 0 && loteVacio && (
                 <FilaVacia
                   columnas={COLUMNAS}
                   icon={<IconoSubida />}
@@ -978,7 +1115,7 @@ export function UploadsPage({ onNavigate }: { onNavigate?: (page: string) => voi
                   action={<button className="btn btn-primary btn-sm" onClick={() => setLoteFiltro(null)}>Quitar filtro del lote</button>}
                 />
               )}
-              {visibleJobs.length === 0 && filtrando && !loteVacio && (
+              {grupos.length === 0 && filtrando && !loteVacio && (
                 <FilaVacia
                   columnas={COLUMNAS}
                   icon={<IconoSubida />}
@@ -995,19 +1132,19 @@ export function UploadsPage({ onNavigate }: { onNavigate?: (page: string) => voi
                 />
               )}
               {/* Pasadas las UMBRAL_VIRTUAL subidas solo se pintan las que se ven: cada elemento es la fila del último
-                  intento con sus intentos anteriores desplegados, en su propio <tbody>. */}
-              {visibleJobs.length > UMBRAL_VIRTUAL ? (
+                  intento de cada tracker con sus intentos anteriores desplegados, en su propio <tbody>. */}
+              {grupos.length > UMBRAL_VIRTUAL ? (
                 <FilasVirtuales
-                  items={visibleJobs}
-                  clave={claveDeSubida}
+                  items={grupos}
+                  clave={claveDeGrupo}
                   alturaEstimada={ALTO_FILA}
                   columnas={COLUMNAS}
                   contenedor={scrollRef}
                   cabecera={theadRef}
-                  pintar={pintarCadena}
+                  pintar={pintarGrupo}
                 />
               ) : (
-                <tbody>{visibleJobs.flatMap(j => pintarCadena(j))}</tbody>
+                <tbody>{grupos.flatMap(pintarGrupo)}</tbody>
               )}
             </table>
           </div>

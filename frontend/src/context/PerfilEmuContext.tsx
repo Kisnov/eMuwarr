@@ -55,8 +55,10 @@ export function PerfilEmuProvider({ children }: { children: React.ReactNode }) {
   }, [lastInvalidatedAt])
 
   const actualizar = useCallback(async () => {
-    ultima.current++
-    setPerfil(await actualizarEmuPerfil())
+    // Dos «Actualizar» a la vez (una por franja): solo vale la última.
+    const esta = ++ultima.current
+    const nuevo = await actualizarEmuPerfil()
+    if (esta === ultima.current) setPerfil(nuevo)
   }, [])
 
   return (

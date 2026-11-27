@@ -36,7 +36,7 @@ def conn():
 def llamadas(monkeypatch):
     hechas: list[str] = []
 
-    def falso(api_key, base_url=None):
+    def falso(api_key, base_url=None, **kw):
         hechas.append(api_key)
         return dict(USUARIO)
 
@@ -68,6 +68,16 @@ def test_emu_get_user_no_ensena_la_url(monkeypatch, estado):
     with pytest.raises(IntegrationError) as exc:
         emu.emu_get_user("secreta")
     assert "secreta" not in str(exc.value) and exc.value.status == estado
+
+
+def test_emu_get_user_de_otro_tracker_dice_su_nombre(monkeypatch):
+    def falso(method, url, **kw):
+        raise IntegrationError("HTTP 401", status=401)
+
+    monkeypatch.setattr(emu, "request_json", falso)
+    with pytest.raises(IntegrationError) as exc:
+        emu.emu_get_user("k", "https://nobs.rawsmoke.net", tracker="NOBS", nombre="N.O.B.S")
+    assert str(exc.value).startswith("N.O.B.S ha rechazado")
 
 
 def test_emu_get_user_rechaza_una_respuesta_sin_usuario(monkeypatch):
@@ -114,7 +124,7 @@ def test_un_fallo_deja_el_ultimo_perfil_y_no_se_reintenta_hasta_la_hora(conn, ll
     _intento_hace(conn, timedelta(hours=2))
     fallos = []
 
-    def falla(api_key, base_url=None):
+    def falla(api_key, base_url=None, **kw):
         fallos.append(api_key)
         raise IntegrationError("eMuwarez ha rechazado la API key (¿ratio por debajo de 1?)", status=401)
 
@@ -136,11 +146,33 @@ def test_rellena_el_usuario_de_ajustes_solo_si_esta_vacio(conn, llamadas):
     assert get_setting_canonical(conn, "emu.username") == "OtroNombre"
 
 
+def test_con_la_clave_de_otra_cuenta_el_usuario_de_ajustes_pasa_a_ser_el_suyo(conn, monkeypatch):
+    cuenta = {"username": "Kisnov"}
+    monkeypatch.setattr(emu_perfil, "emu_get_user", lambda api_key, base_url=None, **kw: {**USUARIO, **cuenta})
+    perfil_emu(conn)
+    assert get_setting_canonical(conn, "emu.username") == "Kisnov"
+
+    def falla(api_key, base_url=None, **kw):
+        raise IntegrationError("eMuwarez no responde")
+
+    monkeypatch.setattr(emu_perfil, "emu_get_user", falla)
+    set_setting(conn, "emu.api_key", "de-otra-cuenta")
+    conn.commit()
+    perfil_emu(conn)  # la primera lectura con la clave nueva falla: el nombre de la anterior ya no vale
+    assert not get_setting_canonical(conn, "emu.username")
+
+    cuenta["username"] = "OtraCuenta"
+    monkeypatch.setattr(emu_perfil, "emu_get_user", lambda api_key, base_url=None, **kw: {**USUARIO, **cuenta})
+    _intento_hace(conn, timedelta(hours=1))
+    perfil_emu(conn)
+    assert get_setting_canonical(conn, "emu.username") == "OtraCuenta"
+
+
 def test_dos_pestanas_a_la_vez_hacen_una_sola_llamada(conn, monkeypatch):
     dentro, seguir = threading.Event(), threading.Event()
     hechas = []
 
-    def lenta(api_key, base_url=None):
+    def lenta(api_key, base_url=None, **kw):
         hechas.append(api_key)
         dentro.set()
         seguir.wait(5)
@@ -176,7 +208,7 @@ def test_otra_clave_no_ensena_el_perfil_de_la_anterior(conn, llamadas, monkeypat
     perfil_emu(conn)
     assert llamadas == ["clave", "nueva"]  # sin esperar la hora
 
-    def falla(api_key, base_url=None):
+    def falla(api_key, base_url=None, **kw):
         raise IntegrationError("eMuwarez ha rechazado la API key (¿ratio por debajo de 1?)", status=401)
 
     monkeypatch.setattr(emu_perfil, "emu_get_user", falla)
@@ -193,3 +225,56 @@ def test_endpoint(client, auth_headers, conn, llamadas):
     assert (resp.json()["username"], resp.json()["seedbonus"]) == ("Kisnov", 12345.5)
     assert client.post("/api/dashboard/emu-perfil/actualizar", headers=auth_headers).status_code == 200
     assert len(llamadas) == 1
+
+
+# ---- otros trackers ----
+
+def test_solo_con_emuwarez_no_hay_otros(conn, llamadas):
+    perfil = emu_perfil.perfiles(conn)
+    assert perfil["otros"] == [] and (perfil["tracker"], perfil["nombre"]) == ("emu", "eMuwarez")
+
+
+def test_cada_tracker_con_clave_se_lee_con_lo_suyo_y_su_fallo_es_suyo(conn, monkeypatch):
+    set_setting(conn, "nobs.api_key", "clave-nobs")
+    set_setting(conn, "mnv.api_key", "clave-mnv")
+    conn.commit()
+    pedidos = []
+
+    def falso(api_key, base_url=None, **kw):
+        pedidos.append((api_key, base_url, kw["tracker"]))
+        if kw["tracker"] == "MNV":
+            raise IntegrationError("Milnueve no responde")
+        return {**USUARIO, "username": f"Kisnov-{kw['tracker']}"}
+
+    monkeypatch.setattr(emu_perfil, "emu_get_user", falso)
+    perfil = emu_perfil.perfiles(conn)
+    assert pedidos == [("clave", "https://emu-warez.com", "EMU"), ("clave-nobs", "https://nobs.rawsmoke.net", "NOBS"),
+                       ("clave-mnv", "https://tracker.milnueve.cc", "MNV")]
+    nobs, mnv = perfil["otros"]
+    assert perfil["username"] == "Kisnov-EMU" and perfil["error"] is None
+    assert (nobs["nombre"], nobs["username"], nobs["url"]) == ("N.O.B.S", "Kisnov-NOBS", "https://nobs.rawsmoke.net")
+    assert mnv["error"] == "Milnueve no responde" and mnv["ratio"] is None
+    # El usuario de cada uno queda en sus ajustes, para leer allí «Tus subidas».
+    assert get_setting_canonical(conn, "nobs.username") == "Kisnov-NOBS"
+    assert get_setting_canonical(conn, "emu.username") == "Kisnov-EMU"
+    assert [tuple(f) for f in conn.execute("SELECT tracker, usuario FROM perfil_historial ORDER BY tracker")] == [
+        ("emu", "Kisnov-EMU"), ("nobs", "Kisnov-NOBS")]
+
+
+def test_el_usuario_de_otro_tracker_sigue_a_su_clave(conn, monkeypatch):
+    """Con la clave de otra cuenta de N.O.B.S, «Tus subidas» pasa a contar por el usuario nuevo."""
+    set_setting(conn, "nobs.api_key", "clave-nobs")
+    set_setting(conn, "nobs.username", "CuentaVieja")
+    conn.commit()
+    monkeypatch.setattr(emu_perfil, "emu_get_user", lambda *_a, **kw: {**USUARIO, "username": f"Kisnov-{kw['tracker']}"})
+    emu_perfil.perfiles(conn)
+    assert get_setting_canonical(conn, "nobs.username") == "Kisnov-NOBS"
+
+
+def test_el_endpoint_trae_los_otros(client, auth_headers, conn, llamadas):
+    set_setting(conn, "nobs.api_key", "clave-nobs")
+    conn.commit()
+    cuerpo = client.get("/api/dashboard/emu-perfil", headers=auth_headers).json()
+    assert cuerpo["tracker"] == "emu" and cuerpo["url"] == "https://emu-warez.com"
+    assert [(o["tracker"], o["nombre"], o["username"]) for o in cuerpo["otros"]] == [("nobs", "N.O.B.S", "Kisnov")]
+    assert llamadas == ["clave", "clave-nobs"]

@@ -1,12 +1,14 @@
-// El paso Resumen: lo que se va a mandar a eMuwarez y lo que el catálogo local ya tiene de lo mismo. Es la última
-// ocasión de ver una categoría, una pista o un duplicado equivocados, y sirve igual para una película, un pack
+// El paso Resumen: lo que se va a mandar y lo que el catálogo local de cada tracker elegido ya tiene de lo mismo. Es la
+// última ocasión de ver una categoría, una pista o un duplicado equivocados, y sirve igual para una película, un pack
 // y una tanda de temporadas o capítulos.
 import { useId } from 'react'
+import { soloA } from '../../utils/elegibilidad'
 import { timeAgo } from '../../utils/format'
 import { peticionCubre } from '../../utils/seleccionSubida'
 import {
-  conclusionDuplicados, textoCategoria, textoCopia, textoFicheros, textoPistas, tipoDeEnlace, type FilaYaHay, type YaHay,
+  textoCategoria, textoCopia, textoFicheros, textoPistas, tipoDeEnlace, type FilaYaHay, type YaHay,
 } from '../../utils/resumenSubida'
+import { CasillasTrackers } from './piezas'
 import { mergeRemuxTracks } from './RemuxTable'
 import type { Asistente } from './useAsistente'
 import { useResumen } from './useResumen'
@@ -18,21 +20,30 @@ export function ResumenSubida({ a }: { a: Asistente }) {
     item, seasons, episodes, targetId, targetIsSeason, batchQueue, batchIsEpisodes, batchItemTitle,
     preview, seasonDisplayTitle, seasonPlan, fields, remuxPreview, remuxEdits, modoPistasAjuste,
     checks, batchContentChecks, nombresTanda, requestId, preselect,
-    anonimoMarcado, personalReleaseMarcado, elegirAnonimo, elegirPersonalRelease, opcionesTracker, uploading,
-    sources, elegirTipo,
+    anonimoMarcado, personalReleaseMarcado, marcasMixtas, elegirAnonimo, elegirPersonalRelease, opcionesTracker, uploading,
+    sources, elegirTipo, trackersParaSubir, trackersElegidos, elegirTracker, destinos, reglas, reglasDe, batchChecksLoading,
+    descripcion, escribirDescripcion, descripcionPorTracker, descripcionPropia, editarDescripcionDe,
   } = a
   const esTanda = batchQueue.length > 1
+  const destinosElegidos = trackersParaSubir.filter(t => trackersElegidos.includes(t.id))
+  // Si eMuwarez no lo admite (sus normas de idioma), se dice junto a su casilla: sale desmarcada de entrada.
+  const emuNoLoAdmite = esTanda ? undefined : reglasDe(targetId)?.find(r => r.tracker === 'emu' && !r.permitido)
   const ids = esTanda ? batchQueue : targetId != null ? [targetId] : []
   const fila = (id: number) => [item, ...seasons, ...episodes].find(x => x.id === id)
   const filas = ids.map(fila)
   const objetivo = filas[0]
   const tipo = objetivo?.item_type ?? item.item_type
-  const cubiertos = esTanda
-    ? filas.filter(f => !f || peticionCubre(preselect, f)).length
-    : requestId != null ? 1 : 0
+  // Una petición solo la cubre la subida a su tracker: sin él entre los destinos, nada queda enlazado.
+  const aSuTracker = !preselect?.tracker || destinos.some(d => d.id === preselect.tracker)
+  // En una tanda, además, solo los que ese tracker admite: lo demás va a otro y no la enlaza.
+  const vaASuTracker = (id: number) => !preselect?.tracker
+    || (reglasDe(id)?.some(r => r.tracker === preselect.tracker && r.permitido) ?? true)
+  const cubiertos = !aSuTracker ? 0 : esTanda
+    ? filas.filter(f => !f || (peticionCubre(preselect, f) && vaASuTracker(f.id))).length
+    : requestId != null && (!objetivo || peticionCubre(preselect, objetivo)) ? 1 : 0
 
-  const { yaHay, sincronizado, peticion } = useResumen({
-    ids, requestId, cubiertos,
+  const { yaHayEn, peticion } = useResumen({
+    ids, trackers: destinos, requestId, cubiertos,
     // Un fichero o un pack: lo que irá en el nombre; una tanda lleva el de cada elemento.
     tuya: esTanda ? undefined : { resolution: fields.resolution, source: fields.source },
     alcance: esTanda ? null : ALCANCE[tipo] ?? 'este contenido',
@@ -59,19 +70,23 @@ export function ResumenSubida({ a }: { a: Asistente }) {
   // Sin un tipo que eMuwarez conozca no se sube (la comprobación «tipo»): aquí se elige, con el Source.
   const tipoDesconocido = !esTanda && checks?.checks.some(c => c.id === 'tipo' && c.status === 'fail')
   const idTitulo = useId()
-  const idYaHay = useId()
   return (
     <div className="asist-resumen">
       <section className="detail-card asist-panel" aria-labelledby={idTitulo}>
         <h3 className="asist-panel-titulo" id={idTitulo}>Lo que se sube</h3>
         {esTanda ? (
           <ul className="asist-lista-subida">
-            {batchQueue.map(id => (
-              <li key={id}>
-                <span className="asist-lista-titulo">{batchItemTitle(id)}</span>
-                <NombreDeLaTanda nombre={nombreDeLaTanda(id)} />
-              </li>
-            ))}
+            {batchQueue.map(id => {
+              // A cuáles de los elegidos va, si alguno no lo admite.
+              const solo = soloA(destinos, reglasDe(id))
+              return (
+                <li key={id}>
+                  <span className="asist-lista-titulo">{batchItemTitle(id)}</span>
+                  <NombreDeLaTanda nombre={nombreDeLaTanda(id)} />
+                  {solo && <span className="asist-dato-nota asist-aviso-dato">Solo a {solo}</span>}
+                </li>
+              )
+            })}
           </ul>
         ) : (
           <p className="asist-nombre-torrent" translate="no">{nombre || '—'}</p>
@@ -98,6 +113,67 @@ export function ResumenSubida({ a }: { a: Asistente }) {
               </dd>
             </>
           )}
+          {/* Solo con otro tracker con clave. Cambiar el primero rehace las comprobaciones de la tanda: no mientras se hacen. */}
+          {trackersParaSubir.length > 1 && (
+            <>
+              <dt>Trackers</dt>
+              <dd>
+                <CasillasTrackers trackers={trackersParaSubir} elegidos={trackersElegidos} onElegir={elegirTracker}
+                  disabled={uploading || (esTanda && batchChecksLoading)} />
+                {emuNoLoAdmite && (
+                  <span className="asist-dato-nota asist-aviso-dato">eMuwarez: ✗ no lo admite. {emuNoLoAdmite.motivo}</span>
+                )}
+                {/* Las normas de idioma de cada otro tracker (las de eMuwarez van en las comprobaciones). */}
+                {esTanda ? (
+                  <span className="asist-dato-nota">
+                    Las comprobaciones de cada uno son las del primero que lo admite; lo que otro no admita se salta solo
+                    para él.
+                  </span>
+                ) : trackersParaSubir.filter(t => t.id !== 'emu').map(t => {
+                  const r = reglas.get(t.id)
+                  return (
+                    <span key={t.id} className={`asist-dato-nota${r && !r.permitido ? ' asist-aviso-dato' : ''}`}>
+                      {t.nombre}: {r ? `${r.permitido ? '✓' : '✗'} ${r.motivo}` : 'comprobando sus normas de idioma…'}
+                    </span>
+                  )
+                })}
+                <span className="asist-dato-nota">
+                  {trackersElegidos.length === 0
+                    ? 'Elige al menos uno.'
+                    : 'Una subida por tracker, una detrás de otra, con el mismo fichero y el mismo nombre.'}
+                </span>
+              </dd>
+            </>
+          )}
+          {/* Una subida suelta: la tanda no lleva descripción propia. */}
+          {!esTanda && (
+            <>
+              <dt>Descripción</dt>
+              <dd>
+                <textarea className="form-input asist-descripcion" rows={4} value={descripcion} disabled={uploading}
+                  maxLength={30000} aria-label="Descripción propia (BBCode)" placeholder="[b]Notas del encode[/b]…"
+                  onChange={e => escribirDescripcion(e.target.value)} />
+                <span className="asist-dato-nota">
+                  BBCode opcional: va tras el tráiler y antes de las capturas y la firma
+                  {destinosElegidos.length > 1 ? ', la misma en todos los trackers.' : '.'}
+                </span>
+                {destinosElegidos.length > 1 && destinosElegidos.map(t => (
+                  <span key={t.id} className="asist-descripcion-tracker">
+                    <label className="asist-casilla">
+                      <input type="checkbox" checked={t.id in descripcionPorTracker} disabled={uploading}
+                        onChange={e => descripcionPropia(t.id, e.target.checked)} />
+                      Otra para {t.nombre}
+                    </label>
+                    {t.id in descripcionPorTracker && (
+                      <textarea className="form-input asist-descripcion" rows={4} value={descripcionPorTracker[t.id]}
+                        disabled={uploading} maxLength={30000} aria-label={`Descripción para ${t.nombre}`}
+                        onChange={e => editarDescripcionDe(t.id, e.target.value)} />
+                    )}
+                  </span>
+                ))}
+              </dd>
+            </>
+          )}
           <dt>Petición</dt>
           <dd className={peticion?.aviso ? 'asist-aviso-dato' : undefined}>{peticion?.texto ?? '…'}</dd>
           <dt>Pistas</dt>
@@ -112,36 +188,48 @@ export function ResumenSubida({ a }: { a: Asistente }) {
             <span className="asist-marcas">
               <label className="asist-casilla">
                 <input type="checkbox" checked={anonimoMarcado} disabled={uploading}
+                  ref={el => { if (el) el.indeterminate = opcionesTracker.anonimo === null && marcasMixtas.anonimo }}
                   onChange={e => elegirAnonimo(e.target.checked)} />
                 Anónimo
               </label>
               <label className="asist-casilla">
                 <input type="checkbox" checked={personalReleaseMarcado} disabled={uploading}
+                  ref={el => { if (el) el.indeterminate = opcionesTracker.personalRelease === null && marcasMixtas.personalRelease }}
                   onChange={e => elegirPersonalRelease(e.target.checked)} />
                 Personal release
               </label>
             </span>
             <span className="asist-dato-nota">
-              {!esTanda
+              {!esTanda && !marcasMixtas.anonimo && !marcasMixtas.personalRelease
                 ? 'De entrada, lo que tenga marcado el grupo en Configuración; aquí cambia solo esta subida.'
                 : opcionesTracker.anonimo === null && opcionesTracker.personalRelease === null
-                ? 'Sin tocarlas, cada subida lleva lo que tenga marcado su grupo en Configuración.'
-                : 'Lo que cambies aquí vale para todas las subidas de la tanda; lo que no toques sigue al grupo de cada una.'}
+                ? 'Sin tocarlas, cada subida lleva lo que tenga marcado su grupo en Configuración para su tracker.'
+                : 'Lo que cambies aquí vale para todas estas subidas; lo que no toques sigue al grupo de cada una.'}
             </span>
           </dd>
         </dl>
       </section>
 
-      <section className="detail-card asist-panel" aria-labelledby={idYaHay}>
-        <h3 className="asist-panel-titulo" id={idYaHay}>En eMuwarez ya hay</h3>
-        <YaHayEnEmu yaHay={yaHay} />
-        {yaHay.estado === 'listo' && (
-          <p className="asist-nota-catalogo">
-            Del catálogo local, sincronizado {timeAgo(sincronizado)}. No cuenta como permiso: revisa las reglas de trumps.
-          </p>
-        )}
-      </section>
+      {/* Uno por tracker elegido, uno debajo de otro. */}
+      <div className="asist-resumen-yahay">
+        {destinos.map(t => <PanelYaHay key={t.id} tracker={t.nombre} yaHay={yaHayEn(t.id)} />)}
+      </div>
     </div>
+  )
+}
+
+function PanelYaHay({ tracker, yaHay }: { tracker: string; yaHay: YaHay }) {
+  const id = useId()
+  return (
+    <section className="detail-card asist-panel" aria-labelledby={id}>
+      <h3 className="asist-panel-titulo" id={id}>En {tracker} ya hay</h3>
+      <YaHayEn tracker={tracker} yaHay={yaHay} />
+      {yaHay.estado === 'listo' && (
+        <p className="asist-nota-catalogo">
+          Del catálogo local, sincronizado {timeAgo(yaHay.sincronizado)}. No cuenta como permiso: revisa las reglas de trumps.
+        </p>
+      )}
+    </section>
   )
 }
 
@@ -152,20 +240,25 @@ export function NombreDeLaTanda({ nombre }: { nombre: string | null | undefined 
   return <span className="asist-lista-nombre" translate="no">{nombre}</span>
 }
 
-function YaHayEnEmu({ yaHay }: { yaHay: YaHay }) {
+function YaHayEn({ tracker, yaHay }: { tracker: string; yaHay: YaHay }) {
   if (yaHay.estado === 'cargando') {
     return <p className="asist-t12 text-muted"><span className="spinner asist-spinner-12" /> Mirando el catálogo local…</p>
   }
   if (yaHay.estado === 'error') return <p className="asist-t13">No se pudo leer el catálogo local.</p>
   if (yaHay.estado === 'sin-catalogo') {
-    return <p className="asist-t13">Sin catálogo local: sincroniza con eMuwarez para saber si ya está.</p>
+    return (
+      <p className="asist-t13">
+        {tracker === 'eMuwarez'
+          ? 'Sin catálogo local: sincroniza con eMuwarez para saber si ya está.'
+          : `Sin catálogo local de ${tracker}: se lee al sincronizar el de eMuwarez.`}
+      </p>
+    )
   }
-  const { filas, sinNada, total } = yaHay
-  const conclusion = conclusionDuplicados(filas)
+  const { filas, sinNada, total, conclusion } = yaHay
   return (
     <>
       {filas.length === 0 ? (
-        <p className="asist-t13">Nada de esto está en eMuwarez todavía.</p>
+        <p className="asist-t13">Nada de esto está en {tracker} todavía.</p>
       ) : (
         <>
         {conclusion && (
@@ -176,7 +269,7 @@ function YaHayEnEmu({ yaHay }: { yaHay: YaHay }) {
         )}
         <div className="asist-tabla-caja asist-tabla-caja-yahay">
           <table className="asist-tabla asist-tabla-yahay">
-            <caption className="solo-lector">Torrents de eMuwarez del mismo contenido</caption>
+            <caption className="solo-lector">Torrents de {tracker} del mismo contenido</caption>
             <thead>
               <tr>
                 <th className="asist-th" scope="col">Torrent</th>
@@ -192,7 +285,7 @@ function YaHayEnEmu({ yaHay }: { yaHay: YaHay }) {
         </>
       )}
       {total > 1 && sinNada > 0 && (
-        <p className="asist-t12 text-muted asist-mt-10">{sinNada} de {total} no están en eMuwarez.</p>
+        <p className="asist-t12 text-muted asist-mt-10">{sinNada} de {total} no están en {tracker}.</p>
       )}
     </>
   )

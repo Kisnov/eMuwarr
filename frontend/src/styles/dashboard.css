@@ -7,83 +7,211 @@
 }
 .sync-card button.btn { white-space: nowrap; }
 
-/* «Tu cuenta en eMuwarez»: una franja propia bajo el título del Panel (ver `.panel-cabecera` en panel.css, que la
-   coloca). Usuario y rol a la izquierda, tus cifras en una línea, los enlaces a la derecha; si no caben, bajan. */
-.cuenta-emu {
-  min-width: 0;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px 18px;
-  padding: 7px 14px;
-  font-size: 12px;
-  color: var(--text-secondary);
-  background: color-mix(in srgb, var(--overlay-light) 3%, transparent);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-card);
-}
+/* Tus cuentas en los trackers: bajo el título del Panel (ver `.panel-cabecera` en panel.css, que la coloca). Con varios,
+   una tarjeta por tracker (`.cuentas-tarjetas`); con uno, una tabla de una fila (`.cuentas-tabla`). */
 .cuenta-emu-usuario {
+  min-width: 0;
+  min-height: 24px;
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 7px;
   font-size: 13px;
   font-weight: 600;
   color: var(--text-primary);
 }
+.cuenta-emu-nombre {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 /* La insignia del rol: texto de acento sobre un tinte del mismo acento (con el fondo blanco de antes, 2,1:1). */
 .cuenta-emu-rol {
+  flex-shrink: 0;
   color: var(--text-accent);
   background: color-mix(in srgb, var(--hud-cyan, var(--color-accent)) 14%, transparent);
   border: 1px solid color-mix(in srgb, var(--hud-cyan, var(--color-accent)) 40%, transparent);
-}
-.cuenta-emu-cifras {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px 16px;
-  margin: 0;
-}
-.cuenta-emu-cifra {
-  display: flex;
-  align-items: baseline;
-  gap: 5px;
 }
 .cuenta-emu-cifra dt {
   color: var(--text-muted);
 }
 .cuenta-emu-cifra dd {
   margin: 0;
+}
+.cuenta-emu-cifra dd,
+td.cuenta-emu-cifra {
   color: var(--text-primary);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
-.cuenta-emu-cifra.es-malo dd {
+.cuenta-emu-cifra.es-malo dd,
+td.cuenta-emu-cifra.es-malo {
   color: var(--color-error);
 }
 .cuenta-emu-cifra.es-aviso dd,
+td.cuenta-emu-cifra.es-aviso,
 .cuenta-emu-error {
   color: var(--color-warning);
 }
-.cuenta-emu-enlaces {
+.cuenta-emu-error {
+  display: block;
+  font-size: 12px;
+  font-weight: 400;
+  white-space: normal;
+}
+.cuenta-emu-acciones {
+  flex-shrink: 0;
   display: flex;
-  gap: 14px;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
   margin-left: auto;
 }
-.cuenta-emu-enlaces a,
-.cuenta-emu-usuario {
+.cuenta-emu-enlace {
   min-height: 24px;
-}
-.cuenta-emu-enlaces a {
   display: inline-flex;
   align-items: center;
   gap: 5px;
+  padding: 0 4px;
   white-space: nowrap;
 }
+
+/* Con varios trackers, una tarjeta por tracker: la cabecera arriba y las cifras en dos filas de cuatro (etiqueta sobre
+   cifra). Llenan el ancho y, si no caben, saltan de línea. */
+.cuentas-tarjetas {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr));
+  gap: 10px;
+}
+.cuenta-tarjeta {
+  min-width: 0;
+  container: tarjeta / inline-size;
+  font-size: 12px;
+  color: var(--text-secondary);
+  background: color-mix(in srgb, var(--overlay-light) 3%, transparent);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+}
+.cuenta-tarjeta-cuerpo {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas: "cabecera acciones" "cifras cifras" "error error";
+  align-items: center;
+  gap: 8px 10px;
+  padding: 9px 10px 10px 14px;
+}
+.cuenta-tarjeta-cabecera {
+  grid-area: cabecera;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.cuenta-tarjeta .cuenta-emu-acciones { grid-area: acciones; }
+.cuenta-tarjeta .cuenta-emu-error { grid-area: error; }
+.cuenta-tarjeta .cuenta-emu-cifras {
+  grid-area: cifras;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, auto));
+  justify-content: space-between;
+  gap: 6px 8px;
+  margin: 0;
+}
+.cuenta-tarjeta .cuenta-emu-cifra {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.cuenta-tarjeta .cuenta-emu-cifra dt { font-size: 11px; }
+.cuenta-tarjeta .cuenta-emu-cifra dd { font-size: 13px; overflow: hidden; text-overflow: ellipsis; }
+/* Tarjeta estrecha: «Mis subidas» se queda en el icono (el nombre sigue accesible y en el tooltip). */
+@container tarjeta (max-width: 420px) {
+  .cuenta-tarjeta .cuenta-emu-cifra dd { font-size: 12px; }
+  .cuenta-tarjeta .cuenta-emu-enlace-texto {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+}
+
+/* Con un solo tracker, una tabla de una fila: las cifras en columnas alineadas a la derecha. */
+.cuentas-tabla-caja {
+  min-width: 0;
+  overflow-x: auto;
+  background: color-mix(in srgb, var(--overlay-light) 3%, transparent);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+}
+.cuentas-tabla {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+.cuentas-tabla th,
+.cuentas-tabla td {
+  padding: 5px 14px;
+  text-align: right;
+  vertical-align: middle;
+}
+.cuentas-tabla thead th {
+  padding-top: 7px;
+  padding-bottom: 3px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+.cuentas-tabla tbody tr + tr > * {
+  border-top: 1px solid color-mix(in srgb, var(--hud-sky, var(--text-accent)) 9%, transparent);
+}
+.cuentas-tabla .cuentas-tabla-cuenta {
+  width: 100%;
+  text-align: left;
+  font-weight: 400;
+}
+.cuentas-tabla-quien {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.cuentas-tabla td.cuentas-tabla-sin-cifras { text-align: left; }
+.cuentas-tabla td.cuentas-tabla-acciones { width: 1%; padding-left: 4px; padding-right: 8px; }
+.cuentas-tabla .cuenta-emu-enlace-texto {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+/* Sin sitio, la tabla se desplaza de lado y la cuenta se queda fija a la izquierda, con fondo opaco. */
+@container panel (max-width: 860px) {
+  .cuentas-tabla .cuentas-tabla-cuenta {
+    position: sticky;
+    left: 0;
+    z-index: 1;
+    width: auto;
+    background: var(--hud-panel-solid, var(--bg-surface));
+  }
+  .cuentas-tabla .cuenta-emu-rol { display: none; }
+  .cuentas-tabla th,
+  .cuentas-tabla td { padding-left: 8px; padding-right: 8px; }
+}
+
 @media (pointer: coarse) {
-  .cuenta-emu-enlaces a,
+  .cuenta-emu-enlace,
   .cuenta-emu-usuario { min-height: 32px; }
   /* Que un enlace o botón de solo icono no sea más estrecho que alto. */
-  .cuenta-emu-enlaces a { min-width: 32px; justify-content: center; }
-  .cuenta-emu .btn-sm { min-width: 36px; justify-content: center; }
+  .cuenta-emu-enlace { min-width: 32px; justify-content: center; }
+  .cuenta-emu-acciones .btn-sm { min-width: 36px; justify-content: center; }
 }
 
 /* Stat card */

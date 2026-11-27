@@ -383,7 +383,7 @@ def get_dashboard_recommendations(conn: sqlite3.Connection, *, limit: int = 100)
     # petición que aún no se ha evaluado (NULL) se queda.
     g1 = conn.execute(
         """
-        SELECT ri.id AS req_id, ri.req_scope, ri.req_season, ri.req_episode, ri.points,
+        SELECT ri.id AS req_id, ri.tracker AS req_tracker, ri.req_scope, ri.req_season, ri.req_episode, ri.points,
                (SELECT rm.library_item_id FROM request_matches rm
                 WHERE rm.request_item_id = ri.id ORDER BY rm.confidence DESC LIMIT 1) AS lib_id
         FROM request_items ri
@@ -420,6 +420,7 @@ def get_dashboard_recommendations(conn: sqlite3.Connection, *, limit: int = 100)
         d["episode_number"] = episode
         d["rec_group"] = 1
         d["rec_request_id"] = r["req_id"]
+        d["rec_request_tracker"] = r["req_tracker"]
         d["rec_points"] = r["points"]
         # La fila a la que se refiere la petición (la temporada o el capítulo, no la serie que cruzó el
         # emparejador): el asistente de «Subir» se abre sobre ella, como el de Peticiones. De ella salen también la
@@ -453,6 +454,7 @@ def get_dashboard_recommendations(conn: sqlite3.Connection, *, limit: int = 100)
         d["content_name"] = name if name is not None else _rec_content_name(conn, d)
         d["size_bytes"] = size if size is not None else _rec_rolled_size(conn, d)
         d["rec_request_id"] = None
+        d["rec_request_tracker"] = None
         d["rec_points"] = None
         d["missing_count"] = missing_count
         d["rec_aportes"] = aportes or []
@@ -495,7 +497,7 @@ def get_dashboard_recommendations(conn: sqlite3.Connection, *, limit: int = 100)
 
     # Group 4 — «Mejoras posibles»: lo que tienes disponible y YA está en eMuwarez, pero tu copia aporta algo que
     # no tiene ninguno de sus torrents (mayor resolución, mejor source, un códec más eficiente o el castellano que
-    # les falta): lo que la ficha de Biblioteca marca como «Aportas» (emu_in_catalog = 1 con emu_aportes). Mismas
+    # les falta): emu_in_catalog = 1 con emu_aportes, como el filtro «Aportas» de Biblioteca. Mismas
     # unidades subibles y mismas exigencias de castellano y de pack que el grupo 2. No es un permiso para subir:
     # eMuwarez tiene reglas de trumps y el Resumen del asistente enseña el veredicto frente a cada torrent.
     for row in conn.execute(

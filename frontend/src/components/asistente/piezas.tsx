@@ -1,7 +1,7 @@
 // Piezas pequeñas que comparten los pasos del asistente.
 import { useId } from 'react'
 import type { SourceComparison } from '../../api/nomenclature'
-import type { UploadCheck } from '../../api/uploads'
+import type { TrackerParaSubir, UploadCheck } from '../../api/uploads'
 import type { UploadJob } from '../../types/api'
 import { statusLabel } from '../../utils/uploadStatus'
 import { CheckStatusIcon } from '../DetailCard'
@@ -163,5 +163,25 @@ export function CampoTag({ value, opciones, onChange }: {
         ))}
       </select>
     </label>
+  )
+}
+
+// Una casilla por tracker al que se puede subir: el Resumen del asistente y el de «Subir por lotes».
+export function CasillasTrackers({ trackers, elegidos, onElegir, disabled }: {
+  trackers: readonly TrackerParaSubir[]
+  elegidos: readonly string[]
+  onElegir: (id: string, si: boolean) => void
+  disabled: boolean
+}) {
+  return (
+    <span className="asist-marcas">
+      {trackers.map(t => (
+        <label key={t.id} className="asist-casilla">
+          <input type="checkbox" checked={elegidos.includes(t.id)} disabled={disabled}
+            onChange={e => onElegir(t.id, e.target.checked)} />
+          {t.nombre}
+        </label>
+      ))}
+    </span>
   )
 }

@@ -6,6 +6,7 @@ import sqlite3
 from pathlib import Path
 
 from ..integrations.base import texto_de_error
+from .settings import ajuste_de_tracker
 
 
 def _check(name: str, status: str, message: str, details: dict | None = None) -> dict:
@@ -115,6 +116,10 @@ def check_allowed_roots_setting() -> dict:
                 "uploadrr.allowed_roots configurado como vacío — las subidas reales se bloquearán hasta configurarlo en Ajustes",
                 {},
             )
+        from .carpeta_subida import abarca_la_biblioteca
+        amplia = abarca_la_biblioteca(roots)
+        if amplia:
+            return _check("allowed_roots", "warning", amplia, {"roots": roots})
         missing = [r for r in roots if not Path(r).exists()]
         if missing:
             return _check(
@@ -155,7 +160,7 @@ def check_required_secrets() -> dict:
         conn = _connect(db_path)
         try:
             tmdb_ok = bool((get_setting_canonical(conn, "tmdb.api_key") or "").strip())
-            emu_ok = bool((get_setting_canonical(conn, "emu.api_key") or "").strip())
+            emu_ok = bool((ajuste_de_tracker(conn, "api_key") or "").strip())
         finally:
             conn.close()
         if tmdb_ok and emu_ok:

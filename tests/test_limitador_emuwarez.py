@@ -301,7 +301,8 @@ def test_el_catalogo_largo_se_reparte_en_minutos_y_deja_sitio_al_perfil(monkeypa
     limite = lim.capacidad - lim.reserva_interactiva
     paginas = limite + 5
     monkeypatch.setattr(emu, "request_json", lambda method, url, **kw: {"data": [{"id": 1}] * 100})
-    emu.emu_fetch_all_torrents(CLAVE, max_pages=paginas)
+    with pytest.raises(IntegrationError):  # todas llenas: no ve el final
+        emu.emu_fetch_all_torrents(CLAVE, max_pages=paginas)
     assert sum(lim.reloj.dormidas) == pytest.approx(60.0)  # la página limite+1 espera al minuto siguiente
     monkeypatch.setattr(emu, "request_json", lambda method, url, **kw: {"username": "yo"})
     antes = len(lim.reloj.dormidas)
@@ -326,9 +327,9 @@ def test_la_prueba_de_conexion_de_ajustes_pasa_por_el_limitador(http_falso, limi
     from tests.http_falso import respuesta
 
     http_falso.responde(respuesta(429))
-    primero = test_emuwarez_connection(api_key=CLAVE, base_url="https://t.x")
+    primero = test_emuwarez_connection(api_key=CLAVE)
     assert primero["ok"] is False
-    segundo = test_emuwarez_connection(api_key=CLAVE, base_url="https://t.x")
+    segundo = test_emuwarez_connection(api_key=CLAVE)
     assert segundo["ok"] is False and segundo["status"] == "rate_limited"
     assert len(http_falso.peticiones) == 1  # el 429 pausa: la segunda no sale
     assert CLAVE not in str(segundo)

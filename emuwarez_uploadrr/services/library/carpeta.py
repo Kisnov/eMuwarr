@@ -33,10 +33,15 @@ _FICHA = ("tmdb_id", "imdb_id", "tvdb_id", "title", "original_title", "english_t
 
 
 def ruta_de_carpeta(ruta: str) -> str:
+    from ..carpeta_subida import RAIZ_SUBIDAS
     ruta = (ruta or "").strip()
     if not ruta.startswith("/"):
         raise ValueError("La ruta de la carpeta debe ser absoluta (empieza por /)")
-    return os.path.normpath(ruta)
+    ruta = os.path.normpath(ruta)
+    # Sus enlaces saldrían como elementos de la biblioteca; una carpeta de dentro sí vale.
+    if os.path.realpath(ruta) == os.path.realpath(RAIZ_SUBIDAS):
+        raise ValueError(f"La carpeta manual no puede ser la carpeta de subidas ({RAIZ_SUBIDAS})")
+    return ruta
 
 
 def _no_se_puede_leer(exc: OSError) -> None:

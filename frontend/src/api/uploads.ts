@@ -11,7 +11,7 @@ import type {
   TrailerEstado,
 } from '../types/api'
 import type { NomenclatureFields, TrackRemuxOverride } from './nomenclature'
-import { latestInChain } from '../utils/uploadStatus'
+import { ACTIVE_JOB_STATUSES, latestInChain, puntasPorTracker } from '../utils/uploadStatus'
 
 export interface UploadQueueResult {
   status: string
@@ -57,8 +57,14 @@ export async function queueUpload(
   // Anónimo / Personal release cambiados a mano en el Resumen. Sin ellos (null), lo que digan los grupos de
   // Configuración para el tag de la subida.
   opciones?: OpcionesTracker,
+  // El id del tracker (emu, nobs, mnv). Sin él, eMuwarez. Una subida por tracker: para varios, una llamada por cada uno.
+  tracker?: string,
+  // La descripción propia (BBCode) de esta subida; vacía, solo la que genera Uploadrr-EMU.
+  descripcion?: string,
 ): Promise<UploadQueueResult> {
   return api.post<UploadQueueResult>(`/library/${itemId}/upload/queue`, {
+    ...(tracker ? { tracker } : {}),
+    ...(descripcion?.trim() ? { descripcion } : {}),
     request_item_id: requestItemId ?? null,
     ...(loteId ? { lote_id: loteId } : {}),
     anonimo: opciones?.anonimo ?? null,
@@ -74,6 +80,90 @@ export async function queueUpload(
   })
 }
 
+// Un tracker al que se puede subir ahora: eMuwarez y los que tienen su clave puesta (GET /upload/trackers).
+export interface TrackerParaSubir {
+  id: string
+  nombre: string
+}
+
+export async function fetchTrackersParaSubir(): Promise<TrackerParaSubir[]> {
+  return api.get<TrackerParaSubir[]>('/upload/trackers')
+}
+
+// «Subir también a…» (services/subir_tambien.py): lo que ya está en un tracker, a otro con el mismo fichero.
+export interface SubirTambienCandidata {
+  job_id: number
+  title: string | null
+  nombre: string
+  result_url: string | null
+  finished_at: string | null
+  origen: TrackerParaSubir
+  trackers: TrackerParaSubir[]
+  // Por qué no se ofrecen los que ya lo tienen según su catálogo local.
+  ya_lo_tienen?: string[]
+}
+
+export interface SubirTambienCandidatas {
+  trackers: TrackerParaSubir[]
+  subidas: SubirTambienCandidata[]
+  // Los trackers sin catálogo local leído: en ellos no se ha mirado si ya está.
+  avisos?: string[]
+}
+
+export interface SubirTambienResultado {
+  job_id: number
+  tracker: string
+  status: 'queued' | 'blocked'
+  nuevo_job_id: number | null
+  motivo: string | null
+}
+
+export interface SubirTambienRespuesta {
+  lote_id: string | null
+  encolados: number
+  saltados: number
+  resultados: SubirTambienResultado[]
+}
+
+export async function getSubirTambien(): Promise<SubirTambienCandidatas> {
+  return api.get<SubirTambienCandidatas>('/uploads/subir-tambien')
+}
+
+export async function subirTambien(jobIds: number[], trackers: string[]): Promise<SubirTambienRespuesta> {
+  return api.post<SubirTambienRespuesta>('/uploads/subir-tambien', { job_ids: jobIds, trackers })
+}
+
+// Lo que dicen las normas de idioma de un tracker de un elemento (web/schemas.py::ReglasDeTracker).
+export interface ReglasDeTracker {
+  tracker: string
+  permitido: boolean
+  motivo: string
+  variante: string | null
+}
+
+// `idiomas`: los elegidos en «Ver pistas» para las pistas de audio sin idioma, por posición.
+export async function fetchReglasTracker(
+  itemId: number, tracker: string, idiomas?: Record<number, string>,
+): Promise<ReglasDeTracker> {
+  const qs = new URLSearchParams({ tracker })
+  if (idiomas) qs.set('idiomas', JSON.stringify(idiomas))
+  return api.get<ReglasDeTracker>(`/library/${itemId}/upload/reglas?${qs}`)
+}
+
+// Qué trackers con clave admiten un elemento y, de una temporada, cada capítulo (web/schemas.py::ElegibilidadSubida).
+export interface ReglasConNombre extends ReglasDeTracker {
+  nombre: string
+}
+
+export interface ElegibilidadSubida {
+  trackers: ReglasConNombre[]
+  capitulos: { item_id: number; trackers: ReglasConNombre[] }[]
+}
+
+export async function fetchElegibilidad(itemId: number): Promise<ElegibilidadSubida> {
+  return api.get<ElegibilidadSubida>(`/library/${itemId}/upload/elegibilidad`)
+}
+
 // Un elemento de «Subir por lotes» (web/schemas.py::UploadLoteElemento).
 export interface ElementoLote {
   item_id: number
@@ -87,11 +177,14 @@ export interface ElementoLote {
   campos?: NomenclatureFields | null
   // Solo pack: el proveedor elegido.
   provider?: string | null
+  // Los trackers cuyo catálogo local ya lo tiene igual o mejor: para ellos se salta.
+  omitir?: string[]
 }
 
-// Lo que hizo el servidor con cada elemento, en el orden mandado (web/schemas.py::UploadLoteResultado).
+// Lo que hizo el servidor con cada elemento y tracker, en el orden mandado (web/schemas.py::UploadLoteResultado).
 export interface ResultadoElementoLote {
   item_id: number
+  tracker: string
   status: 'queued' | 'blocked'
   job_id: number | null
   errors: string[]
@@ -107,9 +200,10 @@ export interface LoteEncolado {
 
 // Encola varias subidas como un lote, en este orden (el de la cola). El que no se puede subir se salta con su
 // motivo y el resto sigue. Si falta algo que haría fallar a todos (claves, Uploadrr-EMU), 409 con los motivos en
-// `detail` (una lista) y nada encolado.
-export async function queueLote(elementos: ElementoLote[]): Promise<LoteEncolado> {
-  return api.post<LoteEncolado>('/uploads/lote', { elementos })
+// `detail` (una lista) y nada encolado. `trackers`: a cuáles, en orden (una subida por elemento y tracker; las
+// comprobaciones son las del primero). Sin ellos, eMuwarez.
+export async function queueLote(elementos: ElementoLote[], trackers?: string[]): Promise<LoteEncolado> {
+  return api.post<LoteEncolado>('/uploads/lote', { elementos, ...(trackers ? { trackers } : {}) })
 }
 
 export interface UploadsQuery {
@@ -169,9 +263,11 @@ export async function reenviarAQbit(jobId: number): Promise<{ message: string }>
 // this item (any status, including Completado)? Used to show "ya existe una
 // subida — al continuar se encadenará a su historial" instead of creating an
 // unrelated duplicate row.
+// Con subidas a varios trackers hay una cadena por tracker: si alguna sigue en curso, es esa (el asistente espera a
+// que termine: «Continuar» reescribe la nomenclatura que esa subida aún tiene que aplicar).
 export async function getExistingJobForItem(itemId: number): Promise<UploadJob | null> {
   const jobs = await getUploads({ library_item_id: itemId, limit: 50 })
-  return latestInChain(jobs)
+  return [...puntasPorTracker(jobs).values()].find(j => ACTIVE_JOB_STATUSES.has(j.status)) ?? latestInChain(jobs)
 }
 
 export async function getUploadJob(jobId: number): Promise<UploadJob> {
@@ -276,11 +372,14 @@ export async function runUploadChecks(
   // Temporada: el Proveedor elegido (utils/origenProveedor.ts::proveedorParaServidor), el mismo que la vista previa y la cola.
   provider?: string,
   // Temporada: lo editado a mano en el asistente (Source, Tag, Título e idiomas de las pistas sin idioma), para que el
-  // `nombre` del pack sea el que saldrá. Sin nada, no viaja nada.
+  // `nombre` del pack sea el que saldrá. Un fichero suelto, los idiomas de «Ver pistas». Sin nada, no viaja nada.
   ajustes?: AjustesComprobacion,
+  // De quién son las normas de idioma (emu, nobs, mnv). Sin él, eMuwarez.
+  tracker?: string,
 ): Promise<UploadChecksResult> {
   const qs = new URLSearchParams()
   if (scope) qs.set('scope', scope)
+  if (tracker && tracker !== 'emu') qs.set('tracker', tracker)
   if (provider !== undefined) qs.set('provider', provider)
   if (ajustes?.source) qs.set('source', ajustes.source)
   if (ajustes?.tag) qs.set('tag', ajustes.tag)

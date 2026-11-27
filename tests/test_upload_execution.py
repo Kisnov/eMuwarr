@@ -78,6 +78,23 @@ def test_validate_job_missing_uploadrr_config(db_conn):
     assert any("uploadrr" in e.lower() for e in result["errors"])
 
 
+@pytest.mark.parametrize("nombre", ["movie.avi", "movie.m2ts", "movie.iso"])
+def test_validate_un_formato_que_uploadrr_no_sube_es_un_error(db_conn, tmp_path, nombre):
+    f = tmp_path / nombre
+    f.write_bytes(b"x")
+    errores = validate_upload_job_start(_insert_job(db_conn, source_path=str(f)), conn=db_conn)["errors"]
+    motivo = "todavía no se pueden subir" if nombre == "movie.iso" else "Uploadrr-EMU solo sube MKV, MP4 y TS"
+    assert any(motivo in e for e in errores)
+
+
+@pytest.mark.parametrize("nombre", ["movie.mkv", "movie.MP4", "movie.ts"])
+def test_validate_mkv_mp4_y_ts_si_se_suben(db_conn, tmp_path, nombre):
+    f = tmp_path / nombre
+    f.write_bytes(b"x")
+    r = validate_upload_job_start(_insert_job(db_conn, source_path=str(f)), conn=db_conn)
+    assert not any("solo sube" in e for e in r["errors"] + r["warnings"])
+
+
 # ---------------------------------------------------------------------------
 # start_upload_job — dry_run
 # ---------------------------------------------------------------------------
@@ -855,6 +872,19 @@ def test_delete_cancelled_job_removes_row_logs_and_artifacts(db_conn):
     assert db_conn.execute("SELECT id FROM upload_artifacts WHERE upload_job_id=?", (jid,)).fetchone() is None
 
 
+def test_no_se_borra_una_cancelada_cuyo_hilo_sigue_preparando(db_conn, monkeypatch):
+    from emuwarez_uploadrr.services import upload_queue
+
+    jid = _insert_job(db_conn, status="cancelled")
+    monkeypatch.setattr(upload_queue, "_EN_CURSO", {jid})
+    result = delete_upload_job(jid, confirmation=DELETE_CONFIRMATION_TOKEN, conn=db_conn)
+    assert (result["ok"], result["error"]) == (False, "invalid_status")
+    assert db_conn.execute("SELECT id FROM upload_jobs WHERE id=?", (jid,)).fetchone() is not None
+
+    monkeypatch.setattr(upload_queue, "_EN_CURSO", set())
+    assert delete_upload_job(jid, confirmation=DELETE_CONFIRMATION_TOKEN, conn=db_conn)["ok"] is True
+
+
 def test_delete_failed_job_ok(db_conn):
     jid = _insert_job(db_conn, status="failed")
     result = delete_upload_job(jid, confirmation=DELETE_CONFIRMATION_TOKEN, conn=db_conn)
@@ -1031,6 +1061,16 @@ def test_collect_secrets_includes_qbittorrent_password_and_qui(db_conn):
     set_setting(db_conn, "qbit.password", "contrasena-qbit")
     set_setting(db_conn, "qbit.qui_proxy_url", "http://qui:7476/proxy/clave-de-qui")
     assert {"contrasena-qbit", "http://qui:7476/proxy/clave-de-qui"} <= set(_collect_secrets(db_conn))
+
+
+def test_collect_secrets_tapa_las_claves_de_nobs_y_milnueve(db_conn):
+    """Fase B: también van en el config.yaml de la subida, así que un error de Uploadrr-EMU puede escribirlas."""
+    from emuwarez_uploadrr.services.settings import set_setting
+    from emuwarez_uploadrr.services.upload_execution import _collect_secrets, redact_secrets
+    set_setting(db_conn, "nobs.api_key", "clave0de0nobs")
+    set_setting(db_conn, "mnv.api_key", "clave0de0mnv")
+    limpia = redact_secrets("NOBS: 401 con clave0de0nobs; MNV: 401 con clave0de0mnv", _collect_secrets(db_conn))
+    assert "clave0de0nobs" not in limpia and "clave0de0mnv" not in limpia
 
 
 def test_collect_secrets_tapa_la_clave_de_qui_sin_host_y_las_de_imagenes(db_conn):

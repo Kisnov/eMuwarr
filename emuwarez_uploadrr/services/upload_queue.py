@@ -22,13 +22,15 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import threading
+import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any
 
-from ..database import connect, row_to_dict
+from ..database import connect, row_to_dict, rows_to_dicts
 from ..integrations.base import texto_de_error
 
 logger = logging.getLogger("emuwarez.upload")
@@ -38,9 +40,11 @@ logger = logging.getLogger("emuwarez.upload")
 # one of these is in flight, it has to wait or be told to view the existing
 # one instead.
 from .ajustes_registro import AJUSTES as _AJUSTES
-from .subida_pasos import reanudar_desde, subpasos_que_reutilizaria, uploadrr_puede_reanudar
+from .subida_pasos import (SUBPASOS_REUTILIZABLES, leer_subpasos, reanudar_desde, subpasos_que_reutilizaria,
+                           uploadrr_puede_reanudar)
 from .upload_states import ACTIVE_JOB_STATUSES, asignacion_etapa_parada, escribir_estado  # noqa: E402
 from .eventos import EVENTO_SUBIDA_ESTADO, publicar
+from . import trackers
 
 # Remux overrides the user edited in the wizard's "Ver Pistas" card are
 # persisted on the job row itself (remux_overrides_json): a later retry has
@@ -64,31 +68,84 @@ def get_queue_positions() -> dict[int, tuple[int, int]]:
     return _upload_concurrency_gate.posiciones()
 
 
-def _find_latest_job_for_item(conn, item_id: int) -> dict | None:
+def _find_latest_job_for_item(conn, item_id: int, tracker: str = trackers.POR_DEFECTO) -> dict | None:
     """The tip of this item's retry chain: the job nobody else's
     retry_of_job_id points at. Every "Subir" click chains onto
     this instead of creating an unrelated row, so the item's full upload
-    activity (including past Completado attempts) stays in one place."""
+    activity (including past Completado attempts) stays in one place.
+
+    Una cadena por tracker: la subida a N.O.B.S de un elemento no reintenta la de eMuwarez."""
     row = conn.execute(
-        "SELECT * FROM upload_jobs WHERE library_item_id = ? "
+        "SELECT * FROM upload_jobs WHERE library_item_id = ? AND tracker = ? "
         "AND id NOT IN (SELECT retry_of_job_id FROM upload_jobs "
         "WHERE retry_of_job_id IS NOT NULL) ORDER BY id DESC LIMIT 1",
-        (item_id,),
+        (item_id, tracker),
     ).fetchone()
     return row_to_dict(row)
 
 
-def trabajo_activo(conn, item_id: int) -> dict | None:
+def _condicion_activa() -> tuple[str, tuple]:
+    """La condición SQL de un trabajo vivo: en un estado activo, o cancelado con su hilo aún en marcha."""
+    with _LOCK:
+        vivos = sorted(_EN_CURSO)
+    return (f"(status IN ({','.join('?' * len(ACTIVE_JOB_STATUSES))}) "
+            f"OR (status = 'cancelled' AND id IN ({','.join('?' * len(vivos))})))", (*ACTIVE_JOB_STATUSES, *vivos))
+
+
+def trabajo_activo(conn, item_id: int, tracker: str | None = None) -> dict | None:
     """El trabajo en marcha de este elemento, si hay alguno. Cuenta también
-    uno cancelado cuyo hilo aún no ha terminado."""
+    uno cancelado cuyo hilo aún no ha terminado. Con `tracker`, solo el de ese tracker."""
+    condicion, parametros = _condicion_activa()
+    filtro, extra = (" AND tracker = ?", (tracker,)) if tracker else ("", ())
+    return row_to_dict(conn.execute(
+        f"SELECT * FROM upload_jobs WHERE library_item_id = ?{filtro} AND {condicion} ORDER BY id DESC LIMIT 1",
+        (item_id, *extra, *parametros),
+    ).fetchone())
+
+
+# Cada cuánto mira una subida si ya terminó la del mismo contenido a otro tracker (_esperar_a_la_anterior).
+ESPERA_ENTRE_TRACKERS_S = 3.0
+
+
+def _anterior_en_curso(conn, job_id: int) -> dict | None:
+    """La subida del mismo contenido, creada antes que esta, que sigue viva (normalmente la de otro tracker).
+
+    Las dos comparten el fichero de la carpeta de subidas y el `tmp/<nombre>` de Uploadrr-EMU (capturas, BASE.torrent):
+    a la vez se pisarían. Por eso una espera a la otra; la más antigua va primero."""
+    # Con su hilo vivo cuenta en cualquier estado: entre 'ready' y 'running' (el arranque de Uploadrr) no es activa.
     with _LOCK:
         vivos = sorted(_EN_CURSO)
     return row_to_dict(conn.execute(
-        f"SELECT * FROM upload_jobs WHERE library_item_id = ? AND (status IN "
-        f"({','.join('?' * len(ACTIVE_JOB_STATUSES))}) OR (status = 'cancelled' AND id IN ({','.join('?' * len(vivos))}))) "
-        f"ORDER BY id DESC LIMIT 1",
-        (item_id, *ACTIVE_JOB_STATUSES, *vivos),
+        "SELECT o.* FROM upload_jobs o JOIN upload_jobs j ON j.id = ? "
+        "WHERE o.library_item_id = j.library_item_id AND o.id < j.id "
+        f"AND (o.status IN ({','.join('?' * len(ACTIVE_JOB_STATUSES))}) OR o.id IN ({','.join('?' * len(vivos))})) "
+        "ORDER BY o.id LIMIT 1",
+        (job_id, *ACTIVE_JOB_STATUSES, *vivos),
     ).fetchone())
+
+
+def _esperar_a_la_anterior(job_id: int) -> bool:
+    """Espera, sin ocupar plaza de «Subidas en paralelo», a que acabe la subida anterior del mismo contenido.
+    Devuelve False si a esta la cancelaron (o ya no está en cola) mientras esperaba."""
+    from .upload_execution import append_upload_log
+    avisada = False
+    while True:
+        conn = connect()
+        try:
+            fila = conn.execute("SELECT status FROM upload_jobs WHERE id = ?", (job_id,)).fetchone()
+            if not fila or fila["status"] != "queued":
+                return False
+            anterior = _anterior_en_curso(conn, job_id)
+            if anterior is None:
+                return True
+            if not avisada:
+                nombre = trackers.obtener(anterior.get("tracker") or trackers.POR_DEFECTO).nombre
+                append_upload_log(job_id, "info", f"Espera a que termine la subida #{anterior['id']} ({nombre}): "
+                                  "las dos usan el mismo fichero preparado.", stream="system", conn=conn)
+                avisada = True
+        finally:
+            conn.close()
+        time.sleep(ESPERA_ENTRE_TRACKERS_S)
 
 
 def _insert_and_start_queued_job(
@@ -108,6 +165,9 @@ def _insert_and_start_queued_job(
     lote_id: str | None = None,
     anonimo: bool | None = None,
     personal_release: bool | None = None,
+    tracker: str = trackers.POR_DEFECTO,
+    copia_de_job_id: int | None = None,
+    descripcion: str | None = None,
 ) -> dict:
     """Shared by queue_upload_for_item() and queue_retry_for_job(): insert a
     fresh 'queued' row for `item` and start its pipeline right away.
@@ -149,7 +209,29 @@ def _insert_and_start_queued_job(
 
     `anonimo`/`personal_release` — lo elegido a mano en el Resumen del asistente; None deja que lo decidan los
     grupos de Configuración cuando el trabajo quede listo (_marcar_lista).
+
+    `tracker` — el id del tracker (services/trackers.py) al que va: un trabajo por tracker. Uno en marcha del mismo
+    contenido a OTRO tracker no lo impide: este espera a que acabe (_esperar_a_la_anterior) y reutiliza su preparación.
+
+    `copia_de_job_id` — «Subir también a…» (services/subir_tambien.py): la subida completada a otro tracker cuyo fichero
+    y torrent reutiliza esta. Con él, la preparación no rehace nada: o es el mismo fichero, o falla (_paso_preparar).
+
+    `descripcion` — la descripción propia (BBCode) escrita en el Resumen; Uploadrr-EMU la añade a la que genera.
     """
+    motivo = trackers.motivo_para_no_subir(conn, tracker)
+    if motivo:
+        return {"status": "blocked", "errors": [motivo], "job": None}
+    reintento_suelto = retry_of_job_id is not None and item.get("item_type") != "season"
+    if tracker != trackers.POR_DEFECTO or copia_de_job_id or reintento_suelto:
+        # Las normas de idioma de otro tracker (services/reglas_tracker.py), antes de crear nada: lo que no admite no
+        # llega a lanzarse. Las de eMuwarez siguen donde siempre (comprobaciones del asistente y plan del pack), salvo
+        # en una copia de otro tracker y en el reintento de un fichero suelto, que no pasan por el asistente (y el
+        # fichero pudo cambiar desde la subida original).
+        from .reglas_tracker import reglas_para_subir
+        reglas = reglas_para_subir(conn, item, tracker, overrides=remux_overrides,
+                                   idiomas=(season_overrides or {}).get("idiomas"))
+        if not reglas.permitido:
+            return {"status": "blocked", "errors": [reglas.motivo], "job": None}
     now_iso = _now_iso()
 
     # Comprobar y crear en la misma transacción: con dos clics en "Reintentar"
@@ -168,7 +250,7 @@ def _insert_and_start_queued_job(
                 conn.execute("ROLLBACK")
                 return {"status": "blocked", "job": None, "errors": [
                     f"Ya se reintentó (subida #{hijo[0]}): reintenta el último intento de la cadena."]}
-        activa = trabajo_activo(conn, item["id"])
+        activa = trabajo_activo(conn, item["id"], tracker)
         if activa:
             conn.execute("ROLLBACK")
             cancelada = activa.get("status") == "cancelled"
@@ -186,8 +268,9 @@ def _insert_and_start_queued_job(
                 retry_of_job_id, retry_count, checks_snapshot_json,
                 nomenclature_proposal_id, nomenclature_snapshot_json,
                 remux_overrides_json, remux_snapshot_json, season_overrides_json,
-                reutiliza_preparacion, lote_id, anonimo, personal_release, created_at, updated_at
-            ) VALUES (?, ?, ?, ?, 'queued', 'queued', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                reutiliza_preparacion, lote_id, anonimo, personal_release, tracker, copia_de_job_id, descripcion,
+                created_at, updated_at
+            ) VALUES (?, ?, ?, ?, 'queued', 'queued', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 item["id"], request_item_id, request_title, request_url,
@@ -205,6 +288,9 @@ def _insert_and_start_queued_job(
                 lote_id,
                 None if anonimo is None else int(bool(anonimo)),
                 None if personal_release is None else int(bool(personal_release)),
+                tracker,
+                copia_de_job_id,
+                (descripcion or "").strip() or None,
                 now_iso, now_iso,
             ),
         )
@@ -262,6 +348,15 @@ def retirar_de_la_cola(job_id: int) -> None:
             _upload_concurrency_gate.retirar(job_id)
 
 
+def _peticion_de_su_tracker(conn, request_item_id: int | None, tracker: str) -> int | None:
+    """Una petición es de un tracker: la subida a otro no la cubre, y va sin enlazar (el asistente manda la misma a
+    cada tracker elegido)."""
+    if request_item_id is None:
+        return None
+    fila = conn.execute("SELECT tracker FROM request_items WHERE id = ?", (request_item_id,)).fetchone()
+    return None if fila and (fila["tracker"] or trackers.POR_DEFECTO) != tracker else request_item_id
+
+
 def _foto_de_la_peticion(conn, request_item_id: int | None) -> tuple[str | None, str | None]:
     """Título y enlace de la petición, tal como están al encolar. La fila se
     borra cuando la petición deja de estar abierta en eMuwarez: sin esta copia,
@@ -287,10 +382,13 @@ def queue_upload_for_item(
     lote_id: str | None = None,
     anonimo: bool | None = None,
     personal_release: bool | None = None,
+    tracker: str = trackers.POR_DEFECTO,
+    descripcion: str | None = None,
     conn=None,
 ) -> dict:
     """Encola la subida de un elemento. `lote_id`: la etiqueta de la tanda o lote al que pertenece (no se hereda
-    del trabajo anterior del elemento: solo el reintento de un trabajo la conserva)."""
+    del trabajo anterior del elemento: solo el reintento de un trabajo la conserva). `tracker`: a cuál (eMuwarez si
+    no se dice); para subir a varios, una llamada por tracker, cada una con su `descripcion`."""
     own = conn is None
     conn = conn or connect()
     try:
@@ -299,7 +397,7 @@ def queue_upload_for_item(
         if not item:
             return {"status": "blocked", "errors": ["Item no encontrado."], "job": None}
 
-        latest = _find_latest_job_for_item(conn, item_id)
+        latest = _find_latest_job_for_item(conn, item_id, tracker)
         retry_of_job_id = latest["id"] if latest else None
         retry_count = (latest.get("retry_count") or 0) + 1 if latest else 0
 
@@ -327,6 +425,7 @@ def queue_upload_for_item(
                 # Claves en texto: el trabajo lo guarda en JSON.
                 season_overrides["idiomas"] = {str(k): v for k, v in idiomas.items()}
 
+        request_item_id = _peticion_de_su_tracker(conn, request_item_id, tracker)
         request_title, request_url = _foto_de_la_peticion(conn, request_item_id)
         return _insert_and_start_queued_job(
             conn, item,
@@ -338,6 +437,8 @@ def queue_upload_for_item(
             season_overrides=season_overrides,
             lote_id=lote_id,
             anonimo=anonimo, personal_release=personal_release,
+            tracker=tracker,
+            descripcion=descripcion,
         )
     finally:
         if own:
@@ -415,10 +516,57 @@ def queue_retry_for_job(original_job_id: int, conn=None, *, desde_el_principio: 
             # Lo elegido a mano para la subida original sigue valiendo para su reintento.
             anonimo=None if original.get("anonimo") is None else bool(original.get("anonimo")),
             personal_release=None if original.get("personal_release") is None else bool(original.get("personal_release")),
+            tracker=original.get("tracker") or trackers.POR_DEFECTO,
+            copia_de_job_id=original.get("copia_de_job_id"),
+            descripcion=original.get("descripcion"),
         )
     finally:
         if own:
             conn.close()
+
+
+def queue_copia_a_otro_tracker(conn, fuente: dict, tracker: str, *, lote_id: str | None = None) -> dict:
+    """«Subir también a…»: encola la subida a `tracker` de lo que `fuente` (una subida completada a otro tracker) ya
+    sembró, con su mismo fichero de la carpeta de subidas. Fija la propuesta de nombre y los ajustes del pack de
+    `fuente` para que salga el mismo nombre; si aun así saliera otro, la preparación falla (_paso_preparar).
+    services/subir_tambien.py comprueba antes que se puede."""
+    item = row_to_dict(conn.execute("SELECT * FROM library_items WHERE id = ?",
+                                    (fuente.get("library_item_id"),)).fetchone())
+    if not item:
+        return {"status": "blocked", "errors": ["El elemento ya no existe en la biblioteca."], "job": None}
+    # Una subida de antes de exigir idioma en cada pista: su archivo siembra, y retocarlo rompería ese torrent.
+    sin_idioma = _sin_idioma_preparado(fuente.get("prepared_path"))
+    if sin_idioma:
+        return {"status": "blocked", "job": None, "errors": [
+            f"{_no_se_lee(sin_idioma[0])} Es el archivo que siembra la subida #{fuente['id']}: no se sube a otro "
+            "tracker." if sin_idioma[1] is None else
+            f"«{os.path.basename(sin_idioma[0])}»: la pista de audio {', '.join(map(str, sin_idioma[1]))} no tiene "
+            f"idioma (und) en el archivo que siembra la subida #{fuente['id']}, y retocarlo rompería ese torrent: no "
+            "se sube a otro tracker."]}
+
+    def _json(columna: str):
+        try:
+            return json.loads(fuente[columna]) if fuente.get(columna) else None
+        except ValueError:
+            return None
+
+    latest = _find_latest_job_for_item(conn, item["id"], tracker)
+    return _insert_and_start_queued_job(
+        conn, item,
+        retry_of_job_id=latest["id"] if latest else None,
+        retry_count=(latest.get("retry_count") or 0) + 1 if latest else 0,
+        nomenclature_proposal_id=fuente.get("nomenclature_proposal_id"),
+        nomenclature_snapshot=_json("nomenclature_snapshot_json"),
+        # Los idiomas elegidos en «Ver pistas» de la fuente: el mismo fichero preparado los lleva.
+        remux_overrides=_json("remux_overrides_json"),
+        remux_snapshot=_json("remux_snapshot_json"),
+        season_overrides=_json("season_overrides_json"),
+        lote_id=lote_id,
+        tracker=tracker,
+        copia_de_job_id=fuente["id"],
+        # La misma descripción propia que llevó en el otro tracker.
+        descripcion=fuente.get("descripcion"),
+    )
 
 
 def reconcile_interrupted_jobs(conn=None) -> int:
@@ -441,7 +589,7 @@ def reconcile_interrupted_jobs(conn=None) -> int:
     conn = conn or connect()
     try:
         rows = conn.execute(
-            "SELECT id, title, torrent_subido FROM upload_jobs WHERE status IN ({})".format(
+            "SELECT id, title, torrent_subido, tracker FROM upload_jobs WHERE status IN ({})".format(
                 ",".join("?" * len(ACTIVE_JOB_STATUSES))),
             tuple(ACTIVE_JOB_STATUSES),
         ).fetchall()
@@ -452,7 +600,8 @@ def reconcile_interrupted_jobs(conn=None) -> int:
                 f"finished_at = ?, updated_at = ?, error_message = ?, {parada} WHERE id = ?",
                 (_now_iso(), _now_iso(),
                  "Interrumpido al pararse la aplicación. " + (
-                     "El torrent ya está en eMuwarez: usa «Reenviar a qBittorrent»." if row["torrent_subido"]
+                     f"El torrent ya está en {trackers.obtener(row['tracker'] or trackers.POR_DEFECTO).nombre}: "
+                     "usa «Reenviar a qBittorrent»." if row["torrent_subido"]
                      else "Puedes reintentar la subida."),
                  *parametros_parada, row["id"]),
             )
@@ -608,10 +757,10 @@ def _propuesta_del_reintento(original: dict, item_id: int, conn, cargar) -> dict
     return {"nomenclature_proposal_id": propuesta["id"], "nomenclature_snapshot": propuesta}
 
 
-def _season_upload_preconditions(conn) -> list[str]:
+def _season_upload_preconditions(conn, tracker: str = trackers.POR_DEFECTO) -> list[str]:
     """The generic (not season-specific) preconditions
     upload_preflight.validate_upload_preconditions() checks for a single
-    file — uploadrr path/script + eMuwarez/TMDb API keys. Season-specific
+    file — uploadrr path/script + the job's tracker's and TMDb API keys. Season-specific
     concerns (episodes consistent, complete, all in the same folder) are
     already covered by build_season_pack_plan() before this ever runs."""
     from ..database import get_setting_canonical
@@ -623,11 +772,8 @@ def _season_upload_preconditions(conn) -> list[str]:
         errors.append("Ruta de Uploadrr no configurada (uploadrr.path).")
     elif not os.path.exists(uploadrr_path):
         errors.append(f"Ruta de Uploadrr no existe: {uploadrr_path}")
-    if not get_setting_canonical(conn, "emu.api_key"):
-        errors.append("API key de eMuwarez no configurada.")
-    if not get_setting_canonical(conn, "tmdb.api_key"):
-        errors.append("API key de TMDb no configurada.")
-    return errors
+    from .upload_preflight import errores_de_claves
+    return errors + errores_de_claves(conn, tracker)
 
 
 def _check_generic_upload_preconditions(job_id: int, item_id: int, is_season: bool, conn) -> bool:
@@ -642,7 +788,7 @@ def _check_generic_upload_preconditions(job_id: int, item_id: int, is_season: bo
     fails immediately instead of after spending time on nomenclature/remux.
     The remaining, path-dependent checks (file existence, prepared_path,
     command preview) still run later, unchanged, in _populate_ready()."""
-    errors = _season_upload_preconditions(conn)
+    errors = _season_upload_preconditions(conn, _tracker_del_trabajo(job_id, conn))
     if not is_season:
         # La vigente, no la última guardada: una automática bloqueada con reglas
         # viejas (p. ej. UND, que antes bloqueaba) haría fallar cada intento.
@@ -673,13 +819,22 @@ def _check_generic_upload_preconditions(job_id: int, item_id: int, is_season: bo
     return True
 
 
-def _ajustes_de_pack(season_overrides: dict | None) -> dict:
+def _tracker_del_trabajo(job_id: int, conn) -> str:
+    """El id del tracker al que va el trabajo."""
+    fila = conn.execute("SELECT tracker FROM upload_jobs WHERE id = ?", (job_id,)).fetchone()
+    return (fila["tracker"] if fila else None) or trackers.POR_DEFECTO
+
+
+def _ajustes_de_pack(season_overrides: dict | None, tracker: str = trackers.POR_DEFECTO) -> dict:
     """Lo editado a mano para un pack en el asistente, como argumentos de
-    build_season_pack_plan() y apply_season_pack()."""
+    build_season_pack_plan() y apply_season_pack(). Con otro `tracker` que eMuwarez, también él (solo lo pasa quien
+    llama a build_season_pack_plan: sus normas de idioma por capítulo)."""
     ajustes = season_overrides or {}
     salida = {f"{k}_override": ajustes.get(k) for k in ("source", "provider", "tag", "title")}
     # El idioma elegido para las pistas de audio sin idioma, por posición.
     salida["idiomas_audio"] = ajustes.get("idiomas") or None
+    if tracker != trackers.POR_DEFECTO:
+        salida["tracker"] = tracker
     return salida
 
 
@@ -691,6 +846,34 @@ def _overrides_de_pack(origen: str | None, season_overrides: dict | None) -> dic
     from .season_pack import idiomas_de_fichero
     idiomas = idiomas_de_fichero(origen, (season_overrides or {}).get("idiomas"))
     return {tid: {"language": codigo} for tid, codigo in idiomas.items()} or None
+
+
+def _sin_idioma_preparado(ruta: str | None) -> tuple[str, list[int] | None] | None:
+    """El primer fichero preparado (el fichero, o uno de la carpeta de un pack) con alguna pista de audio sin idioma
+    (und), y sus posiciones; None si no hay. Un MKV cuyas pistas no se leen va con None: no se sabe. El elegido en
+    «Ver pistas» no llega con las pistas en «Ninguno» ni cuando el archivo no se puede editar. Lo que no es MKV no se
+    mira: la app no lo etiqueta. Sin mkvmerge no se puede mirar nada, como en la integridad."""
+    from .mkv_remux import check_mkvmerge_available, idiomas_de_las_pistas
+    if not ruta or not check_mkvmerge_available()["available"]:
+        return None
+    ficheros = [os.path.join(ruta, n) for n in sorted(os.listdir(ruta))] if os.path.isdir(ruta) else [ruta]
+    for fichero in ficheros:
+        if not (fichero.lower().endswith(".mkv") and os.path.isfile(fichero)):
+            continue
+        pistas = idiomas_de_las_pistas(fichero)
+        if pistas is None:
+            return fichero, None
+        sin = [i for i, c in enumerate(pistas, 1) if c == "UND"]
+        if sin:
+            return fichero, sin
+    return None
+
+
+def _no_se_lee(fichero: str) -> str:
+    """Por qué no se sube un MKV cuyas pistas no se leen, con lo que dice mkvmerge."""
+    from .mkv_remux import read_tracks_json
+    return (f"«{os.path.basename(fichero)}»: no se pudo comprobar el idioma de las pistas "
+            f"({read_tracks_json(fichero).get('error')}).")
 
 
 def _populate_ready(job_id: int, item_id: int, conn, season_overrides: dict | None = None) -> bool:
@@ -705,6 +888,22 @@ def _populate_ready(job_id: int, item_id: int, conn, season_overrides: dict | No
     if not item:
         _fail(job_id, "El elemento ya no existe en la biblioteca.")
         return False
+    tracker = _tracker_del_trabajo(job_id, conn)
+    preparado = conn.execute("SELECT prepared_path FROM upload_jobs WHERE id = ?", (job_id,)).fetchone()[0]
+    from .emu_format import audio_sin_idioma
+    from .reglas_tracker import aviso_no_mkv
+    aviso = aviso_no_mkv(preparado) if preparado and os.path.isfile(preparado) else None
+    if aviso and audio_sin_idioma(item.get("audio_languages")):
+        from .upload_execution import append_upload_log
+        append_upload_log(job_id, "warning", f"Una pista de audio no tiene idioma (und). {aviso}", stream="system",
+                          conn=conn)
+    sin_idioma = _sin_idioma_preparado(preparado)
+    if sin_idioma:
+        from .reglas_tracker import motivo_audio_sin_idioma
+        _fail(job_id, _no_se_lee(sin_idioma[0]) if sin_idioma[1] is None else (
+            f"«{os.path.basename(sin_idioma[0])}»: {motivo_audio_sin_idioma(sin_idioma[1])} Si ya lo elegiste, no se "
+            "pudo escribir en el archivo preparado: mira el registro de la preparación."))
+        return False
 
     if item.get("item_type") == "season":
         # validate_upload_preconditions() hard-blocks on `if not path`, and a
@@ -712,12 +911,12 @@ def _populate_ready(job_id: int, item_id: int, conn, season_overrides: dict | No
         # season-specific precondition check replaces it.
         from .season_pack import build_season_pack_plan
 
-        plan = build_season_pack_plan(item_id, conn=conn, **_ajustes_de_pack(season_overrides))
+        plan = build_season_pack_plan(item_id, conn=conn, **_ajustes_de_pack(season_overrides, tracker))
         if plan["status"] != "valid":
             _fail(job_id, "; ".join(plan.get("errors") or ["No se pudo preparar el pack de temporada."]))
             return False
 
-        errors = _season_upload_preconditions(conn)
+        errors = _season_upload_preconditions(conn, tracker)
         if errors:
             _fail(job_id, "; ".join(errors))
             return False
@@ -738,8 +937,9 @@ def _populate_ready(job_id: int, item_id: int, conn, season_overrides: dict | No
             "episode": None,
             "release_format": plan.get("source"),
         }
-        command_preview = build_uploadrr_command_preview(synthetic_item, None, None, conn=conn)
-        return _marcar_lista(job_id, command_preview, conn, grupo=plan.get("release_tag"))
+        command_preview = build_uploadrr_command_preview(synthetic_item, None, None, conn=conn, tracker=tracker,
+                                                         variante=plan.get("variante"))
+        return _marcar_lista(job_id, command_preview, conn, grupo=plan.get("release_tag"), tracker=tracker)
 
     proposal_row = conn.execute(
         "SELECT * FROM nomenclature_proposals WHERE library_item_id = ? AND status != 'expired' "
@@ -748,13 +948,29 @@ def _populate_ready(job_id: int, item_id: int, conn, season_overrides: dict | No
     ).fetchone()
     proposal = row_to_dict(proposal_row)
 
-    preconditions = validate_upload_preconditions(item, proposal=proposal, conn=conn)
+    preconditions = validate_upload_preconditions(item, proposal=proposal, conn=conn, tracker=tracker)
     if not preconditions["ok"]:
         _fail(job_id, "; ".join(preconditions["errors"]))
         return False
 
-    command_preview = build_uploadrr_command_preview(item, proposal, None, conn=conn)
-    return _marcar_lista(job_id, command_preview, conn, grupo=(proposal or {}).get("release_tag"))
+    # La categoría en otro tracker (`--variante`): sus normas, que se vuelven a mirar aquí, justo antes de lanzar
+    # (los idiomas pueden haber cambiado desde que se encoló). eMuwarez no lleva nunca.
+    variante = None
+    if tracker != trackers.POR_DEFECTO:
+        from .mkv_remux import idiomas_de_las_pistas
+        from .reglas_tracker import reglas_para_subir
+        # Con los idiomas del fichero preparado, que ya lleva los elegidos en «Ver pistas».
+        pistas = idiomas_de_las_pistas(preparado)
+        if pistas:
+            item = {**item, "audio_languages": " / ".join(dict.fromkeys(pistas))}
+        reglas = reglas_para_subir(conn, item, tracker)
+        if not reglas.permitido:
+            _fail(job_id, reglas.motivo)
+            return False
+        variante = reglas.variante
+    command_preview = build_uploadrr_command_preview(item, proposal, None, conn=conn, tracker=tracker,
+                                                     variante=variante)
+    return _marcar_lista(job_id, command_preview, conn, grupo=(proposal or {}).get("release_tag"), tracker=tracker)
 
 
 def _opciones_elegidas(job_id: int, conn) -> dict:
@@ -766,7 +982,27 @@ def _opciones_elegidas(job_id: int, conn) -> dict:
             "personal_release": None if fila[1] is None else bool(fila[1])}
 
 
-def _marcar_lista(job_id: int, command_preview: dict, conn, *, grupo: str | None = None) -> bool:
+def _titulo_de_la_copia(job_id: int, conn) -> str | None:
+    """«Subir también a…»: el nombre con que se publicó la subida de origen (su `-mt`), aunque la nomenclatura haya
+    cambiado luego. None si no es una copia."""
+    fila = conn.execute(
+        "SELECT f.uploadrr_command_json, f.nomenclature_snapshot_json, f.prepared_path FROM upload_jobs j "
+        "JOIN upload_jobs f ON f.id = j.copia_de_job_id WHERE j.id = ?", (job_id,)).fetchone()
+    if not fila:
+        return None
+    for crudo, clave in ((fila[0], "title"), (fila[1], "proposed_torrent_name")):
+        try:
+            titulo = (json.loads(crudo or "null") or {}).get(clave)
+        except (ValueError, AttributeError):
+            titulo = None
+        if titulo:
+            return titulo
+    ruta = fila[2] or ""
+    return (os.path.splitext(os.path.basename(ruta))[0] if os.path.isfile(ruta) else os.path.basename(ruta)) or None
+
+
+def _marcar_lista(job_id: int, command_preview: dict, conn, *, grupo: str | None = None,
+                  tracker: str = trackers.POR_DEFECTO) -> bool:
     """Deja el trabajo en 'ready' para arrancar Uploadrr.
 
     No toca prepared_path: el paso anterior ya dejó ahí el enlace de la
@@ -776,19 +1012,26 @@ def _marcar_lista(job_id: int, command_preview: dict, conn, *, grupo: str | None
 
     Devuelve False si el usuario canceló mientras tanto: no se resucita.
 
-    Aquí se decide también si va anónima y si es Personal release (`grupo`: el tag del nombre ya aplicado), y se
+    Aquí se decide también si va anónima y si es Personal release (`grupo`: el tag del nombre ya aplicado; las marcas
+    de ese grupo en `tracker`), y se
     guarda con el resto del comando: es lo que lee la ejecución (upload_execution.consultas).
     """
     from .opciones_tracker import opciones_de_subida
     from .uploadrr_contract import RUNTIME_EMU, render_command_preview
-    opciones = opciones_de_subida(conn, grupo, **_opciones_elegidas(job_id, conn))
+    opciones = opciones_de_subida(conn, grupo, tracker=tracker, **_opciones_elegidas(job_id, conn))
     command_preview = {**command_preview, **opciones}
+    titulo = _titulo_de_la_copia(job_id, conn)
+    if titulo:
+        command_preview["title"] = titulo
     if command_preview.get("runtime_type") == RUNTIME_EMU and isinstance(command_preview.get("command_args"), list):
         # La vista previa del comando (detalle de la subida) enseña las mismas banderas que se lanzarán.
-        extra = (["-a"] if opciones["anon"] else []) + (["-pr"] if opciones["personal_release"] else [])
-        if extra:
-            command_preview["command_args"] = [*command_preview["command_args"], *extra]
-            command_preview["command_preview"] = render_command_preview(command_preview["command_args"])
+        args = list(command_preview["command_args"])
+        if titulo and "-mt" in args[:-1]:
+            args[args.index("-mt") + 1] = titulo
+        args += (["-a"] if opciones["anon"] else []) + (["-pr"] if opciones["personal_release"] else [])
+        if args != command_preview["command_args"]:
+            command_preview["command_args"] = args
+            command_preview["command_preview"] = render_command_preview(args)
     return escribir_estado(
         job_id, salvo=("cancelled", "failed"), status="ready", stage="preflight",
         uploadrr_command_json=json.dumps(command_preview, ensure_ascii=False),
@@ -816,6 +1059,7 @@ def _check_season_integrity(job_id: int, season_id: int, conn) -> bool:
     from .media_info_service import mediainfo_available, read_media_info_summary
     from .path_mapping import resolve_local_path
     from .upload_execution import append_upload_log
+    from .uploadrr_contract import motivo_formato_no_subible
 
     episodes = _get_season_episodes(season_id, conn=conn)
     available = [e for e in episodes if e.get("local_status") == LocalStatus.AVAILABLE.value]
@@ -836,6 +1080,9 @@ def _check_season_integrity(job_id: int, season_id: int, conn) -> bool:
         if _fuera_de_raices(ep_path, conn):
             _fail(job_id, f"El archivo del {label} está fuera de los allowed_roots configurados: {ep_path}")
             return False
+        if motivo := motivo_formato_no_subible(ep_path):
+            _fail(job_id, f"Capítulo {ep.get('episode_number')}: {motivo}")
+            return False
         if mediainfo_available():
             info = read_media_info_summary(ep_path)
             if not info:
@@ -854,18 +1101,32 @@ def _renombrar_si_esta_en_subidas(job_id: int, item_id: int, origen: str | None,
     """Renombra en su sitio un archivo que ya está en la carpeta de subidas (los de
     la biblioteca, nunca). Devuelve la ruta con la que seguir, o None si falló
     (el trabajo ya queda fallido)."""
-    from .carpeta_subida import ENLACES, en_carpeta_de_subidas
+    from .carpeta_subida import ENLACES, abarca_la_biblioteca, dentro_de, en_carpeta_de_subidas
     from .nomenclature import renombrar_en_subidas
     from .upload_execution import append_upload_log
-    if not origen or not en_carpeta_de_subidas(origen) or os.path.basename(origen) == nombre:
+    from .uploadrr_contract import get_allowed_roots
+    from ..database import get_json_state
+    from .upload_execution.ciclo_de_vida import ENLACES_SEMBRADOS_SIN_FILA
+    if not origen or not en_carpeta_de_subidas(origen):
+        return origen
+    # Con la carpeta de subidas abarcando la biblioteca, «en la carpeta de subidas» puede ser el original.
+    amplia = abarca_la_biblioteca(get_allowed_roots(conn))
+    if amplia:
+        _fail(job_id, amplia)
+        return None
+    if os.path.basename(origen) == nombre:
         return origen
     destino = os.path.join(os.path.dirname(origen), nombre)
     with ENLACES:
         # Si otra subida siembra desde ahí, renombrarlo le quita el fichero a qBittorrent.
         otra = _subida_que_lo_usa(conn, origen, job_id)
-        r = None if otra is not None else renombrar_en_subidas(item_id, origen, destino, conn=conn, **kw)
+        # O una ya borrada cuyo enlace otra subida compartía (enlaces_sembrados_sin_fila), suelto o su pack.
+        borrada = otra is None and any(dentro_de(origen, ruta) for ruta in
+                                       get_json_state(conn, ENLACES_SEMBRADOS_SIN_FILA) or [])
+        r = None if otra is not None or borrada else renombrar_en_subidas(item_id, origen, destino, conn=conn, **kw)
     if r is None:
-        append_upload_log(job_id, "info", f"No se renombra «{os.path.basename(origen)}»: la subida #{otra} "
+        quien = f"la subida #{otra}" if otra is not None else "una subida borrada de la lista"
+        append_upload_log(job_id, "info", f"No se renombra «{os.path.basename(origen)}»: {quien} "
                                           "siembra desde ahí. Se enlaza con el nombre de eMuwarez.",
                           stream="system", conn=conn)
         return origen
@@ -880,20 +1141,37 @@ def _renombrar_si_esta_en_subidas(job_id: int, item_id: int, origen: str | None,
 
 
 def _subida_que_lo_usa(conn, ruta: str, job_id: int) -> int | None:
-    """La otra subida que siembra (o prepara) desde `ruta`, con el mismo criterio
-    que el borrado: quitarle el enlace o reescribirlo rompería su torrent."""
+    """La otra subida que siembra (o prepara) desde `ruta`, o desde la carpeta de pack que la contiene, con el mismo
+    criterio que el borrado: quitarle el enlace o reescribirlo rompería su torrent."""
+    ruta = os.path.normpath(ruta)  # «uploads/./Pack/E01» es de «uploads/Pack»
     fila = conn.execute(
-        "SELECT id FROM upload_jobs WHERE prepared_path = ? AND id != ? "
-        "AND (status NOT IN ('cancelled', 'failed') OR torrent_subido = 1) LIMIT 1",
-        (ruta, job_id)).fetchone()
+        "SELECT id FROM upload_jobs WHERE (prepared_path = ? OR substr(?, 1, length(prepared_path) + 1) = "
+        "prepared_path || '/') AND id != ? AND (status NOT IN ('cancelled', 'failed') OR torrent_subido = 1) LIMIT 1",
+        (ruta, ruta, job_id)).fetchone()
     return fila["id"] if fila else None
 
 
-def _motivo_para_no_tocar(origen: str) -> str | None:
+def _destino_sin_dueno(conn, destino: str, job_id: int, origenes: list[str]) -> bool:
+    """Si en `destino` ya hay algo que no dejó ninguna otra subida con fila (una borrada de la lista, que qBittorrent
+    puede seguir sembrando), o que contiene los propios originales: prepararlo lo borraría antes de enlazar."""
+    from ..database import get_json_state
+    from .upload_execution.ciclo_de_vida import ENLACES_SEMBRADOS_SIN_FILA
+    if not os.path.lexists(destino) or any(os.path.abspath(f) == os.path.abspath(destino) for f in origenes):
+        return False
+    if any(os.path.dirname(os.path.abspath(f)) == os.path.abspath(destino) for f in origenes):
+        return True
+    if destino in (get_json_state(conn, ENLACES_SEMBRADOS_SIN_FILA) or []):
+        return True
+    return conn.execute("SELECT 1 FROM upload_jobs WHERE prepared_path = ? AND id != ? LIMIT 1",
+                        (destino, job_id)).fetchone() is None
+
+
+def _motivo_para_no_tocar(origen: str, conn) -> str | None:
     """None si se puede escribir en el original; si no, por qué no."""
-    enlaces = os.stat(origen).st_nlink
-    if enlaces > 1:
-        return f"lo comparten {enlaces} enlaces duros (un torrent que siembra o una subida anterior)"
+    from .carpeta_subida import motivo_para_no_editar
+    motivo = motivo_para_no_editar(origen, conn)
+    if motivo:
+        return motivo
     if not (os.access(origen, os.W_OK) and os.access(os.path.dirname(origen), os.W_OK)):
         return "no se puede escribir en él"
     return None
@@ -950,7 +1228,7 @@ def _preparar_fichero(job_id: int, item_id: int, origen: str, destino: str, modo
     if not origen.lower().endswith(".mkv"):
         return fin([], False, None, "no es MKV")
 
-    motivo = _motivo_para_no_tocar(origen)
+    motivo = _motivo_para_no_tocar(origen, conn)
     # Con el idioma elegido para una pista sin idioma: si solo cambia eso, también hay que escribirlo.
     plan = build_remux_plan(item_id, conn=conn, ruta=origen, reordenar=motivo is None,
                             idiomas=idiomas_elegidos(overrides))
@@ -1053,27 +1331,101 @@ def _motivo_no_reutilizable(job: dict, destino: str, ficheros: list, is_season: 
         return None, "la subida anterior ya no existe"
     if reanudar_desde(anterior.get("status"), anterior.get("etapa_parada")) is None:
         return None, "la subida anterior no llegó a terminar la preparación de los ficheros"
+    motivo = _motivo_preparacion_cambiada(anterior, destino, ficheros, is_season)
+    return (None, motivo) if motivo else (anterior, None)
+
+
+def _motivo_preparacion_cambiada(anterior: dict, destino: str, ficheros: list, is_season: bool, *,
+                                 sin_huellas_vale: bool = False) -> str | None:
+    """None si lo que `anterior` dejó preparado en `destino` sigue siendo lo que hay que subir; si no, por qué no.
+
+    `sin_huellas_vale`: una subida de antes de que se apuntaran las huellas (noviembre de 2026) vale igual si su
+    fichero sigue ahí. Solo para «Subir también a…», que ya comprobó en qBittorrent que ese fichero es el que siembra
+    entero, y donde Uploadrr-EMU compara el torrent del otro tracker con él antes de subir nada."""
     if anterior.get("prepared_path") != destino:
-        return None, "el nombre o el sitio en la carpeta de subidas ha cambiado"
-    if not anterior.get("remux_snapshot_json"):
-        return None, "no quedó apuntado qué pistas se prepararon"
+        return "el nombre o el sitio en la carpeta de subidas ha cambiado"
+    if not anterior.get("remux_snapshot_json") and not sin_huellas_vale:
+        return "no quedó apuntado qué pistas se prepararon"
     # El nombre no basta: si la biblioteca sustituyó el original, lo preparado es del anterior.
     try:
         huellas = json.loads(anterior.get("huellas_preparacion_json") or "null")
     except ValueError:
         huellas = None
-    if not isinstance(huellas, dict):
-        return None, "no quedó apuntada la huella de los originales con que se preparó"
-    for _i, origen, nombre in ficheros:
+    if not isinstance(huellas, dict) and not sin_huellas_vale:
+        return "no quedó apuntada la huella de los originales con que se preparó"
+    for _i, origen, nombre in ficheros if isinstance(huellas, dict) else ():
         if huellas.get(nombre) is None or huellas.get(nombre) != _huella_de(origen):
-            return None, f"el original de «{nombre}» ha cambiado desde que se preparó"
+            return f"el original de «{nombre}» ha cambiado desde que se preparó"
     if is_season:
         faltan = [n for _i, _f, n in ficheros if not os.path.isfile(os.path.join(destino, n))]
         if not os.path.isdir(destino) or faltan:
-            return None, "faltan ficheros en la carpeta del pack"
+            return "faltan ficheros en la carpeta del pack"
     elif not os.path.isfile(destino):
-        return None, "el fichero ya no está en la carpeta de subidas"
-    return anterior, None
+        return "el fichero ya no está en la carpeta de subidas"
+    return None
+
+
+_EPISODIO = re.compile(r"S\d+E\d+(?:-?E\d+)*", re.IGNORECASE)
+
+
+def _con_nombres_de_la_fuente(destino: str, ficheros: list, is_season: bool) -> list:
+    """`ficheros` con los nombres que ya tienen en `destino` (lo preparado por la subida de origen): un capítulo por su
+    SxxEyy. El que no se encuentra conserva el suyo y la comprobación de la preparación dice que falta."""
+    if not is_season:
+        return [(i, f, os.path.basename(destino)) for i, f, _n in ficheros]
+    try:
+        por_capitulo = {m.group(0).upper(): n for n in sorted(os.listdir(destino)) if (m := _EPISODIO.search(n))}
+    except OSError:
+        return ficheros
+    return [(i, f, por_capitulo.get(m.group(0).upper(), n) if (m := _EPISODIO.search(n)) else n) for i, f, n in ficheros]
+
+
+def _preparada_para_otro_tracker(conn, ruta: str, t: "_Trabajo") -> dict | None:
+    """La subida del mismo contenido a otro tracker que ya dejó `ruta` preparada y la siembra, si todas las que usan
+    `ruta` son de esas. Es la que esta reutiliza: mismo fichero, mismas piezas, y nadie lo rehace (le rompería el
+    torrent). Una del mismo tracker, de otro elemento o aún en marcha no vale: entonces manda la regla de siempre
+    (_subida_que_lo_usa)."""
+    condicion, parametros = _condicion_activa()
+    filas = rows_to_dicts(conn.execute(
+        f"SELECT *, {condicion} AS viva FROM upload_jobs WHERE prepared_path = ? AND id != ? "
+        "AND (status NOT IN ('cancelled', 'failed') OR torrent_subido = 1) ORDER BY id DESC",
+        (*parametros, ruta, t.job_id)).fetchall())
+    mio = t.job.get("tracker") or trackers.POR_DEFECTO
+    if not filas or any(f["library_item_id"] != t.item_id or (f.get("tracker") or trackers.POR_DEFECTO) == mio
+                        or f["viva"] or not (f["status"] == "completed" or f["torrent_subido"]) for f in filas):
+        return None
+    return filas[0]
+
+
+def _reutilizar_de_otro_tracker(t: "_Trabajo", otra: dict) -> bool:
+    """Reutiliza lo que dejó preparado la subida a otro tracker (`otra`) y lanza Uploadrr-EMU con `--resume`: las
+    capturas y el BASE.torrent de su `tmp/<nombre>` valen para este tracker también (si ya no está, se hace con el torrent
+    de la otra: upload_execution.consultas.base_desde_para). Si lo preparado ya no vale, falla: rehacerlo rompería el
+    torrent que siembra la otra."""
+    from .upload_execution import append_upload_log, update_phase_progress
+    job_id, conn = t.job_id, t.conn
+    nombre_otro = trackers.obtener(otra.get("tracker") or trackers.POR_DEFECTO).nombre
+    motivo = _motivo_preparacion_cambiada(otra, t.destino_uploadrr, t.ficheros, t.is_season,
+                                          sin_huellas_vale=bool(t.job.get("copia_de_job_id")))
+    if motivo:
+        _fail(job_id, f"«{os.path.basename(t.destino_uploadrr)}» ya está preparado para la subida #{otra['id']} "
+                      f"({nombre_otro}), pero {motivo}: no se rehace para no romper ese torrent.")
+        return False
+    # El tracker de la otra no se hereda: aquí se sube a este. Capturas y torrent, sí.
+    pasos = json.dumps([p for p in leer_subpasos(otra.get("pasos_uploadrr_json")) if p in SUBPASOS_REUTILIZABLES])
+    conn.execute("UPDATE upload_jobs SET remux_snapshot_json = ?, huellas_preparacion_json = ?, "
+                 "reanuda_uploadrr = 1, pasos_uploadrr_json = ? WHERE id = ?",
+                 (otra["remux_snapshot_json"], otra["huellas_preparacion_json"], pasos, job_id))
+    conn.commit()
+    update_phase_progress(job_id, "remux", 100)
+    append_upload_log(job_id, "info",
+                      f"Se reutiliza la preparación de la subida #{otra['id']} ({nombre_otro}): "
+                      f"«{os.path.basename(t.destino_uploadrr)}» es el mismo fichero, así que el torrent tendrá las "
+                      "mismas piezas. Uploadrr reutilizará sus capturas y su torrent si siguen ahí.",
+                      stream="system", conn=conn)
+    t.preparada = {"status": "ready", "metodos": ["reutilizada"]}
+    t.que = f"{len(t.ficheros)} capítulo(s)" if t.is_season else "el archivo"
+    return True
 
 
 @dataclass
@@ -1134,6 +1486,7 @@ def _paso_comprobar(t: _Trabajo) -> bool:
     from .mkv_remux import check_mkvmerge_available, read_tracks_json
     from .media_info_service import mediainfo_available, read_media_info_summary
     from .path_mapping import resolve_local_path, ruta_de_lectura
+    from .uploadrr_contract import motivo_formato_no_subible
 
     job_id, conn = t.job_id, t.conn
     append_upload_log(job_id, "info", "Comprobando integridad del archivo…", stream="system", conn=conn)
@@ -1150,6 +1503,9 @@ def _paso_comprobar(t: _Trabajo) -> bool:
         if _fuera_de_raices(local_path, conn):
             _fail(job_id, f"El archivo está fuera de los allowed_roots configurados: {local_path}")
             return False
+        if motivo := motivo_formato_no_subible(local_path):
+            _fail(job_id, motivo)
+            return False
         if mediainfo_available():
             info = read_media_info_summary(local_path)
             if not info:
@@ -1165,6 +1521,15 @@ def _paso_comprobar(t: _Trabajo) -> bool:
     return _check_generic_upload_preconditions(job_id, t.item_id, t.is_season, conn=conn)
 
 
+def _sin_tipo_en_su_tracker(t: _Trabajo, formato) -> bool:
+    """Falla el trabajo, antes de preparar nada, si su tracker no tiene el tipo de esta copia."""
+    from .uploadrr_contract import motivo_sin_tipo
+    motivo = motivo_sin_tipo(t.job.get("tracker") or trackers.POR_DEFECTO, formato)
+    if motivo:
+        _fail(t.job_id, motivo)
+    return bool(motivo)
+
+
 def _paso_nombre(t: _Trabajo) -> bool:
     """Nomenclatura: el nombre de eMuwarez de cada fichero. Uno de la
     biblioteca no se renombra (lo lleva su enlace en la carpeta de subidas);
@@ -1177,13 +1542,17 @@ def _paso_nombre(t: _Trabajo) -> bool:
     if t.is_season:
         from .season_pack import build_season_pack_plan
         try:
-            plan_pack = build_season_pack_plan(t.item_id, conn=conn, **_ajustes_de_pack(t.season_overrides))
+            plan_pack = build_season_pack_plan(
+                t.item_id, conn=conn,
+                **_ajustes_de_pack(t.season_overrides, t.job.get("tracker") or trackers.POR_DEFECTO))
         except Exception as exc:
             _fail(job_id, f"Error aplicando la nomenclatura del pack de temporada: {texto_de_error(exc)}")
             return False
         if plan_pack.get("status") != "valid":
             reason = "; ".join(plan_pack.get("errors") or []) or "estado desconocido"
             _fail(job_id, f"No se pudo aplicar la nomenclatura del pack de temporada: {reason}")
+            return False
+        if _sin_tipo_en_su_tracker(t, plan_pack.get("source")):
             return False
         t.plan_pack = plan_pack
         _write_snapshot(job_id, "nomenclature_snapshot_json", {
@@ -1223,6 +1592,9 @@ def _paso_nombre(t: _Trabajo) -> bool:
     if plan_nombre.get("status") != "ready":
         reason = "; ".join(plan_nombre.get("errors") or []) or "estado desconocido"
         _fail(job_id, f"No se pudo aplicar la nomenclatura: {reason}")
+        return False
+    from .upload_preflight import formato_de_subida
+    if _sin_tipo_en_su_tracker(t, formato_de_subida(t.item, plan_nombre.get("proposal"))):
         return False
     t.plan_nombre = plan_nombre
     if plan_nombre.get("proposal"):
@@ -1265,17 +1637,42 @@ def _paso_preparar(t: _Trabajo) -> bool:
         t.destino_uploadrr = os.path.join(RAIZ_SUBIDAS, carpeta_pack)
     else:
         t.destino_uploadrr = os.path.join(RAIZ_SUBIDAS, ficheros[0][2])
+    copia_de = t.job.get("copia_de_job_id")
+    if copia_de:
+        # «Subir también a…»: el fichero y el nombre de la subida de origen, aunque la nomenclatura haya cambiado luego.
+        from .upload_execution import get_upload_job
+        fuente = get_upload_job(copia_de, conn=conn)
+        if not fuente or not fuente.get("prepared_path"):
+            _fail(job_id, f"La subida #{copia_de} ya no tiene fichero en la carpeta de subidas: no hay qué subir también.")
+            return False
+        t.destino_uploadrr = fuente["prepared_path"]
+        t.ficheros = ficheros = _con_nombres_de_la_fuente(t.destino_uploadrr, ficheros, is_season)
+        if fuente.get("nomenclature_snapshot_json"):  # el tráiler se busca en el tmp de Uploadrr por este nombre
+            conn.execute("UPDATE upload_jobs SET nomenclature_snapshot_json = ? WHERE id = ?",
+                         (fuente["nomenclature_snapshot_json"], job_id))
+            conn.commit()
     # La ruta se apunta ANTES de crearla: así un borrado de otra subida la ve en uso.
     with ENLACES:
         otra = _subida_que_lo_usa(conn, t.destino_uploadrr, job_id)
-        if otra is None:
+        # La misma subida a otro tracker: se comparte su fichero en vez de rehacerlo.
+        de_otro_tracker = _preparada_para_otro_tracker(conn, t.destino_uploadrr, t) if otra is not None else None
+        # Lo que ya hay en el destino y no explica ninguna subida no se rehace ni se apunta como propio: puede ser lo
+        # que siembra una borrada, y borrar después esta subida se lo llevaría.
+        sin_dueno = otra is None and _destino_sin_dueno(conn, t.destino_uploadrr, job_id, [f for _i, f, _n in ficheros])
+        if (otra is None and not sin_dueno) or de_otro_tracker is not None:
             conn.execute("UPDATE upload_jobs SET prepared_path = ?, updated_at = ? WHERE id = ?",
                          (t.destino_uploadrr, _now_iso(), job_id))
             conn.commit()
+    if de_otro_tracker is not None:
+        return _reutilizar_de_otro_tracker(t, de_otro_tracker)
+    if copia_de and otra is None:
+        _fail(job_id, f"«{os.path.basename(t.destino_uploadrr)}» ya no lo siembra la subida #{copia_de}: «Subir "
+                      "también a…» solo reutiliza un fichero que sigue en la carpeta de subidas.")
+        return False
     if otra is not None:
         _fail(job_id, f"«{os.path.basename(t.destino_uploadrr)}» es de la subida #{otra}, que lo siembra "
                       "o lo tiene en qBittorrent: no se rehace para no romper ese torrent. "
-                      f"Abre la subida #{otra} para ver su estado: si ya está en eMuwarez, "
+                      f"Abre la subida #{otra} para ver su estado: si ya está en su tracker, "
                       "no hace falta volver a subirlo.")
         return False
 
@@ -1290,8 +1687,9 @@ def _paso_preparar(t: _Trabajo) -> bool:
             # Con los ficheros de la anterior, Uploadrr-EMU también reanuda (`--resume`): reutiliza las capturas y el
             # torrent que dejó hechos, pero solo si fue la anterior quien lo lanzó (subida_pasos.uploadrr_puede_reanudar).
             # Con ficheros rehechos o un tmp de otra preparación, empieza de cero.
-            reanuda = uploadrr_puede_reanudar(anterior.get("status"), anterior.get("etapa_parada"),
-                                              anterior.get("pasos_uploadrr_json"))
+            # Sin `process_id` la anterior no llegó a lanzarlo (falló preparando su config, p. ej.).
+            reanuda = anterior.get("process_id") is not None and uploadrr_puede_reanudar(
+                anterior.get("status"), anterior.get("etapa_parada"), anterior.get("pasos_uploadrr_json"))
             # Si reanuda, hereda los pasos que dejó hechos: un fallo antes del primer `Step done` no debe borrarlos.
             pasos = anterior.get("pasos_uploadrr_json") if reanuda else None
             conn.execute("UPDATE upload_jobs SET remux_snapshot_json = ?, huellas_preparacion_json = ?, "
@@ -1309,9 +1707,21 @@ def _paso_preparar(t: _Trabajo) -> bool:
                 + (f" Uploadrr no repetirá: {', '.join(n.lower() for n in aprovecha)}." if aprovecha else ""),
                 stream="system", conn=conn,
             )
+            if sin_dueno:  # reutilizarlo sin rehacerlo sí vale: ahora es de esta subida
+                with ENLACES:
+                    conn.execute("UPDATE upload_jobs SET prepared_path = ?, updated_at = ? WHERE id = ?",
+                                 (t.destino_uploadrr, _now_iso(), job_id))
+                    conn.commit()
             t.preparada = {"status": "ready", "metodos": ["reutilizada"]}
             t.que = f"{len(ficheros)} capítulo(s)" if is_season else "el archivo"
             return True
+
+    if sin_dueno:
+        _fail(job_id, f"«{os.path.basename(t.destino_uploadrr)}» ya existe en la carpeta de subidas y puede estar "
+                      "sembrándose (de una subida que se borró de la lista, por ejemplo): no se rehace para no romper "
+                      f"ese torrent. Si qBittorrent ya no lo siembra, bórralo a mano de {RAIZ_SUBIDAS} y vuelve a "
+                      "intentarlo; si lo siembra, no se puede preparar otra subida de este contenido mientras siga ahí.")
+        return False
 
     por_nombre = {n: i for i, _f, n in ficheros}
     resultados = t.resultados
@@ -1469,6 +1879,16 @@ def _run_queued_job(job_id: int) -> None:
     # path before that point falls through to the `finally` below and
     # releases it immediately, so a job that never gets that far can't
     # deadlock the queue.
+    # Antes que la plaza: la del mismo contenido a otro tracker va primero, y esperarla no ocupa plaza.
+    try:
+        if not _esperar_a_la_anterior(job_id):
+            return  # cancelada mientras esperaba
+    except Exception as exc:
+        # Fuera del try de abajo: sin esto la fila se quedaba en 'queued' sin hilo y las siguientes del mismo
+        # contenido la esperaban para siempre. Aún no tiene plaza, así que no hay nada que liberar.
+        logger.exception("Job %s: excepción esperando a la subida anterior", job_id)
+        _fail(job_id, f"Error inesperado: {texto_de_error(exc)}")
+        return
     if not _upload_concurrency_gate.acquire(job_id):
         return  # cancelada mientras esperaba turno: no ocupa plaza
 
@@ -1511,15 +1931,18 @@ def _run_queued_job(job_id: int) -> None:
 
 def dashboard_upload_counters(conn) -> dict:
     """Los contadores de subidas del Panel. Vivían dentro del endpoint."""
+    from .upload_execution.consultas import CONDICION_PUNTA
     try:
         cuentas = {r["status"]: int(r["cnt"] or 0) for r in conn.execute(
             "SELECT status, COUNT(*) AS cnt FROM upload_jobs GROUP BY status")}
+        # Como Subidas: una fallida ya reintentada no cuenta.
+        fallidas = conn.execute(f"SELECT COUNT(*) FROM upload_jobs WHERE status = 'failed' AND {CONDICION_PUNTA}").fetchone()[0]
         ultima = conn.execute("SELECT MAX(updated_at) AS last_at FROM upload_jobs").fetchone()
         return {
             "uploads_ready": cuentas.get("ready", 0),
             "uploads_running": cuentas.get("running", 0),
             "uploads_completed": cuentas.get("completed", 0),
-            "uploads_failed": cuentas.get("failed", 0),
+            "uploads_failed": int(fallidas or 0),
             "last_upload_at": ultima["last_at"] if ultima else None,
         }
     except Exception:

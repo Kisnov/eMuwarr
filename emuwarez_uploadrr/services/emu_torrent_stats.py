@@ -1,9 +1,10 @@
-"""Las estadísticas que eMuwarez da de un torrent que subiste: seeders, leechers y veces completado.
+"""Las estadísticas que el tracker de una subida da del torrent que subiste: seeders, leechers y veces completado.
 
 La subida guarda la ficha del torrent (`upload_jobs.result_tracker`, la línea `Torrent URL:` de Uploadrr-EMU); de ella
-sale solo el id numérico (`/torrents/<id>`) y se pide `GET /api/torrents/<id>` a eMuwarez (la constante `EMU_BASE_URL`), nunca a
-la URL que traiga la subida. Una llamada por subida y no por la lista: la clave de eMuwarez la comparten Sonarr, Radarr, qui
-y las subidas con 30 peticiones por minuto, así que solo se pide al abrir el detalle, con una caché corta en memoria.
+sale solo el id numérico (`/torrents/<id>`) y se pide `GET /api/torrents/<id>` al tracker de la subida, con su clave y su
+URL (`Tracker.url`), nunca a la URL que traiga la subida. Una llamada por subida y no por la lista:
+la clave de eMuwarez la comparten Sonarr, Radarr, qui y las subidas con 30 peticiones por minuto, así que solo se pide al
+abrir el detalle, con una caché corta en memoria.
 La respuesta nunca lleva la URL ni la clave. Solo lectura.
 """
 from __future__ import annotations
@@ -19,18 +20,19 @@ from typing import Any, Optional
 
 from ..integrations.base import IntegrationError, texto_de_error
 from ..integrations.emu import emu_get_torrent
-from .settings import get_setting_canonical
+from .settings import ajuste_de_tracker
+from .trackers import obtener
 
 logger = logging.getLogger(__name__)
 
 TTL_CACHE = 300.0       # segundos que vale una lectura buena
 TTL_FALLO = 30.0        # y una fallida
 _FICHA = re.compile(r"/torrents/(\d+)(?:[/?#]|$)")
-MENSAJE_SIN_APROBAR = ("eMuwarez aún no enseña este torrent: estará pendiente de moderación (o lo han retirado). "
+MENSAJE_SIN_APROBAR = ("{} aún no enseña este torrent: estará pendiente de moderación (o lo han retirado). "
                        "Las cifras salen cuando lo aprueben.")
 
 _lock = threading.Lock()
-_cache: dict[tuple[str, int], tuple[float, dict[str, Any]]] = {}
+_cache: dict[tuple[str, str, int], tuple[float, dict[str, Any]]] = {}
 
 
 def id_de_la_ficha(url: Optional[str]) -> Optional[int]:
@@ -58,34 +60,36 @@ def _resumir(atributos: dict[str, Any]) -> dict[str, Any]:
 
 def estadisticas_de_la_subida(conn: sqlite3.Connection, job_id: int, *, refrescar: bool = False) -> dict[str, Any]:
     """`{aplica, configurado, disponible, mensaje, actualizado, seeders, leechers, completadas, ...}`.
-    `aplica` es falso si la subida no existe o no llegó a eMuwarez (sin ficha). Un fallo del tracker es
+    `aplica` es falso si la subida no existe o no llegó a su tracker (sin ficha). Un fallo del tracker es
     `disponible: false` con su mensaje, nunca una excepción."""
-    fila = conn.execute("SELECT status, result_tracker FROM upload_jobs WHERE id = ?", (job_id,)).fetchone()
+    fila = conn.execute("SELECT status, result_tracker, tracker FROM upload_jobs WHERE id = ?", (job_id,)).fetchone()
     torrent_id = id_de_la_ficha(fila["result_tracker"]) if fila and fila["status"] == "completed" else None
     base = {"aplica": torrent_id is not None, "configurado": False, "disponible": False, "mensaje": None,
             "actualizado": None}
     if torrent_id is None:
         return base
-    clave = (get_setting_canonical(conn, "emu.api_key") or "").strip()
+    tracker = obtener(fila["tracker"])
+    clave = (ajuste_de_tracker(conn, "api_key", tracker.id) or "").strip()
     if not clave:
-        return {**base, "mensaje": "Falta la API key de eMuwarez en Configuración."}
+        return {**base, "mensaje": f"Falta la API key de {tracker.nombre} en Configuración."}
     base["configurado"] = True
     huella = hashlib.sha256(clave.encode()).hexdigest()
-    llave = (huella, torrent_id)
+    llave = (tracker.id, huella, torrent_id)  # la misma clave puede valer en dos trackers
     ahora = time.monotonic()
     with _lock:
         guardado = _cache.get(llave)
         if guardado and not refrescar and ahora - guardado[0] < (TTL_CACHE if guardado[1].get("disponible") else TTL_FALLO):
             return {**base, **guardado[1]}
     try:
-        atributos = emu_get_torrent(clave, torrent_id)
+        atributos = emu_get_torrent(clave, torrent_id, tracker.url, tracker=tracker.uploadrr, nombre=tracker.nombre)
         resultado = {"disponible": True, "actualizado": datetime.now(timezone.utc).isoformat(), **_resumir(atributos)}
     except IntegrationError as exc:
         if exc.status == 404:
-            # Lo normal: aún no la ha aprobado un moderador, y hasta entonces eMuwarez no la enseña.
-            resultado = {"disponible": False, "pendiente_moderacion": True, "mensaje": MENSAJE_SIN_APROBAR}
+            # Lo normal: aún no la ha aprobado un moderador, y hasta entonces el tracker no la enseña.
+            resultado = {"disponible": False, "pendiente_moderacion": True,
+                         "mensaje": MENSAJE_SIN_APROBAR.format(tracker.nombre)}
         else:
-            logger.warning("No se pudieron leer las estadísticas del torrent %s en eMuwarez: %s", torrent_id,
+            logger.warning("No se pudieron leer las estadísticas del torrent %s en %s: %s", torrent_id, tracker.nombre,
                            texto_de_error(exc))
             resultado = {"disponible": False, "mensaje": texto_de_error(exc)}
     with _lock:

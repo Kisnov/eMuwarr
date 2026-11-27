@@ -126,6 +126,32 @@ def tipo_de_subida(release_format) -> Optional[str]:
     return _UPLOADRR_TYPES.get(str(release_format or "").strip())
 
 
+def motivo_sin_tipo(tracker: str, release_format) -> Optional[str]:
+    """Por qué `tracker` (su id) no puede recibir una copia de este formato; None si tiene su tipo o no se sabe cuál es
+    (eso lo dice su propia comprobación). N.O.B.S y Milnueve no tienen «SD»."""
+    from ..integrations.emu import tiene_tipo
+    from .trackers import obtener
+    tipo, destino = tipo_de_subida(release_format), obtener(tracker)
+    if not tipo or tiene_tipo(destino.uploadrr, tipo):
+        return None
+    return f"{destino.nombre} no tiene el tipo «{release_format}»: esta copia no se puede subir ahí"
+
+
+# Lo único que Uploadrr-EMU sube (src/videoprocessor.py::get_video): con otro formato acaba sin vídeo que subir.
+EXTENSIONES_SUBIBLES = (".mkv", ".mp4", ".ts")
+
+
+def motivo_formato_no_subible(ruta: str | None) -> Optional[str]:
+    """Por qué no se sube este fichero por su formato; None si es MKV, MP4 o TS."""
+    ext = os.path.splitext(ruta or "")[1].lower()
+    if ext in EXTENSIONES_SUBIBLES:
+        return None
+    if ext == ".iso":
+        return "Es un ISO: las imágenes de disco todavía no se pueden subir desde aquí."
+    return (f"Es un {ext.lstrip('.').upper() or 'archivo sin extensión'}: Uploadrr-EMU solo sube MKV, MP4 y TS. "
+            "Conviértelo a MKV antes de subirlo.")
+
+
 def _format_season(value) -> str:
     if isinstance(value, int):
         return f"S{value:02d}"
@@ -199,13 +225,24 @@ def build_uploadrr_emu_command(
     anonimo: bool = False,
     personal_release: bool = False,
     solo_cliente: Optional[int | str] = None,
+    base_desde: Optional[str] = None,
     eventos: Optional[str] = None,
     config: Optional[str] = None,
+    tracker: str = "EMU",
+    variante: Optional[str] = None,
+    descripcion: Optional[str] = None,
 ) -> list[str]:
     """Build the real Uploadrr-EMU argv. Always a list[str], never a shell string.
 
+    `tracker` es su nombre en Uploadrr-EMU (`services.trackers.Tracker.uploadrr`: EMU, NOBS, MNV), el `-tk`. Una
+    subida va a un solo tracker: cada uno es su propio trabajo.
+
     `solo_cliente` (el id del torrent en eMuwarez) añade `--resume --solo-cliente <id>`: Uploadrr-EMU no sube nada,
     solo baja el .torrent firmado de ese id y lo vuelve a añadir a qBittorrent, que lo comprueba.
+
+    `base_desde` («EMU:<id>», el tracker en Uploadrr-EMU y el id del torrent en él) añade `--resume --base-desde <valor>`:
+    el mismo contenido ya está en ese tracker y en su `tmp/<nombre>` ya no queda un BASE.torrent reutilizable, así que Uploadrr-EMU
+    lo hace con el torrent de allí (mismas piezas, sin hashear) en vez de crear otro que no se podría sembrar junto.
 
     `release_format` is the nomenclature's source code (WEB-DL, BDRemux…), sent as `-t`.
 
@@ -220,7 +257,14 @@ def build_uploadrr_emu_command(
     `config` añade `--config <ruta absoluta>`: Uploadrr-EMU lee ese config.yaml (el de esta subida) en vez del suyo.
     También es global.
 
-    Una `resolution` de menos de 720p añade `-avbc` (ver pide_aviso_baja_calidad).
+    Una `resolution` de menos de 720p añade `-avbc` (ver pide_aviso_baja_calidad), solo para eMuwarez: el aviso es
+    una norma suya.
+
+    `variante` (la de services/reglas_tracker.py: anime, latino, anime_catalan) añade `--variante <v>`: Uploadrr-EMU
+    elige con ella la categoría del tracker (MOVIE_ANIME…). Sin ella, la de siempre.
+
+    `descripcion` (la ruta del fichero con la descripción propia de la subida) añade `-df <ruta absoluta>`: Uploadrr-EMU
+    la pone tras el tráiler y antes de las capturas y la firma.
 
     Only accepts prepared_path (or applied_path passed as prepared_path by
     the caller) — there is intentionally no source_path parameter, so the
@@ -230,13 +274,13 @@ def build_uploadrr_emu_command(
         python_path,
         uploadrr_script_path,
         prepared_path,
-        "-tk", "EMU",
+        "-tk", tracker,
         "-mt", torrent_name,
     ]
     if tmdb_id:
         cmd += ["-tmdb", str(tmdb_id)]
     cmd += ["-ua", "-c", "tv" if category == "tv" else "movie"]
-    aviso = pide_aviso_baja_calidad(resolution)
+    aviso = tracker == "EMU" and pide_aviso_baja_calidad(resolution)
     resolution = _normalize_resolution(resolution)
     if resolution:
         cmd += ["-res", resolution]
@@ -258,15 +302,25 @@ def build_uploadrr_emu_command(
         cmd.append("-a")
     if personal_release:
         cmd.append("-pr")
-    if reanudar or solo_cliente:
+    cmd += argv_variante(variante)
+    if descripcion:
+        cmd += ["-df", os.path.abspath(descripcion)]
+    if reanudar or solo_cliente or base_desde:
         cmd.append("--resume")
     if solo_cliente:
         cmd += ["--solo-cliente", str(solo_cliente)]
+    elif base_desde:
+        cmd += ["--base-desde", base_desde]
     if eventos:
         cmd += ["--eventos", os.path.abspath(eventos)]
     if config:
         cmd += ["--config", os.path.abspath(config)]
     return cmd
+
+
+def argv_variante(variante: Optional[str]) -> list[str]:
+    """`--variante <v>` para Uploadrr-EMU, o nada si es la categoría normal. Va con las banderas del ítem, como `-c`."""
+    return ["--variante", variante] if variante else []
 
 
 def render_command_preview(command: list[str]) -> str:
@@ -352,6 +406,7 @@ __all__ = [
     "get_allowed_roots",
     "path_within_allowed_roots",
     "build_uploadrr_emu_command",
+    "argv_variante",
     "render_command_preview",
     "redact_uploadrr_command",
     "validate_uploadrr_emu_contract",

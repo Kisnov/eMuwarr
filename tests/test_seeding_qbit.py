@@ -227,6 +227,21 @@ def test_cache_de_60_segundos_y_refrescar_se_la_salta(http_falso, reloj):
     assert len(http_falso.peticiones) == 6
 
 
+def test_una_subida_que_termina_no_se_lee_con_la_lista_de_antes(http_falso, reloj):
+    from emuwarez_uploadrr.services.upload_execution import _finalize_job_status
+
+    _config()
+    _subida(ruta=f"{RAIZ}/A")
+    nueva = _subida(estado="running", ruta=f"{RAIZ}/B")
+    _servidor(http_falso, [torrent("A")])
+    _salud()
+    _servidor(http_falso, [torrent("A"), torrent("B", hash="b" * 40)])
+
+    _finalize_job_status(nueva, "completed", stage="finished")
+
+    assert {i["job_id"]: i["estado"] for i in _salud()["items"]}[nueva] == "sembrando"
+
+
 def test_cambiar_la_configuracion_no_sirve_la_cache_de_otra(http_falso):
     _config()
     _servidor(http_falso, [])

@@ -1,10 +1,12 @@
 // Paso 2 de «Subir por lotes»: por película o temporada, el nombre del torrent, sus avisos, su comprobación y lo
-// que ya hay en eMuwarez, con la casilla «Incluir»; debajo, las comprobaciones comunes (una sola vez) y «Subir N».
-import type { UploadCheck, UploadChecksResult } from '../../api/uploads'
+// que ya hay en cada tracker elegido, con la casilla «Incluir»; debajo, las comprobaciones comunes (una sola vez) y
+// «Subir N».
+// Con otro tracker con clave, arriba se eligen a cuáles.
+import type { TrackerParaSubir, UploadCheck, UploadChecksResult } from '../../api/uploads'
 import type { LibraryItemResponse } from '../../types/api'
 import { motivoDelBloqueo } from '../../utils/comprobaciones'
-import { CheckRow } from '../asistente/piezas'
-import type { AnalisisElemento } from './useLote'
+import { CasillasTrackers, CheckRow } from '../asistente/piezas'
+import type { AnalisisElemento, YaHayEnTracker } from './useLote'
 
 export interface FilaResumenLote {
   item: LibraryItemResponse
@@ -18,6 +20,14 @@ export interface FilaResumenLote {
   // Falta su comprobación o su análisis.
   pendiente: boolean
   incluida: boolean
+  // «N.O.B.S: motivo» por cada tracker elegido que no lo admite o ya lo tiene: para ese se salta.
+  noLoAdmiten: string[]
+  // «Milnueve»: a cuáles va, si alguno de los elegidos no lo admite; null si va a todos.
+  soloA: string | null
+  // Lo que ya hay en cada tracker elegido (undefined mientras se mira); vacío si se salta por su nombre.
+  yaHay: { tracker: string; en: YaHayEnTracker | undefined }[]
+  // Los trackers que ya lo tienen y a los que no se manda.
+  omitir: string[]
 }
 
 // Qué falló y dónde: la etiqueta dice qué («Contenido no accesible») y el mensaje, el detalle (la ruta, los errores
@@ -36,7 +46,7 @@ const CLASE_NIVEL: Record<string, string> = {
 
 export function PasoResumenLote({
   filas, entorno, comprobando, comprobandoIndice, errorComprobando, analizando, paralelo, enviando, rechazo,
-  falloEnvio, onIncluir, onRepetir, onVolver, onSubir,
+  falloEnvio, trackersParaSubir, trackersElegidos, onElegirTracker, destinoSubida, onIncluir, onRepetir, onVolver, onSubir,
 }: {
   filas: readonly FilaResumenLote[]
   entorno: UploadChecksResult | null
@@ -50,6 +60,11 @@ export function PasoResumenLote({
   // Los motivos de un 409: falta algo que haría fallar a todas.
   rechazo: string[] | null
   falloEnvio: string | null
+  trackersParaSubir: readonly TrackerParaSubir[]
+  trackersElegidos: readonly string[]
+  onElegirTracker: (id: string, si: boolean) => void
+  // «eMuwarez y N.O.B.S»; vacío si no hay ninguno elegido.
+  destinoSubida: string
   onIncluir: (id: number, incluir: boolean) => void
   onRepetir: () => void
   onVolver: () => void
@@ -61,9 +76,11 @@ export function PasoResumenLote({
   const envReady = entorno?.ready === true
   const resumen = !comprobando && (completas || !!errorComprobando)
   const fallidas = filas.filter(f => f.contenido?.ready === false || f.analisis?.bloqueo).length
-  const puedeSubir = !comprobando && !errorComprobando && completas && envReady && !analizando && incluidas > 0 && !enviando
   const salta = filas.filter(f => f.salto).length
   const porComprobar = filas.filter(f => !f.salto && f.pendiente).length
+  // Con alguna aún por comprobar no se sube: quedaría fuera sin saber si era un duplicado.
+  const puedeSubir = !comprobando && !errorComprobando && completas && envReady && !analizando && incluidas > 0 && !enviando
+    && !!destinoSubida && porComprobar === 0
   return (
     <div className="modal-body">
       {/* Lo que va a pasar con el lote, de un vistazo y sin tener que leer la tabla fila a fila. */}
@@ -72,16 +89,30 @@ export function PasoResumenLote({
         {salta > 0 && <span className="lote-cifra lote-cifra-mal"><strong>{salta}</strong> {salta === 1 ? 'se saltará' : 'se saltarán'}</span>}
         {porComprobar > 0 && <span className="lote-cifra"><strong>{porComprobar}</strong> por comprobar</span>}
       </div>
+      {/* Cambiar el primero rehace las comprobaciones (son sus normas): no mientras se hacen. */}
+      {trackersParaSubir.length > 1 && (
+        <div className="lote-trackers">
+          <span className="asist-etiqueta">Trackers</span>
+          <CasillasTrackers trackers={trackersParaSubir} elegidos={trackersElegidos} onElegir={onElegirTracker}
+            disabled={comprobando || enviando} />
+          <span className="asist-dato-nota">
+            {!destinoSubida
+              ? 'Elige al menos uno.'
+              : 'Una subida por elemento y tracker, una detrás de otra, con el mismo fichero y el mismo nombre. Las comprobaciones de cada uno son las del primero que lo admite.'}
+          </span>
+        </div>
+      )}
       <div className="lote-tabla-caja">
         <table className="data-table lote-tabla">
           <thead>
-            <tr><th>Contenido</th><th>Comprobación</th><th>En eMuwarez</th><th>Incluir</th></tr>
+            <tr><th>Contenido</th><th>Comprobación</th><th>En {destinoSubida || 'eMuwarez'}</th><th>Incluir</th></tr>
           </thead>
           <tbody>
             {filas.map(f => {
               const a = f.analisis
               // El de una temporada ya lleva la serie: «Serie - Temporada 2».
               const titulo = f.item.title
+              const una = f.yaHay.length === 1 ? f.yaHay[0] : null
               return (
                 <tr key={f.item.id} data-item={f.item.id}>
                   <td className="lote-celda-titulo">
@@ -90,6 +121,8 @@ export function PasoResumenLote({
                       {f.nombre === undefined ? 'Calculando el nombre…' : f.nombre ?? '—'}
                     </div>
                     {a?.avisos.map(aviso => <div key={aviso} className="lote-aviso">⚠ {aviso}</div>)}
+                    {!f.salto && f.soloA && <div className="lote-aviso">⚠ Solo a {f.soloA}</div>}
+                    {!f.salto && f.noLoAdmiten.map(m => <div key={m} className="lote-aviso">⚠ No va a {m}</div>)}
                     {f.salto && f.contenido?.ready !== false && <div className="lote-error">✗ {f.salto}</div>}
                   </td>
                   <td>
@@ -99,7 +132,13 @@ export function PasoResumenLote({
                         ? <span className="asist-ok">✓ Lista</span>
                         : <span className="asist-error">✗ {f.salto ?? primerFallo(f.contenido)}</span>}
                   </td>
-                  <td className={['lote-celda-emu', a?.nivel && CLASE_NIVEL[a.nivel]].filter(Boolean).join(' ')}>{a ? a.enEmu : '…'}</td>
+                  {/* Con varios trackers, una línea por tracker con su nombre delante. */}
+                  <td className={['lote-celda-emu', una?.en?.nivel && CLASE_NIVEL[una.en.nivel]].filter(Boolean).join(' ')}
+                    data-etiqueta={una ? `En ${una.tracker}: ` : undefined}>
+                    {!a ? '…' : f.yaHay.length === 0 ? '—' : una ? una.en?.texto ?? '…' : f.yaHay.map(({ tracker, en }) => (
+                      <div key={tracker} className={en?.nivel ? CLASE_NIVEL[en.nivel] : undefined}>{tracker}: {en?.texto ?? '…'}</div>
+                    ))}
+                  </td>
                   <td className="lote-celda-incluir">
                     <label className="checkbox-label">
                       <input
@@ -155,7 +194,7 @@ export function PasoResumenLote({
 
       {paralelo === 0 ? (
         <p className="lote-paralelo lote-paralelo-aviso">
-          ⚠ Sin límite: se lanzarán las {incluidas} a la vez contra eMuwarez. Puedes ponerle un tope en Configuración → Otros, «Máximo de subidas en paralelo».
+          ⚠ Sin límite: se lanzarán las {incluidas} a la vez. Puedes ponerle un tope en Configuración → Otros, «Máximo de subidas en paralelo».
         </p>
       ) : (
         <p className="lote-paralelo">
@@ -176,7 +215,7 @@ export function PasoResumenLote({
       <div className="asist-pie">
         <button className="btn btn-secondary" onClick={onVolver} type="button" disabled={enviando}>← Volver</button>
         <button className="btn btn-primary" onClick={onSubir} type="button" disabled={!puedeSubir}>
-          {enviando ? 'Encolando…' : `Subir (${incluidas})`}
+          {enviando ? 'Encolando…' : `Subir (${incluidas})${trackersParaSubir.length > 1 && destinoSubida ? ` a ${destinoSubida}` : ''}`}
         </button>
       </div>
     </div>

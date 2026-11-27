@@ -179,3 +179,24 @@ def test_cerrar_una_fase_avisa_con_la_fase_ya_escrita(trabajo, monkeypatch):
     ue.mark_phase_failed(trabajo, "qbittorrent_add")
 
     assert vistos == [("subida-progreso", "uploading_emu", "done"), ("subida-progreso", "qbittorrent_add", "failed")]
+
+
+def test_borrar_una_subida_avisa_despues_de_borrarla(trabajo, monkeypatch):
+    """Otra pestaña con Subidas abierta quita la fila sin esperar a su sondeo."""
+    from emuwarez_uploadrr.services.upload_execution import DELETE_CONFIRMATION_TOKEN, ciclo_de_vida, delete_upload_job
+
+    upload_states.escribir_estado(trabajo, salvo=(), status="failed")
+    vistos = []
+
+    def espia(tipo, datos=None):
+        conn = connect(db_path())
+        try:
+            existe = conn.execute("SELECT 1 FROM upload_jobs WHERE id = ?", (datos["job_id"],)).fetchone() is not None
+        finally:
+            conn.close()
+        vistos.append((tipo, datos["job_id"], existe))
+        return 0
+
+    monkeypatch.setattr(ciclo_de_vida, "publicar", espia)
+    assert delete_upload_job(trabajo, confirmation=DELETE_CONFIRMATION_TOKEN)["ok"] is True
+    assert vistos == [("subida-estado", trabajo, False)]

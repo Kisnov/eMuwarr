@@ -7,7 +7,7 @@ import type { LibraryItemResponse } from '../../types/api'
 import type { DashboardRecommendationItem } from '../../api/dashboard'
 import {
   MAX_ELEMENTOS_LOTE, PATRON_LOTE_ID, claveDelPanel, entradaDePeticion, entradaDelPanel, expandirEntradas,
-  marcadaPorDefecto, nombresRepetidos, nuevoLoteId, peticionSeleccionableEnLote, razonNoMarcable, razonNoSubible,
+  nombresRepetidos, nuevoLoteId, peticionSeleccionableEnLote, razonNoMarcable, razonNoSubible,
   seleccionableEnLote, conAvisoDeLote, loteDeNotificacion,
 } from '../lote'
 
@@ -75,6 +75,8 @@ describe('razonNoSubible', () => {
   it('sin castellano, o sin poder leer sus pistas, no se puede', () => {
     expect(razonNoSubible(pelicula({ has_spanish_ok: 0 }))).toBe('No tiene castellano ni en el audio ni en los subtítulos.')
     expect(razonNoSubible(pelicula({ has_spanish_ok: null }))).toContain('no se puede confirmar que tenga castellano')
+    // Con lo que admite cada tracker, manda eso: el servidor lo ha mirado con sus normas.
+    expect(razonNoSubible(pelicula({ has_spanish_ok: null }), ['mnv'])).toBeNull()
   })
 
   it('una temporada entra si se puede subir como pack, y si no, con el motivo de seasonNotReadyReason', () => {
@@ -91,6 +93,13 @@ describe('razonNoSubible', () => {
     expect(razonNoSubible(pelicula({ item_type: 'series' }))).toBe('Una serie se sube por temporadas.')
   })
 
+  it('con más de un tracker, en vez del castellano decide si lo admite alguno', () => {
+    expect(razonNoSubible(pelicula({ has_spanish_ok: 0 }), ['Milnueve'])).toBeNull()
+    expect(razonNoSubible(pelicula({ has_spanish_ok: 0 }), [])).toBe('Ningún tracker con clave admite sus idiomas.')
+    expect(razonNoSubible(pelicula({ local_status: 'Faltante' }), ['Milnueve'])).toContain('Faltante')
+    expect(razonNoSubible(pelicula({ item_type: 'season', video_codec: 'x264', has_spanish_ok: 0 }), ['Milnueve'])).toBeNull()
+  })
+
   it('lo de una carpeta manual sin ficha de TMDb no entra, a ningún nivel, aunque lo demás esté bien', () => {
     for (const item_type of ['movie', 'series', 'season', 'episode']) {
       expect(razonNoSubible(pelicula({ item_type, por_identificar: true })))
@@ -100,6 +109,13 @@ describe('razonNoSubible', () => {
 })
 
 describe('razonNoMarcable', () => {
+  it('con más de un tracker no mira los idiomas: los mira el lote', () => {
+    expect(razonNoMarcable(pelicula({ has_spanish_ok: 0 }))).toBe('No tiene castellano ni en el audio ni en los subtítulos.')
+    expect(razonNoMarcable(pelicula({ has_spanish_ok: 0 }), true)).toBeNull()
+    expect(razonNoMarcable(pelicula({ local_status: 'Faltante' }), true)).toContain('Faltante')
+    expect(razonNoMarcable(pelicula({ por_identificar: true }), true)).toBe('Identifica la ficha en TMDb antes de subirla.')
+  })
+
   it('una serie se marca (se cambia por sus temporadas) salvo que esté por identificar', () => {
     expect(razonNoMarcable(pelicula({ item_type: 'series' }))).toBeNull()
     expect(razonNoMarcable(pelicula({ item_type: 'series', por_identificar: true })))
@@ -183,6 +199,12 @@ describe('las filas del Panel', () => {
       .toEqual({ item: ficha, requestId: 78, alcance: { season: 1, episode: 12 } })
     expect(entradaDelPanel(fila({ season_number: 2 }), ficha)).toEqual({ item: ficha })
   })
+
+  it('una petición lleva también su tracker', () => {
+    expect(entradaDelPanel(fila({ rec_request_id: 77, rec_request_tracker: 'nobs' }), ficha).tracker).toBe('nobs')
+    expect(entradaDePeticion({ id: 70, req_scope: null, req_season: null, req_episode: null, tracker: 'mnv' }, ficha).tracker)
+      .toBe('mnv')
+  })
 })
 
 describe('las peticiones de Peticiones', () => {
@@ -207,20 +229,6 @@ describe('las peticiones de Peticiones', () => {
       .toEqual({ item: ficha, requestId: 71, alcance: { season: 2, episode: null } })
     expect(entradaDePeticion({ id: 72, req_scope: 'episode', req_season: 1, req_episode: 12 }, ficha))
       .toEqual({ item: ficha, requestId: 72, alcance: { season: 1, episode: 12 } })
-  })
-})
-
-describe('marcadaPorDefecto', () => {
-  it('desmarca un duplicado y una copia peor que todo lo que hay', () => {
-    expect(marcadaPorDefecto('duplicado')).toBe(false)
-    expect(marcadaPorDefecto('peor')).toBe(false)
-  })
-
-  it('marca el resto, también sin nada con lo que comparar', () => {
-    expect(marcadaPorDefecto(null)).toBe(true)
-    expect(marcadaPorDefecto('trump')).toBe(true)
-    expect(marcadaPorDefecto('mixto')).toBe(true)
-    expect(marcadaPorDefecto('sin-comparar')).toBe(true)
   })
 })
 

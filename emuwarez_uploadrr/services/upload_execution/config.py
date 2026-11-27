@@ -25,12 +25,16 @@ from ..uploadrr_config import (
     stage_oxipng_on,
     stage_per_episode_screens,
     stage_qbittorrent_config,
+    stage_sin_firma,
     stage_tmdb_key,
+    stage_tracker_config,
     staged_config_text,
 )
+from ..trackers import EMU, TRACKERS
 from ..uploadrr_contract import get_runtime_settings
 from .comun import _get_db_conn, logger
 from .registro import append_upload_log
+from ..settings import ajuste_de_tracker
 
 
 class ConfigNoPreparada(RuntimeError):
@@ -55,7 +59,12 @@ def _lineas_preparadas(job_id: int, cwd: str) -> list[str] | None:
     conn = _get_db_conn()
     try:
         tmdb_key = get_setting_canonical(conn, "tmdb.api_key")
-        emu_key = get_setting_canonical(conn, "emu.api_key")
+        emu_key = ajuste_de_tracker(conn, "api_key")
+        # Los otros trackers (fase B) con clave puesta: su bloque TRACKERS.<X> va en el config de la subida.
+        claves_otros = {
+            t.uploadrr: clave for t in TRACKERS.values() if t is not EMU
+            if (clave := (ajuste_de_tracker(conn, "api_key", t.id) or "").strip())
+        }
         img_hosts = fallback_order(conn)
         img_api_keys = {
             host_id: key for host_id in SCREENS_API_KEY_HOSTS
@@ -70,6 +79,8 @@ def _lineas_preparadas(job_id: int, cwd: str) -> list[str] | None:
         qbit_username = get_setting_canonical(conn, "qbit.username")
         qbit_password = get_setting_canonical(conn, "qbit.password")
         qbit_qui = get_setting_canonical(conn, "qbit.qui_proxy_url")
+        fila = conn.execute("SELECT tracker FROM upload_jobs WHERE id = ?", (job_id,)).fetchone()
+        otro_tracker = bool(fila and fila[0] and fila[0] != EMU.id)
     finally:
         conn.close()
 
@@ -89,6 +100,8 @@ def _lineas_preparadas(job_id: int, cwd: str) -> list[str] | None:
         if emu_key:
             lines, _msg = stage_emu_config(lines, api_key=emu_key)
             changed = True
+        for tracker, clave in claves_otros.items():
+            lines, _msg = stage_tracker_config(lines, tracker, api_key=clave)
         lines, _msg = stage_add_logo(lines, add_logo)
         lines, _msg = stage_per_episode_screens(lines, per_episode_screens)
         lines, _msg = stage_blu_api_off(lines)
@@ -96,6 +109,8 @@ def _lineas_preparadas(job_id: int, cwd: str) -> list[str] | None:
         lines, _msg = stage_oxipng_on(lines)
         lines, _msg = stage_anon_off(lines)
         lines, _msg = stage_firma_actual(lines)
+        if otro_tracker:
+            lines, _msg = stage_sin_firma(lines)
         changed = True
         # Siempre hay al menos uno (ver arriba): esto es lo que hace que la
         # preferencia del usuario (p. ej. Pixhost) llegue de verdad a Uploadrr-EMU
@@ -138,6 +153,26 @@ def ruta_config(job_id: int, *, reenvio: bool = False) -> Path:
     return db_path().parent / CARPETA_CONFIGS / f"{job_id}{'-reenvio' if reenvio else ''}.yaml"
 
 
+def ruta_descripcion(job_id: int) -> Path:
+    """La descripción propia de este trabajo (`-df`), junto a su config: se borra igual al acabar y al arrancar."""
+    return db_path().parent / CARPETA_CONFIGS / f"{job_id}-descripcion.txt"
+
+
+def preparar_descripcion_de_la_subida(ruta: str | os.PathLike, texto: str) -> None:
+    """Escribe la descripción propia en `ruta`, como el config (0600, O_EXCL). Si no se puede, la subida no se lanza:
+    saldría sin ella."""
+    ruta = Path(ruta)
+    try:
+        ruta.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+        ruta.unlink(missing_ok=True)  # la de un intento que no se borró
+        with os.fdopen(os.open(ruta, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600), "wb") as destino:
+            destino.write(texto.encode("utf-8"))
+    except OSError as exc:
+        raise ConfigNoPreparada(
+            f"No se pudo preparar la descripción de la subida ({texto_de_error(exc)}). No se lanza: saldría sin ella."
+        ) from exc
+
+
 def sin_config_por_subida(cwd: str) -> ConfigNoPreparada:
     """Un Uploadrr-EMU que no anuncia `--config` (otro `uploadrr.path`, más viejo): ya no se escribe en su config.yaml."""
     return ConfigNoPreparada(
@@ -167,10 +202,24 @@ def preparar_config_de_la_subida(job_id: int, cwd: str, ruta: str | os.PathLike)
         raise _no_preparada(exc) from exc
     append_upload_log(
         job_id, "info",
-        "Config de Uploadrr-EMU preparado para esta subida (DEFAULT.tmdb / TRACKERS.EMU.api_key / SCREENS.img_hosts / "
-        "TORRENT_CLIENTS.qbit).",
+        f"Config de Uploadrr-EMU preparado para esta subida (DEFAULT.tmdb / TRACKERS.{_uploadrr_del_trabajo(job_id)}"
+        ".api_key / SCREENS.img_hosts / TORRENT_CLIENTS.qbit).",
         stream="system",
     )
+
+
+def _uploadrr_del_trabajo(job_id: int) -> str:
+    """El bloque TRACKERS.<X> de la subida (`upload_jobs.tracker`); eMuwarez si no se sabe (solo es para el registro)."""
+    try:
+        conn = _get_db_conn()
+        try:
+            fila = conn.execute("SELECT tracker FROM upload_jobs WHERE id = ?", (job_id,)).fetchone()
+        finally:
+            conn.close()
+    except Exception:  # noqa: BLE001 — el registro no para la subida
+        fila = None
+    tracker = TRACKERS.get(fila[0] if fila and fila[0] else "") or EMU
+    return tracker.uploadrr
 
 
 def borrar_config_de_la_subida(ruta: str | os.PathLike | None) -> None:

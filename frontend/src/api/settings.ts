@@ -4,6 +4,9 @@ import type { ModoAvisoLote } from '../utils/lote'
 
 export type UploadrrRuntimeType = 'uploadrr_emu' | 'uploadrr_generic'
 
+// Las marcas de los grupos en otro tracker; null: las de eMuwarez.
+export type MarcasTracker = { personal_release: string[]; anonimos: string[] } | null
+
 export interface SettingsData {
   default_release_tag: string
   upload_tags?: string[]
@@ -19,6 +22,7 @@ export interface SettingsData {
   source_engine_enabled: boolean
   emu_add_logo: boolean
   emu_per_episode_screens: boolean
+  descripcion_plantilla: string | null
   remux_track_mode: ModoPistas
   remux_no_reflink_copies: boolean
   qbit_username: string | null
@@ -32,6 +36,12 @@ export interface SettingsData {
   tmdb_api_key_masked: string | null
   emu_api_key_configured: boolean
   emu_api_key_masked: string | null
+  // Otros trackers (fase B del plan multitracker): opcionales.
+  nobs_api_key_configured: boolean
+  nobs_api_key_masked: string | null
+  mnv_api_key_configured: boolean
+  mnv_api_key_masked: string | null
+  marcas_por_tracker?: Record<string, MarcasTracker>
   emu_username: string | null
   uploadrr_path: string | null
   uploadrr_runtime_type: UploadrrRuntimeType
@@ -75,6 +85,7 @@ export interface SettingsUpdatePayload {
   source_engine_enabled?: boolean
   emu_add_logo?: boolean
   emu_per_episode_screens?: boolean
+  descripcion_plantilla?: string
   remux_track_mode?: ModoPistas
   remux_no_reflink_copies?: boolean
   qbit_username?: string
@@ -85,6 +96,9 @@ export interface SettingsUpdatePayload {
   image_host_keys?: Record<string, string>
   tmdb_api_key?: string
   emu_api_key?: string
+  nobs_api_key?: string
+  mnv_api_key?: string
+  marcas_por_tracker?: Record<string, MarcasTracker>
   emu_username?: string
   uploadrr_path?: string
   uploadrr_runtime_type?: UploadrrRuntimeType

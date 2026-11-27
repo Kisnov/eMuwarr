@@ -6,6 +6,7 @@ import {
   STATUS_CLASS, ACTIVE_JOB_STATUSES, statusLabel, phaseLabel, currentPhaseInfo,
   progressCounter, queuedWaitText, formatSecondsHM, useTicker,
 } from '../../utils/uploadStatus'
+import { ChipTracker } from '../ChipTracker'
 import { EmptyState } from '../EmptyState'
 import { IconoSubida } from '../Iconos'
 import { HoverTitle } from '../Tooltip'
@@ -20,7 +21,7 @@ function FilaSubida({ job, yendose = false, onOpen }: {
   useTicker(ACTIVE_JOB_STATUSES.has(job.status))
   const isPreparingOrRunning = job.status === 'preparing' || job.status === 'running'
   const phaseInfo = isPreparingOrRunning ? currentPhaseInfo(job) : null
-  const phaseLabelText = phaseInfo?.label ?? (isPreparingOrRunning ? phaseLabel(job.progress_phase) : null)
+  const phaseLabelText = phaseInfo?.label ?? (isPreparingOrRunning ? phaseLabel(job.progress_phase, job) : null)
   // Total time since the job started (not just this sub-phase) — the
   // number that actually answers "how long has this been going".
   const totalElapsedText = isPreparingOrRunning ? progressCounter(job) : null
@@ -48,6 +49,7 @@ function FilaSubida({ job, yendose = false, onOpen }: {
         </div>
         <div className="panel-fila-estado">
           <div className="panel-fila-badges">
+            <ChipTracker tracker={job.tracker} nombre={job.tracker_nombre} />
             <span className={`${STATUS_CLASS[job.status] || 'badge req-unknown'}${isPreparingOrRunning ? ' badge-blink' : ''}`}>{statusLabel(job.status)}</span>
             {job.status === 'queued' && (
               <span className="panel-fila-nota">{queuedWaitText(job)}</span>

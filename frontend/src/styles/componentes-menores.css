@@ -102,3 +102,23 @@
   flex-shrink: 0;
   overflow: hidden;
 }
+
+/* LogoTracker: el favicon de cada tracker recortado a su marca, a la altura pedida y con el ancho de su proporción. */
+.logo-tracker { display: block; flex-shrink: 0; width: auto; object-fit: contain; }
+.logo-tracker-14 { height: 14px; max-width: 20px; }
+.logo-tracker-18 { height: 18px; max-width: 25px; }
+.logo-tracker-20 { height: 20px; max-width: 28px; }
+.logo-tracker-24 { height: 24px; max-width: 34px; }
+.logo-tracker.es-pixel { image-rendering: pixelated; }
+/* Un tracker sin logo en la app: su nombre, en una chapa para que no se lea como parte del texto de al lado. */
+.logo-tracker-sin-logo {
+  flex-shrink: 0;
+  padding: 1px 7px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-badge);
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.logo-tracker-con-nombre { display: inline-flex; align-items: center; gap: 5px; }

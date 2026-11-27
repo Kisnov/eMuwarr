@@ -7,7 +7,8 @@ import {
 import { seguirProgreso } from '../../api/eventos'
 import { proveedorParaServidor, type ProveedoresElegidos } from '../../utils/origenProveedor'
 
-export function useComprobaciones(targetId: number | null, proveedorElegido: ProveedoresElegidos) {
+// `tracker`: de quién son las normas de idioma (el primero de los elegidos en el Resumen); eMuwarez, las de siempre.
+export function useComprobaciones(targetId: number | null, proveedorElegido: ProveedoresElegidos, tracker = 'emu') {
   const [checks, setChecks] = useState<UploadChecksResult | null>(null)
   const [checksLoading, setChecksLoading] = useState(false)
   // Una petición que no llegó (red, eMuwarez caído): sin su resultado no se puede subir.
@@ -42,7 +43,9 @@ export function useComprobaciones(targetId: number | null, proveedorElegido: Pro
     let fallo: string | null = null
     const proveedor = proveedorParaServidor(proveedorElegido, targetId)
     try {
-      resultado = ajustes
+      resultado = tracker !== 'emu'
+        ? await runUploadChecks(targetId, undefined, proveedor, ajustes, tracker)
+        : ajustes
         ? await runUploadChecks(targetId, undefined, proveedor, ajustes)
         : await runUploadChecks(targetId, undefined, proveedor)
     }
@@ -57,7 +60,7 @@ export function useComprobaciones(targetId: number | null, proveedorElegido: Pro
         setLiveChecks([])
       }
     }
-  }, [targetId, proveedorElegido])
+  }, [targetId, proveedorElegido, tracker])
 
   return { checks, checksLoading, checksError, liveChecks, runChecks }
 }
@@ -74,14 +77,22 @@ export function useComprobaciones(targetId: number | null, proveedorElegido: Pro
 //
 // `ajustesDe`: lo editado a mano de un elemento (Source, Tag, Título, idiomas), que un pack necesita para dar el nombre
 // que saldrá; lo comprobado con otros ajustes ya no vale, como con otro Proveedor.
-export function useComprobacionesTanda({ step, batchQueue, batchPhase, proveedorElegido, ajustesDe, minimo = 2 }: {
+//
+// `tracker`: de quién son las normas (el primero de los elegidos); con otro, todo se vuelve a comprobar.
+export function useComprobacionesTanda({
+  step, batchQueue, batchPhase, proveedorElegido, ajustesDe, minimo = 2, tracker = 'emu', trackerDe,
+}: {
   step: 0 | 1 | 2
   batchQueue: readonly number[]
   batchPhase: 'idle' | 'processing' | 'done'
   proveedorElegido: ProveedoresElegidos
   ajustesDe?: (id: number) => AjustesComprobacion | undefined
   minimo?: number
+  tracker?: string
+  // El de las comprobaciones de contenido de cada uno (el primero que lo admite); sin él, `tracker`.
+  trackerDe?: (id: number) => string
 }) {
+  const trackerDeCada = (id: number) => trackerDe?.(id) ?? tracker
   const [batchEnvChecks, setBatchEnvChecks] = useState<UploadChecksResult | null>(null)
   const [batchContentChecks, setBatchContentChecks] = useState<Map<number, UploadChecksResult>>(new Map())
   const [batchChecksLoading, setBatchChecksLoading] = useState(false)
@@ -112,11 +123,16 @@ export function useComprobacionesTanda({ step, batchQueue, batchPhase, proveedor
   // o «Volver a comprobar», repite eso y conserva lo que ya pasó, si se
   // comprobó con el Proveedor que tiene ahora (se puede cambiar en el paso 1).
   const comprobadoCon = useRef(new Map<number, string>())
-  const clave = (id: number) => JSON.stringify([proveedorParaServidor(proveedorElegido, id) ?? null, ajustesDe?.(id) ?? null])
+  const entornoCon = useRef(tracker)
+  const clave = (id: number) => JSON.stringify([proveedorParaServidor(proveedorElegido, id) ?? null, ajustesDe?.(id) ?? null, trackerDeCada(id)])
   const sigueValiendo = (id: number) => !!batchContentChecks.get(id)?.ready && comprobadoCon.current.get(id) === clave(id)
+  const entornoVale = !!batchEnvChecks?.ready && entornoCon.current === tracker
+  // Otro tracker para alguno (se marcó o desmarcó uno que lo admite) también lo vuelve a comprobar.
+  const trackersDeLaCola = batchQueue.map(trackerDeCada).join(',')
   useEffect(() => {
     if (step !== 2 || batchQueue.length < minimo || batchPhase !== 'idle') return
-    if (batchChecksLoading || (batchEnvChecks?.ready && batchQueue.every(sigueValiendo))) return
+    // Todo lo de este tracker sigue valiendo: el error de otro (uno elegido antes) ya no cuenta.
+    if (entornoVale && batchQueue.every(sigueValiendo)) { setBatchChecksError(null); return }
     let alive = true
     const run = async () => {
       setBatchChecksLoading(true)
@@ -124,8 +140,11 @@ export function useComprobacionesTanda({ step, batchQueue, batchPhase, proveedor
       setBatchChecksError(null)
       try {
         // El item_id da igual para las de entorno, pero el endpoint lo pide.
-        const env = batchEnvChecks?.ready ? batchEnvChecks : await runUploadChecks(batchQueue[0], 'environment')
+        const env = entornoVale ? batchEnvChecks : tracker !== 'emu'
+          ? await runUploadChecks(batchQueue[0], 'environment', undefined, undefined, tracker)
+          : await runUploadChecks(batchQueue[0], 'environment')
         if (!alive) return
+        entornoCon.current = tracker
         setBatchEnvChecks(env)
         // Lo que ya no vale se quita de entrada: si una petición falla, no queda a la vista como bueno.
         const acc = new Map([...batchContentChecks].filter(([id]) => sigueValiendo(id)))
@@ -136,7 +155,10 @@ export function useComprobacionesTanda({ step, batchQueue, batchPhase, proveedor
           setBatchChecksIndex(i)
           const proveedor = proveedorParaServidor(proveedorElegido, batchQueue[i])
           const ajustes = ajustesDe?.(batchQueue[i])
-          const resultado = ajustes
+          const suyo = trackerDeCada(batchQueue[i])
+          const resultado = suyo !== 'emu'
+            ? await runUploadChecks(batchQueue[i], 'content', proveedor, ajustes, suyo)
+            : ajustes
             ? await runUploadChecks(batchQueue[i], 'content', proveedor, ajustes)
             : await runUploadChecks(batchQueue[i], 'content', proveedor)
           // Una pasada abandonada que responde tarde no pisa a la que la sustituyó.
@@ -155,7 +177,7 @@ export function useComprobacionesTanda({ step, batchQueue, batchPhase, proveedor
     run()
     return () => { alive = false; setBatchChecksLoading(false) }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- se relanza al cambiar la tanda o su fase, no con cada elección
-  }, [step, batchQueue.length, batchPhase, intento])
+  }, [step, batchQueue.length, batchPhase, intento, tracker, trackersDeLaCola])
 
   // Otra selección: lo comprobado para la anterior ya no vale.
   const olvidar = () => {

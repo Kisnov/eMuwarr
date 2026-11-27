@@ -27,6 +27,7 @@ const torrent = (id: number, extra: Partial<MiTorrent> = {}): MiTorrent => ({
 
 const respuesta = (torrents: MiTorrent[], extra: Partial<MisTorrents> = {}): MisTorrents => ({
   leido_at: new Date(Date.now() - 2 * 3600_000).toISOString(),
+  url: 'https://emu-warez.com',
   torrents,
   totales: { subidas: torrents.length, seeders: 7, leechers: 0, completados: 75, completados_semana: 4, sin_seeders: 1 },
   ...extra,
@@ -43,6 +44,16 @@ describe('MisSubidasEmu', () => {
     await montar(<MisSubidasEmu visible />)
     await esperar(() => texto().includes('Aún no se han leído'))
     expect(document.querySelectorAll('.stat-card')).toHaveLength(0)
+    expect(texto()).not.toContain('cada 6 horas')
+  })
+
+  it('con otro tracker, lo pide a ese, lo nombra y enlaza a su ficha', async () => {
+    pedir.mockResolvedValue(respuesta([torrent(1)], { url: 'https://nobs.rawsmoke.net' }))
+    await montar(<MisSubidasEmu visible tracker={{ id: 'nobs', nombre: 'N.O.B.S' }} />)
+    await esperar(() => document.querySelector('tbody'))
+    expect(pedir).toHaveBeenCalledWith('nobs')
+    expect(document.querySelector('h2')!.textContent).toBe('Tus subidas en N.O.B.S')
+    expect(document.querySelector('tbody a')!.getAttribute('href')).toBe('https://nobs.rawsmoke.net/torrents/1')
   })
 
   it('no pide nada mientras la sección no se ve', async () => {
@@ -63,6 +74,7 @@ describe('MisSubidasEmu', () => {
       t.querySelector('.stat-card-label')!.textContent, t.querySelector('.stat-card-value')!.textContent]))
     expect(tarjetas).toEqual({ Subidas: '3', Completadas: '75', 'Completadas esta semana': '4', Seeders: '7', 'Sin seeders': '1' })
     expect(texto()).toContain('Leídas hace 2 h')
+    expect(texto()).not.toContain('cada 6 horas')
     expect(texto()).toContain('Las subidas anónimas no salen')
 
     expect(nombres()).toEqual(['Torrent 1', 'Torrent 3', 'Torrent 2'])   // las más completadas primero

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import os
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query
@@ -24,7 +25,7 @@ from ...services.upload_execution import (
     reenviar_a_qbittorrent,
 )
 from ...services.subida_pasos import NOMBRES, pasos_de_subida, reanudar_desde, subpasos_que_reutilizaria
-from ...services import lotes
+from ...services import lotes, subir_tambien, trackers
 from ...services.mis_torrents import lectura_para_moderacion, pendiente_de_moderacion
 from ...services.lotes import PATRON_LOTE_ID, contar_por_lote
 from ...services.trailer_check import marcar_trailer_a_mano
@@ -53,6 +54,13 @@ from ..schemas import (
     UploadRetryRequest,
     UploadStartRequest,
     UploadStartResult,
+    TrackerParaSubir,
+    ReglasDeTracker,
+    ElegibilidadSubida,
+    SubirTambienBody,
+    SubirTambienCandidata,
+    SubirTambienCandidatas,
+    SubirTambienResponse,
 )
 
 router = APIRouter(tags=["uploads"])
@@ -140,6 +148,7 @@ def _job_to_detail(
     prepared = j.get("prepared_path")
     source = j.get("source_path") or j.get("path")
     using_prepared = bool(prepared) if (prepared or source) else None
+    tracker = trackers.TRACKERS.get(j.get("tracker") or trackers.POR_DEFECTO, trackers.EMU)
     return UploadJobDetail(
         media_type=media_type,
         poster_url=poster_url,
@@ -186,7 +195,10 @@ def _job_to_detail(
         runtime_type=_extract_runtime_type(j),
         command_preview=_extract_command_preview(j),
         progress_phase=compute_progress_phase(j.get("status", ""), j.get("stage")),
-        pasos=pasos_de_subida(j.get("status"), j.get("stage"), j.get("etapa_parada"), j.get("pasos_uploadrr_json")),
+        tracker=tracker.id,
+        tracker_nombre=tracker.nombre,
+        pasos=pasos_de_subida(j.get("status"), j.get("stage"), j.get("etapa_parada"), j.get("pasos_uploadrr_json"),
+                              tracker.nombre),
         reintento_reutiliza=subpasos_que_reutilizaria(j.get("status"), j.get("etapa_parada"), j.get("pasos_uploadrr_json")),
         reintento_desde=_reintento_desde(j),
         reintento_desde_nombre=NOMBRES.get(_reintento_desde(j) or ""),
@@ -199,6 +211,8 @@ def _job_to_detail(
         reenvio_qbit_estado=j.get("reenvio_qbit_estado"),
         reenvio_qbit_at=j.get("reenvio_qbit_at"),
         puede_reenviar_qbit=puede_reenviar_qbit(j),
+        copia_de_job_id=j.get("copia_de_job_id"),
+        descripcion=j.get("descripcion"),
         pendiente_moderacion=pendiente_moderacion,
         nomenclature_snapshot=_extract_json_dict(j, "nomenclature_snapshot_json"),
         remux_snapshot=_extract_json_dict(j, "remux_snapshot_json"),
@@ -220,6 +234,7 @@ def upload_checks(
     tag: str | None = Query(default=None),
     title: str | None = Query(default=None),
     idiomas: str | None = Query(default=None),
+    tracker: str | None = Query(default=None),
     current_user: dict = Depends(require_auth),
 ) -> dict:
     """Run the pre-upload checks (fail-fast, eMuwarez last) for the 'Subida a
@@ -235,20 +250,62 @@ def upload_checks(
     "all" (por defecto) las hace todas, que es lo que usa un solo elemento.
 
     Una temporada acepta además lo que el asistente editó a mano para el pack (`source`, `tag`, `title` e
-    `idiomas`, un JSON {"2": "spa"}): así el `nombre` que devuelve es el que saldrá. Sin ellos, todo igual."""
+    `idiomas`, un JSON {"2": "spa"}): así el `nombre` que devuelve es el que saldrá. Sin ellos, todo igual. Un fichero
+    suelto, solo `idiomas`: los elegidos en «Ver pistas», que cuentan para sus pistas sin idioma y sus normas.
+
+    `tracker` (emu, nobs, mnv): de quién son las normas de idioma (la comprobación «spanish» y la de cada capítulo de
+    un pack). Sin él, eMuwarez; uno desconocido es un 422."""
     from emuwarez_uploadrr.services.upload_checks import run_upload_checks
-    try:
-        elegidos = json.loads(idiomas) if idiomas else None
-    except ValueError:
-        elegidos = None
+    tracker = _tracker_valido(tracker)
+    elegidos = _idiomas(idiomas)
     ajustes = {k: v.strip() for k, v in (("source", source), ("tag", tag), ("title", title)) if v and v.strip()}
-    if isinstance(elegidos, dict) and elegidos:
+    if elegidos:
         ajustes["idiomas"] = elegidos
     with _get_conn() as conn:
         # `provider` de una temporada: el elegido en el asistente ("" = Sin proveedor).
         return run_upload_checks(conn, item_id, scope=scope,
                                  provider_override=None if provider is None else provider.strip(),
-                                 **({"ajustes": ajustes} if ajustes else {}))
+                                 **({"ajustes": ajustes} if ajustes else {}),
+                                 **({} if tracker == trackers.POR_DEFECTO else {"tracker": tracker}))
+
+
+def _idiomas(crudo: str | None) -> dict | None:
+    """Los idiomas elegidos en «Ver pistas» ({"2": "spa"}, por posición) de la query; None si no viene uno válido."""
+    try:
+        elegidos = json.loads(crudo) if crudo else None
+    except ValueError:
+        return None
+    return elegidos if isinstance(elegidos, dict) else None
+
+
+def _tracker_valido(tracker: str | None) -> str:
+    """El id del tracker pedido (eMuwarez sin él), o un 422 si no existe."""
+    try:
+        return trackers.obtener(tracker or trackers.POR_DEFECTO).id
+    except ValueError:
+        raise HTTPException(status_code=422, detail=f"Tracker desconocido: {tracker}.") from None
+
+
+@router.get("/library/{item_id}/upload/reglas", response_model=ReglasDeTracker)
+def reglas_para_subir(
+    item_id: int,
+    tracker: str = Query(...),
+    idiomas: str | None = Query(default=None),
+    current_user: dict = Depends(require_auth),
+):
+    """Si las normas de idioma de `tracker` admiten el elemento, por qué, y la categoría que le toca allí
+    (services/reglas_tracker.py; una temporada, capítulo a capítulo). Barato, sin red: el Resumen lo pide para cada
+    tracker que ofrece. `idiomas` ({"2": "spa"}): los elegidos en «Ver pistas» para las pistas sin idioma; con ellos se
+    leen las pistas de cada fichero (mkvmerge -J)."""
+    from ...services.library import get_library_item
+    from ...services.reglas_tracker import reglas_para_subir as reglas
+    tracker = _tracker_valido(tracker)
+    with _get_conn() as conn:
+        item = get_library_item(conn, item_id)
+        if not item:
+            raise HTTPException(status_code=404, detail="Elemento no encontrado.")
+        r = reglas(conn, item, tracker, idiomas=_idiomas(idiomas))
+    return ReglasDeTracker(tracker=tracker, permitido=r.permitido, motivo=r.motivo, variante=r.variante)
 
 
 @router.get("/library/{item_id}/upload/checks/progress")
@@ -261,6 +318,26 @@ def upload_checks_progress(
     POST above is running; returns the empty/initial shape if none is running."""
     from emuwarez_uploadrr.services.upload_checks import get_checks_progress
     return get_checks_progress(item_id)
+
+
+@router.get("/library/{item_id}/upload/elegibilidad", response_model=ElegibilidadSubida)
+def elegibilidad_para_subir(item_id: int, current_user: dict = Depends(require_auth)):
+    """Qué trackers de los que se puede subir admiten el elemento por sus normas y, de una temporada, cada capítulo
+    (services/reglas_tracker.py::elegibilidad). Sin red: el asistente lo pide al abrirse, con más de un tracker."""
+    from ...services.library import get_library_item
+    from ...services.reglas_tracker import elegibilidad
+    with _get_conn() as conn:
+        item = get_library_item(conn, item_id)
+        if not item:
+            raise HTTPException(status_code=404, detail="Elemento no encontrado.")
+        return elegibilidad(conn, item)
+
+
+@router.get("/upload/trackers", response_model=list[TrackerParaSubir])
+def trackers_para_subir(current_user: dict = Depends(require_auth)):
+    """Los trackers que el Resumen ofrece: eMuwarez y los que tienen su clave puesta."""
+    with _get_conn() as conn:
+        return [TrackerParaSubir(id=t.id, nombre=t.nombre) for t in trackers.para_subir(conn)]
 
 
 @router.post("/library/{item_id}/upload/queue", response_model=UploadQueueResponse)
@@ -286,13 +363,18 @@ def queue_upload(
             except (TypeError, ValueError):
                 continue
     checks = body.checks.model_dump() if body.checks else None
+    tracker = body.tracker or trackers.POR_DEFECTO
     with _get_conn() as conn:
+        motivo = trackers.motivo_para_no_subir(conn, tracker)
+        if motivo:
+            raise HTTPException(status_code=422, detail=motivo)
         result = queue_upload_for_item(
             item_id, request_item_id=body.request_item_id,
             remux_overrides=overrides, remux_snapshot=body.remux_snapshot, checks=checks, conn=conn,
             source_override=body.source, provider_override=body.provider, tag_override=body.tag,
             title_override=body.title, idiomas_audio=body.idiomas, lote_id=body.lote_id,
-            anonimo=body.anonimo, personal_release=body.personal_release,
+            anonimo=body.anonimo, personal_release=body.personal_release, tracker=tracker,
+            descripcion=body.descripcion,
         )
 
     job = result.get("job")
@@ -376,13 +458,51 @@ def count_uploads(
 
 @router.post("/uploads/lote", response_model=UploadLoteResponse)
 def encolar_lote(body: UploadLoteBody, current_user: dict = Depends(require_auth)):
-    """«Subir por lotes»: encola cada elemento en el orden dado, con la misma etiqueta de lote. El que no se puede
-    subir se salta con su motivo; si falta algo que haría fallar a todos (claves, Uploadrr-EMU), 409 y nada encolado."""
+    """«Subir por lotes»: encola cada elemento en el orden dado, una subida por tracker, con la misma etiqueta de lote.
+    El que no se puede subir (a un tracker) se salta con su motivo; si falta algo que haría fallar a todos (claves,
+    Uploadrr-EMU), 409 y nada encolado."""
     with db(_db_path()) as conn:
         try:
-            return UploadLoteResponse(**lotes.encolar_lote(conn, [e.model_dump() for e in body.elementos]))
+            return UploadLoteResponse(**lotes.encolar_lote(conn, [e.model_dump() for e in body.elementos],
+                                                           body.trackers))
         except lotes.LoteRechazado as e:
             raise HTTPException(status_code=409, detail=e.motivos) from e
+
+
+def _tracker_para_subir(t: trackers.Tracker) -> TrackerParaSubir:
+    return TrackerParaSubir(id=t.id, nombre=t.nombre)
+
+
+@router.get("/uploads/subir-tambien", response_model=SubirTambienCandidatas)
+def candidatas_subir_tambien(current_user: dict = Depends(require_auth)):
+    """«Subir también a…»: las subidas completadas que se pueden subir también a otro tracker, y a cuáles."""
+    with _get_conn() as conn:
+        destinos = subir_tambien.destinos(conn)
+        filas = subir_tambien.candidatas(conn)
+        # Solo de los que se ofrecen en alguna fila.
+        avisos = subir_tambien.sin_catalogo(conn, [t for t in destinos if any(t in f["trackers"] for f in filas)])
+    return SubirTambienCandidatas(
+        trackers=[_tracker_para_subir(t) for t in destinos], avisos=avisos,
+        subidas=[SubirTambienCandidata(
+            job_id=f["job"]["id"], title=f["job"].get("title"),
+            nombre=os.path.basename(f["job"]["prepared_path"]), result_url=f["job"].get("result_url"),
+            origen=_tracker_para_subir(f["origen"]),
+            finished_at=f["job"].get("finished_at"), trackers=[_tracker_para_subir(t) for t in f["trackers"]],
+            ya_lo_tienen=f["ya_lo_tienen"],
+        ) for f in filas],
+    )
+
+
+@router.post("/uploads/subir-tambien", response_model=SubirTambienResponse)
+def encolar_subir_tambien(body: SubirTambienBody, current_user: dict = Depends(require_auth)):
+    """«Subir también a…»: una subida por cada subida completada y tracker elegidos (salvo el suyo), con el mismo
+    fichero y el mismo torrent. La que no se puede (sin el torrent entero en qBittorrent, ya subida a ese tracker…)
+    se salta con su motivo; si falta algo que haría fallar a todas (la clave del tracker), 422 y nada encolado."""
+    with db(_db_path()) as conn:
+        try:
+            return SubirTambienResponse(**subir_tambien.subir_tambien(conn, body.job_ids, body.trackers))
+        except subir_tambien.SubirTambienRechazado as e:
+            raise HTTPException(status_code=422, detail=" ".join(e.args[0])) from e
 
 
 def _resumen_o_404(conn, lote_id: str) -> LoteResumen:
@@ -457,8 +577,12 @@ def get_upload(job_id: int, current_user: dict = Depends(require_auth)):
         display_title = content_display_title(conn, row) if row else None
         lote_total = contar_por_lote(conn, [job["lote_id"]]).get(job["lote_id"]) if job.get("lote_id") else None
         pendiente = pendiente_de_moderacion(job, lectura_para_moderacion(conn))
-    return _con_ficha(job, row, display_title=display_title, queue_position=queue_position, queue_total=queue_total,
-                      lote_total=lote_total, pendiente_moderacion=pendiente)
+        ofrecidos, avisos = subir_tambien.ofrecidos(conn, job)
+    detalle = _con_ficha(job, row, display_title=display_title, queue_position=queue_position, queue_total=queue_total,
+                         lote_total=lote_total, pendiente_moderacion=pendiente)
+    detalle.subir_tambien_a = [TrackerParaSubir(id=t.id, nombre=t.nombre) for t in ofrecidos]
+    detalle.subir_tambien_avisos = avisos
+    return detalle
 
 
 @router.get("/uploads/{job_id}/logs", response_model=UploadJobLogsResponse)

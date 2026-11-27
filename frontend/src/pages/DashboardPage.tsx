@@ -31,6 +31,7 @@ import {
   avisosDeAtencion, fallidasRecientes, lineaSincronizacion, ordenarEnCurso, repartirRecomendaciones,
 } from '../utils/hoy'
 import { useAlSalir, useSeccionVisible } from '../context/SeccionVisible'
+import type { PreseleccionDePeticion } from '../components/asistente/useAsistente'
 
 // La versión publicada se mira como mucho una vez por hora (el servidor tampoco pregunta más a menudo).
 const VERSION_CADA_MS = 3_600_000
@@ -67,7 +68,7 @@ export function DashboardPage({ onNavigate }: DashboardPageProps = {}) {
   const [loadingData, setLoadingData] = useState(true)
   const [dataError, setDataError] = useState<string | null>(null)
   const [wizardItem, setWizardItem] = useState<LibraryItemResponse | null>(null)
-  const [wizardPreselect, setWizardPreselect] = useState<{ season?: number | null; episode?: number | null } | undefined>(undefined)
+  const [wizardPreselect, setWizardPreselect] = useState<PreseleccionDePeticion | undefined>(undefined)
   const [wizardRequestId, setWizardRequestId] = useState<number | undefined>(undefined)
   const [requestItem, setRequestItem] = useState<LibraryItemResponse | null>(null)
   // Si ya se está pidiendo un contenido para abrir el asistente o el formulario (no se desactivan los botones: el que
@@ -194,8 +195,11 @@ export function DashboardPage({ onNavigate }: DashboardPageProps = {}) {
   // refresca el aviso del servidor, sin esperar a que dé la vuelta el Panel.
   const subidasPedidas = useRef(false)
   const versionMirada = useRef(0)
+  // Solo cuenta la última carga: una vieja más lenta no pisa la nueva.
+  const datosSeq = useRef(0)
 
   const loadData = useCallback(async () => {
+    const seq = ++datosSeq.current
     if (!subidasPedidas.current) {
       subidasPedidas.current = true
       void loadActiveUploads()
@@ -211,6 +215,7 @@ export function DashboardPage({ onNavigate }: DashboardPageProps = {}) {
       getDashboardSummary(),
       getDashboardRecommendations(recentLimit),
     ])
+    if (seq !== datosSeq.current) return
     if (s.status === 'fulfilled') setSummary(s.value)
     else {
       setDataError('No se pudieron cargar los datos del Panel')
@@ -293,7 +298,8 @@ export function DashboardPage({ onNavigate }: DashboardPageProps = {}) {
       if (como === 'pedir') setRequestItem(libItem)
       else {
         setWizardPreselect(como === 'peticion'
-          ? { season: item.season_number, episode: item.item_type === 'episode' ? item.episode_number : null }
+          ? { season: item.season_number, episode: item.item_type === 'episode' ? item.episode_number : null,
+              tracker: item.rec_request_tracker }
           : undefined)
         setWizardRequestId(como === 'peticion' ? (item.rec_request_id ?? undefined) : undefined)
         setWizardItem(libItem)

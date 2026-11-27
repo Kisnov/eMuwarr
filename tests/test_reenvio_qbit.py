@@ -196,6 +196,15 @@ def test_al_arrancar_la_interrumpida_con_el_torrent_subido_no_dice_que_se_reinte
     assert puede_reenviar_qbit(get_upload_job(jid)) is True
 
 
+def test_al_arrancar_la_interrumpida_de_otro_tracker_lo_nombra(db_conn, tmp_path, uploadrr):
+    jid = _job(db_conn, tmp_path, status="running")
+    db_conn.execute("UPDATE upload_jobs SET torrent_subido = 1, tracker = 'nobs' WHERE id = ?", (jid,))
+    db_conn.commit()
+    reconcile_interrupted_jobs()
+    mensaje = _fila(db_conn, jid)["error_message"]
+    assert "ya está en N.O.B.S" in mensaje and "eMuwarez" not in mensaje
+
+
 # ---------------------------------------------------------------------------
 # Bien y mal, con el subproceso simulado
 # ---------------------------------------------------------------------------

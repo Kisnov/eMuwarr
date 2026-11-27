@@ -233,7 +233,6 @@ class SetupImghostsRequest(BaseModel):
 
 class SetupEmuRequest(BaseModel):
     api_key: str
-    endpoint_url: Optional[str] = None
 
     @field_validator("api_key")
     @classmethod
@@ -528,6 +527,8 @@ class DashboardRecommendationItem(BaseModel):
     title_slug: Optional[str] = None
     missing_count: Optional[int] = None
     rec_request_id: Optional[int] = None
+    # El id del tracker de esa petición (services/trackers.py): al que el asistente propone subir.
+    rec_request_tracker: Optional[str] = None
     # La recompensa (points) de la petición del grupo 1; None en los grupos 2 y 3 o si eMuwarez no la dice.
     rec_points: Optional[int] = None
     # Solo grupo 1: la fila de la biblioteca a la que se refiere la petición (la temporada o el capítulo, no la
@@ -550,8 +551,12 @@ class DashboardRecommendationsResponse(BaseModel):
 
 
 class EmuPerfilResponse(BaseModel):
-    """Tu cuenta de eMuwarez: los campos de /api/user de UNIT3D tal cual (subido, ratio... ya vienen formateados)."""
+    """Tu cuenta de eMuwarez: los campos de /api/user de UNIT3D tal cual (subido, ratio... ya vienen formateados). En
+    `otros`, la de cada otro tracker con clave."""
     configured: bool = False
+    tracker: str = "emu"
+    nombre: str = "eMuwarez"
+    url: Optional[str] = None
     username: Optional[str] = None
     group: Optional[str] = None
     uploaded: Optional[str] = None
@@ -564,6 +569,7 @@ class EmuPerfilResponse(BaseModel):
     hit_and_runs: Optional[int] = None
     updated_at: Optional[str] = None
     error: Optional[str] = None
+    otros: list["EmuPerfilResponse"] = []
 
 
 class PuntoCuentaResponse(BaseModel):
@@ -648,8 +654,9 @@ class TotalesMisTorrentsResponse(BaseModel):
 
 
 class MisTorrentsResponse(BaseModel):
-    """Tus subidas en eMuwarez (las no anónimas); `leido_at` es None si aún no se han leído nunca."""
+    """Tus subidas en un tracker (las no anónimas); `leido_at` es None si aún no se han leído nunca."""
     leido_at: Optional[str] = None
+    url: str
     torrents: list[MiTorrentResponse]
     totales: TotalesMisTorrentsResponse
 
@@ -877,6 +884,9 @@ class RequestMatchResponse(BaseModel):
 
 class RequestItemResponse(BaseModel):
     id: int
+    # El tracker de la petición (services/trackers.py): su id y su nombre para enseñarlo.
+    tracker: str = "emu"
+    tracker_nombre: str = "eMuwarez"
     emu_id: str
     title: str
     category: Optional[str] = None
@@ -1138,6 +1148,9 @@ class UploadJobDetail(BaseModel):
     # Los grupos de release de lo que se sube (el de la copia, o los de todos los capítulos de una temporada).
     release_groups: list[str] = []
     id: Optional[int] = None
+    # El tracker al que va (services/trackers.py): su id y su nombre para enseñarlo.
+    tracker: str = "emu"
+    tracker_nombre: str = "eMuwarez"
     library_item_id: Optional[int] = None
     request_item_id: Optional[int] = None
     status: str
@@ -1223,6 +1236,15 @@ class UploadJobDetail(BaseModel):
     reenvio_qbit_estado: Optional[str] = None
     reenvio_qbit_at: Optional[str] = None
     puede_reenviar_qbit: bool = False
+    # «Subir también a…» (services/subir_tambien.py): los trackers a los que se puede subir también esta subida
+    # completada con el mismo fichero. Solo lo rellena el detalle (GET /uploads/{id}); en la lista va vacío.
+    subir_tambien_a: list[TrackerParaSubir] = []
+    # Los que no se ofrecen porque su catálogo local ya lo tiene, y los ofrecidos sin catálogo local.
+    subir_tambien_avisos: list[str] = []
+    # La subida completada a otro tracker cuyo fichero y torrent reutiliza esta («Subir también a…»).
+    copia_de_job_id: Optional[int] = None
+    # La descripción propia que lleva (BBCode), o None.
+    descripcion: Optional[str] = None
     # En eMuwarez, pendiente de que un moderador la apruebe (services/mis_torrents.py, pendiente_de_moderacion).
     pendiente_moderacion: bool = False
     # Read-only snapshots taken at apply time — the nomenclature field
@@ -1421,6 +1443,41 @@ class UploadQueueBody(BaseModel):
     # de Configuración para el tag de esta subida (services/opciones_tracker.py).
     anonimo: Optional[bool] = None
     personal_release: Optional[bool] = None
+    # El id del tracker (services/trackers.py). None: eMuwarez. Para subir a varios, una petición por tracker.
+    tracker: Optional[str] = None
+    # Descripción propia (BBCode) del Resumen: Uploadrr-EMU la añade a la que genera. None o vacía: solo la generada.
+    descripcion: Optional[str] = Field(None, max_length=30000)
+
+
+class TrackerParaSubir(BaseModel):
+    """Un tracker al que se puede subir ahora (services/trackers.para_subir)."""
+    id: str
+    nombre: str
+
+
+class ReglasDeTracker(BaseModel):
+    """Lo que dicen las normas de idioma de un tracker de un elemento (services/reglas_tracker.reglas_para_subir)."""
+    tracker: str
+    permitido: bool
+    motivo: str
+    variante: Optional[str] = None  # la categoría allí (--variante); None, la de siempre
+
+
+class ElegibilidadTracker(ReglasDeTracker):
+    """Las normas de un tracker para un elemento, con su nombre para enseñarlo."""
+    nombre: str
+
+
+class ElegibilidadCapitulo(BaseModel):
+    item_id: int
+    trackers: list[ElegibilidadTracker]
+
+
+class ElegibilidadSubida(BaseModel):
+    """Qué trackers con clave admiten un elemento y, de una temporada, cada capítulo
+    (services/reglas_tracker.py::elegibilidad)."""
+    trackers: list[ElegibilidadTracker]
+    capitulos: list[ElegibilidadCapitulo] = []
 
 
 class LoteResumen(BaseModel):
@@ -1490,14 +1547,19 @@ class UploadLoteElemento(BaseModel):
     campos: Optional[Dict[str, Any]] = None
     # Solo pack: el proveedor elegido. None = no elegido; "" = «Sin proveedor» a mano.
     provider: Optional[str] = None
+    # Los trackers cuyo catálogo local ya lo tiene igual o mejor (lo decide el Resumen): para ellos se salta.
+    omitir: list[str] = []
 
 
 class UploadLoteBody(BaseModel):
     elementos: list[UploadLoteElemento] = Field(min_length=1, max_length=MAX_ELEMENTOS_LOTE)
+    # A qué trackers, en orden (eMuwarez primero): una subida por elemento y tracker. Las `checks` son las del primero.
+    trackers: list[str] = Field(default=["emu"], min_length=1, max_length=8)
 
 
 class UploadLoteResultado(BaseModel):
     item_id: int
+    tracker: str
     status: str  # "queued" | "blocked"
     job_id: Optional[int] = None
     errors: list[str] = []
@@ -1509,6 +1571,49 @@ class UploadLoteResponse(BaseModel):
     encolados: int
     saltados: int
     resultados: list[UploadLoteResultado]
+
+
+class SubirTambienBody(BaseModel):
+    """«Subir también a…»: las subidas completadas y los trackers a los que subirlas (una subida por cada par, salvo
+    a su propio tracker)."""
+    job_ids: list[int] = Field(min_length=1, max_length=MAX_ELEMENTOS_LOTE)
+    trackers: list[str] = Field(min_length=1, max_length=8)
+
+
+class SubirTambienResultado(BaseModel):
+    job_id: int  # la subida de origen
+    tracker: str
+    status: str  # "queued" | "blocked"
+    nuevo_job_id: Optional[int] = None
+    motivo: Optional[str] = None
+
+
+class SubirTambienResponse(BaseModel):
+    # None si no se encoló ninguna, o si era una sola (no hace falta lote).
+    lote_id: Optional[str] = None
+    encolados: int
+    saltados: int
+    resultados: list[SubirTambienResultado]
+
+
+class SubirTambienCandidata(BaseModel):
+    job_id: int
+    title: Optional[str] = None
+    nombre: str  # el del fichero o carpeta en la carpeta de subidas (el del torrent)
+    result_url: Optional[str] = None
+    finished_at: Optional[str] = None
+    origen: TrackerParaSubir  # el tracker donde ya está
+    trackers: list[TrackerParaSubir]
+    # Por qué no se ofrecen los que ya lo tienen según su catálogo local.
+    ya_lo_tienen: list[str] = []
+
+
+class SubirTambienCandidatas(BaseModel):
+    # Los trackers con clave (eMuwarez también) y las subidas que aún no están en alguno de los otros.
+    trackers: list[TrackerParaSubir]
+    subidas: list[SubirTambienCandidata]
+    # Los trackers sin catálogo local leído: en ellos no se ha mirado si ya está.
+    avisos: list[str] = []
 
 
 class UploadQueueResponse(BaseModel):
@@ -1529,7 +1634,6 @@ class TestTmdbRequest(BaseModel):
 
 class TestEmuwarezRequest(BaseModel):
     api_key: Optional[str] = None
-    base_url: Optional[str] = None
 
 
 class TestArrRequest(BaseModel):
@@ -1615,7 +1719,7 @@ class ScheduledTaskResponse(BaseModel):
 
 class UpdateScheduledTaskRequest(BaseModel):
     # `run_at` (HH:MM) = cada día a esa hora; sin ella, cada `interval_minutes`.
-    interval_minutes: Optional[int] = None
+    interval_minutes: Optional[int] = Field(None, ge=1, le=525600)  # como mucho, un año
     run_at: Optional[str] = None
 
 

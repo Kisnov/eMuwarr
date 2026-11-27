@@ -164,8 +164,9 @@ def _pelicula(entorno, mkv_base, *, carpeta: Path, nombre="Peli (2024) WEBDL-108
     return {"id": iid, "proposal_id": pid, "f": f, "seed": seed}
 
 
-def _subir(entorno, item_id: int, proposal_id: int | None = None) -> dict:
-    """Pasa un trabajo por toda la cola, hasta justo antes de arrancar Uploadrr."""
+def _subir(entorno, item_id: int, proposal_id: int | None = None, **columnas) -> dict:
+    """Pasa un trabajo por toda la cola, hasta justo antes de arrancar Uploadrr. `columnas`: más de la fila
+    (tracker, retry_of_job_id, reutiliza_preparacion…)."""
     from emuwarez_uploadrr.services.upload_execution import _upload_concurrency_gate, get_upload_job_logs
     conn = entorno["conn"]
     jid = conn.execute(
@@ -173,6 +174,8 @@ def _subir(entorno, item_id: int, proposal_id: int | None = None) -> dict:
                                     nomenclature_proposal_id, created_at, updated_at)
            VALUES (?, 'queued', 'queued', 'X', '', '', ?,
                    CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)""", (item_id, proposal_id)).lastrowid
+    for columna, valor in columnas.items():
+        conn.execute(f"UPDATE upload_jobs SET {columna} = ? WHERE id = ?", (valor, jid))
     conn.commit()
     visto, refrescos = {}, []
 
@@ -523,6 +526,63 @@ def test_en_la_carpeta_de_subidas_se_renombra_y_se_titula_en_su_sitio(entorno, m
     assert r["refrescos"] == [peli["id"]]
 
 
+@pytest.mark.parametrize("apuntada", ["{pack}", "{pack}/", "{uploads}/./{nombre}"])
+def test_no_se_renombra_un_capitulo_del_pack_que_sembraba_una_subida_borrada(entorno, mkv_base, monkeypatch,
+                                                                            apuntada):
+    """Sin fila, el rastro es enlaces_sembrados_sin_fila (la borrada lo compartía con otra subida)."""
+    from emuwarez_uploadrr.database import set_json_state
+    from emuwarez_uploadrr.services import carpeta_subida
+    from emuwarez_uploadrr.services.upload_execution.ciclo_de_vida import ENLACES_SEMBRADOS_SIN_FILA
+    monkeypatch.setattr(carpeta_subida, "clonar", _reflink("no"))
+    _modo(entorno, "ninguno")
+    pack = entorno["uploads"] / "Serie S01 2020 1080p WEB-DL"
+    peli = _pelicula(entorno, mkv_base, carpeta=pack, nombre="Serie.S01E01.mkv", semilla=False)
+    set_json_state(entorno["conn"], ENLACES_SEMBRADOS_SIN_FILA,
+                   [apuntada.format(pack=pack, uploads=entorno["uploads"], nombre=pack.name)])
+    entorno["conn"].commit()
+
+    r = _subir(entorno, peli["id"], peli["proposal_id"])
+
+    assert sorted(os.listdir(pack)) == ["Serie.S01E01.mkv"], r["logs"]
+    assert any("una subida borrada de la lista siembra desde ahí" in m for m in r["logs"])
+
+
+def test_con_la_carpeta_de_subidas_abarcando_la_biblioteca_no_se_renombra_ni_se_prepara(entorno, mkv_base, monkeypatch):
+    """UPLOADRR_UPLOADS_DIR=/data: todo el original de Radarr contaba como «en la carpeta de subidas» y se renombraba."""
+    from emuwarez_uploadrr.services import carpeta_subida
+    monkeypatch.setattr(carpeta_subida, "RAIZ_SUBIDAS", str(entorno["tmp"]))     # la ruta permitida entera
+    _modo(entorno, "ninguno")
+    peli = _pelicula(entorno, mkv_base, carpeta=entorno["tmp"] / "media" / "Peli (2024)", semilla=False)
+
+    r = _subir(entorno, peli["id"], peli["proposal_id"])
+
+    assert r["job"]["status"] == "failed" and r["visto"] == {}
+    assert "UPLOADRR_UPLOADS_DIR" in r["job"]["error_message"]
+    assert [p.name for p in peli["f"].parent.iterdir()] == ["Peli (2024) WEBDL-1080p.mkv"]
+    assert not (entorno["tmp"] / f"{PROPUESTO}.mkv").exists()
+
+
+def test_no_se_renombra_un_capitulo_de_un_pack_que_siembra_otra_subida(entorno, mkv_base, monkeypatch):
+    """La subida del pack apunta a su carpeta, no al fichero: renombrarlo se lo quitaba al torrent del pack."""
+    from emuwarez_uploadrr.services import carpeta_subida
+    monkeypatch.setattr(carpeta_subida, "clonar", _reflink("no"))
+    _modo(entorno, "ninguno")
+    pack = entorno["uploads"] / "Serie S01 2020 1080p WEB-DL"
+    peli = _pelicula(entorno, mkv_base, carpeta=pack, nombre="Serie.S01E01.mkv", semilla=False)
+    conn = entorno["conn"]
+    sembradora = conn.execute(
+        """INSERT INTO upload_jobs (library_item_id, status, stage, title, path, source_path, prepared_path,
+                                    created_at, updated_at)
+           VALUES (?, 'completed', 'completed', 'Pack', '', '', ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)""",
+        (peli["id"], str(pack))).lastrowid
+    conn.commit()
+
+    r = _subir(entorno, peli["id"], peli["proposal_id"])
+
+    assert sorted(os.listdir(pack)) == ["Serie.S01E01.mkv"], r["logs"]
+    assert any(f"la subida #{sembradora} siembra desde ahí" in m for m in r["logs"])
+
+
 # ---------------------------------------------------------------------------
 # Un pack desde la biblioteca (/data/media), de punta a punta
 # ---------------------------------------------------------------------------
@@ -598,6 +658,103 @@ def test_un_pack_de_la_biblioteca_va_a_su_carpeta_con_los_nombres_de_emuwarez(en
     assert len(episodios) == 2
 
 
+def test_tras_borrar_el_pack_completado_no_se_rehace_su_carpeta(entorno, mkv_base, monkeypatch):
+    """La carpeta del pack entera se borraba (rmtree) y se rehacía, con el torrent viejo aún sembrando de ella."""
+    from emuwarez_uploadrr.services import carpeta_subida
+    monkeypatch.setattr(carpeta_subida, "clonar", _reflink("no"))
+    _modo(entorno, "ninguno")
+    pack = _temporada(entorno, mkv_base)
+    primera = _subir(entorno, pack["id"])
+    carpeta = Path(primera["visto"]["prepared_path"])
+    entorno["conn"].execute("UPDATE upload_jobs SET status = 'completed' WHERE id = ?", (primera["id"],))
+    entorno["conn"].commit()
+    _borrar(entorno, primera["id"])
+    (carpeta / "extra.nfo").write_text("de la subida borrada")
+    antes = {n: (carpeta / n).stat().st_ino for n in os.listdir(carpeta)}
+
+    r = _subir(entorno, pack["id"])
+
+    assert r["job"]["status"] == "failed" and r["visto"] == {}
+    assert "ya existe en la carpeta de subidas" in r["job"]["error_message"]
+    assert {n: (carpeta / n).stat().st_ino for n in os.listdir(carpeta)} == antes
+    for cap in pack["capitulos"]:
+        assert cap["f"].stat().st_nlink == 3 and _sha(cap["f"]) == cap["sha"]
+
+
+def test_lo_que_sembraba_una_subida_borrada_no_lo_explica_la_fallida_que_lo_compartia(entorno):
+    """La de eMuwarez completada se borró y la de N.O.B.S fallida apuntaba al mismo fichero (enlaces_sembrados_sin_fila):
+    ese fichero es el del torrent de eMuwarez, no un resto de la fallida."""
+    from emuwarez_uploadrr.database import set_json_state
+    from emuwarez_uploadrr.services.upload_execution.ciclo_de_vida import ENLACES_SEMBRADOS_SIN_FILA
+    conn = entorno["conn"]
+    entorno["uploads"].mkdir()
+    destino = entorno["uploads"] / "Peli.mkv"
+    destino.write_bytes(b"sembrado")
+    conn.execute("INSERT INTO upload_jobs (library_item_id, status, stage, title, path, source_path, prepared_path, "
+                 "created_at, updated_at) VALUES (NULL, 'failed', 'failed', 'X', '', '', ?, 'x', 'x')", (str(destino),))
+    conn.commit()
+    assert uq._destino_sin_dueno(conn, str(destino), 999, ["/data/Peli.mkv"]) is False
+    set_json_state(conn, ENLACES_SEMBRADOS_SIN_FILA, [str(destino)])
+    conn.commit()
+    assert uq._destino_sin_dueno(conn, str(destino), 999, ["/data/Peli.mkv"]) is True
+
+
+@pytest.mark.parametrize("reutilizable", [True, False])
+def test_el_reintento_de_la_fallida_que_compartia_el_fichero_de_una_borrada(entorno, mkv_base, monkeypatch,
+                                                                             reutilizable):
+    """A eMuwarez completada (borrada de la lista) y a N.O.B.S fallida con el mismo fichero: queda en
+    enlaces_sembrados_sin_fila. Reintentar la de N.O.B.S reutilizando lo preparado vale; rehacerlo, no."""
+    from emuwarez_uploadrr.database import get_json_state
+    from emuwarez_uploadrr.services import carpeta_subida
+    from emuwarez_uploadrr.services.settings import set_setting
+    from emuwarez_uploadrr.services.upload_execution.ciclo_de_vida import ENLACES_SEMBRADOS_SIN_FILA
+    monkeypatch.setattr(carpeta_subida, "clonar", _reflink("no"))
+    _modo(entorno, "ninguno")
+    conn = entorno["conn"]
+    set_setting(conn, "nobs.api_key", "c")
+    peli = _pelicula(entorno, mkv_base, carpeta=entorno["tmp"] / "media" / "Peli (2024)", semilla=False)
+    emu = _subir(entorno, peli["id"], peli["proposal_id"])
+    destino = emu["visto"]["prepared_path"]
+    nobs = conn.execute(
+        """INSERT INTO upload_jobs (library_item_id, status, stage, title, path, source_path, prepared_path, tracker,
+                                    etapa_parada, remux_snapshot_json, huellas_preparacion_json, created_at, updated_at)
+           SELECT library_item_id, 'failed', 'failed', title, path, source_path, prepared_path, 'nobs', ?,
+                  remux_snapshot_json, ?, created_at, updated_at FROM upload_jobs WHERE id = ?""",
+        ("preflight", emu["job"]["huellas_preparacion_json"] if reutilizable else "{}", emu["id"])).lastrowid
+    conn.execute("UPDATE upload_jobs SET status = 'completed' WHERE id = ?", (emu["id"],))
+    conn.commit()
+    _borrar(entorno, emu["id"])
+    assert get_json_state(conn, ENLACES_SEMBRADOS_SIN_FILA) == [destino]
+    inodo = os.stat(destino).st_ino
+
+    r = _subir(entorno, peli["id"], peli["proposal_id"], tracker="nobs", retry_of_job_id=nobs,
+               reutiliza_preparacion=1)
+
+    assert os.stat(destino).st_ino == inodo and os.path.samefile(destino, peli["f"])
+    if reutilizable:
+        assert r["visto"] == {"prepared_path": destino, "status": "ready"}, r["logs"]
+        assert any(f"Se reutiliza la preparación de la subida #{nobs}" in m for m in r["logs"])
+    else:
+        assert r["job"]["status"] == "failed" and r["visto"] == {}
+        assert "ya existe en la carpeta de subidas" in r["job"]["error_message"]
+        assert r["job"]["prepared_path"] is None
+
+
+def test_un_reintento_tras_un_fallo_rehace_lo_que_dejo_su_intento(entorno, mkv_base, monkeypatch):
+    """Lo que dejó una subida fallida con su fila sí se rehace: es suyo y nadie lo siembra."""
+    from emuwarez_uploadrr.services import carpeta_subida
+    monkeypatch.setattr(carpeta_subida, "clonar", _reflink("no"))
+    _modo(entorno, "ninguno")
+    pack = _temporada(entorno, mkv_base)
+    primera = _subir(entorno, pack["id"])
+    entorno["conn"].execute("UPDATE upload_jobs SET status = 'failed' WHERE id = ?", (primera["id"],))
+    entorno["conn"].commit()
+
+    r = _subir(entorno, pack["id"])
+
+    assert r["visto"]["status"] == "ready" and r["visto"]["prepared_path"] == primera["visto"]["prepared_path"]
+
+
 @pytest.mark.parametrize("como", ["completada", "fallida con el torrent en qBittorrent"])
 def test_no_se_rehace_el_enlace_que_siembra_otra_subida(entorno, mkv_base, monkeypatch, como):
     """Quitar ese enlace dejaba el original con un solo enlace: se editaba en el
@@ -626,6 +783,177 @@ def test_no_se_rehace_el_enlace_que_siembra_otra_subida(entorno, mkv_base, monke
     assert f"es de la subida #{primera['id']}" in r["job"]["error_message"]
     assert destino.stat().st_ino == inodo and _sha(destino) == sembrado
     assert _sha(peli["f"]) == sembrado
+
+
+def _simbolico(origen, destino):
+    """carpeta_subida._enlazar con la carpeta de subidas en otro disco: EXDEV y un enlace simbólico de verdad."""
+    os.symlink(origen, destino)
+    return "simbólico"
+
+
+def test_con_enlace_simbolico_el_original_que_siembra_otra_subida_no_se_edita(entorno, mkv_base, monkeypatch):
+    """Un enlace simbólico no suma a st_nlink: el original parecía no compartido y la segunda subida, con otro
+    nombre, lo editaba en su sitio mientras la primera lo sembraba a través del enlace."""
+    from emuwarez_uploadrr.services import carpeta_subida
+    monkeypatch.setattr(carpeta_subida, "_enlazar", _simbolico)
+    monkeypatch.setattr(carpeta_subida, "clonar", _reflink("no"))     # entre discos no hay reflink
+    _modo(entorno, "solo_renombrar")
+    peli = _pelicula(entorno, mkv_base, carpeta=entorno["tmp"] / "media" / "Peli (2024)", semilla=False)
+    conn = entorno["conn"]
+    primera = _subir(entorno, peli["id"], peli["proposal_id"])
+    conn.execute("UPDATE upload_jobs SET status = 'completed' WHERE id = ?", (primera["id"],))
+    conn.execute("UPDATE nomenclature_proposals SET proposed_filename = ?, proposed_torrent_name = ? WHERE id = ?",
+                 (PROPUESTO + ".v2", PROPUESTO.replace(".", " ") + " v2", peli["proposal_id"]))
+    conn.commit()
+    sembrado = entorno["uploads"] / f"{PROPUESTO}.mkv"
+    assert os.path.islink(sembrado) and peli["f"].stat().st_nlink == 1
+    antes = _sha(peli["f"])
+
+    r = _subir(entorno, peli["id"], peli["proposal_id"])
+
+    assert r["visto"]["prepared_path"] == str(entorno["uploads"] / f"{PROPUESTO}.v2.mkv"), r["logs"]
+    assert _sha(peli["f"]) == antes and _sha(sembrado) == antes
+    assert any("sin reflink" in m for m in r["logs"])
+    assert any("enlace simbólico" in m and "el original no se ha tocado" in m for m in r["logs"])
+    assert json.loads(r["job"]["remux_snapshot_json"]) == {"omitida": "sin reflink"}
+
+
+def _borrar(entorno, job_id: int) -> None:
+    from emuwarez_uploadrr.services.upload_execution import DELETE_CONFIRMATION_TOKEN, delete_upload_job
+    assert delete_upload_job(job_id, confirmation=DELETE_CONFIRMATION_TOKEN, conn=entorno["conn"])["ok"]
+
+
+def test_tras_borrar_la_subida_completada_no_se_rehace_el_fichero_que_aun_siembra(entorno, mkv_base, monkeypatch):
+    """Borrar la fila deja el enlace (qBittorrent lo siembra) sin nadie que lo explique: una subida nueva lo borraba,
+    editaba el original, que ya volvía a tener un solo enlace, y lo enlazaba otra vez."""
+    from emuwarez_uploadrr.services import carpeta_subida
+    monkeypatch.setattr(carpeta_subida, "clonar", _reflink("no"))
+    _modo(entorno, "ninguno")
+    peli = _pelicula(entorno, mkv_base, carpeta=entorno["tmp"] / "media" / "Peli (2024)", semilla=False)
+    primera = _subir(entorno, peli["id"], peli["proposal_id"])
+    entorno["conn"].execute("UPDATE upload_jobs SET status = 'completed' WHERE id = ?", (primera["id"],))
+    entorno["conn"].commit()
+    _borrar(entorno, primera["id"])
+    destino = entorno["uploads"] / f"{PROPUESTO}.mkv"
+    inodo, sembrado = destino.stat().st_ino, _sha(destino)
+    assert os.path.samefile(destino, peli["f"]) and peli["f"].stat().st_nlink == 2
+    _modo(entorno, "solo_renombrar")       # la nueva editaría el original
+
+    r = _subir(entorno, peli["id"], peli["proposal_id"])
+
+    assert r["job"]["status"] == "failed" and r["visto"] == {}
+    assert "ya existe en la carpeta de subidas" in r["job"]["error_message"]
+    assert r["job"]["prepared_path"] is None          # este intento fallido no lo explica para el siguiente
+    assert destino.stat().st_ino == inodo and os.path.samefile(destino, peli["f"])
+    assert _sha(destino) == sembrado and _sha(peli["f"]) == sembrado
+
+    os.unlink(destino)                     # qBittorrent ya no lo siembra y el usuario lo borra
+    assert _subir(entorno, peli["id"], peli["proposal_id"])["visto"]["status"] == "ready"
+
+
+def test_un_pack_registrado_que_no_se_puede_mirar_veta_la_edicion_y_uno_que_no_existe_no(entorno, mkv_base,
+                                                                                       monkeypatch):
+    """Sin poder listar la carpeta del pack no se sabe si un enlace simbólico suyo sirve el original."""
+    _modo(entorno, "solo_renombrar")
+    peli = _pelicula(entorno, mkv_base, carpeta=entorno["tmp"] / "media" / "Peli (2024)", semilla=False)
+    conn = entorno["conn"]
+    pack = entorno["uploads"] / "Pack S01"
+    conn.execute("INSERT INTO upload_jobs (library_item_id, status, stage, title, path, source_path, prepared_path, "
+                 "created_at, updated_at) VALUES (?, 'completed', 'completed', 'X', '', '', ?, 'x', 'x')",
+                 (peli["id"], str(pack)))
+    conn.commit()
+    assert uq._motivo_para_no_tocar(str(peli["f"]), conn) is None          # no existe: no siembra nada
+
+    pack.mkdir(parents=True)
+    scandir = os.scandir
+
+    def sin_permiso(ruta="."):
+        if os.fspath(ruta) == str(pack):
+            raise PermissionError(13, "Permission denied", str(pack))
+        return scandir(ruta)
+    monkeypatch.setattr(os, "scandir", sin_permiso)
+    motivo = uq._motivo_para_no_tocar(str(peli["f"]), conn)
+    assert motivo and "no se pudo mirar" in motivo and str(pack) in motivo
+
+
+def test_una_ruta_registrada_que_no_se_puede_consultar_veta_la_edicion(entorno, mkv_base, monkeypatch):
+    """Si ni siquiera se puede consultar la ruta (un directorio padre sin permiso) no se da por fichero sin enlace."""
+    _modo(entorno, "solo_renombrar")
+    peli = _pelicula(entorno, mkv_base, carpeta=entorno["tmp"] / "media" / "Peli (2024)", semilla=False)
+    conn = entorno["conn"]
+    pack = entorno["uploads"] / "Pack S01"
+    pack.mkdir(parents=True)
+    conn.execute("INSERT INTO upload_jobs (library_item_id, status, stage, title, path, source_path, prepared_path, "
+                 "created_at, updated_at) VALUES (?, 'completed', 'completed', 'X', '', '', ?, 'x', 'x')",
+                 (peli["id"], str(pack)))
+    conn.commit()
+    lstat = os.lstat
+
+    def sin_permiso(ruta, *a, **k):
+        if os.fspath(ruta) == str(pack):
+            raise PermissionError(13, "Permission denied", str(pack))
+        return lstat(ruta, *a, **k)
+    monkeypatch.setattr(os, "lstat", sin_permiso)
+    motivo = uq._motivo_para_no_tocar(str(peli["f"]), conn)
+    assert motivo and "no se pudo mirar" in motivo and str(pack) in motivo
+
+
+def test_un_capitulo_del_pack_sembrado_sin_fila_se_reconoce_por_componentes(entorno):
+    """«uploads/./Pack/E01» es del pack «uploads/Pack»; «uploads/Pack2/E01», no."""
+    from emuwarez_uploadrr.services.carpeta_subida import dentro_de
+    raiz = str(entorno["uploads"])
+    assert dentro_de(f"{raiz}/./Pack/E01.mkv", f"{raiz}/Pack")
+    assert dentro_de(f"{raiz}/Pack", f"{raiz}/Pack/")
+    assert not dentro_de(f"{raiz}/Pack2/E01.mkv", f"{raiz}/Pack")
+    conn = entorno["conn"]
+    conn.execute("INSERT INTO upload_jobs (library_item_id, status, stage, title, path, source_path, prepared_path, "
+                 "created_at, updated_at) VALUES (NULL, 'completed', 'completed', 'X', '', '', ?, 'x', 'x')",
+                 (f"{raiz}/Pack",))
+    conn.commit()
+    assert uq._subida_que_lo_usa(conn, f"{raiz}/./Pack/E01.mkv", 999) is not None
+    assert uq._subida_que_lo_usa(conn, f"{raiz}/Pack2/E01.mkv", 999) is None
+
+
+def test_sin_poder_probar_el_enlace_el_original_no_se_edita(entorno, mkv_base, monkeypatch):
+    """Con la carpeta de subidas sin poder crearse no se sabe si un enlace simbólico de antes lo siembra."""
+    from emuwarez_uploadrr.services import carpeta_subida
+    fichero = entorno["tmp"] / "no-es-carpeta"
+    fichero.write_text("x")
+    monkeypatch.setattr(carpeta_subida, "RAIZ_SUBIDAS", str(fichero / "uploads"))   # no se puede crear
+    _modo(entorno, "solo_renombrar")
+    peli = _pelicula(entorno, mkv_base, carpeta=entorno["tmp"] / "media" / "Peli (2024)", semilla=False)
+    assert peli["f"].stat().st_nlink == 1
+    antes = _sha(peli["f"])
+
+    assert "no se puede comprobar el enlace" in uq._motivo_para_no_tocar(str(peli["f"]), entorno["conn"])
+    _subir(entorno, peli["id"], peli["proposal_id"])
+
+    assert _sha(peli["f"]) == antes
+
+
+def test_un_enlace_simbolico_de_cuando_la_carpeta_estaba_en_otro_disco_veta_la_edicion(entorno, mkv_base):
+    """Hoy la prueba da «duro», pero lo subido antes con enlaces simbólicos sigue sembrando el original."""
+    _modo(entorno, "solo_renombrar")
+    peli = _pelicula(entorno, mkv_base, carpeta=entorno["tmp"] / "media" / "Peli (2024)", semilla=False)
+    conn = entorno["conn"]
+    for nombre, es_pack in (("suelto.mkv", False), ("Pack S01", True)):
+        conn.execute("DELETE FROM upload_jobs")
+        destino = entorno["uploads"] / nombre
+        if es_pack:
+            destino.mkdir(parents=True)
+            os.symlink(peli["f"], destino / "Serie.S01E01.mkv")
+        else:
+            entorno["uploads"].mkdir(exist_ok=True)
+            os.symlink(peli["f"], destino)
+        conn.execute("INSERT INTO upload_jobs (library_item_id, status, stage, title, path, source_path, "
+                     "prepared_path, created_at, updated_at) VALUES (?, 'completed', 'completed', 'X', '', '', ?, "
+                     "'x', 'x')", (peli["id"], str(destino)))
+        conn.commit()
+        assert peli["f"].stat().st_nlink == 1
+        assert "enlace simbólico" in uq._motivo_para_no_tocar(str(peli["f"]), conn)
+    conn.execute("UPDATE upload_jobs SET status = 'failed'")     # una fallida sin torrent no siembra
+    conn.commit()
+    assert uq._motivo_para_no_tocar(str(peli["f"]), conn) is None
 
 
 # ---------------------------------------------------------------------------

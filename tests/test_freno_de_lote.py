@@ -49,11 +49,12 @@ def retiradas(monkeypatch):
     return hechas
 
 
-def _trabajo(conn, *, status: str = "running", lote_id: str | None = LOTE, titulo: str = "Peli") -> int:
+def _trabajo(conn, *, status: str = "running", lote_id: str | None = LOTE, titulo: str = "Peli",
+             tracker: str = "emu") -> int:
     cur = conn.execute(
-        """INSERT INTO upload_jobs (title, path, status, stage, lote_id, created_at, updated_at)
-           VALUES (?, '/x', ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)""",
-        (titulo, status, status, lote_id),
+        """INSERT INTO upload_jobs (title, path, status, stage, lote_id, tracker, created_at, updated_at)
+           VALUES (?, '/x', ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)""",
+        (titulo, status, status, lote_id, tracker),
     )
     conn.commit()
     return cur.lastrowid
@@ -113,6 +114,7 @@ def _lote(conn, *, en_marcha: int, en_cola: int, lote_id: str = LOTE) -> tuple[l
     "Error aplicando la nomenclatura del pack de temporada: boom",
     "«Peli.2020.1080p.mkv» es de la subida #12, que lo siembra o lo tiene en qBittorrent: no se rehace.",
     "El elemento ya no existe en la biblioteca.",
+    "N.O.B.S no tiene el tipo «SD»: esta copia no se puede subir ahí",
     "Interrumpido al pararse la aplicación. Puedes reintentar la subida.",
     "",
     None,
@@ -227,6 +229,22 @@ def test_una_completada_corta_la_racha(db_conn, retiradas):
 
     uq._fail(marcha[8], SISTEMICO)
     assert _estados(db_conn, cola) == ["cancelled"]
+
+
+def test_la_racha_es_de_cada_tracker(db_conn, retiradas):
+    """Un lote a eMuwarez y N.O.B.S con N.O.B.S caído: las de eMuwarez, que acaban entre medias, no cortan su racha, y
+    el freno solo para lo que espera para N.O.B.S."""
+    nobs = [_trabajo(db_conn, titulo=f"N{i}", tracker="nobs") for i in range(5)]
+    emu = [_trabajo(db_conn, titulo=f"E{i}") for i in range(5)]
+    cola_emu = _trabajo(db_conn, status="queued", titulo="CE")
+    cola_nobs = _trabajo(db_conn, status="queued", titulo="CN", tracker="nobs")
+
+    for e, n in zip(emu, nobs):
+        _completar(db_conn, e)
+        uq._fail(n, SISTEMICO)
+
+    assert _estados(db_conn, [cola_emu, cola_nobs]) == ["queued", "cancelled"]
+    assert retiradas == [(cola_nobs, "cancelled")]
 
 
 def test_motivos_distintos_no_paran(db_conn, retiradas):
@@ -401,8 +419,8 @@ def _peli(conn, tmp_path, titulo: str) -> int:
     f.write_bytes(b"x" * 10)
     cur = conn.execute(
         """INSERT INTO library_items (item_type, title, local_status, request_status, nomenclature_status, path,
-                                      size_bytes, updated_at)
-           VALUES ('movie', ?, 'Disponible', 'Sin petición', 'N/A', ?, 10, CURRENT_TIMESTAMP)""",
+                                      size_bytes, audio_languages, updated_at)
+           VALUES ('movie', ?, 'Disponible', 'Sin petición', 'N/A', ?, 10, 'spa', CURRENT_TIMESTAMP)""",
         (titulo, str(f)),
     )
     conn.commit()
@@ -481,7 +499,7 @@ def test_si_los_primeros_fallan_mientras_se_encola_el_resto_se_salta(db_conn, tm
     """Los cinco primeros fallan nada más crearse (desde el mismo hilo que encola, así que el freno entra con el
     candado ya cogido): no hay nada en cola que parar, pero los dos últimos ya no se crean."""
     from emuwarez_uploadrr.services import upload_checks
-    monkeypatch.setattr(uq, "_season_upload_preconditions", lambda conn: [])
+    monkeypatch.setattr(uq, "_season_upload_preconditions", lambda conn, *_tracker: [])
     monkeypatch.setattr(upload_checks, "run_upload_checks", lambda conn, item_id, scope="all", **kw: LISTO)
     encolar = uq.queue_upload_for_item
 
@@ -504,8 +522,89 @@ def test_si_los_primeros_fallan_mientras_se_encola_el_resto_se_salta(db_conn, tm
 
 def test_sin_racha_encolar_lote_no_se_salta_nada(db_conn, tmp_path, monkeypatch):
     from emuwarez_uploadrr.services import upload_checks
-    monkeypatch.setattr(uq, "_season_upload_preconditions", lambda conn: [])
+    monkeypatch.setattr(uq, "_season_upload_preconditions", lambda conn, *_tracker: [])
     monkeypatch.setattr(upload_checks, "run_upload_checks", lambda conn, item_id, scope="all", **kw: LISTO)
     items = [_peli(db_conn, tmp_path, t) for t in "ABC"]
     r = lotes.encolar_lote(db_conn, [{"item_id": i, "checks": LISTO} for i in items])
     assert (r["encolados"], r["saltados"]) == (3, 0)
+
+
+def test_si_un_tracker_se_para_mientras_se_encola_los_demas_siguen(db_conn, tmp_path, monkeypatch, retiradas):
+    from emuwarez_uploadrr.services import upload_checks
+    from emuwarez_uploadrr.services.settings import set_setting
+    monkeypatch.setattr(uq, "_season_upload_preconditions", lambda conn, *_tracker: [])
+    monkeypatch.setattr(upload_checks, "run_upload_checks", lambda conn, item_id, scope="all", **kw: LISTO)
+    set_setting(db_conn, "nobs.api_key", "clave")
+    db_conn.commit()
+    encolar = uq.queue_upload_for_item
+
+    def encolar_y_fallar_nobs(*a, **kw):
+        resultado = encolar(*a, **kw)
+        if resultado.get("status") == "queued" and kw.get("tracker") == "nobs":
+            uq._fail(resultado["job"]["id"], SISTEMICO)
+        return resultado
+    monkeypatch.setattr(uq, "queue_upload_for_item", encolar_y_fallar_nobs)
+    items = [_peli(db_conn, tmp_path, t) for t in "ABCDEF"]
+    db_conn.execute("UPDATE library_items SET audio_languages = 'spa'")
+    db_conn.commit()
+
+    r = lotes.encolar_lote(db_conn, [{"item_id": i, "checks": LISTO} for i in items], ["emu", "nobs"])
+
+    ultimo = [(x["tracker"], x["status"], x["errors"]) for x in r["resultados"] if x["item_id"] == items[-1]]
+    assert ultimo == [("emu", "queued", []), ("nobs", "blocked", [PARADO])]
+    assert (r["encolados"], r["saltados"]) == (11, 1)
+
+
+def _lote_a_dos_trackers(db_conn, tmp_path, monkeypatch, despues_de_encolar):
+    """Seis películas a eMuwarez y N.O.B.S; `despues_de_encolar(job_id, tracker, n)` corre tras crear cada trabajo."""
+    from emuwarez_uploadrr.services import upload_checks
+    from emuwarez_uploadrr.services.settings import set_setting
+    monkeypatch.setattr(uq, "_season_upload_preconditions", lambda conn, *_tracker: [])
+    monkeypatch.setattr(upload_checks, "run_upload_checks", lambda conn, item_id, scope="all", **kw: LISTO)
+    set_setting(db_conn, "nobs.api_key", "clave")
+    db_conn.commit()
+    encolar = uq.queue_upload_for_item
+    creados: list[str] = []
+
+    def encolar_y_seguir(*a, **kw):
+        resultado = encolar(*a, **kw)
+        if resultado.get("status") == "queued":
+            creados.append(kw.get("tracker"))
+            despues_de_encolar(resultado["job"]["id"], kw.get("tracker"), creados.count(kw.get("tracker")))
+        return resultado
+    monkeypatch.setattr(uq, "queue_upload_for_item", encolar_y_seguir)
+    items = [_peli(db_conn, tmp_path, t) for t in "ABCDEFG"]
+    db_conn.execute("UPDATE library_items SET audio_languages = 'spa'")
+    db_conn.commit()
+    r = lotes.encolar_lote(db_conn, [{"item_id": i, "checks": LISTO} for i in items], ["emu", "nobs"])
+    return items, r
+
+
+def test_un_tracker_parado_no_vuelve_aunque_luego_se_complete_una_suya(db_conn, tmp_path, monkeypatch, retiradas):
+    nobs: list[int] = []
+
+    def despues(job_id, tracker, n):
+        if tracker == "nobs":
+            nobs.append(job_id)
+            uq._fail(job_id, SISTEMICO)
+        elif n == 6:
+            # Una de N.O.B.S que se reintentó por fuera y acabó bien, después de la racha.
+            _completar(db_conn, nobs[0])
+    items, r = _lote_a_dos_trackers(db_conn, tmp_path, monkeypatch, despues)
+
+    nobs_de = {x["item_id"]: (x["status"], x["errors"]) for x in r["resultados"] if x["tracker"] == "nobs"}
+    assert nobs_de[items[5]] == ("blocked", [PARADO])
+    assert nobs_de[items[6]] == ("blocked", [PARADO])
+
+
+def test_con_todos_parados_cada_tracker_dice_su_motivo(db_conn, tmp_path, monkeypatch, retiradas):
+    otro = "Timeout esperando a N.O.B.S\nExit code: 1"
+
+    def despues(job_id, tracker, n):
+        uq._fail(job_id, SISTEMICO if tracker == "emu" else otro)
+    items, r = _lote_a_dos_trackers(db_conn, tmp_path, monkeypatch, despues)
+
+    for item in items[5:]:
+        assert [(x["tracker"], x["errors"]) for x in r["resultados"] if x["item_id"] == item] == [
+            ("emu", [PARADO]), ("nobs", ["Lote parado: 5 fallos seguidos por «Timeout esperando a N.O.B.S»"])]
+    assert r["encolados"] == 10

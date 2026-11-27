@@ -37,12 +37,12 @@ export function DeleteUploadModal({ job, onClose, onDeleted }: {
           {(job.retry_count ?? 0) > 0 && (
             <p className="delsub-aviso-texto delsub-aviso-extra">
               Incluye sus <strong>{job.retry_count} reintento(s)</strong>: se borran los que
-              fallaron o se cancelaron. Otra subida del mismo título que llegó a eMuwarez no se borra desde aquí.
+              fallaron o se cancelaron. Otra subida del mismo título que llegó a su tracker no se borra desde aquí.
             </p>
           )}
         </div>
         <p className="delsub-nota">
-          No se toca el archivo de vídeo de tu biblioteca, ni el torrent en eMuwarez, ni lo que siembra qBittorrent.
+          No se toca el archivo de vídeo de tu biblioteca, ni el torrent en {job.tracker_nombre ?? 'eMuwarez'}, ni lo que siembra qBittorrent.
         </p>
         {error && <p className="error-text delsub-error">{error}</p>}
         <div className="delsub-botones">

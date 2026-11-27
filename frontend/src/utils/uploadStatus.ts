@@ -110,6 +110,16 @@ export function latestInChain(jobs: UploadJob[]): UploadJob | null {
   return jobs.find(j => j.id != null && !referenced.has(j.id)) ?? jobs[jobs.length - 1]
 }
 
+// La punta de la cadena de cada tracker, por su id: los reintentos se encadenan dentro de un tracker.
+export function puntasPorTracker(jobs: UploadJob[]): Map<string, UploadJob> {
+  const puntas = new Map<string, UploadJob>()
+  for (const tracker of new Set(jobs.map(j => j.tracker ?? 'emu'))) {
+    const punta = latestInChain(jobs.filter(j => (j.tracker ?? 'emu') === tracker))
+    if (punta) puntas.set(tracker, punta)
+  }
+  return puntas
+}
+
 // Human labels for the computed progress_phase (the coarse string, not the %).
 const PHASE_LABEL: Record<string, string> = {
   staging: 'Generando nomenclatura',
@@ -139,9 +149,15 @@ const PHASE_LABEL: Record<string, string> = {
   cancelled: 'Cancelado',
 }
 
-export function phaseLabel(phase?: string | null): string {
+// `job`: la subida de la fase; si va a otro tracker, «Subiendo a N.O.B.S» en vez de «Subiendo a eMuwarez».
+export function phaseLabel(phase?: string | null, job?: Pick<UploadJob, 'tracker' | 'tracker_nombre'>): string {
   if (!phase) return '—'
-  return PHASE_LABEL[phase] || phase
+  return conSuTracker(PHASE_LABEL[phase] || phase, job)
+}
+
+// Las etiquetas de fase nombran a eMuwarez: en la subida a otro tracker, el suyo.
+export function conSuTracker(texto: string, job?: Pick<UploadJob, 'tracker' | 'tracker_nombre'>): string {
+  return job?.tracker_nombre && (job.tracker ?? 'emu') !== 'emu' ? texto.replace('eMuwarez', job.tracker_nombre) : texto
 }
 
 // Action (gerund) form of each real pipeline sub-phase tracked in
@@ -196,7 +212,7 @@ export function currentPhaseInfo(job: UploadJob): CurrentPhaseInfo | null {
   if (idx === -1) return null
   const phase = phases[idx]
   return {
-    label: PROGRESS_ACTION_LABEL[phase.key] || phase.label,
+    label: conSuTracker(PROGRESS_ACTION_LABEL[phase.key] || phase.label, job),
     counterText: `${idx + 1}/${phases.length}`,
   }
 }

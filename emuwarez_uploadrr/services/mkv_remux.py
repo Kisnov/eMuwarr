@@ -183,7 +183,7 @@ _PRIORITY_CASTILIAN, _PRIORITY_CATALAN, _PRIORITY_ENGLISH, _PRIORITY_OTHER = 0, 
 _NOMBRE_POR_CODIGO = {
     "ESP": "Español (Castellano)", "LAT": _LATIN_SPANISH_NAME,
     "CAT": "Català", "VAL": _VALENCIAN_NAME,
-    "ENG": "Inglés", "UND": _UNKNOWN_LANG_NAME,
+    "ENG": "Inglés", "UND": _UNKNOWN_LANG_NAME, "ZXX": "Sin diálogo",
 }
 
 
@@ -202,11 +202,11 @@ def lang_display_name(lang: str | None, lang_ietf: str | None = None, existing_n
 
 # Lo que se puede elegir en Ver Pistas para una pista de audio sin idioma. El
 # código va tal cual a mkvpropedit/mkvmerge; el nombre, de lang_display_name.
-IDIOMAS_ELEGIBLES = ("spa", "es-419", "cat", "ca-valencia", "eng", "fra", "ger", "ita", "por", "jpn", "kor")
+IDIOMAS_ELEGIBLES = ("spa", "es-419", "cat", "ca-valencia", "eng", "fra", "ger", "ita", "por", "jpn", "kor", "zxx")
 
 
 def opciones_de_idioma() -> list[dict]:
-    return [{"code": c, "label": lang_display_name(c)} for c in IDIOMAS_ELEGIBLES]
+    return [{"code": c, "label": lang_display_name(c) + (" (zxx)" if c == "zxx" else "")} for c in IDIOMAS_ELEGIBLES]
 
 
 def _por_id(overrides: dict | None) -> dict[int, dict]:
@@ -261,6 +261,29 @@ def overrides_de_idiomas(mkv_json: dict | None, idiomas: dict | None) -> dict[in
         if resolve_language(props.get("language"), props.get("language_ietf"),
                             props.get("track_name")) == "UND":
             salida[pista["id"]] = {"language": codigo}
+    return salida
+
+
+def idiomas_de_las_pistas(ruta: str | None, *, overrides: dict | None = None,
+                          idiomas: dict | None = None) -> list[str] | None:
+    """El código de cada pista de audio de un MKV, en su orden, con el idioma elegido en «Ver pistas» puesto en las que
+    no traen (`overrides` por id de pista, o `idiomas` por posición): lo que tendrá el fichero preparado. Las que siguen
+    sin idioma salen "UND". None si no es un MKV o no se leen sus pistas."""
+    if not ruta or not ruta.lower().endswith(".mkv"):
+        return None
+    leido = read_tracks_json(ruta)
+    if not leido.get("ok"):
+        return None
+    elegidos = idiomas_elegidos(overrides) or idiomas_elegidos(overrides_de_idiomas(leido["data"], idiomas))
+    salida = []
+    for pista in leido["data"].get("tracks") or []:
+        if pista.get("type") != "audio":
+            continue
+        props = pista.get("properties") or {}
+        codigo = resolve_language(props.get("language"), props.get("language_ietf"), props.get("track_name"))
+        if codigo == "UND" and pista.get("id") in elegidos:
+            codigo = resolve_language(elegidos[pista["id"]])
+        salida.append(codigo)
     return salida
 
 
@@ -1037,11 +1060,11 @@ def apply_remux(
 
         # Un enlace duro es el MISMO fichero: escribir aquí cambiaría también el
         # torrent que lo siembra, y sus piezas dejarían de cuadrar.
-        enlaces = p.stat().st_nlink
-        if enlaces > 1:
+        from .carpeta_subida import motivo_para_no_editar
+        motivo = motivo_para_no_editar(str(p), conn)
+        if motivo:
             return {**preview, "status": "blocked", "dry_run": False, "apply": False,
-                    "errors": [f"No se edita {p.name}: lo comparten {enlaces} enlaces duros "
-                               "(un torrent que siembra o una subida anterior)."]}
+                    "errors": [f"No se edita {p.name}: {motivo}."]}
 
         if not plan["order_changed"]:
             # Solo cambian nombres y banderas: eso se edita EN LA CABECERA con

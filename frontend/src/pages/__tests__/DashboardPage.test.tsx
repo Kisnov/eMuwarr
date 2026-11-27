@@ -11,13 +11,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 vi.mock('../../api/dashboard', () => ({ getDashboardSummary: vi.fn(), getDashboardRecommendations: vi.fn() }))
 vi.mock('../../api/uploads', () => ({
   getUploads: vi.fn(), getUploadJob: vi.fn(), queueLote: vi.fn(), runUploadChecks: vi.fn(),
-  getUploadChecksProgress: vi.fn(),
+  getUploadChecksProgress: vi.fn(), fetchTrackersParaSubir: vi.fn(async () => []), fetchReglasTracker: vi.fn(),
 }))
 vi.mock('../../api/nomenclature', () => ({ getNomenclatureFields: vi.fn(), previewNomenclatureFields: vi.fn() }))
 vi.mock('../../api/settings', () => ({ fetchSettings: vi.fn() }))
 vi.mock('../../api/maintenance', () => ({ getVersionInfo: vi.fn() }))
 vi.mock('../../api/library', () => ({
-  getLibraryItem: vi.fn(), getLibrary: vi.fn(), getEmuComparison: vi.fn(), suggestProvider: vi.fn(),
+  getLibraryItem: vi.fn(), getLibrary: vi.fn(), getEmuComparisons: vi.fn(), suggestProvider: vi.fn(),
 }))
 vi.mock('../../api/eventos', () => ({
   suscribirse: vi.fn(() => () => {}), canalVivo: vi.fn(() => true), observarCanal: vi.fn(() => () => {}),
@@ -41,7 +41,7 @@ vi.mock('../../components/RequestFormModal', () => ({
 
 import type { DashboardRecommendationItem } from '../../api/dashboard'
 import { getDashboardRecommendations, getDashboardSummary } from '../../api/dashboard'
-import { getEmuComparison, getLibrary, getLibraryItem } from '../../api/library'
+import { getEmuComparisons, getLibrary, getLibraryItem } from '../../api/library'
 import { getNomenclatureFields } from '../../api/nomenclature'
 import { getVersionInfo } from '../../api/maintenance'
 import { fetchSettings } from '../../api/settings'
@@ -796,10 +796,10 @@ describe('«Subir seleccionadas» en «Listo para subir»', () => {
     vi.mocked(getNomenclatureFields).mockImplementation(async id => ({
       fields: { source: 'BluRay', provider: null }, torrent_name: `Nombre ${id}`, internal_mkv_title: '', blocked: false,
     }) as never)
-    vi.mocked(getEmuComparison).mockResolvedValue({ available: true, message: null, matches: [] })
+    vi.mocked(getEmuComparisons).mockResolvedValue({ comparaciones: [{ available: true, message: null, matches: [] }], conclusion: null })
     vi.mocked(queueLote).mockImplementation(async elementos => ({
       lote_id: '0123456789ab', encolados: elementos.length, saltados: 0,
-      resultados: elementos.map((e, i) => ({ item_id: e.item_id, status: 'queued' as const, job_id: 100 + i, errors: [] })),
+      resultados: elementos.map((e, i) => ({ item_id: e.item_id, tracker: 'emu', status: 'queued' as const, job_id: 100 + i, errors: [] })),
     }))
   })
 
@@ -942,5 +942,26 @@ describe('«Subir seleccionadas» en «Listo para subir»', () => {
     await act(async () => { soltar() })
     await act(async () => { fijarVisible(true) })
     expect(document.querySelector('.lote-lista')).toBeNull()
+  })
+})
+
+describe('Panel: recargas que se cruzan', () => {
+  it('una carga vieja que responde después de una nueva no pisa lo nuevo', async () => {
+    let soltarVieja: () => void = () => {}
+    vi.mocked(getDashboardRecommendations)
+      .mockImplementationOnce(() => new Promise(r => {
+        soltarVieja = () => r({ items: [rec({ id: 5, content_name: 'Vieja', rec_request_id: 9, rec_points: 10 })] })
+      }))
+      .mockResolvedValue({ items: [rec({ id: 6, content_name: 'Nueva', rec_request_id: 8, rec_points: 10 })] })
+    await montar(<Envoltorio />)
+    await esperar(() => vi.mocked(getDashboardRecommendations).mock.calls.length === 1)
+    await act(async () => {
+      for (const [tipo, cb] of vi.mocked(suscribirse).mock.calls) if (tipo === 'tarea-terminada') (cb as () => void)()
+    })
+    await esperar(() => document.querySelector('.panel-carriles') && carril('Listo para subir').textContent?.includes('Nueva'))
+    await act(async () => { soltarVieja() })
+    await act(async () => { await new Promise(r => setTimeout(r, 20)) })
+    expect(carril('Listo para subir').textContent).toContain('Nueva')
+    expect(carril('Listo para subir').textContent).not.toContain('Vieja')
   })
 })

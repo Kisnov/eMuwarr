@@ -12,6 +12,7 @@ import { SyncInfo } from '../components/SyncInfo'
 import { StatusBadge } from '../components/StatusBadge'
 import { getReadinessActionLabel, getReadinessLabel, getReclamadaInfo, getRequestStatusInfo } from '../utils/status'
 import { HoverTitle, Tooltip, useTooltip } from '../components/Tooltip'
+import { ChipTracker } from '../components/ChipTracker'
 import { useSync } from '../context/SyncContext'
 import { UploadWizardModal } from '../components/UploadWizardModal'
 import { getLibraryItem } from '../api/library'
@@ -52,6 +53,7 @@ import { SubidaPorLotesModal } from '../components/lote/SubidaPorLotesModal'
 import { useSeleccionLote } from '../hooks/useSeleccionLote'
 import { entradaDePeticion, peticionSeleccionableEnLote, type EntradaLote } from '../utils/lote'
 import { desplazarAlContenedor } from '../utils/desplazar'
+import type { PreseleccionDePeticion } from '../components/asistente/useAsistente'
 
 // Fallback for "Consultar en eMuwarez" while we don't have the exact
 // per-request URL yet — points at the general requests listing instead of
@@ -243,7 +245,7 @@ function OriginCell({ item, instances, size = 13, alwaysChip = true }: {
   return <ValueChip linkable={!!deepLink}>{inner}</ValueChip>
 }
 
-function ReadinessBadge({ status }: { status: string | null | undefined }) {
+function ReadinessBadge({ status, tracker }: { status: string | null | undefined; tracker: string }) {
   if (!status) return <span className="pet-muted-11">—</span>
   const color =
     status === 'ready_to_upload' ? 'var(--color-available-soft)' :
@@ -255,7 +257,7 @@ function ReadinessBadge({ status }: { status: string | null | undefined }) {
     status === 'spec_mismatch' || status === 'no_castellano' ? 'var(--color-warning)' :
     status.includes('error') || status.includes('missing') || status === 'blocked' ? 'var(--color-missing)' :
     'var(--text-secondary)'
-  return <span className="pet-estado-11" style={{ color }}>{getReadinessLabel(status)}</span>
+  return <span className="pet-estado-11" style={{ color }}>{getReadinessLabel(status, tracker)}</span>
 }
 
 function CandidatesPanel({ requestId }: { requestId: number }) {
@@ -364,7 +366,7 @@ function RequestDetailPage({ item, readiness, instances, onBack, onShowCandidate
   instances: InstanceSafeResponse[]
   onBack: () => void
   onShowCandidates: () => void
-  onUpload: (libraryItemId: number, preselect?: { season?: number | null; episode?: number | null }, requestId?: number) => void
+  onUpload: (libraryItemId: number, preselect?: PreseleccionDePeticion, requestId?: number) => void
   onOpenLibraryItem?: (id: number) => void
 }) {
   const m = item.match
@@ -387,13 +389,14 @@ function RequestDetailPage({ item, readiness, instances, onBack, onShowCandidate
   const malId = item.mal_id || m?.local_mal_id || null
   const hasSeason = item.req_scope === 'season' || item.req_scope === 'episode'
   const temporadaLabel = hasSeason ? String(item.req_season ?? '?') : 'Todas'
+  const tracker = item.tracker_nombre ?? 'eMuwarez'
   const consultarTip = useTooltip(item.url
-    ? 'Abrir la petición en eMuwarez (reclamarla, marcarla como llena, ver el ID del torrent…)'
-    : 'Todavía no tenemos la URL exacta de esta petición: abre el listado general de peticiones en eMuwarez')
+    ? `Abrir la petición en ${tracker} (reclamarla, marcarla como llena, ver el ID del torrent…)`
+    : `Todavía no tenemos la URL exacta de esta petición: abre el listado general de peticiones en ${tracker}`)
   // Sin el contenido en la biblioteca el botón no hace nada, y el motivo va escrito a su lado: en un tooltip no llegaba
   // ni al dedo ni a un botón deshabilitado, que no recibe el ratón.
   const subirTip = useTooltip(libraryTargetId
-    ? 'Subir el contenido de tu biblioteca a eMuwarez (mismo asistente que en Biblioteca)'
+    ? `Subir el contenido de tu biblioteca a ${tracker} (mismo asistente que en Biblioteca)`
     : null)
   const reqNameTip = useTooltip(m?.content_name || null)
   const libNameTip = useTooltip(m?.content_name || baseName(m?.local_path ?? null) || m?.library_title || null)
@@ -414,7 +417,7 @@ function RequestDetailPage({ item, readiness, instances, onBack, onShowCandidate
             rel="noreferrer"
             {...consultarTip.triggerProps}
           >
-            <ExternalLinkButtonIcon /> Consultar en eMuwarez
+            <ExternalLinkButtonIcon /> Consultar en {tracker}
             {consultarTip.tooltipNode}
           </a>
           <button
@@ -430,11 +433,12 @@ function RequestDetailPage({ item, readiness, instances, onBack, onShowCandidate
             onClick={() => libraryTargetId && onUpload(libraryTargetId, {
               season: item.req_season,
               episode: item.req_scope === 'episode' ? item.req_episode : null,
+              tracker: item.tracker,
             }, item.id)}
             {...subirTip.triggerProps}
             aria-describedby={libraryTargetId ? subirTip.triggerProps['aria-describedby'] : 'pet-motivo-subir'}
           >
-            <UploadButtonIcon /> Subir a eMuwarez
+            <UploadButtonIcon /> Subir a {tracker}
             {subirTip.tooltipNode}
           </button>
         </div>
@@ -619,7 +623,7 @@ function RequestDetailPage({ item, readiness, instances, onBack, onShowCandidate
         <details className="cmp-readiness pet-preparacion">
           <summary>Preparación de subida (avanzado)</summary>
           <div className="pet-mt-8">
-            <div className="detail-row"><span>Estado</span><ReadinessBadge status={readiness.status} /></div>
+            <div className="detail-row"><span>Estado</span><ReadinessBadge status={readiness.status} tracker={tracker} /></div>
             <div className="detail-row"><span>Acción</span><span className="pet-accion">{readiness.recommended_action ? getReadinessActionLabel(readiness.recommended_action) : '—'}</span></div>
             <div className="detail-row"><span>Compat. score</span><span>{readiness.compatibility_score?.toFixed(0) ?? '—'}/100</span></div>
             <div className="detail-row"><span>Readiness score</span><span>{readiness.upload_readiness_score?.toFixed(0) ?? '—'}/100</span></div>
@@ -702,7 +706,7 @@ export function RequestsPage({ onNavigate }: { onNavigate?: (page: string) => vo
   const [detailLoading, setDetailLoading] = useState(false)
   const [showCandidates, setShowCandidates] = useState(false)
   const [wizardItem, setWizardItem] = useState<LibraryItemResponse | null>(null)
-  const [wizardPreselect, setWizardPreselect] = useState<{ season?: number | null; episode?: number | null } | undefined>(undefined)
+  const [wizardPreselect, setWizardPreselect] = useState<PreseleccionDePeticion | undefined>(undefined)
   const [wizardRequestId, setWizardRequestId] = useState<number | undefined>(undefined)
   // «Subir seleccionadas»: el botón «Seleccionar» pone casillas en las peticiones que se pueden subir (las mismas que
   // «Listo para subir» del Panel). Lo marcado sobrevive a filtrar y ordenar, y se limpia al salir de Peticiones y al
@@ -754,7 +758,7 @@ export function RequestsPage({ onNavigate }: { onNavigate?: (page: string) => vo
   // "Subir a eMuwarez" — reuse the exact same upload wizard as Biblioteca by
   // loading the matched library item and handing it to UploadWizardModal, with
   // the request's scope (season / episode) so the selection is pre-filled.
-  const openUpload = useCallback(async (libraryItemId: number, preselect?: { season?: number | null; episode?: number | null }, requestId?: number) => {
+  const openUpload = useCallback(async (libraryItemId: number, preselect?: PreseleccionDePeticion, requestId?: number) => {
     try {
       const libItem = await getLibraryItem(libraryItemId)
       setWizardPreselect(preselect)
@@ -791,11 +795,16 @@ export function RequestsPage({ onNavigate }: { onNavigate?: (page: string) => vo
 
   // Solo cuenta la última petición: marcar varias casillas seguidas lanza
   // varias, y una vieja más lenta no pisa la nueva (igual que en Biblioteca).
+  // Con `silencioso`, una recarga en segundo plano que falla deja la tabla que ya había; si aún no hay respuesta
+  // buena para los filtros de ahora (la de un filtro nuevo se ha tirado), avisa como cualquier otra.
   const ultimaCarga = useRef(0)
-  const loadItems = useCallback(async (off = 0) => {
+  const sinRespuestaBuena = useRef(true)
+  const loadItems = useCallback(async (off = 0, silencioso = false) => {
     const esta = ++ultimaCarga.current
+    if (!silencioso) sinRespuestaBuena.current = true
+    const callar = silencioso && !sinRespuestaBuena.current
     setLoading(true)
-    setError(null)
+    if (!callar) setError(null)
     try {
       const res = await getRequests({
         search: debouncedSearch || undefined,
@@ -810,6 +819,8 @@ export function RequestsPage({ onNavigate }: { onNavigate?: (page: string) => vo
         offset: off,
       })
       if (esta !== ultimaCarga.current) return
+      sinRespuestaBuena.current = false
+      setError(null)
       setItems(res.items)
       setTotal(res.total)
       setOffset(off)
@@ -818,7 +829,7 @@ export function RequestsPage({ onNavigate }: { onNavigate?: (page: string) => vo
         setTotalSinFiltro(res.total)
       }
     } catch (e: unknown) {
-      if (esta === ultimaCarga.current) setError(e instanceof Error ? e.message : 'Error cargando peticiones')
+      if (esta === ultimaCarga.current && !callar) setError(e instanceof Error ? e.message : 'Error cargando peticiones')
     } finally {
       if (esta === ultimaCarga.current) setLoading(false)
     }
@@ -849,8 +860,19 @@ export function RequestsPage({ onNavigate }: { onNavigate?: (page: string) => vo
   // sync finishing (peticiones u otra), or coming back to the tab.
   useEffect(() => {
     if (lastInvalidatedAt) {
-      loadItems(0)
+      loadItems(0, true)
       if (!isUnfiltered) loadFacets()
+      // La ficha abierta también; se descarta si mientras tanto se abre otra, se cierra o ya llegó una más nueva.
+      if (selectedId !== null) {
+        const esta = ultimoDetalle.current
+        const pedida = ++pedidaFicha.current
+        Promise.all([getRequestDetail(selectedId), getReadiness(selectedId).catch(() => null)]).then(([d, rr]) => {
+          if (esta !== ultimoDetalle.current || pedida <= aplicadaFicha.current) return
+          aplicadaFicha.current = pedida
+          setDetail(d)
+          setReadiness(rr as RequestReadinessResponse | null)
+        }).catch(() => {})
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- solo cuando algo invalida la lista
   }, [lastInvalidatedAt])
@@ -859,6 +881,9 @@ export function RequestsPage({ onNavigate }: { onNavigate?: (page: string) => vo
   // Solo vale el detalle de la última petición abierta: la campana puede abrir dos seguidas, y la primera,
   // si llega la última, dejaba su ficha bajo el id de la segunda.
   const ultimoDetalle = useRef(0)
+  // Abrir y refrescar la ficha piden en orden: una respuesta más vieja que la última aplicada se tira.
+  const pedidaFicha = useRef(0)
+  const aplicadaFicha = useRef(0)
   const closeRequestDetail = () => {
     ultimoDetalle.current++
     closeDetailPath('requests')
@@ -871,6 +896,7 @@ export function RequestsPage({ onNavigate }: { onNavigate?: (page: string) => vo
 
   const openRequestDetail = async (id: number) => {
     const esta = ++ultimoDetalle.current
+    const pedida = ++pedidaFicha.current
     pushDetailPath('requests', id)
     setSelectedId(id)
     setShowCandidates(false)
@@ -880,7 +906,8 @@ export function RequestsPage({ onNavigate }: { onNavigate?: (page: string) => vo
         getRequestDetail(id),
         getReadiness(id).catch(() => null),
       ])
-      if (esta !== ultimoDetalle.current) return
+      if (esta !== ultimoDetalle.current || pedida <= aplicadaFicha.current) return
+      aplicadaFicha.current = pedida
       setDetail(d.status === 'fulfilled' ? d.value : null)
       setReadiness(rr.status === 'fulfilled' && rr.value !== null ? rr.value as RequestReadinessResponse : null)
     } catch { if (esta === ultimoDetalle.current) setDetail(null) }
@@ -1061,6 +1088,7 @@ export function RequestsPage({ onNavigate }: { onNavigate?: (page: string) => vo
               <DetailTitleText title={requestDisplayTitle(item)} />
             </HoverTitle>
           </div>
+          <ChipTracker tracker={item.tracker} nombre={item.tracker_nombre} />
         </div>
       </td>
       <td className="pet-nowrap pet-tipo pet-meta">

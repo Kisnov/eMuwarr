@@ -139,6 +139,15 @@
   padding-left: 24px;
 }
 
+/* La subida del mismo elemento a otro tracker: bajo el título (póster y hueco), sin raya que la separe de la de arriba. */
+.sub-titulo-fila-tracker {
+  padding-left: 38px;
+}
+
+.data-table tr:not(.sub-fila-antigua):has(+ tr.sub-fila-tracker) > td {
+  border-bottom-color: transparent;
+}
+
 /* Chip «Lote · N» junto al título: un botón que filtra la lista por ese lote. */
 .sub-lote-chip {
   flex-shrink: 0;
@@ -154,6 +163,18 @@
   font-weight: 600;
   white-space: nowrap;
   cursor: pointer;
+}
+
+/* El tracker de una subida que no es a eMuwarez: el mismo chip, sin acción. */
+.sub-tracker-chip {
+  flex-shrink: 0;
+  padding: 1px 7px;
+  border-radius: var(--radius-badge);
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
 }
 
 .sub-lote-chip:hover {
@@ -442,6 +463,17 @@ button.sub-reintentos-chip:hover {
   color: var(--text-primary);
 }
 
+/* Los otros trackers del grupo, plegados: en rojo si alguna de esas subidas falló o se canceló. */
+.sub-toggle-trackers-fallido {
+  border-color: color-mix(in srgb, var(--color-error) 55%, transparent);
+  color: var(--color-error-soft);
+}
+
+button.sub-toggle-trackers-fallido:hover {
+  border-color: color-mix(in srgb, var(--color-error) 70%, transparent);
+  color: var(--color-error-pale);
+}
+
 /* Acciones de la fila: solo el icono; el nombre va en aria-label y en el tooltip. Se ofrece solo lo que se puede
    hacer con esa subida, así que no hay botones apagados. */
 .sub-acciones-fila {
@@ -696,6 +728,10 @@ input.sub-confirmar.sub-confirmar-ok:not([type="checkbox"]):not([type="radio"]):
     padding-left: 28px;
   }
 
+  .sub-scroll .data-table tr.sub-tarjeta:not(.sub-fila-antigua):has(+ tr.sub-fila-tracker) {
+    border-bottom-color: transparent;
+  }
+
   .sub-scroll .data-table tr.sub-tarjeta > td {
     display: none;
     padding: 0;
@@ -791,6 +827,11 @@ input.sub-confirmar.sub-confirmar-ok:not([type="checkbox"]):not([type="radio"]):
   .sub-scroll .data-table tr.sub-tarjeta > td.sub-meta:not(.sub-col-tipo)::before {
     content: "·";
     margin-right: 8px;
+  }
+
+  /* Sin tipo ni origen delante (son los de la tarjeta de arriba), la fecha va sola. */
+  .sub-scroll .data-table tr.sub-tarjeta.sub-fila-tracker > td.sub-meta.sub-fecha::before {
+    content: none;
   }
 
   .sub-tarjeta .sub-meta .vicon {
@@ -917,3 +958,21 @@ input.sub-confirmar.sub-confirmar-ok:not([type="checkbox"]):not([type="radio"]):
   .sub-trailer-chip,
   .sub-trailer-banner { animation: none; }
 }
+
+/* «Subir también a…» (components/SubirTambien.tsx): la lista de subidas a eMuwarez que se pueden elegir. */
+.subir-tambien-trackers {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  border: 0;
+  padding: 0;
+  margin: 12px 0;
+}
+.subir-tambien-lista {
+  list-style: none;
+  margin: 0 0 12px;
+  padding: 0;
+  max-height: calc(var(--vh100) * 0.5);
+  overflow-y: auto;
+}
+.subir-tambien-lista li { padding: 4px 0; }

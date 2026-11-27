@@ -16,6 +16,8 @@ import re
 import unicodedata
 from typing import Optional
 
+from .trackers import EMU
+
 # Pixel height ranks — higher is better
 _RESOLUTION_RANK: dict[str, int] = {
     "480p": 480, "480i": 480, "480": 480,
@@ -313,18 +315,29 @@ def reclamante(req: dict) -> Optional[str]:
     return quien.strip().lower() if isinstance(quien, str) and quien.strip() else None
 
 
-def reclamada_por(req: dict, mi_usuario: str | None) -> Optional[str]:
-    """«ti», «otro» o «desconocido» si la petición está reclamada en eMuwarez; None si no lo está. Sin saber quién la
-    reclamó (o sin saber quién eres) cuenta como desconocida."""
+def usuario_en(mi_usuario: "dict[str, str] | str | None", req: dict) -> str:
+    """Tu usuario en el tracker de la petición, en minúsculas; vacío si no se sabe. `mi_usuario`: el de cada tracker
+    por su id (requests.mis_usuarios); un texto suelto es el de eMuwarez, que no dice quién eres en otro tracker."""
+    tracker = req.get("tracker") or EMU.id
+    if isinstance(mi_usuario, dict):
+        mi_usuario = mi_usuario.get(tracker)
+    elif tracker != EMU.id:
+        mi_usuario = None
+    return (mi_usuario or "").strip().lower()
+
+
+def reclamada_por(req: dict, mi_usuario: "dict[str, str] | str | None") -> Optional[str]:
+    """«ti», «otro» o «desconocido» si la petición está reclamada en su tracker; None si no lo está. Sin saber quién
+    la reclamó (o sin saber quién eres allí) cuenta como desconocida. `mi_usuario`: ver usuario_en."""
     if emu_override_status(req.get("emu_status")) != "Reclamado":
         return None
-    quien = reclamante(req)
-    if quien is None or not (mi_usuario or "").strip():
+    quien, yo = reclamante(req), usuario_en(mi_usuario, req)
+    if quien is None or not yo:
         return "desconocido"
-    return "ti" if quien == mi_usuario.strip().lower() else "otro"
+    return "ti" if quien == yo else "otro"
 
 
-def estado_emu_de(req: dict, mi_usuario: str | None) -> Optional[str]:
+def estado_emu_de(req: dict, mi_usuario: "dict[str, str] | str | None") -> Optional[str]:
     """emu_override_status de esta petición para ti: la que has reclamado tú no te impide subirla."""
     return None if reclamada_por(req, mi_usuario) == "ti" else emu_override_status(req.get("emu_status"))
 
@@ -336,7 +349,7 @@ def classify_request_match(
     id_match: bool = False,
     title_match: bool = False,
     base_confidence: float = 0.90,
-    mi_usuario: str | None = None,
+    mi_usuario: "dict[str, str] | str | None" = None,
 ) -> dict:
     """
     Given a matched (request, library_item) pair, classify compatibility.

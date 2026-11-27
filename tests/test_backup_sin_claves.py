@@ -151,6 +151,18 @@ def test_los_config_de_las_subidas_no_van_ni_en_la_copia_con_secretos(cfg):
         assert not any(m.startswith("config_uploadrr") for m in _miembros(copia["archive_path"]))
 
 
+def test_el_estado_de_las_subidas_en_marcha_no_va_en_la_copia(cfg):
+    """El limitador cambia de tamaño mientras se lee y tumbaba la copia entera con un OSError."""
+    for fichero in ("limitador/emuwarez.json", "plazas/plaza-1", "eventos_uploadrr/7.jsonl"):
+        (cfg / fichero).parent.mkdir()
+        (cfg / fichero).write_text("{}")
+    for copia in (create_config_backup(), create_config_backup(include_secrets=True, confirmation=RESTORE_CONFIRMATION)):
+        assert not any(m.split("/")[0] in ("limitador", "plazas", "eventos_uploadrr")
+                       for m in _miembros(copia["archive_path"]))
+    assert not any(f["name"].split("/")[0] in ("limitador", "plazas", "eventos_uploadrr")
+                   for f in get_config_inventory()["files"])
+
+
 def test_ni_el_config_del_cli_antiguo(cfg):
     (cfg / "config.json").write_text('{"emu_api_key": "cli-antiguo"}')
     (cfg / "config.enc.json").write_text("{}")

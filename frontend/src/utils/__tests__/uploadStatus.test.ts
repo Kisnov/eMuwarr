@@ -8,7 +8,7 @@
  */
 import { describe, it, expect } from 'vitest'
 import {
-  latestInChain, phaseLabel, formatSecondsHM, currentPhaseInfo,
+  latestInChain, puntasPorTracker, phaseLabel, formatSecondsHM, currentPhaseInfo,
   ACTIVE_JOB_STATUSES, statusLabel, queuedWaitText, fundirPorId, conservarIguales,
 } from '../uploadStatus'
 import type { UploadJob, UploadProgressPhase } from '../../types/api'
@@ -48,12 +48,24 @@ describe('la punta de una cadena de reintentos', () => {
     const jobs = [job({ id: 1 }), job({ id: 5 })]
     expect([1, 5]).toContain(latestInChain(jobs)?.id)
   })
+
+  it('cada tracker tiene su punta: la subida a eMuwarez y la de N.O.B.S no son la misma cadena', () => {
+    const puntas = puntasPorTracker([
+      job({ id: 1 }), job({ id: 2, retry_of_job_id: 1 }),
+      job({ id: 3, tracker: 'nobs' }),
+    ])
+    expect([...puntas].map(([t, j]) => [t, j.id])).toEqual([['emu', 2], ['nobs', 3]])
+  })
 })
 
 describe('las etiquetas de fase', () => {
   it('sin fase, la raya de "sin dato" de toda la app', () => {
     expect(phaseLabel(null)).toBe('—')
     expect(phaseLabel(undefined)).toBe('—')
+    // La fase de subida nombra al tracker de la subida.
+    expect(phaseLabel('uploading_emu')).toBe('Subiendo a eMuwarez')
+    expect(phaseLabel('uploading_emu', { tracker: 'nobs', tracker_nombre: 'N.O.B.S' })).toBe('Subiendo a N.O.B.S')
+    expect(phaseLabel('uploading_emu', { tracker: 'emu', tracker_nombre: 'eMuwarez' })).toBe('Subiendo a eMuwarez')
   })
 
   it('traduce las fases del backend', () => {

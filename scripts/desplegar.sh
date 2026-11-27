@@ -11,6 +11,7 @@
 #   scripts/desplegar.sh --notas "Lo que cambia, en una línea"
 #   scripts/desplegar.sh --notas "..." --version patch   # sube la versión antes
 #   scripts/desplegar.sh --solo-prueba                   # sube solo :dev, sin versión ni manifiesto
+#   scripts/desplegar.sh ... --fuera-de-dev              # también con un commit que no está en dev de GitHub
 #
 # Al publicar sigue el orden del workflow: la imagen como :<sha>, la etiqueta
 # vX.Y.Z (y main avanza hasta ella), la imagen como :X.Y.Z, :dev y :latest, y el manifiesto. Si algo falla,
@@ -32,12 +33,14 @@ PYTHON="$(command -v python3 || command -v python)" || { echo "No encuentro pyth
 NOTAS=""
 ESCALA=""
 PRUEBA=0
+FUERA_DE_DEV=0
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --notas)         NOTAS="${2:?falta el texto de --notas}"; shift 2 ;;
     --version)       ESCALA="${2:?falta la escala de --version: patch, minor o major}"; shift 2 ;;
     --solo-prueba)   PRUEBA=1; shift ;;
+    --fuera-de-dev)  FUERA_DE_DEV=1; shift ;;
     # La cabecera entera, hasta la primera línea que no es comentario.
     -h|--help)       sed -n '2,${/^#/!q;p;}' "${BASH_SOURCE[0]}"; exit 0 ;;
     *) echo "Argumento no reconocido: $1" >&2; exit 2 ;;
@@ -63,8 +66,18 @@ fi
 
 if [[ -n "$ESCALA" ]]; then
   "$PYTHON" scripts/subir_version.py "$ESCALA"
-  echo "La versión ha cambiado: commitea ese cambio y vuelve a lanzar esto." >&2
+  echo "La versión ha cambiado: commitea ese cambio, súbelo a dev y vuelve a lanzar esto." >&2
   exit 1
+fi
+
+# Solo lo que ya está en dev de GitHub: desde otra rama, :dev o :latest llevarían código que dev no tiene.
+if [[ "$FUERA_DE_DEV" -eq 0 ]]; then
+  git fetch -q origin dev
+  if ! git merge-base --is-ancestor HEAD origin/dev; then
+    echo "Este commit no está en dev de GitHub: no se construye ni se sube nada." >&2
+    echo "Súbelo a dev primero, o relanza con --fuera-de-dev si es a propósito." >&2
+    exit 1
+  fi
 fi
 
 COMMIT="$(git rev-parse HEAD)"

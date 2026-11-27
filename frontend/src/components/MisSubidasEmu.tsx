@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { getMisSubidas } from '../api/estadisticas'
-import { EMU_URL } from '../constants/emu'
+import type { TrackerParaSubir } from '../api/uploads'
 import type { MiTorrent, MisTorrents } from '../types/api'
 import { formatDate, formatNumero, SIN_DATO, timeAgo } from '../utils/format'
 import { StatCard } from './StatCard'
@@ -15,9 +15,13 @@ type Orden = keyof typeof ORDENES
 
 const cifra = (n: number | null) => (n === null ? SIN_DATO : formatNumero(n))
 
-// Tus subidas en eMuwarez: lo que guardó la última lectura (la tarea «Leer tus subidas en eMuwarez», cada 6 horas). Se
-// pide cada vez que se entra en Estadísticas (`visible`); no llama al tracker.
-export function MisSubidasEmu({ visible }: { visible: boolean }) {
+const EMU: TrackerParaSubir = { id: 'emu', nombre: 'eMuwarez' }
+
+// Tus subidas en `tracker` (eMuwarez sin él): lo que guardó la última lectura (la tarea «Leer tus subidas»,
+// cada 6 horas). Se pide cada vez que se entra en Estadísticas (`visible`); no llama al tracker.
+export function MisSubidasEmu({ visible, tracker = EMU }: { visible: boolean; tracker?: TrackerParaSubir }) {
+  const nombre = tracker.nombre
+  const titulo = tracker.id === 'emu' ? 'est-grupo-mis-subidas' : `est-grupo-mis-subidas-${tracker.id}`
   const [datos, setDatos] = useState<MisTorrents | null>(null)
   const [fallo, setFallo] = useState(false)
   const [orden, setOrden] = useState<Orden>('completados')
@@ -26,29 +30,29 @@ export function MisSubidasEmu({ visible }: { visible: boolean }) {
   useEffect(() => {
     if (!visible) return
     let vigente = true
-    getMisSubidas().then(d => { if (vigente) { setDatos(d); setFallo(false) } }, () => { if (vigente) setFallo(true) })
+    getMisSubidas(tracker.id).then(d => { if (vigente) { setDatos(d); setFallo(false) } }, () => { if (vigente) setFallo(true) })
     return () => { vigente = false }
-  }, [visible, intento])
+  }, [visible, intento, tracker.id])
 
   const filas = useMemo(() => (datos ? [...datos.torrents].sort(ORDENES[orden].comparar) : []), [datos, orden])
 
   const aviso = fallo && (
     <p className="est-nota est-aviso" role="status">
-      No se pudieron cargar tus subidas en eMuwarez{datos ? '; se enseñan las de la última vez' : ''}.{' '}
+      No se pudieron cargar tus subidas en {nombre}{datos ? '; se enseñan las de la última vez' : ''}.{' '}
       <button type="button" className="btn btn-ghost btn-sm" onClick={() => setIntento(n => n + 1)}>Reintentar</button>
     </p>
   )
   if (!datos) return aviso || null
   const t = datos.totales
   return (
-    <section aria-labelledby="est-grupo-mis-subidas">
-      <h2 className="est-grupo-titulo" id="est-grupo-mis-subidas">Tus subidas en eMuwarez</h2>
+    <section aria-labelledby={titulo}>
+      <h2 className="est-grupo-titulo" id={titulo}>Tus subidas en {nombre}</h2>
       {aviso}
       {datos.leido_at === null ? (
-        <p className="est-nota">Aún no se han leído: la tarea «Leer tus subidas en eMuwarez» lo hace cada 6 horas, y en Tareas se puede ejecutar ahora.</p>
+        <p className="est-nota">Aún no se han leído: lo hace la tarea «Leer tus subidas», y en Tareas se puede ejecutar ahora.</p>
       ) : (
         <>
-          <div className="stat-cards-row" role="group" aria-label="Totales de tus subidas en eMuwarez">
+          <div className="stat-cards-row" role="group" aria-label={`Totales de tus subidas en ${nombre}`}>
             <StatCard label="Subidas" value={formatNumero(t.subidas)} />
             <StatCard label="Completadas" value={formatNumero(t.completados)} info="Veces que alguien ha terminado de bajar alguna de tus subidas." />
             <StatCard label="Completadas esta semana" value={cifra(t.completados_semana)}
@@ -59,7 +63,7 @@ export function MisSubidasEmu({ visible }: { visible: boolean }) {
           </div>
           <div className="est-subidas-cab">
             <p className="est-nota">
-              Leídas {timeAgo(datos.leido_at)}, cada 6 horas. Las subidas anónimas no salen: eMuwarez no las da al buscar por usuario.
+              Leídas {timeAgo(datos.leido_at)}. Las subidas anónimas no salen: {nombre} no las da al buscar por usuario.
             </p>
             <select className="form-input form-select est-subidas-orden" aria-label="Orden de tus subidas" value={orden}
               onChange={e => setOrden(e.target.value as Orden)}>
@@ -67,9 +71,9 @@ export function MisSubidasEmu({ visible }: { visible: boolean }) {
             </select>
           </div>
           {filas.length === 0 ? (
-            <p className="est-nota">No hay ninguna subida tuya en eMuwarez que no sea anónima.</p>
+            <p className="est-nota">No hay ninguna subida tuya en {nombre} que no sea anónima.</p>
           ) : (
-            <div className="est-tabla est-tabla-marco" tabIndex={0} role="region" aria-label="Tus subidas en eMuwarez">
+            <div className="est-tabla est-tabla-marco" tabIndex={0} role="region" aria-label={`Tus subidas en ${nombre}`}>
               <table className="data-table">
                 <thead>
                   <tr>
@@ -81,7 +85,7 @@ export function MisSubidasEmu({ visible }: { visible: boolean }) {
                   {filas.map(f => (
                     <tr key={f.torrent_id}>
                       <th scope="row">
-                        <a href={`${EMU_URL}/torrents/${f.torrent_id}`} target="_blank" rel="noreferrer">{f.nombre}</a>
+                        <a href={`${datos.url}/torrents/${f.torrent_id}`} target="_blank" rel="noreferrer">{f.nombre}</a>
                       </th>
                       <td className={f.seeders === 0 ? 'est-sin-seeders' : undefined}>{cifra(f.seeders)}</td>
                       <td>{cifra(f.leechers)}</td>

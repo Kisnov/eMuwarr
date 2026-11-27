@@ -192,6 +192,15 @@ def isolated_db(tmp_path, monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _carpeta_de_subidas_de_la_prueba(tmp_path, monkeypatch):
+    """La carpeta de subidas de serie (/config/Uploadrr/uploads) no se puede crear en CI, y sin poder probar el enlace
+    no se edita ningún original: cada prueba tiene la suya, en su temporal (las que la necesitan en otro sitio la
+    cambian ellas)."""
+    from emuwarez_uploadrr.services import carpeta_subida
+    monkeypatch.setattr(carpeta_subida, "RAIZ_SUBIDAS", str(tmp_path / "uploads"))
+
+
+@pytest.fixture(autouse=True)
 def _default_instance_connection_ok(monkeypatch):
     """The create-instance endpoint (POST /api/instances) now verifies the
     Radarr/Sonarr connection before persisting. Test fixtures create instances

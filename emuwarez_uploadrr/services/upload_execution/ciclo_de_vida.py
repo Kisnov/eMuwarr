@@ -11,6 +11,8 @@ from .ejecucion import start_upload_job
 from .estado import _update_job_status
 from .procesos import _PROCESOS, _PROCESOS_LOCK, _detener_proceso, _pid_es_de_este_job
 from .registro import append_upload_log
+from ..eventos import EVENTO_SUBIDA_ESTADO, publicar
+from ..trackers import POR_DEFECTO
 from ...integrations.base import texto_de_error
 
 
@@ -113,9 +115,9 @@ def retry_upload_job(
                (library_item_id, request_item_id, request_title, request_url,
                 title, path,
                 source_path, prepared_path, uploadrr_command_json,
-                status, stage, retry_of_job_id, retry_count,
+                status, stage, retry_of_job_id, retry_count, tracker, descripcion,
                 created_at, updated_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'ready', 'preflight', ?, ?, ?, ?)""",
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'ready', 'preflight', ?, ?, ?, ?, ?, ?)""",
             (
                 original.get("library_item_id"),
                 original.get("request_item_id"),
@@ -128,6 +130,9 @@ def retry_upload_job(
                 original.get("uploadrr_command_json"),
                 job_id,
                 retry_count,
+                # El reintento va al mismo tracker que el original.
+                original.get("tracker") or POR_DEFECTO,
+                original.get("descripcion"),
                 now,
                 now,
             ),
@@ -247,6 +252,12 @@ def _cancelar(job_id: int, conn=None) -> dict:
                 "job_id": job_id,
             }
 
+        # La marca, antes de parar el proceso: si muere primero, su hilo da la subida por fallida y avisa.
+        _update_job_status(
+            job_id, "cancelled",
+            stage="cancelled",
+            finished_at=_now(),
+        )
         pid = job.get("process_id")
         cancelled = False
         with _PROCESOS_LOCK:
@@ -286,11 +297,6 @@ def _cancelar(job_id: int, conn=None) -> dict:
                     conn=conn,
                 )
 
-        _update_job_status(
-            job_id, "cancelled",
-            stage="cancelled",
-            finished_at=_now(),
-        )
         append_upload_log(job_id, "info", "Job marcado como cancelado.", stream="system")
 
         return {
@@ -333,6 +339,21 @@ def retry_chain_ids(job_id: int, conn) -> list[int]:
         for fila in conn.execute("SELECT id FROM upload_jobs WHERE retry_of_job_id = ?", (actual,)).fetchall():
             pendientes.append(fila["id"])
     return ids
+
+
+def _ya_no_esta(ruta: str) -> bool:
+    """Solo si el sistema dice que no existe: un error de permisos o de E/S no es «borrado»."""
+    try:
+        os.lstat(ruta)
+    except FileNotFoundError:
+        return True
+    except OSError:
+        return False
+    return False
+
+
+# Estado: los enlaces de la carpeta de subidas que sembraba una subida ya borrada cuando otra aún apuntaba a ellos.
+ENLACES_SEMBRADOS_SIN_FILA = "enlaces_sembrados_sin_fila"
 
 
 def delete_upload_job(job_id: int, confirmation: str | None = None, conn=None) -> dict:
@@ -403,6 +424,17 @@ def delete_upload_job(job_id: int, confirmation: str | None = None, conn=None) -
                            f"canceladas o fallidas (status={estados}).",
                 "job_id": job_id,
             }
+        # Una cancelada cuyo hilo aún termina el paso en curso sigue escribiendo en su fila y en la carpeta de subidas.
+        from ..upload_queue import _condicion_activa
+        condicion, parametros = _condicion_activa()
+        if conn.execute(f"SELECT 1 FROM upload_jobs WHERE id IN ({','.join('?' * len(cadena))}) AND {condicion}",
+                        (*cadena, *parametros)).fetchone():
+            return {
+                "ok": False,
+                "error": "invalid_status",
+                "message": "La subida cancelada aún está terminando el paso en curso; bórrala en un momento.",
+                "job_id": job_id,
+            }
         # Un reenvío a qBittorrent en marcha escribe en su registro y en su fila.
         if conn.execute(
             f"SELECT 1 FROM upload_jobs WHERE id IN ({','.join('?' * len(chain))}) AND reenvio_qbit_estado = 'en_curso'",
@@ -426,12 +458,17 @@ def delete_upload_job(job_id: int, confirmation: str | None = None, conn=None) -
         # lo dice `torrent_subido`) o todavía viva (se está preparando o
         # subiendo), sea de esta cadena o de otra: los intentos fallidos suelen
         # apuntar al mismo enlace.
+        from .. import carpeta_subida
         from ..carpeta_subida import ENLACES, borrar_de_subidas
+        from ...database import get_json_state, set_json_state
         marcas = ",".join("?" * len(chain))
         filas = conn.execute(
-            f"SELECT prepared_path, status FROM upload_jobs WHERE id IN ({marcas})", chain).fetchall()
+            f"SELECT prepared_path, status, torrent_subido FROM upload_jobs WHERE id IN ({marcas})", chain).fetchall()
         with ENLACES:
-            en_uso = {f["prepared_path"] for f in conn.execute(
+            # Más los que sembraba una subida ya borrada y otra subida aún apuntaba (la misma, a otro tracker):
+            # qBittorrent sigue sembrando de ahí aunque la fila que lo decía ya no esté.
+            sin_fila = set(get_json_state(conn, ENLACES_SEMBRADOS_SIN_FILA) or [])
+            en_uso = sin_fila | {f["prepared_path"] for f in conn.execute(
                 "SELECT prepared_path FROM upload_jobs WHERE prepared_path IS NOT NULL "
                 "AND (status NOT IN ('cancelled', 'failed') OR torrent_subido = 1)")}
             for fila in filas:
@@ -441,6 +478,20 @@ def delete_upload_job(job_id: int, confirmation: str | None = None, conn=None) -
                     "SELECT 1 FROM library_items WHERE path = ? OR prepared_path = ? LIMIT 1", (ruta, ruta)).fetchone()
                 if ruta not in en_uso and not propio:
                     borrar_de_subidas(ruta)
+            sembradas = [f["prepared_path"] for f in filas
+                         if f["prepared_path"] and (f["status"] == "completed" or f["torrent_subido"])]
+            compartidas = {f["prepared_path"] for f in conn.execute(
+                f"SELECT prepared_path FROM upload_jobs WHERE prepared_path IN ({','.join('?' * len(sembradas))}) "
+                f"AND id NOT IN ({marcas}) AND status != 'completed' AND torrent_subido = 0",
+                (*sembradas, *chain))} if sembradas else set()
+            # Los que ya no están en disco (se borró el torrent con sus datos) dejan de apuntarse; con la carpeta de
+            # subidas fuera de alcance, o sin poder mirar, no se sabe, y se quedan.
+            ahora = sin_fila | compartidas
+            if os.path.isdir(carpeta_subida.RAIZ_SUBIDAS):
+                ahora = {r for r in ahora if not _ya_no_esta(r)}
+            if ahora != sin_fila:
+                set_json_state(conn, ENLACES_SEMBRADOS_SIN_FILA, sorted(ahora))
+                conn.commit()  # dentro del cerrojo: otro borrado a la vez lee la lista ya escrita
         conn.execute(f"DELETE FROM upload_artifacts WHERE upload_job_id IN ({marcas})", chain)
         conn.execute(f"DELETE FROM upload_job_logs WHERE upload_job_id IN ({marcas})", chain)
         conn.execute(f"UPDATE filesystem_operations SET upload_job_id = NULL WHERE upload_job_id IN ({marcas})", chain)
@@ -455,12 +506,14 @@ def delete_upload_job(job_id: int, confirmation: str | None = None, conn=None) -
                 conn.execute("UPDATE upload_jobs SET retry_of_job_id = ? WHERE id = ?", (padre, conservada))
         conn.execute(f"DELETE FROM upload_jobs WHERE id IN ({marcas})", chain)
         conn.commit()
+        for borrada in chain:
+            publicar(EVENTO_SUBIDA_ESTADO, {"job_id": borrada})
 
         mensaje = ("Subida eliminada." if len(chain) == 1
                    else f"Subida eliminada, con sus {len(chain) - 1} reintento(s).")
         if conservadas:
-            mensaje += (f" Se conserva la subida #{conservadas[0]}, que llegó a eMuwarez." if len(conservadas) == 1
-                        else f" Se conservan {len(conservadas)} subidas que llegaron a eMuwarez.")
+            mensaje += (f" Se conserva la subida #{conservadas[0]}, que llegó a su tracker." if len(conservadas) == 1
+                        else f" Se conservan {len(conservadas)} subidas que llegaron a su tracker.")
         return {"ok": True, "message": mensaje, "job_id": job_id, "deleted_job_ids": chain,
                 "kept_job_ids": conservadas}
     finally:

@@ -6,8 +6,9 @@ import re
 from datetime import datetime, timezone
 
 from ...database import connect, get_setting_canonical, init_db
+from ..trackers import TRACKERS
 from ...integrations.base import tapar_claves
-from ..uploadrr_eventos import MOTIVOS_CLIENTE
+from ..uploadrr_eventos import MOTIVOS_CLIENTE, del_tracker
 
 
 logger = logging.getLogger("emuwarez.upload")
@@ -35,17 +36,23 @@ QBIT_REENVIO_SIN_TORRENT = ("qBittorrent: no se añadió el torrent porque no se
                             "firmado o guardarlo.")
 
 
-def mensaje_qbit_fallo(motivo: str | None, *, reenvio: bool = False) -> str:
+def mensaje_qbit_fallo(motivo: str | None, *, reenvio: bool = False, nombre: str = "eMuwarez") -> str:
     """Lo que ve el usuario cuando Uploadrr-EMU dice (evento `cliente`, ok:false) por qué el torrent no entró en
-    qBittorrent. En un reenvío (`reenvio`) no se ha subido nada: el .torrent se pide a eMuwarez."""
+    qBittorrent. En un reenvío (`reenvio`) no se ha subido nada: el .torrent se pide al tracker. `nombre`: el del
+    tracker de la subida."""
     if motivo == "login":
         return QBIT_LOGIN_INCORRECTO
     if motivo == "no_visible":
-        return QBIT_NO_VISIBLE
+        return del_tracker(QBIT_NO_VISIBLE, nombre)
     if motivo == "sin_torrent":
-        return QBIT_REENVIO_SIN_TORRENT if reenvio else QBIT_SIN_TORRENT_FIRMADO
-    texto = MOTIVOS_CLIENTE.get(motivo or "") or f"motivo «{motivo}»"
-    return f"qBittorrent: falló al añadir o etiquetar el torrent ({texto}). Revisa qBittorrent. La subida a eMuwarez sí se completó."
+        return del_tracker(QBIT_REENVIO_SIN_TORRENT if reenvio else QBIT_SIN_TORRENT_FIRMADO, nombre)
+    texto = del_tracker(MOTIVOS_CLIENTE.get(motivo or "") or f"motivo «{motivo}»", nombre)
+    return f"qBittorrent: falló al añadir o etiquetar el torrent ({texto}). Revisa qBittorrent. {subida_completada(nombre)}"
+
+
+def subida_completada(nombre: str = "eMuwarez") -> str:
+    """La coletilla de un fallo de qBittorrent tras subir: el torrent ya está en el tracker."""
+    return f"La subida a {nombre} sí se completó."
 
 
 # Phase 10F: approximate progress phases surfaced to the UI (string label
@@ -143,7 +150,8 @@ def _get_setting(conn, key: str, default=None):
 def _collect_secrets(conn) -> list[str]:
     secrets = []
     # Los dos de qBittorrent también: un error de conexión de Uploadrr-EMU escribe la URL de qui, clave incluida.
-    for key in ("emu.api_key", "tmdb.api_key", "qbit.password", "qbit.qui_proxy_url"):
+    # Las de los otros trackers (fase B) también se stagean en el config.yaml del hijo.
+    for key in (*(t.clave("api_key") for t in TRACKERS.values()), "tmdb.api_key", "qbit.password", "qbit.qui_proxy_url"):
         val = get_setting_canonical(conn, key)
         if val:
             secrets.append(val)

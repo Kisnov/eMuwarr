@@ -55,6 +55,11 @@ def test_update_interval_below_minimum_returns_422(client, auth_headers):
     assert resp.status_code == 422
 
 
+def test_update_interval_above_a_year_returns_422(client, auth_headers):
+    resp = client.put("/api/tasks/scheduled/sync-library", json={"interval_minutes": 10**10}, headers=auth_headers)
+    assert resp.status_code == 422
+
+
 def test_update_interval_unknown_task_returns_404(client, auth_headers):
     resp = client.put("/api/tasks/scheduled/not-a-task", json={"interval_minutes": 30}, headers=auth_headers)
     assert resp.status_code == 404

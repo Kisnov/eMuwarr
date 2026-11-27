@@ -18,6 +18,7 @@ from unittest import mock
 import pytest
 
 from emuwarez_uploadrr.services.uploadrr_contract import (
+    EXTENSIONES_SUBIBLES,
     _UPLOADRR_RES_CHOICES,
     _UPLOADRR_TYPES,
     build_uploadrr_emu_command,
@@ -129,13 +130,31 @@ def test_el_config_de_la_subida_llega_como_global_con_la_ruta_absoluta(parser_up
     assert _parsear(parser_uploadrr, _cmd()).config is None
 
 
+def test_la_descripcion_propia_llega_como_descfile_y_no_como_otro_video(parser_uploadrr, args_uploadrr, tmp_path):
+    archivo = tmp_path / "Peli.2024.1080p.WEB-DL.mkv"
+    archivo.write_bytes(b"x")
+    descripcion = tmp_path / "config_uploadrr" / "7-descripcion.txt"
+    descripcion.parent.mkdir()
+    descripcion.write_text("[b]Notas[/b]", encoding="utf-8")  # existe: no debe contarse como otro ítem
+    for cambios in ({}, dict(category="tv", season=1, reanudar=True, config=str(tmp_path / "7.yaml"))):
+        argv = _cmd(prepared_path=str(archivo), descripcion=str(descripcion), **cambios)
+        items, globales = args_uploadrr.group_args_by_path(argv)
+        assert items == [([], str(archivo.resolve()))]
+        ns = parser_uploadrr.parse_args(globales)
+        args_uploadrr.enforce_global_only(ns, is_global=True, parser=parser_uploadrr)
+        assert ns.descfile == str(descripcion)
+    assert _parsear(parser_uploadrr, _cmd()).descfile is None
+
+
 def _choices(parser: argparse.ArgumentParser, opcion: str) -> set[str]:
     (accion,) = [a for a in parser._actions if opcion in a.option_strings]
     return set(accion.choices)
 
 
 def test_cada_resolucion_y_tipo_que_puede_mandar_la_app_existe_en_uploadrr(parser_uploadrr):
+    from emuwarez_uploadrr.services.reglas_tracker import VARIANTES
     assert _UPLOADRR_RES_CHOICES <= _choices(parser_uploadrr, "-res")
+    assert set(VARIANTES) == _choices(parser_uploadrr, "--variante")
     assert set(_UPLOADRR_TYPES.values()) <= _choices(parser_uploadrr, "-t")
     assert {"movie", "tv"} <= _choices(parser_uploadrr, "-c")
 
@@ -157,15 +176,29 @@ _BASE = {"manual_name": "Peli.2024.1080p.WEB-DL", "trackers": ["EMU"], "unattend
 @pytest.mark.parametrize(
     "cambios, esperado, ausentes",
     [
-        ({}, {**_BASE, "category": "MOVIE", "resolution": "1080p"}, ("anon", "resume", "aviso_baja_calidad", "solo_cliente")),
+        ({}, {**_BASE, "category": "MOVIE", "resolution": "1080p"},
+         ("anon", "resume", "aviso_baja_calidad", "solo_cliente", "base_desde", "variante")),
         (dict(category="tv", season=1, episode=5),
          {**_BASE, "category": "TV", "manual_season": "S01", "manual_episode": "E05"}, ("anon", "resume")),
         (dict(category="tv", season=2, resolution="480p", anonimo=True, reanudar=True),
          {**_BASE, "category": "TV", "resolution": "480p", "manual_season": "S02", "anon": True, "resume": True,
           "aviso_baja_calidad": True, "full_dir": True}, ("manual_episode", "solo_cliente")),
         (dict(solo_cliente="4242"), {**_BASE, "category": "MOVIE", "resume": True, "solo_cliente": 4242}, ("anon",)),
+        # Otro tracker: su -tk, y sin el aviso de baja calidad, que es una norma de eMuwarez.
+        (dict(tracker="NOBS", resolution="480p", reanudar=True),
+         {**_BASE, "trackers": ["NOBS"], "category": "MOVIE", "resolution": "480p", "resume": True},
+         ("aviso_baja_calidad", "solo_cliente")),
+        (dict(tracker="MNV", solo_cliente="77"),
+         {**_BASE, "trackers": ["MNV"], "category": "MOVIE", "resume": True, "solo_cliente": 77}, ("anon",)),
+        # «Subir también a…» sin el BASE.torrent de entonces: Uploadrr-EMU lo hace con el torrent de eMuwarez.
+        (dict(tracker="NOBS", reanudar=True, base_desde="EMU:4242"),
+         {**_BASE, "trackers": ["NOBS"], "category": "MOVIE", "resume": True, "base_desde": "EMU:4242"},
+         ("aviso_baja_calidad", "solo_cliente")),
+        (dict(category="tv", season=1, variante="anime_catalan"),
+         {**_BASE, "category": "TV", "manual_season": "S01", "variante": "anime_catalan"}, ("anon",)),
     ],
-    ids=["pelicula", "capitulo", "pack-480p-anonimo-resume", "solo-cliente"],
+    ids=["pelicula", "capitulo", "pack-480p-anonimo-resume", "solo-cliente", "nobs-480p-resume", "mnv-solo-cliente",
+         "nobs-base-desde", "pack-variante"],
 )
 def test_el_comando_de_la_app_llega_a_la_meta_con_el_tipo_y_valor_que_espera_uploadrr(
         args_uploadrr, parser_uploadrr, tmp_path, cambios, esperado, ausentes):
@@ -178,3 +211,52 @@ def test_el_comando_de_la_app_llega_a_la_meta_con_el_tipo_y_valor_que_espera_upl
         assert meta[clave] == valor and type(meta[clave]) is type(valor), (clave, meta.get(clave))
     for clave in ausentes:
         assert not meta.get(clave), (clave, meta.get(clave))
+
+
+def test_cada_tracker_de_la_app_tiene_su_adaptador_en_uploadrr():
+    """El `-tk` de cada tracker (services/trackers.py) es un fichero de uploadrr-emu/src/trackers/: si no, Uploadrr-EMU
+    sale con sin_trackers."""
+    from emuwarez_uploadrr.services.trackers import TRACKERS
+    for tracker in TRACKERS.values():
+        assert (CARPETA_UPLOADRR / "src" / "trackers" / f"{tracker.uploadrr}.py").is_file(), tracker.uploadrr
+
+
+# La subida a otro tracker de punta a punta: la variante la eligen las normas de la app (reglas_tracker), llega a la
+# meta por el parser real y la tabla del tracker en Uploadrr-EMU (`data/trackers/<TK>.json`, la que lee
+# Unit3dConTabla.get_cat_id con el token <CATEGORÍA>_<VARIANTE>) la convierte en el id de categoría.
+@pytest.mark.parametrize("tracker, audio, anime, categoria, cat_id", [
+    ("nobs", "spa / jpn", True, "movie", 4),     # anime a N.O.B.S: Anime (películas)
+    ("mnv", "es-419 / eng", False, "movie", 10),  # película solo en latino a Milnueve: Películas Latino
+])
+def test_el_trabajo_de_otro_tracker_llega_con_su_variante_hasta_la_categoria(
+        args_uploadrr, parser_uploadrr, tmp_path, tracker, audio, anime, categoria, cat_id):
+    import json
+
+    from emuwarez_uploadrr.services import trackers
+    from emuwarez_uploadrr.services.reglas_tracker import reglas_de
+
+    archivo = tmp_path / "Peli.2024.1080p.WEB-DL.mkv"
+    archivo.write_bytes(b"x")
+    reglas = reglas_de(tracker, {"audio_languages": audio}, anime=anime)
+    tk = trackers.obtener(tracker).uploadrr
+    argv = _cmd(prepared_path=str(archivo), tracker=tk, variante=reglas.variante, category=categoria)
+    assert argv[argv.index("-tk") + 1] == tk and argv[argv.index("--variante") + 1] == reglas.variante
+
+    meta = _meta_como_upload_py(args_uploadrr, parser_uploadrr, argv)
+    assert meta["trackers"] == [tk] and meta["variante"] == reglas.variante and meta["category"] == "MOVIE"
+    assert not meta.get("aviso_baja_calidad")
+
+    tabla = json.loads((CARPETA_UPLOADRR / "data" / "trackers" / f"{tk}.json").read_text(encoding="utf-8"))
+    ids = {t.upper(): e["id"] for e in tabla["categories"] for t in e["tokens"]}
+    assert ids[f"{meta['category']}_{meta['variante'].upper()}"] == cat_id
+
+
+def test_la_app_solo_deja_subir_los_formatos_que_sube_uploadrr():
+    import ast
+    import re
+    # get_video descarta lo demás y la subida acaba sin vídeo; torrentman tampoco lo mete en el torrent.
+    for fichero, patron in (("videoprocessor.py", r"video_extensions = \{([^}]*)\}"),
+                            ("utils/torrentman.py", r"valid_extensions = \{([^}]*)\}")):
+        fuente = (CARPETA_UPLOADRR / "src" / fichero).read_text(encoding="utf-8")
+        suyas = ast.literal_eval("{" + re.search(patron, fuente).group(1) + "}")
+        assert suyas == set(EXTENSIONES_SUBIBLES), fichero

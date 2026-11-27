@@ -1,4 +1,4 @@
-"""Línea `Uploading screenshots: X/Y` (src/progress.py): la lee emuwarez-uploadrr tal cual.
+"""Línea `Uploading screenshots: X/Y` (src/progress.py): la lee eMuwarr tal cual.
 
 Sin terminal (la app lanza upload.py con la salida a una tubería) el Live de Rich no escribe nada, así que
 `ProgressManager.update` imprime el texto a mano. Cada línea tiene que salir completa, sola y sin códigos ANSI."""

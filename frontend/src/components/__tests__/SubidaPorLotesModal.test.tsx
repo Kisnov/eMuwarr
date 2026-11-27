@@ -8,9 +8,12 @@
 import { act } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-vi.mock('../../api/uploads', () => ({ queueLote: vi.fn(), runUploadChecks: vi.fn(), getUploadChecksProgress: vi.fn() }))
+vi.mock('../../api/uploads', () => ({
+  queueLote: vi.fn(), runUploadChecks: vi.fn(), getUploadChecksProgress: vi.fn(), fetchTrackersParaSubir: vi.fn(),
+  fetchElegibilidad: vi.fn(),
+}))
 vi.mock('../../api/nomenclature', () => ({ getNomenclatureFields: vi.fn(), previewNomenclatureFields: vi.fn() }))
-vi.mock('../../api/library', () => ({ getEmuComparison: vi.fn(), getLibrary: vi.fn(), suggestProvider: vi.fn() }))
+vi.mock('../../api/library', () => ({ getEmuComparisons: vi.fn(), getLibrary: vi.fn(), suggestProvider: vi.fn() }))
 vi.mock('../../api/settings', () => ({ fetchSettings: vi.fn() }))
 vi.mock('../../api/eventos', () => ({ seguirProgreso: vi.fn(() => () => {}) }))
 
@@ -19,7 +22,7 @@ import * as nom from '../../api/nomenclature'
 import * as biblioteca from '../../api/library'
 import { fetchSettings } from '../../api/settings'
 import { ApiClientError } from '../../api/client'
-import type { EmuComparison } from '../../api/library'
+import type { EmuComparaciones } from '../../api/library'
 import type { LibraryItemResponse } from '../../types/api'
 import type { EntradaLote } from '../../utils/lote'
 import { SubidaPorLotesModal } from '../lote/SubidaPorLotesModal'
@@ -42,7 +45,15 @@ const CAMPOS = {
 }
 const ENTORNO = { ready: true, checks: [{ id: 'emuwarez', label: 'eMuwarez responde', status: 'ok' as const, message: '' }] }
 const LISTO = { ready: true, checks: [{ id: 'accesible', label: 'Fichero accesible', status: 'ok' as const, message: '' }] }
-const SIN_NADA: EmuComparison = { available: true, message: null, matches: [] }
+const SIN_NADA: EmuComparaciones = { comparaciones: [{ available: true, message: null, matches: [] }], conclusion: null }
+// Un torrent de la misma calidad y lo que concluye el servidor de él.
+const IGUAL: EmuComparaciones = {
+  comparaciones: [{
+    available: true, message: null,
+    matches: [{ name: 'Dune 1080p', resolution: '1080p', source: 'BluRay', codec: null, has_spanish: 1, size: null, veredicto: 'igual' }],
+  }],
+  conclusion: { nivel: 'duplicado', clase: 'igual', texto: 'Ya hay 1 torrent con tu misma calidad: la subida sería un duplicado.', ya_lo_tiene: true },
+}
 
 const nombreDe = (id: number) => `Peli ${id} (2021) 1080p BluRay x264-GRP`
 
@@ -72,15 +83,16 @@ async function alResumen(n: number) {
 }
 
 beforeEach(() => {
+  m(subidas.fetchTrackersParaSubir).mockResolvedValue([])
   m(subidas.runUploadChecks).mockImplementation(async (_id, scope) => (scope === 'environment' ? ENTORNO : LISTO))
   m(nom.getNomenclatureFields).mockImplementation(async id => ({
     fields: { ...CAMPOS }, torrent_name: nombreDe(id), internal_mkv_title: '', blocked: false,
   }))
-  m(biblioteca.getEmuComparison).mockResolvedValue(SIN_NADA)
+  m(biblioteca.getEmuComparisons).mockResolvedValue(SIN_NADA)
   m(fetchSettings).mockResolvedValue({ upload_max_concurrent: 1 } as never)
   m(subidas.queueLote).mockImplementation(async elementos => ({
     lote_id: '0123456789ab', encolados: elementos.length, saltados: 0,
-    resultados: elementos.map((e, i) => ({ item_id: e.item_id, status: 'queued', job_id: 100 + i, errors: [] })),
+    resultados: elementos.map((e, i) => ({ item_id: e.item_id, tracker: 'emu', status: 'queued', job_id: 100 + i, errors: [] })),
   }))
 })
 afterEach(async () => {
@@ -164,6 +176,7 @@ describe('qué llega desmarcado o se salta', () => {
     m(nom.getNomenclatureFields).mockImplementation(async id => ({
       fields: { ...CAMPOS }, torrent_name: nombreDe(id), internal_mkv_title: '', blocked: false,
       audio_warning: id === 11 ? 'Una pista de audio no tiene idioma: el nombre no la incluye.' : null,
+      audio_sin_idioma: id === 11,
     }))
     await abrir([DUNE, ALIEN])
     await alResumen(2)
@@ -177,16 +190,14 @@ describe('qué llega desmarcado o se salta', () => {
   })
 
   it('un duplicado en eMuwarez llega desmarcado con su veredicto', async () => {
-    m(biblioteca.getEmuComparison).mockImplementation(async id => (id === 12
-      ? { available: true, message: null, matches: [{ name: 'Alien 1080p', resolution: '1080p', source: 'BluRay', codec: null, has_spanish: 1, size: null, veredicto: 'igual' }] }
-      : SIN_NADA))
+    m(biblioteca.getEmuComparisons).mockImplementation(async ([id]) => (id === 12 ? IGUAL : SIN_NADA))
     await abrir([DUNE, ALIEN])
     await alResumen(2)
     expect(fila(12).textContent).toContain('la subida sería un duplicado')
     expect(incluir('Alien').checked).toBe(false)
     expect(incluir('Dune').checked).toBe(true)
     // Lo que compara es lo que irá en el nombre.
-    expect(biblioteca.getEmuComparison).toHaveBeenCalledWith(12, { resolution: '1080p', source: 'BluRay' })
+    expect(biblioteca.getEmuComparisons).toHaveBeenCalledWith([12], { resolution: '1080p', source: 'BluRay' }, 'emu')
   })
 
   it('dos películas que saldrían con el mismo nombre se saltan las dos', async () => {
@@ -224,6 +235,16 @@ describe('cuándo se habilita «Subir»', () => {
     expect(fila(12).textContent).toContain('Comprobando…')
     expect(botonSubir()!.disabled).toBe(true)
     await act(async () => { pendiente.resolver(LISTO) })
+    await esperar(() => botonSubir() && !botonSubir()!.disabled)
+  })
+
+  it('no mientras falta saber si un tracker ya lo tiene', async () => {
+    const pendiente = diferida<typeof SIN_NADA>()
+    m(biblioteca.getEmuComparisons).mockImplementation(async ([id]) => (id === 12 ? pendiente.promesa : SIN_NADA))
+    await abrir([DUNE, ALIEN])
+    await alResumen(2)
+    expect(botonSubir()!.disabled).toBe(true)
+    await act(async () => { pendiente.resolver(SIN_NADA) })
     await esperar(() => botonSubir() && !botonSubir()!.disabled)
   })
 
@@ -283,7 +304,7 @@ describe('lo que se manda y lo que vuelve', () => {
     m(fetchSettings).mockResolvedValue({ upload_max_concurrent: 0 } as never)
     await abrir([DUNE, ALIEN])
     await alResumen(2)
-    expect(texto()).toContain('Sin límite: se lanzarán las 2 a la vez contra eMuwarez')
+    expect(texto()).toContain('Sin límite: se lanzarán las 2 a la vez.')
     // El nombre real de la sección y del campo, con las comillas del resto de la interfaz.
     expect(texto()).toContain('Configuración → Otros, «Máximo de subidas en paralelo»')
   })
@@ -299,8 +320,8 @@ describe('lo que se manda y lo que vuelve', () => {
     m(subidas.queueLote).mockResolvedValue({
       lote_id: '0123456789ab', encolados: 1, saltados: 1,
       resultados: [
-        { item_id: 11, status: 'queued', job_id: 100, errors: [] },
-        { item_id: 12, status: 'blocked', job_id: null, errors: ['Ya hay una subida en curso para este contenido.'] },
+        { item_id: 11, tracker: 'emu', status: 'queued', job_id: 100, errors: [] },
+        { item_id: 12, tracker: 'emu', status: 'blocked', job_id: null, errors: ['Ya hay una subida en curso para este contenido.'] },
       ],
     })
     await abrir([DUNE, ALIEN])
@@ -356,7 +377,7 @@ describe('lo que se manda y lo que vuelve', () => {
     await escape()
     expect(onClose).not.toHaveBeenCalled()
     await act(async () => {
-      respuesta.resolver({ lote_id: '0123456789ab', encolados: 1, saltados: 0, resultados: [{ item_id: 11, status: 'queued', job_id: 1, errors: [] }] })
+      respuesta.resolver({ lote_id: '0123456789ab', encolados: 1, saltados: 0, resultados: [{ item_id: 11, tracker: 'emu', status: 'queued', job_id: 1, errors: [] }] })
     })
     await esperar(() => texto().includes('1 de 1 encolada'))
     await escape()
@@ -470,7 +491,7 @@ describe('series y temporadas', () => {
     // Ni su nomenclatura ni su proveedor se miran aparte: los dice el plan del pack.
     expect(nom.getNomenclatureFields).not.toHaveBeenCalled()
     expect(biblioteca.suggestProvider).not.toHaveBeenCalled()
-    expect(m(biblioteca.getEmuComparison).mock.calls).toEqual([[101, undefined]])
+    expect(m(biblioteca.getEmuComparisons).mock.calls).toEqual([[[101], undefined, 'emu']])
   })
 
   it('una temporada enseña los avisos de su plan, y con audio sin idioma llega desmarcada', async () => {
@@ -621,5 +642,282 @@ describe('desde el Panel', () => {
     ])
     expect(texto()).toContain('«Fargo - Temporada 2»: la petición es del capítulo S02E04, que no está en la biblioteca.')
     expect(titulosPaso1()).toEqual(['Dune (2021)'])
+  })
+})
+
+describe('a varios trackers', () => {
+  const NOBS_NO = { tracker: 'nobs', nombre: 'N.O.B.S', permitido: false, motivo: 'N.O.B.S no lo admite: el audio (jpn) no está en castellano ni latino.', variante: null }
+  const si = (tracker: string, nombre: string) => ({ tracker, nombre, permitido: true, motivo: 'Audio en castellano.', variante: null })
+  const casillaTracker = (nombre: string) =>
+    [...document.querySelectorAll<HTMLLabelElement>('.lote-trackers label')].find(l => l.textContent === nombre)!.querySelector('input')!
+
+  beforeEach(() => {
+    m(subidas.fetchTrackersParaSubir).mockResolvedValue([{ id: 'emu', nombre: 'eMuwarez' }, { id: 'nobs', nombre: 'N.O.B.S' }])
+    m(subidas.fetchElegibilidad).mockImplementation(async id => ({
+      trackers: [si('emu', 'eMuwarez'), id === 12 ? NOBS_NO : si('nobs', 'N.O.B.S')], capitulos: [],
+    }))
+  })
+
+  it('con solo eMuwarez no se ve nada nuevo ni se manda el tracker', async () => {
+    m(subidas.fetchTrackersParaSubir).mockResolvedValue([{ id: 'emu', nombre: 'eMuwarez' }])
+    await abrir([DUNE])
+    await alResumen(1)
+    expect(document.querySelector('.lote-trackers')).toBeNull()
+    await pulsar(boton('Subir (1)'))
+    await esperar(() => texto().includes('1 de 1 encolada'))
+    expect(m(subidas.queueLote).mock.calls[0]).toHaveLength(1)
+    expect(subidas.fetchElegibilidad).not.toHaveBeenCalled()
+  })
+
+  it('eMuwarez de entrada; con otro marcado, dice lo que ese no admite y manda los dos en orden', async () => {
+    await abrir([DUNE, ALIEN])
+    await alResumen(2)
+    expect(casillaTracker('eMuwarez').checked).toBe(true)
+    expect(casillaTracker('N.O.B.S').checked).toBe(false)
+    expect(boton('Subir (2) a eMuwarez')).toBeDefined()
+
+    await pulsar(casillaTracker('N.O.B.S'))
+    await esperar(() => fila(12).textContent?.includes('No va a N.O.B.S'))
+    expect(fila(12).textContent).toContain(`⚠ No va a N.O.B.S: ${NOBS_NO.motivo}`)
+    expect(fila(11).textContent).not.toContain('No va a')
+    expect(m(subidas.fetchElegibilidad).mock.calls.map(c => c[0]).sort()).toEqual([11, 12])
+    // Las comprobaciones siguen siendo las de eMuwarez, el primero: no se repiten.
+    expect(llamadas('content')).toHaveLength(2)
+
+    m(subidas.queueLote).mockResolvedValue({
+      lote_id: '0123456789ab', encolados: 3, saltados: 1,
+      resultados: [
+        { item_id: 11, tracker: 'emu', status: 'queued', job_id: 100, errors: [] },
+        { item_id: 11, tracker: 'nobs', status: 'queued', job_id: 101, errors: [] },
+        { item_id: 12, tracker: 'emu', status: 'queued', job_id: 102, errors: [] },
+        { item_id: 12, tracker: 'nobs', status: 'blocked', job_id: null, errors: [NOBS_NO.motivo] },
+      ],
+    })
+    await pulsar(boton('Subir (2) a eMuwarez y N.O.B.S'))
+    await esperar(() => texto().includes('3 de 4 encoladas'))
+    expect(m(subidas.queueLote).mock.calls[0][1]).toEqual(['emu', 'nobs'])
+    expect(texto()).toContain(`✗ Alien (N.O.B.S): ${NOBS_NO.motivo}`)
+  })
+
+  it('lo que un tracker ya tiene se salta solo para ese, y sin su catálogo se dice', async () => {
+    m(biblioteca.getEmuComparisons).mockImplementation(async ([id], _tuya, tracker) => (
+      tracker !== 'nobs' ? SIN_NADA
+        : id === 11 ? IGUAL : {
+          comparaciones: [{ available: false, message: 'El catálogo de N.O.B.S se lee al sincronizar el de eMuwarez.', matches: [] }],
+          conclusion: null,
+        }))
+    await abrir([DUNE, HEAT])
+    await alResumen(2)
+    await pulsar(casillaTracker('N.O.B.S'))
+    await esperar(() => fila(11).textContent?.includes('No va a N.O.B.S'))
+    expect(texto()).toContain('En eMuwarez y N.O.B.S')
+    expect(fila(11).textContent).toContain('⚠ No va a N.O.B.S: ya hay uno igual o mejor')
+    expect(fila(11).textContent).toContain('eMuwarez: No hay nada igual en eMuwarez.')
+    expect(fila(11).textContent).toContain('N.O.B.S: Ya hay 1 torrent con tu misma calidad')
+    expect(incluir('Dune').checked).toBe(true)
+    expect(fila(13).textContent).toContain('Sin catálogo local de N.O.B.S: se lee al sincronizar el de eMuwarez.')
+    expect(fila(13).textContent).not.toContain('No va a')
+
+    await pulsar(boton('Subir (2) a eMuwarez y N.O.B.S'))
+    await esperar(() => m(subidas.queueLote).mock.calls.length)
+    expect(m(subidas.queueLote).mock.calls[0][0].map(e => e.omitir)).toEqual([['nobs'], undefined])
+  })
+
+  it('lo que tienen todos llega desmarcado y, marcado a mano, va a todos', async () => {
+    m(biblioteca.getEmuComparisons).mockResolvedValue(IGUAL)
+    await abrir([DUNE])
+    await alResumen(1)
+    await pulsar(casillaTracker('N.O.B.S'))
+    await esperar(() => fila(11).textContent?.includes('N.O.B.S: Ya hay'))
+    expect(incluir('Dune').checked).toBe(false)
+    expect(fila(11).textContent).not.toContain('No va a')
+
+    await pulsar(incluir('Dune'))
+    await pulsar(boton('Subir (1) a eMuwarez y N.O.B.S'))
+    await esperar(() => m(subidas.queueLote).mock.calls.length)
+    expect(m(subidas.queueLote).mock.calls[0][0][0].omitir).toBeUndefined()
+  })
+
+  it('si uno lo tiene y el otro no lo admite, llega desmarcado', async () => {
+    m(biblioteca.getEmuComparisons).mockImplementation(async (_ids, _tuya, tracker) => (tracker === 'emu' ? IGUAL : SIN_NADA))
+    await abrir([ALIEN])
+    await alResumen(1)
+    await pulsar(casillaTracker('N.O.B.S'))
+    await esperar(() => fila(12).textContent?.includes('No va a N.O.B.S'))
+    expect(incluir('Alien').checked).toBe(false)
+  })
+
+  it('sin eMuwarez, las comprobaciones se rehacen con las normas del primero que queda', async () => {
+    await abrir([DUNE])
+    await alResumen(1)
+    await pulsar(casillaTracker('N.O.B.S'))
+    await pulsar(casillaTracker('eMuwarez'))
+    await esperar(() => boton('Subir (1) a N.O.B.S') && !boton('Subir (1) a N.O.B.S')!.disabled)
+    expect(llamadas('environment').map(c => c[4])).toEqual([undefined, 'nobs'])
+    expect(llamadas('content').map(c => c[4])).toEqual([undefined, 'nobs'])
+    await pulsar(boton('Subir (1) a N.O.B.S'))
+    await esperar(() => m(subidas.queueLote).mock.calls.length)
+    expect(m(subidas.queueLote).mock.calls[0][1]).toEqual(['nobs'])
+  })
+
+  it('el fallo al comprobar con otro tracker no bloquea al volver al que ya estaba comprobado', async () => {
+    m(subidas.runUploadChecks).mockImplementation(async (_id, scope, _p, _a, tracker) => {
+      if (tracker === 'nobs') throw new Error('N.O.B.S no responde')
+      return scope === 'environment' ? ENTORNO : LISTO
+    })
+    await abrir([DUNE])
+    await alResumen(1)
+    await pulsar(casillaTracker('N.O.B.S'))
+    await pulsar(casillaTracker('eMuwarez'))
+    await esperar(() => texto().includes('N.O.B.S no responde'))
+    expect(boton('Subir (1) a N.O.B.S')!.disabled).toBe(true)
+
+    await pulsar(casillaTracker('eMuwarez'))
+    await esperar(() => !texto().includes('N.O.B.S no responde'))
+    expect(boton('Subir (1) a eMuwarez y N.O.B.S')!.disabled).toBe(false)
+    expect(llamadas('environment')).toHaveLength(2)
+  })
+
+  it('lo que llega por una petición de otro tracker va de entrada a ese tracker', async () => {
+    await abrirEntradas([{ item: DUNE, requestId: 77, alcance: { season: null, episode: null }, tracker: 'nobs' }])
+    await alResumen(1)
+    expect(casillaTracker('N.O.B.S').checked).toBe(true)
+    expect(casillaTracker('eMuwarez').checked).toBe(false)
+    expect(boton('Subir (1) a N.O.B.S')).toBeDefined()
+  })
+
+  it('una petición de un tracker que ya no tiene clave no deja el lote sin destino', async () => {
+    m(subidas.fetchTrackersParaSubir).mockResolvedValue([{ id: 'emu', nombre: 'eMuwarez' }])
+    await abrirEntradas([{ item: DUNE, requestId: 77, alcance: { season: null, episode: null }, tracker: 'nobs' }])
+    await alResumen(1)
+    await pulsar(boton('Subir (1)'))
+    await esperar(() => texto().includes('1 de 1 encolada'))
+  })
+
+  it('con peticiones de dos trackers, cada una marca el suyo; la que el suyo no admite, eMuwarez', async () => {
+    await abrirEntradas([
+      { item: DUNE, requestId: 77, alcance: { season: null, episode: null }, tracker: 'nobs' },
+      { item: HEAT, requestId: 78, alcance: { season: null, episode: null }, tracker: 'emu' },
+    ])
+    await alResumen(2)
+    expect(casillaTracker('N.O.B.S').checked).toBe(true)
+    expect(casillaTracker('eMuwarez').checked).toBe(true)
+    await desmontar()
+
+    // N.O.B.S no admite Alien: su petición de allí no la manda allí.
+    await abrirEntradas([{ item: ALIEN, requestId: 79, alcance: { season: null, episode: null }, tracker: 'nobs' }])
+    await alResumen(1)
+    expect(casillaTracker('eMuwarez').checked).toBe(true)
+    expect(casillaTracker('N.O.B.S').checked).toBe(false)
+  })
+
+  describe('lo que eMuwarez no admite y Milnueve sí', () => {
+    const CATALAN = peli(15, 'Catalana', { has_spanish_ok: 0 })
+    const JAPONESA = peli(16, 'Japonesa', { has_spanish_ok: 0 })
+    const EMU_NO = { tracker: 'emu', nombre: 'eMuwarez', permitido: false, motivo: 'Ni el audio (cat) ni los subtítulos (sin detectar) están en castellano.', variante: null }
+    const MNV_NO = { tracker: 'mnv', nombre: 'Milnueve', permitido: false, motivo: 'Milnueve no lo admite.', variante: null }
+
+    beforeEach(() => {
+      m(subidas.fetchTrackersParaSubir).mockResolvedValue([{ id: 'emu', nombre: 'eMuwarez' }, { id: 'mnv', nombre: 'Milnueve' }])
+      m(subidas.fetchElegibilidad).mockImplementation(async id => ({
+        trackers: id === 15 ? [EMU_NO, si('mnv', 'Milnueve')] : id === 16 ? [EMU_NO, MNV_NO] : [si('emu', 'eMuwarez'), si('mnv', 'Milnueve')],
+        capitulos: [],
+      }))
+    })
+
+    it('entra, va solo a Milnueve y se comprueba con sus normas', async () => {
+      await abrir([DUNE, CATALAN, JAPONESA])
+      await esperar(() => !casillaPaso1('Catalana').disabled)
+      expect(casillaPaso1('Catalana').checked).toBe(true)
+      expect(texto()).toContain('Milnueve ✓ · eMuwarez ✗ sin castellano')
+      expect(casillaPaso1('Japonesa').disabled).toBe(true)
+      expect(texto()).toContain('Ningún tracker con clave admite sus idiomas.')
+
+      await alResumen(2)
+      // De entrada, eMuwarez para Dune y Milnueve para la catalana.
+      expect(casillaTracker('eMuwarez').checked).toBe(true)
+      expect(casillaTracker('Milnueve').checked).toBe(true)
+      expect(llamadas('content').map(c => [c[0], c[4]])).toEqual([[11, undefined], [15, 'mnv']])
+      expect(fila(15).textContent).toContain('⚠ Solo a Milnueve')
+      expect(fila(15).textContent).toContain(`⚠ No va a eMuwarez: ${EMU_NO.motivo}`)
+      expect(fila(11).textContent).not.toContain('Solo a')
+      expect(incluir('Catalana').checked).toBe(true)
+
+      await pulsar(boton('Subir (2) a eMuwarez y Milnueve'))
+      await esperar(() => m(subidas.queueLote).mock.calls.length)
+      expect(m(subidas.queueLote).mock.calls[0][1]).toEqual(['emu', 'mnv'])
+    })
+
+    it('volver al paso 1 sin cambiar nada conserva los trackers elegidos; cambiarlo los vuelve a decidir', async () => {
+      await abrir([DUNE, CATALAN])
+      await esperar(() => !casillaPaso1('Catalana').disabled)
+      await alResumen(2)
+      await pulsar(casillaTracker('eMuwarez'))
+      await pulsar(boton('← Volver'))
+      await alResumen(2)
+      expect(casillaTracker('eMuwarez').checked).toBe(false)
+
+      await pulsar(boton('← Volver'))
+      await pulsar(casillaPaso1('Dune'))
+      await alResumen(1)
+      expect(casillaTracker('eMuwarez').checked).toBe(false)
+      expect(casillaTracker('Milnueve').checked).toBe(true)
+      await pulsar(boton('← Volver'))
+      await pulsar(casillaPaso1('Dune'))
+      await alResumen(2)
+      expect(casillaTracker('eMuwarez').checked).toBe(true)
+    })
+
+    it('no deja continuar hasta saber qué admite cada tracker', async () => {
+      const respuesta = diferida<Awaited<ReturnType<typeof subidas.fetchElegibilidad>>>()
+      m(subidas.fetchElegibilidad).mockReturnValueOnce(respuesta.promesa)
+      await abrir([CATALAN])
+      await esperar(() => texto().includes('Mirando qué admite cada tracker'))
+      expect(boton('Continuar (0)')!.disabled).toBe(true)
+      await act(async () => respuesta.resolver({ trackers: [EMU_NO, si('mnv', 'Milnueve')], capitulos: [] }))
+      await esperar(() => !boton('Continuar (1)')!.disabled)
+      expect(texto()).not.toContain('Mirando qué admite')
+    })
+
+    it('tampoco mientras no ha llegado la lista de trackers', async () => {
+      const lista = diferida<Awaited<ReturnType<typeof subidas.fetchTrackersParaSubir>>>()
+      m(subidas.fetchTrackersParaSubir).mockReturnValueOnce(lista.promesa)
+      await abrir([DUNE])
+      expect(boton('Continuar (1)')!.disabled).toBe(true)
+      await act(async () => lista.resolver([]))
+      await esperar(() => !boton('Continuar (1)')!.disabled)
+    })
+
+    it('mientras tanto no se puede cambiar lo marcado', async () => {
+      const respuesta = diferida<Awaited<ReturnType<typeof subidas.fetchElegibilidad>>>()
+      m(subidas.fetchElegibilidad).mockReturnValueOnce(respuesta.promesa)
+      await abrir([DUNE, CATALAN])
+      await esperar(() => texto().includes('Mirando qué admite cada tracker'))
+      expect(casillaPaso1('Dune').disabled).toBe(true)
+      await act(async () => respuesta.resolver({ trackers: [si('emu', 'eMuwarez')], capitulos: [] }))
+      await esperar(() => !casillaPaso1('Dune').disabled)
+    })
+
+    it('sin Milnueve marcado, se comprueba con las de eMuwarez y se salta', async () => {
+      // Milnueve la admite; con las de eMuwarez, falla el castellano.
+      m(subidas.runUploadChecks).mockImplementation(async (id, scope, ...resto) => (scope === 'environment' ? ENTORNO
+        : id === 15 && resto[2] !== 'mnv' ? { ready: false, checks: [{ id: 'spanish', label: 'No tiene castellano', status: 'fail' as const, message: '' }] } : LISTO))
+      await abrir([DUNE, CATALAN])
+      await esperar(() => !casillaPaso1('Catalana').disabled)
+      await alResumen(2)
+      expect(fila(15).textContent).not.toContain('No tiene castellano')
+      await pulsar(casillaTracker('Milnueve'))
+      await esperar(() => fila(15).textContent?.includes('No tiene castellano'))
+      expect(llamadas('content').filter(c => c[0] === 15).map(c => c[4])).toEqual(['mnv', undefined])
+      expect(incluir('Catalana').checked).toBe(false)
+    })
+  })
+
+  it('sin ninguno marcado no se sube', async () => {
+    await abrir([DUNE])
+    await alResumen(1)
+    await pulsar(casillaTracker('eMuwarez'))
+    expect(texto()).toContain('Elige al menos uno.')
+    expect(boton('Subir (1)')!.disabled).toBe(true)
   })
 })

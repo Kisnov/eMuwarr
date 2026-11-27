@@ -20,7 +20,7 @@ export type Consulta = 'nomenclatura' | 'remux' | 'checks' | 'registro'
 
 const AYUDA_NOMENCLATURA = 'Los campos que componen el nombre final del torrent, del archivo y de su título interno.'
 const AYUDA_PISTAS = 'Antes de subir se hace un remux para reordenar las pistas de audio y subtítulos y ponerles el nombre adecuado, siguiendo la prioridad de idioma: Español (Castellano) → Català → Inglés → el resto.'
-const AYUDA_VERIFICACION = 'Las comprobaciones que se hacen antes de subir: que el archivo se pueda renombrar o enlazar, que el directorio de salida sea escribible, y que qBittorrent, el repositorio de imágenes y eMuwarez estén disponibles. Si alguna falla (no las que se omiten), la subida no continúa.'
+const AYUDA_VERIFICACION = 'Las comprobaciones que se hacen antes de subir: que el archivo se pueda enlazar, que el directorio de salida sea escribible, y que qBittorrent, el repositorio de imágenes y eMuwarez (si subes a eMuwarez) estén disponibles. La conexión con N.O.B.S y Milnueve no se comprueba antes: un fallo suyo se ve al subir. Si alguna falla (no las que se omiten), la subida no continúa.'
 
 function Dato({ etiqueta, ayuda, children }: { etiqueta: string; ayuda?: string; children: React.ReactNode }) {
   return (
@@ -133,7 +133,7 @@ export function ResultadoSubida({ job, seeding, retryError, pasos, onStart, onRe
         ))}
         {job.result_url && (
           <a className="btn btn-primary btn-sm dsub-sin-subrayado" href={job.result_url} target="_blank" rel="noreferrer">
-            <ExternalLinkButtonIcon /> Ver en eMuwarez
+            <ExternalLinkButtonIcon /> Ver en {job.tracker_nombre || 'eMuwarez'}
           </a>
         )}
         <RellenarPeticion job={job} />
@@ -160,9 +160,9 @@ export function ResultadoSubida({ job, seeding, retryError, pasos, onStart, onRe
         </Dato>
         <Dato etiqueta="Petición"><PeticionDeSubida job={job} /></Dato>
         {job.result_url && (
-          <Dato etiqueta="Torrent" ayuda="La ficha del torrent en eMuwarez, con su número.">
+          <Dato etiqueta="Torrent" ayuda={`La ficha del torrent en ${job.tracker_nombre || 'eMuwarez'}, con su número.`}>
             <ValueChip linkable>
-              <ExternalIdLink id={job.result_torrent_id ? `#${job.result_torrent_id}` : 'Ver torrent'} href={job.result_url} label="eMuwarez" />
+              <ExternalIdLink id={job.result_torrent_id ? `#${job.result_torrent_id}` : 'Ver torrent'} href={job.result_url} label={job.tracker_nombre || 'eMuwarez'} />
             </ValueChip>
           </Dato>
         )}

@@ -14,6 +14,7 @@ from emuwarez_uploadrr.integrations.base import IntegrationError
 from emuwarez_uploadrr.services import mis_torrents, scheduler
 from emuwarez_uploadrr.services.mis_torrents import resumen, sincronizar
 from emuwarez_uploadrr.services.settings import set_setting
+from emuwarez_uploadrr.services.trackers import TRACKERS
 
 AHORA = datetime(2026, 11, 18, 12, 0)
 
@@ -41,7 +42,7 @@ def tracker(monkeypatch):
     """Lo que devuelve eMuwarez en la próxima lectura, y con qué se pidió."""
     estado = {"torrents": [], "pedido": None}
 
-    def leer(api_key, **kwargs):
+    def leer(api_key, base_url=None, **kwargs):
         estado["pedido"] = kwargs
         if isinstance(estado["torrents"], Exception):
             raise estado["torrents"]
@@ -172,7 +173,8 @@ def test_la_semana_se_cuenta_hasta_la_ultima_lectura_y_sin_fotos_mas_viejas(conn
     sincronizar(conn, AHORA)
     assert resumen(conn)["torrents"][0]["completados_semana"] is None
     # Abrir Estadísticas otro día sin leer de nuevo no mueve el corte: va con la fecha de la lectura.
-    conn.execute("INSERT INTO emu_mis_torrents_dia VALUES (?, 1, 5, 0, 12)",
+    conn.execute("INSERT INTO emu_mis_torrents_dia (dia, torrent_id, seeders, leechers, completados) "
+                 "VALUES (?, 1, 5, 0, 12)",
                  ((AHORA - timedelta(days=7)).strftime("%Y-%m-%d"),))
     conn.commit()
     assert resumen(conn)["torrents"][0]["completados_semana"] == 18
@@ -215,8 +217,8 @@ def test_si_falla_al_escribir_se_deshace_entera(conn, tracker, monkeypatch):
         raise sqlite3.OperationalError("disco lleno")
 
     monkeypatch.setattr(mis_torrents, "set_json_state", falla)
-    with pytest.raises(sqlite3.OperationalError):
-        sincronizar(conn, AHORA)
+    estado, texto = sincronizar(conn, AHORA)
+    assert estado == "failed" and "disco lleno" in texto  # el fallo de este tracker no corta a los demás
     conn.commit()   # lo que haría después el planificador: no debe confirmar nada a medias
     assert [t["torrent_id"] for t in resumen(conn)["torrents"]] == [1, 2]
 
@@ -280,27 +282,27 @@ def _subida(torrent_id=18532, *, terminada="2026-11-19T10:22:17+00:00", estado="
     ({**_subida(), "finished_at": None}, False),
 ], ids=["pendiente", "aprobada", "despues-de-leer", "anonima", "fallida", "sin-id", "sin-fecha"])
 def test_pendiente_de_moderacion(subida, pendiente):
-    assert mis_torrents.pendiente_de_moderacion(subida, (LEIDA, frozenset({18434}))) is pendiente
+    assert mis_torrents.pendiente_de_moderacion(subida, {"emu": (LEIDA, frozenset({18434}))}) is pendiente
 
 
 def test_sin_lectura_nada_esta_pendiente():
-    assert mis_torrents.pendiente_de_moderacion(_subida(), None) is False
+    assert mis_torrents.pendiente_de_moderacion(_subida(), {}) is False
 
 
 def test_un_titulo_con_menos_a_no_la_hace_anonima():
     comando = 'upload.py "/x/Peli -a 2020.mkv" -tk EMU -mt "Peli -a 2020"'
-    assert mis_torrents.pendiente_de_moderacion(_subida(comando=comando), (LEIDA, frozenset())) is True
+    assert mis_torrents.pendiente_de_moderacion(_subida(comando=comando), {"emu": (LEIDA, frozenset())}) is True
 
 
 def test_la_lectura_para_moderacion_es_la_de_tu_usuario(conn, tracker):
-    assert mis_torrents.lectura_para_moderacion(conn) is None
+    assert mis_torrents.lectura_para_moderacion(conn) == {}
     tracker["torrents"] = [_torrent(18434, 3)]
     sincronizar(conn, AHORA)
-    leido_at, ids = mis_torrents.lectura_para_moderacion(conn)
+    leido_at, ids = mis_torrents.lectura_para_moderacion(conn)["emu"]
     assert ids == {18434} and leido_at.tzinfo is not None
     set_setting(conn, "emu.username", "Otro")
     conn.commit()
-    assert mis_torrents.lectura_para_moderacion(conn) is None
+    assert mis_torrents.lectura_para_moderacion(conn) == {}
 
 
 def test_la_lista_de_subidas_marca_la_pendiente(client, auth_headers, conn, tracker):
@@ -317,3 +319,120 @@ def test_la_lista_de_subidas_marca_la_pendiente(client, auth_headers, conn, trac
     lista = {j["id"]: j["pendiente_moderacion"] for j in client.get("/api/uploads", headers=auth_headers).json()}
     assert lista == {filas[0]: False, filas[1]: True}
     assert client.get(f"/api/uploads/{filas[1]}", headers=auth_headers).json()["pendiente_moderacion"] is True
+
+
+def test_una_lectura_corta_frente_al_total_del_tracker_no_se_guarda(conn, tracker, monkeypatch):
+    tracker["torrents"] = [_torrent(i, 1) for i in range(1, 101)]
+    sincronizar(conn, AHORA - timedelta(days=1))
+
+    def cortada(api_key, base_url=None, **kwargs):
+        kwargs["progress"](1, 4, 25, 100)  # el tracker dice 100 y solo han llegado 25
+        return [_torrent(i, 1) for i in range(1, 26)]
+
+    monkeypatch.setattr(mis_torrents, "emu_fetch_all_torrents", cortada)
+    assert sincronizar(conn, AHORA) == ("failed", "La lectura está incompleta (25 de 100 subidas): se conserva la anterior")
+    assert resumen(conn)["totales"]["subidas"] == 100
+
+
+def test_una_pagina_vacia_con_subidas_en_el_total_no_borra_la_lista(conn, tracker, monkeypatch):
+    tracker["torrents"] = [_torrent(i, 1) for i in range(1, 11)]
+    sincronizar(conn, AHORA - timedelta(days=1))
+    monkeypatch.setattr(mis_torrents, "emu_fetch_all_torrents", emu.emu_fetch_all_torrents)
+    monkeypatch.setattr(emu, "request_json", lambda method, url, **kw: {"data": [], "meta": {"total": 10}})
+    assert sincronizar(conn, AHORA)[0] == "failed"
+    assert resumen(conn)["totales"]["subidas"] == 10
+
+
+def test_las_filas_que_no_se_pueden_guardar_no_cuentan_para_el_total(conn, tracker, monkeypatch):
+    tracker["torrents"] = [_torrent(i, 1) for i in range(1, 101)]
+    sincronizar(conn, AHORA - timedelta(days=1))
+
+    def con_filas_rotas(api_key, base_url=None, **kwargs):
+        kwargs["progress"](1, 1, 100, 100)
+        return [_torrent(i, 1) for i in range(1, 81)] + [{"id": str(i), "attributes": {}} for i in range(81, 101)]
+
+    monkeypatch.setattr(mis_torrents, "emu_fetch_all_torrents", con_filas_rotas)
+    assert sincronizar(conn, AHORA) == ("failed", "La lectura está incompleta (80 de 100 subidas): se conserva la anterior")
+    assert resumen(conn)["totales"]["subidas"] == 100
+
+
+def test_una_subida_nueva_mientras_se_pagina_no_tumba_la_lectura(conn, tracker, monkeypatch):
+    def con_una_de_mas(api_key, base_url=None, **kwargs):
+        kwargs["progress"](2, 2, 40, 41)
+        return [_torrent(i, 1) for i in range(1, 41)]
+
+    monkeypatch.setattr(mis_torrents, "emu_fetch_all_torrents", con_una_de_mas)
+    assert sincronizar(conn, AHORA)[0] == "completed"
+
+
+# --- Varios trackers: cada uno con su clave, su URL y su cupo ----------------------------------------------------------
+
+@pytest.fixture
+def varios(conn, monkeypatch):
+    """N.O.B.S y Milnueve con clave y usuario; lo que devuelve cada uno, y con qué se pidió."""
+    for t in ("nobs", "mnv"):
+        set_setting(conn, f"{t}.api_key", f"clave-{t}")
+        set_setting(conn, f"{t}.username", "Kisnov")
+    conn.commit()
+    estado = {"EMU": [_torrent(1, 10)], "NOBS": [_torrent(1, 2), _torrent(2, 0, seeders=0)], "MNV": [_torrent(9, 1)],
+              "pedidos": []}
+
+    def leer(api_key, base_url=None, **kwargs):
+        estado["pedidos"].append((api_key, base_url, kwargs["tracker"], kwargs["uploader"]))
+        if isinstance(estado[kwargs["tracker"]], Exception):
+            raise estado[kwargs["tracker"]]
+        return estado[kwargs["tracker"]]
+
+    monkeypatch.setattr(mis_torrents, "emu_fetch_all_torrents", leer)
+    return estado
+
+
+def test_lee_cada_tracker_con_clave_con_lo_suyo(conn, varios):
+    assert sincronizar(conn, AHORA) == ("completed", "eMuwarez: 1 subidas, 0 sin seeders · N.O.B.S: 2 subidas, "
+                                                     "1 sin seeders · Milnueve: 1 subidas, 0 sin seeders")
+    assert varios["pedidos"] == [("clave", "https://emu-warez.com", "EMU", "Kisnov"),
+                                 ("clave-nobs", "https://nobs.rawsmoke.net", "NOBS", "Kisnov"),
+                                 ("clave-mnv", "https://tracker.milnueve.cc", "MNV", "Kisnov")]
+    nobs = resumen(conn, TRACKERS["nobs"])
+    assert nobs["url"] == "https://nobs.rawsmoke.net" and nobs["totales"]["subidas"] == 2
+    assert [f["torrent_id"] for f in resumen(conn)["torrents"]] == [1] and resumen(conn)["totales"]["completados"] == 10
+
+
+def test_el_fallo_de_un_tracker_no_para_a_los_demas_ni_borra_lo_suyo(conn, varios):
+    sincronizar(conn, AHORA)
+    varios["NOBS"] = IntegrationError("N.O.B.S no responde")
+    varios["MNV"] = [_torrent(9, 5)]
+    estado, texto = sincronizar(conn, AHORA + timedelta(hours=6))
+    assert estado == "failed" and "N.O.B.S: N.O.B.S no responde" in texto and "Milnueve: 1 subidas" in texto
+    assert resumen(conn, TRACKERS["nobs"])["totales"]["subidas"] == 2
+    assert resumen(conn, TRACKERS["mnv"])["torrents"][0]["completados"] == 5
+
+
+def test_una_respuesta_rara_de_un_tracker_no_deja_sin_leer_a_los_siguientes(conn, varios):
+    varios["NOBS"] = ["no es un torrent"]
+    estado, texto = sincronizar(conn, AHORA)
+    assert estado == "failed" and "N.O.B.S: No se pudieron leer tus subidas: error inesperado" in texto
+    assert "Milnueve: 1 subidas" in texto
+    assert resumen(conn, TRACKERS["mnv"])["totales"]["subidas"] == 1
+
+
+def test_un_tracker_sin_usuario_se_salta(conn, varios):
+    set_setting(conn, "mnv.username", "")
+    conn.commit()
+    estado, texto = sincronizar(conn, AHORA)
+    assert estado == "completed" and "Milnueve: Aún no se sabe tu usuario de Milnueve" in texto
+    assert [p[2] for p in varios["pedidos"]] == ["EMU", "NOBS"]
+
+
+def test_la_lectura_para_moderacion_es_por_tracker(conn, varios):
+    sincronizar(conn, AHORA)
+    lecturas = mis_torrents.lectura_para_moderacion(conn)
+    assert {t: ids for t, (_, ids) in lecturas.items()} == {"emu": {1}, "nobs": {1, 2}, "mnv": {9}}
+
+
+def test_el_endpoint_da_las_de_cada_tracker(client, auth_headers, conn, varios):
+    sincronizar(conn)
+    cuerpo = client.get("/api/estadisticas/mis-subidas?tracker=nobs", headers=auth_headers).json()
+    assert cuerpo["url"] == "https://nobs.rawsmoke.net" and cuerpo["totales"]["subidas"] == 2
+    assert client.get("/api/estadisticas/mis-subidas", headers=auth_headers).json()["url"] == "https://emu-warez.com"
+    assert client.get("/api/estadisticas/mis-subidas?tracker=otro", headers=auth_headers).status_code == 422

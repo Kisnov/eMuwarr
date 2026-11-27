@@ -116,6 +116,8 @@ export async function getNomenclatureFields(itemId: number, idiomas?: Record<num
   source_warning?: string | null
   // Una pista de audio sin idioma: el nombre no la incluye hasta elegirlo.
   audio_warning?: string | null
+  // Y bloquea hasta elegirlo en Ver pistas (solo un MKV: los demás no se pueden etiquetar).
+  audio_sin_idioma?: boolean
   source_comparison?: SourceComparison | null
   // MediaInfo apunta a otro source que el nombre o Radarr/Sonarr. Solo avisa.
   source_mismatch_warning?: string | null

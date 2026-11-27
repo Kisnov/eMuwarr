@@ -13,14 +13,17 @@ vi.mock('../../api/estadisticas', () => ({
   guardarObjetivos: vi.fn(),
   // Tus subidas en eMuwarez (MisSubidasEmu) tienen su propia prueba: aquí, sin leer todavía.
   getMisSubidas: vi.fn(() => Promise.resolve({
-    leido_at: null, torrents: [],
+    leido_at: null, url: 'https://emu-warez.com', torrents: [],
     totales: { subidas: 0, seeders: 0, leechers: 0, completados: 0, completados_semana: null, sin_seeders: 0 },
   })),
 }))
 vi.mock('../../api/dashboard', () => ({ getDashboardSummary: vi.fn() }))
+// Los trackers con clave: solo eMuwarez, salvo donde se dice.
+vi.mock('../../api/uploads', () => ({ fetchTrackersParaSubir: vi.fn() }))
 
 import { getDashboardSummary } from '../../api/dashboard'
-import { getEstadisticasCuenta } from '../../api/estadisticas'
+import { getEstadisticasCuenta, getMisSubidas } from '../../api/estadisticas'
+import { fetchTrackersParaSubir } from '../../api/uploads'
 import { SeccionVisible } from '../../context/SeccionVisible'
 import { SyncContext } from '../../context/SyncContext'
 import type { DashboardSummaryResponse, EstadisticasCuenta, PuntoCuenta, RitmosCuenta } from '../../types/api'
@@ -30,6 +33,7 @@ import { EstadisticasPage } from '../EstadisticasPage'
 
 const pedir = vi.mocked(getEstadisticasCuenta)
 const pedirResumen = vi.mocked(getDashboardSummary)
+const pedirTrackers = vi.mocked(fetchTrackersParaSubir)
 
 const resumen = (extra: Partial<DashboardSummaryResponse> = {}): DashboardSummaryResponse => ({
   library_total: 51372, available: 15861, missing: 57, uploading: 0, completed: 0, unique_content: 283,
@@ -52,10 +56,25 @@ beforeEach(() => {
   pedir.mockReset()
   pedirResumen.mockReset()
   pedirResumen.mockResolvedValue(resumen())
+  pedirTrackers.mockReset()
+  pedirTrackers.mockResolvedValue([{ id: 'emu', nombre: 'eMuwarez' }])
 })
 afterEach(desmontar)
 
 describe('EstadisticasPage', () => {
+  it('con otro tracker con clave, se elige de cuál es la evolución y hay unas «Tus subidas» por tracker', async () => {
+    pedirTrackers.mockResolvedValue([{ id: 'emu', nombre: 'eMuwarez' }, { id: 'nobs', nombre: 'N.O.B.S' }])
+    pedir.mockResolvedValue({ dias: 90, ritmos: SIN_RITMOS, puntos: [punto('2026-10-01', { hit_and_runs: 1 })] })
+    await montar(<EstadisticasPage />)
+    await esperar(() => document.querySelector('[aria-label="Tracker de la evolución"]'))
+    await esperar(() => document.querySelectorAll('#est-grupo-mis-subidas, #est-grupo-mis-subidas-nobs').length === 2)
+    expect(vi.mocked(getMisSubidas).mock.calls.map(c => c[0])).toEqual(expect.arrayContaining(['emu', 'nobs']))
+    await pulsar(boton('N.O.B.S'))
+    await esperar(() => pedir.mock.calls.some(c => c[1] === 'nobs'))
+    await esperar(() => texto().includes('H&R en N.O.B.S'))
+    expect(boton('N.O.B.S')!.getAttribute('aria-pressed')).toBe('true')
+  })
+
   it('lleva el objetivo del paso «Estadísticas» del tour', async () => {
     pedir.mockResolvedValue({ dias: 90, ritmos: SIN_RITMOS, puntos: [] })
     await montar(<EstadisticasPage />)
@@ -69,7 +88,8 @@ describe('EstadisticasPage', () => {
     await montar(<EstadisticasPage />)
     await esperar(() => document.querySelector('svg[role="img"]'))
 
-    expect(pedir).toHaveBeenCalledWith(90)
+    expect(pedir).toHaveBeenCalledWith(90, 'emu')
+    expect(document.querySelector('[aria-label="Tracker de la evolución"]')).toBeNull()  // solo eMuwarez: sin selector
     const graficos = [...document.querySelectorAll('svg[role="img"]')]
     expect(graficos.map(g => g.querySelector('title')!.textContent)).toEqual(
       ['Subido y bajado', 'Ratio', 'Bonus', 'Buffer', 'Seeding y leeching'])
@@ -234,7 +254,7 @@ describe('EstadisticasPage', () => {
 
     await pulsar(boton('365 días'))
     await esperar(() => pedir.mock.calls.length === 2)
-    expect(pedir).toHaveBeenLastCalledWith(365)
+    expect(pedir).toHaveBeenLastCalledWith(365, 'emu')
     expect(boton('365 días')!.getAttribute('aria-pressed')).toBe('true')
     expect(boton('90 días')!.getAttribute('aria-pressed')).toBe('false')
   })
@@ -295,6 +315,9 @@ describe('EstadisticasPage', () => {
     await montar(<EstadisticasPage />)
     await esperar(() => texto().includes('Todavía no hay datos'))
     expect(texto()).toContain('Se empieza a guardar hoy')
+    // La tarea «Leer tu cuenta» se cambia en Tareas: el aviso no da un plazo fijo.
+    expect(texto()).toContain('la tarea «Leer tu cuenta»')
+    expect(texto()).not.toContain('como mucho en una hora')
     expect(document.querySelector('svg[role="img"]')).toBeNull()
   })
 

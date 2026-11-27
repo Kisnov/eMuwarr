@@ -2,13 +2,13 @@
 
 ## Versiones con soporte
 
-Solo la última: la rama `main` y la imagen de [emuwarez-uploadrr](https://github.com/Kisnov/emuwarez-uploadrr) que
+Solo la última: la rama `main` y la imagen de [eMuwarr](https://github.com/Kisnov/eMuwarr) que
 la incluye. No se mantienen versiones antiguas.
 
 ## Cómo informar de una vulnerabilidad
 
-Usa el informe privado de GitHub: pestaña **Security** de este repositorio, **Report a vulnerability**
-(<https://github.com/Kisnov/Uploadrr-EMU/security/advisories/new>).
+Usa el informe privado de GitHub: pestaña **Security** de eMuwarr (donde vive ahora este código), **Report a vulnerability**
+(<https://github.com/Kisnov/eMuwarr/security/advisories/new>).
 
 No abras un issue público ni publiques el detalle (ni un ejemplo que funcione) antes de que haya arreglo.
 
@@ -17,7 +17,7 @@ quita las claves antes.
 
 ## Qué cuenta
 
-Solo el camino de eMuwarez (tracker `EMU`). Es el que usa [emuwarez-uploadrr](https://github.com/Kisnov/emuwarez-uploadrr)
+Solo el camino de eMuwarez (tracker `EMU`). Es el que usa [eMuwarr](https://github.com/Kisnov/eMuwarr)
 y el que se mantiene. El resto de trackers (BLU, ACM, AITHER, PTP…) es código heredado: no se revisa salvo que el fallo
 afecte a una subida a eMuwarez.
 

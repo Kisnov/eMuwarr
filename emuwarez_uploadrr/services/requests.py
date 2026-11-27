@@ -12,7 +12,7 @@ import unicodedata
 import urllib.parse
 from typing import Optional, Sequence
 
-from ..database import borrar_peticiones, get_json_state, get_setting_canonical, get_state, set_state
+from ..database import borrar_peticiones, get_json_state, get_state, set_state
 from .settings import leer_ajuste
 from . import cli_config, emu_catalog
 from .emu_perfil import PERFIL_STATE_KEY
@@ -24,6 +24,8 @@ from .request_readiness import _biblioteca, refresh_request_readiness
 from .eventos import EVENTO_SYNC_EMPEZADA, EVENTO_SYNC_TERMINADA, publicar
 from .tasks import start_task, finish_task
 from .tmdb_titles import tmdb_configured
+from .trackers import EMU, TRACKERS, Tracker, tiene_clave
+from .settings import ajuste_de_tracker
 from .compatibility import (
     match_request_to_library,
     classify_request_match,
@@ -31,13 +33,15 @@ from .compatibility import (
     peor_resolucion,
     peor_source,
     reclamada_por,
+    usuario_en,
     tipo_de_peticion,
 )
 
 logger = logging.getLogger("emuwarez.requests")
 
 SYNC_STATE_KEY = "last_emu_requests_sync_utc"
-# «1» si el último recorrido cuadró con el total de eMuwarez: solo con esa base se sabe cuáles son nuevas.
+# «1» si el último recorrido cuadró con el total del tracker: solo con esa base se sabe cuáles son nuevas. Una por
+# tracker (emu_catalog._clave: la de siempre para eMuwarez, con su id detrás para los demás).
 SYNC_COMPLETA_KEY = "last_emu_requests_sync_complete"
 MIN_SYNC_SECONDS = 3600
 
@@ -88,18 +92,19 @@ def get_request_sync_status(conn: sqlite3.Connection) -> dict:
 
 
 def upsert_request(
-    conn: sqlite3.Connection, item: RequestItem, *, seen_at: Optional[str] = None, commit: bool = True
+    conn: sqlite3.Connection, item: RequestItem, *, seen_at: Optional[str] = None, commit: bool = True,
+    tracker: Tracker = EMU,
 ) -> int:
-    """Inserta o actualiza una petición. `seen_at` marca cuándo la vio la sincronización
+    """Inserta o actualiza una petición de `tracker`. `seen_at` marca cuándo la vio la sincronización
     y `commit=False` deja la transacción abierta, para guardar varias de golpe."""
     conn.execute(
         """
         INSERT INTO request_items(
-            emu_id, title, category, requested_source, requested_resolution,
+            tracker, emu_id, title, category, requested_source, requested_resolution,
             emu_status, points, comments, created_at, tmdb_id, imdb_id, tvdb_id, mal_id, url,
             author, author_visible, req_scope, req_season, req_episode, raw_json, last_seen_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-        ON CONFLICT(emu_id) DO UPDATE SET
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+        ON CONFLICT(tracker, emu_id) DO UPDATE SET
             title = excluded.title,
             category = excluded.category,
             requested_source = excluded.requested_source,
@@ -130,14 +135,15 @@ def upsert_request(
             updated_at = CURRENT_TIMESTAMP
         """,
         (
-            item.emu_id, item.title, item.category, item.requested_source,
+            tracker.id, item.emu_id, item.title, item.category, item.requested_source,
             item.requested_resolution, item.emu_status, item.points, item.comments,
             item.created_at, item.tmdb_id, item.imdb_id, item.tvdb_id, item.mal_id, item.url, item.author,
             1 if item.author_visible else 0, item.req_scope, item.req_season, item.req_episode, item.raw_json,
             seen_at,
         ),
     )
-    row = conn.execute("SELECT id FROM request_items WHERE emu_id = ?", (item.emu_id,)).fetchone()
+    row = conn.execute("SELECT id FROM request_items WHERE tracker = ? AND emu_id = ?",
+                       (tracker.id, item.emu_id)).fetchone()
     if commit:
         conn.commit()
     return int(row["id"])
@@ -156,7 +162,7 @@ def _resolve_emu_api_key(conn: sqlite3.Connection) -> Optional[str]:
     El respaldo se lee con services/cli_config, no con legacy.load_app_config:
     aquella podía terminar en SystemExit o pidiendo una contraseña por teclado
     desde el hilo del servidor. Ver la cabecera de cli_config.py."""
-    key = get_setting_canonical(conn, "emu.api_key")
+    key = ajuste_de_tracker(conn, "api_key")
     if key:
         return key
     return cli_config.emu_api_key()
@@ -201,8 +207,9 @@ def sync_emu_requests(
 # Progreso de la sincronización de peticiones, para que la interfaz enseñe la barra y no tenga una petición HTTP
 # colgada durante minutos. Un solo proceso: un dict en memoria basta, igual que en el catálogo (emu_catalog).
 _PROGRESO_LOCK = threading.Lock()
+# `error_otros`: lo que falló al leer las peticiones de otro tracker (lo de los demás vale igual).
 _PROGRESO: dict = {"active": False, "done": False, "phase": "", "page": 0, "total_pages": None,
-                   "imported": 0, "message": "", "error": None}
+                   "imported": 0, "message": "", "error": None, "error_otros": None}
 
 
 def get_request_sync_progress() -> dict:
@@ -219,7 +226,7 @@ def _sincronizar_peticiones(conn: sqlite3.Connection) -> dict[str, int | str]:
     """Una sincronización, con su progreso y sus avisos: es el único sitio donde corre, la arranque quien la
     arranque (el botón, la tarea programada o el CLI)."""
     _set_progress(active=True, done=False, phase="Iniciando…", page=0, total_pages=None, imported=0, message="",
-                  error=None)
+                  error=None, error_otros=None)
     publicar(EVENTO_SYNC_EMPEZADA, {"que": "peticiones"})
     try:
         result = _importar_peticiones(conn)
@@ -277,7 +284,7 @@ def start_requests_sync_background(force: bool = False) -> dict:
             raise IntegrationError("No hay API key de eMuwarez configurada")
         # Activa antes de que el hilo arranque: la interfaz la sigue desde que esta respuesta llega.
         _set_progress(active=True, done=False, phase="Iniciando…", page=0, total_pages=None, imported=0, message="",
-                      error=None)
+                      error=None, error_otros=None)
         try:
             threading.Thread(target=_run, daemon=True).start()
         except Exception:
@@ -310,30 +317,40 @@ def _importar_peticiones(conn: sqlite3.Connection) -> dict[str, int | str]:
         set_state(conn, SYNC_STATE_KEY, prev_sync or "")
         conn.commit()
 
-    # Sin un recorrido previo completo (la primera vez, o tras uno cortado) todo lo que llega ya estaba ahí: no se avisa.
-    conocidas = ({r[0] for r in conn.execute("SELECT emu_id FROM request_items")}
-                 if get_state(conn, SYNC_COMPLETA_KEY) == "1" else None)
-
     logger.info("Sincronización de peticiones iniciada")
     try:
-        _set_progress(phase="Descargando peticiones…")
-        raw_items, total = emu.emu_fetch_all_pages(
-            api_key, progress=lambda pagina, ultima, filas: _set_progress(page=pagina, total_pages=ultima, imported=filas))
-        items = emu.normalize_requests(raw_items)
-        _set_progress(phase="Guardando peticiones…", imported=len(items))
-        sync_at = _utcnow().isoformat()
-        for item in items:
-            upsert_request(conn, item, seen_at=sync_at, commit=False)
-        if conocidas is not None:
-            conn.executemany("UPDATE request_items SET aviso_pendiente = 1 WHERE emu_id = ?",
-                             [(i.emu_id,) for i in items if i.emu_id not in conocidas])
-        # Solo un recorrido que cuadra con el total de eMuwarez dice cuáles ya no están abiertas.
-        complete = total is not None and len(items) == total == len({i.emu_id for i in items})
-        if complete:
-            set_state(conn, SYNC_COMPLETA_KEY, "1")  # un recorrido cortado después no quita la base que ya había
-        else:
-            logger.warning("El recorrido de peticiones no cuadra con el total de eMuwarez; no se borra ninguna")
-        removed = borrar_peticiones(conn, "last_seen_at IS NULL OR last_seen_at != ?", (sync_at,)) if complete else 0
+        # eMuwarez y luego cada otro tracker con clave, de uno en uno: el fallo de uno no frena a los demás ni borra
+        # sus peticiones.
+        otros = [t for t in TRACKERS.values() if t is not EMU and tiene_clave(conn, t)]
+        # Las de un tracker cuya clave se ha quitado ya no se pueden refrescar: se borran.
+        sin_clave = [t for t in TRACKERS.values() if t is not EMU and t not in otros]
+        removed_sin_clave = sum(borrar_peticiones(conn, "tracker = ?", (t.id,)) for t in sin_clave)
+        for t in sin_clave:
+            # Sin base: al volver a poner la clave, sus peticiones no son nuevas y no se avisa de todas.
+            if get_state(conn, emu_catalog._clave(SYNC_COMPLETA_KEY, t)) == "1":
+                set_state(conn, emu_catalog._clave(SYNC_COMPLETA_KEY, t), "")
+        conn.commit()  # el fallo de un tracker que sí tiene clave no la deshace
+        error_emu = None
+        try:
+            imported, removed = _leer_peticiones_de(conn, EMU, api_key)
+        except Exception as exc:
+            if not otros:
+                raise
+            conn.rollback()
+            error_emu, imported, removed = exc, 0, 0
+        removed += removed_sin_clave
+        fallos: list[str] = []
+        for tracker in otros:
+            try:
+                n, r = _leer_peticiones_de(conn, tracker, ajuste_de_tracker(conn, "api_key", tracker.id))
+                imported, removed = imported + n, removed + r
+            except Exception as exc:  # noqa: BLE001 — se cuenta en el progreso y en la tarea
+                conn.rollback()
+                # Los errores de la API ya dicen de qué tracker son.
+                texto = texto_de_error(exc)
+                fallos.append(texto if tracker.nombre in texto else f"{tracker.nombre}: {texto}")
+                logger.warning("No se pudieron sincronizar las peticiones de %s: %s", tracker.nombre, texto_de_error(exc))
+        _set_progress(error_otros="; ".join(fallos) or None)
         set_state(conn, SYNC_STATE_KEY, _utcnow().isoformat())
         conn.commit()
         _set_progress(phase="Cruzando con tu biblioteca…")
@@ -352,17 +369,22 @@ def _importar_peticiones(conn: sqlite3.Connection) -> dict[str, int | str]:
         except Exception:
             conn.rollback()
             logger.exception("No se pudieron traer los pósters de TMDb")
-        summary = f"{len(items)} peticiones importadas, {matched} cruces"
+        # eMuwarez falló pero los demás se leyeron: la sincronización falla como siempre, sin perder lo de los demás.
+        if error_emu is not None:
+            raise error_emu
+        summary = f"{imported} peticiones importadas, {matched} cruces"
         if removed:
             summary += f", {removed} retiradas"
         if sin_preparar is None:
             summary += ", preparación sin calcular (ver el log)"
         elif sin_preparar:
             summary += f", {sin_preparar} sin preparación (ver el log)"
+        if fallos:
+            summary += f". {'; '.join(fallos)}"
         finish_task(conn, task_id, TaskStatus.COMPLETED.value, summary)
         logger.info("Sincronización de peticiones terminada: %d importadas, %d retiradas, %d cruzadas con tu biblioteca",
-                    len(items), removed, matched)
-        return {"status": "ok", "imported": len(items), "matched": matched, "removed": removed}
+                    imported, removed, matched)
+        return {"status": "ok", "imported": imported, "matched": matched, "removed": removed}
     except IntegrationError as exc:
         _restore_throttle()
         finish_task(conn, task_id, TaskStatus.FAILED.value, texto_de_error(exc))
@@ -373,6 +395,46 @@ def _importar_peticiones(conn: sqlite3.Connection) -> dict[str, int | str]:
         finish_task(conn, task_id, TaskStatus.FAILED.value, texto_de_error(exc))
         logger.error("Sincronización de peticiones fallida: %s", texto_de_error(exc))
         raise
+
+
+def _leer_peticiones_de(conn: sqlite3.Connection, tracker: Tracker, api_key: str) -> tuple[int, int]:
+    """Lee y guarda las peticiones abiertas de `tracker`, con su URL y su cupo de la API; borra las suyas que ya no
+    están solo tras un recorrido completo. Devuelve (importadas, retiradas). Si falla, no ha hecho commit."""
+    nombre = tracker.nombre
+    # Sin un recorrido previo completo (la primera vez, o tras uno cortado) todo lo que llega ya estaba ahí: no se avisa.
+    conocidas = ({r[0] for r in conn.execute("SELECT emu_id FROM request_items WHERE tracker = ?", (tracker.id,))}
+                 if get_state(conn, emu_catalog._clave(SYNC_COMPLETA_KEY, tracker)) == "1" else None)
+    _set_progress(phase="Descargando peticiones…" if tracker is EMU else f"Descargando peticiones de {nombre}…",
+                  page=0, total_pages=None)
+    url = tracker.url
+    raw_items, total = emu.emu_fetch_all_pages(
+        api_key, url, progress=lambda pagina, ultima, filas: _set_progress(page=pagina, total_pages=ultima, imported=filas),
+        tracker=tracker.uploadrr, nombre=nombre)
+    items = emu.normalize_requests(raw_items, tracker.uploadrr, url)
+    _set_progress(phase="Guardando peticiones…", imported=len(items))
+    sync_at = _utcnow().isoformat()
+    for item in items:
+        upsert_request(conn, item, seen_at=sync_at, commit=False, tracker=tracker)
+    if conocidas is not None:
+        conn.executemany("UPDATE request_items SET aviso_pendiente = 1 WHERE tracker = ? AND emu_id = ?",
+                         [(tracker.id, i.emu_id) for i in items if i.emu_id not in conocidas])
+    # Solo un recorrido que cuadra con el total del tracker dice cuáles ya no están abiertas.
+    complete = total is not None and len(items) == total == len({i.emu_id for i in items})
+    if complete:
+        # Un recorrido cortado después no quita la base que ya había.
+        set_state(conn, emu_catalog._clave(SYNC_COMPLETA_KEY, tracker), "1")
+    else:
+        logger.warning("El recorrido de peticiones no cuadra con el total de %s; no se borra ninguna", nombre)
+    # Las de otro tracker no salen en este recorrido: no se borran por no estar en él.
+    removed = borrar_peticiones(conn, "tracker = ? AND (last_seen_at IS NULL OR last_seen_at != ?)",
+                                (tracker.id, sync_at)) if complete else 0
+    conn.commit()
+    return len(items), removed
+
+
+def _otro_tracker(tracker_id: Optional[str]) -> str:
+    """El nombre del tracker de una petición que no es de eMuwarez; vacío para eMuwarez, que es lo de siempre."""
+    return "" if tracker_id in (None, EMU.id) else TRACKERS[tracker_id].nombre
 
 
 _MAX_TITULOS_EN_EL_AVISO = 5
@@ -396,18 +458,21 @@ def _avisar_peticiones_nuevas_listas(conn: sqlite3.Connection) -> None:
     en la siguiente. Best-effort: un fallo aquí no tumba la sincronización."""
     try:
         filas = conn.execute(
-            "SELECT title, readiness_status FROM request_items WHERE aviso_pendiente = 1 ORDER BY created_at, id"
+            "SELECT title, tracker, readiness_status FROM request_items WHERE aviso_pendiente = 1 "
+            "ORDER BY created_at, id"
         ).fetchall()
         # Apagadas antes de avisar: si el aviso falla a medias, mejor ninguno que el mismo cada día.
         conn.execute("UPDATE request_items SET aviso_pendiente = 0 "
                      "WHERE aviso_pendiente = 1 AND readiness_status IS NOT NULL")
         conn.commit()
-        titulos = [r["title"] for r in filas if r["readiness_status"] == "ready_to_upload"]
+        titulos = [(r["title"], _otro_tracker(r["tracker"])) for r in filas if r["readiness_status"] == "ready_to_upload"]
         if not titulos:
             return
         from .notification_center import emit
         # El título lo escribe cualquier usuario del tracker: un «@everyone» no debe avisar a todo el canal de Discord.
-        primeros = ", ".join(f"«{t.replace('@', '@' + chr(0x200b))}»" for t in titulos[:_MAX_TITULOS_EN_EL_AVISO])
+        # De otro tracker, su nombre detrás: «Dune» (N.O.B.S).
+        primeros = ", ".join(f"«{t.replace('@', '@' + chr(0x200b))}»" + (f" ({otro})" if otro else "")
+                             for t, otro in titulos[:_MAX_TITULOS_EN_EL_AVISO])
         resto = len(titulos) - _MAX_TITULOS_EN_EL_AVISO
         cuerpo = (f"Hay una petición nueva que ya puedes rellenar: {primeros}." if len(titulos) == 1 else
                   f"Hay {len(titulos)} peticiones nuevas que ya puedes rellenar: {primeros}"
@@ -526,6 +591,12 @@ def _pack_blocked_reason(conn: sqlite3.Connection, matched_item: dict, req: dict
     if not row:
         return None
     season = dict(row)
+    tracker = req.get("tracker") or EMU.id
+    if tracker != EMU.id and season.get("has_spanish_ok") == 0:
+        from .reglas_tracker import reglas_para_subir
+        # En otro tracker lo que vale es lo que admiten sus normas (latino, catalán…), no el castellano de eMuwarez.
+        if reglas_para_subir(conn, season, tracker).permitido:
+            season["has_spanish_ok"] = 1
     if can_pack_from_rollup(season):
         return None
     if not season.get("video_codec"):
@@ -624,22 +695,41 @@ def _effective_target(conn: sqlite3.Connection, matched_item: dict, req: dict) -
 _ORDEN_DEL_CASAMIENTO = {"Compatible": 0, "No disponible": 1, "Parcial": 2, "No compatible": 3}
 
 
+# Tu usuario en el tracker de la fila `ri`, en minúsculas, para comparar en SQL: un `?` por tracker (_mi_usuario_params).
+_MI_USUARIO_SQL = "CASE ri.tracker " + " ".join(f"WHEN '{t}' THEN ?" for t in TRACKERS) + " ELSE '' END"
+
+
+def _mi_usuario_params(mi_usuario: dict[str, str]) -> list[str]:
+    return [(mi_usuario.get(t) or "").strip().lower() for t in TRACKERS]
+
+
 def mi_usuario_emu(conn: sqlite3.Connection) -> Optional[str]:
     """Tu usuario de eMuwarez sin llamar a la API: el del perfil guardado (emu_perfil) y, si aún no hay, el de
     Ajustes. Sirve para saber si una petición reclamada la has reclamado tú."""
     perfil = (get_json_state(conn, PERFIL_STATE_KEY) or {}).get("perfil") or {}
-    return perfil.get("username") or get_setting_canonical(conn, "emu.username") or None
+    return perfil.get("username") or ajuste_de_tracker(conn, "username") or None
+
+
+def usuarios_de_ajustes(conn: sqlite3.Connection) -> dict[str, str]:
+    """Tu usuario en cada tracker, por su id, tal como está guardado: el de eMuwarez es el de Configuración; el de
+    los demás lo guarda la lectura de su perfil. Con él se sabe qué peticiones son tuyas («(Yo)», «Mis peticiones»)."""
+    return {t.id: ajuste_de_tracker(conn, "username", t.id) or "" for t in TRACKERS.values()}
+
+
+def mis_usuarios(conn: sqlite3.Connection) -> dict[str, str]:
+    """Lo mismo para saber qué peticiones has reclamado tú: en eMuwarez manda el del perfil leído (mi_usuario_emu)."""
+    return {**usuarios_de_ajustes(conn), EMU.id: mi_usuario_emu(conn) or ""}
 
 
 def clasificar_peticion(
     conn: sqlite3.Connection, req: dict, item: dict, *, id_match: bool = False, title_match: bool = False,
-    base_confidence: float = 0.90, mi_usuario: Optional[str] = None,
+    base_confidence: float = 0.90, mi_usuario: "dict[str, str] | str | None" = None,
 ) -> tuple[dict, dict]:
     """(fila con lo que de verdad tiene lo pedido, clasificación). Es LA definición de «compatible»: la usan el cruce
     guardado, el detalle y «lista para subir», para que la lista, el Panel y los avisos digan lo mismo que la ficha."""
     efectiva = _effective_target(conn, item, req)
     if mi_usuario is None:
-        mi_usuario = mi_usuario_emu(conn)
+        mi_usuario = mis_usuarios(conn)
     cls = classify_request_match(req, efectiva, id_match=id_match, title_match=title_match,
                                  base_confidence=base_confidence, mi_usuario=mi_usuario)
     # Una petición de temporada o serie completa se cubre con un PACK. Si ese pack no puede armarse (los capítulos no
@@ -654,7 +744,7 @@ def clasificar_peticion(
 
 
 def _mejor_candidato(
-    conn: sqlite3.Connection, req: dict, candidates: list[dict], mi_usuario: Optional[str] = None,
+    conn: sqlite3.Connection, req: dict, candidates: list[dict], mi_usuario: "dict[str, str] | str | None" = None,
 ) -> tuple[dict, dict]:
     """De los candidatos igual de seguros (la misma película en Radarr y en Radarr 4K) el que mejor atiende la
     petición, con su clasificación: el primero de la lista podía ser la copia de 1080p de una petición de 2160p."""
@@ -675,7 +765,7 @@ _INSERTAR_CASAMIENTO = """
 
 
 def _casar(
-    conn: sqlite3.Connection, req: dict, library: list[dict], mi_usuario: Optional[str] = None,
+    conn: sqlite3.Connection, req: dict, library: list[dict], mi_usuario: "dict[str, str] | str | None" = None,
 ) -> Optional[tuple]:
     """(petición, candidata, clasificación, fila a la que va el estado) o None si no casa con nada. Solo lee."""
     candidates = match_request_to_library(req, library)
@@ -759,7 +849,7 @@ def _cruzar_todas(conn: sqlite3.Connection) -> tuple[int, set[int]]:
     antes = _compatible_request_ids(conn)
     requests = [dict(r) for r in conn.execute("SELECT * FROM request_items").fetchall()]
     library = _biblioteca(conn)
-    usuario = mi_usuario_emu(conn) or ""
+    usuario = mis_usuarios(conn)
     casamientos = [c for c in (_casar(conn, req, library, usuario) for req in requests) if c]
     _guardar_casamientos(conn, casamientos)
     return len(casamientos), _compatible_request_ids(conn) - antes
@@ -816,10 +906,11 @@ def _notify_new_compatible_matches(conn: sqlite3.Connection, new_ids: set[int]) 
             return
         for rid in new_ids:
             row = conn.execute(
-                "SELECT title, url, req_scope, req_season, req_episode"
+                "SELECT title, url, tracker, req_scope, req_season, req_episode"
                 " FROM request_items WHERE id = ?", (rid,)
             ).fetchone()
             title = (row["title"] if row else None) or f"Petición #{rid}"
+            otro = _otro_tracker(row["tracker"]) if row else ""
             # request_items has neither a poster of its own nor a title that
             # says WHICH season or episode was asked for — both come from the
             # library item behind the very 'Compatible' match this
@@ -845,7 +936,7 @@ def _notify_new_compatible_matches(conn: sqlite3.Connection, new_ids: set[int]) 
             emit(
                 conn, "request_match_found",
                 "Contenido compatible",
-                "Tienes contenido compatible con esta petición.",
+                f"Tienes contenido compatible con esta petición{f' de {otro}' if otro else ''}.",
                 link=(row["url"] if row and row["url"] else "/requests"),
                 level="info",
                 entity_type="request_item",
@@ -937,7 +1028,7 @@ def list_request_items(
     if search:
         where_clauses.append("ri.title LIKE ?")
         params.append(f"%{search}%")
-    mi_usuario = mi_usuario_emu(conn) or ""
+    mi_usuario = mis_usuarios(conn)
     if status:
         # Mirrors compatibility.estado_emu_de() — a request with zero
         # library candidates has no request_matches row at all, but can still
@@ -949,10 +1040,10 @@ def list_request_items(
                 rm.status,
                 CASE
                     WHEN LOWER(COALESCE(ri.emu_status,'')) LIKE '%reclam%' OR LOWER(COALESCE(ri.emu_status,'')) LIKE '%claim%' THEN
-                        CASE WHEN ? != '' AND LOWER(TRIM(COALESCE(CASE WHEN json_valid(ri.raw_json) THEN
+                        CASE WHEN {_MI_USUARIO_SQL} != '' AND LOWER(TRIM(COALESCE(CASE WHEN json_valid(ri.raw_json) THEN
                                 COALESCE(json_extract(ri.raw_json, '$.claimed_by.username'),
                                          json_extract(ri.raw_json, '$.claimed_by.name'),
-                                         json_extract(ri.raw_json, '$.claimed_by')) END, ''))) = ?
+                                         json_extract(ri.raw_json, '$.claimed_by')) END, ''))) = {_MI_USUARIO_SQL}
                              THEN 'Sin coincidencia' ELSE 'Reclamado' END
                     WHEN LOWER(COALESCE(ri.emu_status,'')) LIKE '%pend%' THEN 'Pendiente'
                     -- "Sin llenar" = petición abierta: no es un override, y
@@ -970,7 +1061,7 @@ def list_request_items(
                 END
             ) IN ({','.join('?' * len(status))})
         """)
-        params.extend([mi_usuario.strip().lower()] * 2 + list(status))
+        params.extend(_mi_usuario_params(mi_usuario) * 2 + list(status))
     en("ri.category", category)
     pedido("ri.requested_resolution", resolution)
     pedido("ri.requested_source", source)
@@ -1053,7 +1144,7 @@ def list_request_items(
 def get_request_item(conn: sqlite3.Connection, request_id: int) -> Optional[dict]:
     """Return a single request_item dict (no match info)."""
     row = conn.execute("SELECT * FROM request_items WHERE id = ?", (request_id,)).fetchone()
-    return _safe_request_dict(dict(row), mi_usuario_emu(conn) or "") if row else None
+    return _safe_request_dict(dict(row), mis_usuarios(conn)) if row else None
 
 
 # ---------------------------------------------------------------------------
@@ -1061,7 +1152,7 @@ def get_request_item(conn: sqlite3.Connection, request_id: int) -> Optional[dict
 # ---------------------------------------------------------------------------
 
 _CAMPOS_DE_LA_FICHA = (
-    "ri.id AS peticion_id, ri.title, ri.author, ri.author_visible, ri.points, ri.url, ri.emu_status, "
+    "ri.id AS peticion_id, ri.tracker, ri.title, ri.author, ri.author_visible, ri.points, ri.url, ri.emu_status, "
     "ri.created_at, ri.req_scope, ri.req_season, ri.req_episode"
 )
 
@@ -1083,7 +1174,7 @@ def _url_publica(url: Optional[str]) -> Optional[str]:
     return urllib.parse.urlunsplit((partes.scheme, partes.netloc.rpartition("@")[2], partes.path, "", ""))
 
 
-def _resumen_para_la_ficha(fila: dict, mi_usuario: str) -> dict:
+def _resumen_para_la_ficha(fila: dict, mi_usuario: dict[str, str]) -> dict:
     """Lo que la ficha enseña de una petición. El autor, solo si eMuwarez lo deja ver (la misma regla que
     `_safe_request_dict`): una petición anónima no tiene autor que enseñar."""
     autor = (fila.get("author") or "").strip() if fila.get("author_visible") else ""
@@ -1091,7 +1182,7 @@ def _resumen_para_la_ficha(fila: dict, mi_usuario: str) -> dict:
         "id": int(fila["peticion_id"]),
         "title": fila.get("title"),
         "author": autor or None,
-        "is_mine": bool(autor and mi_usuario and autor.lower() == mi_usuario.strip().lower()),
+        "is_mine": bool(autor and autor.lower() == usuario_en(mi_usuario, fila)),
         "points": fila.get("points"),
         "url": _url_publica(fila.get("url")),
         "emu_status": fila.get("emu_status"),
@@ -1149,9 +1240,10 @@ def peticiones_heredadas(conn: sqlite3.Connection, ids: list[int]) -> dict[int, 
     return heredadas
 
 
-def peticion_que_enlazar(conn: sqlite3.Connection, item_id: int) -> Optional[int]:
-    """La petición abierta que enlazaría una subida de esta fila sin que nadie la elija (un lote desde Biblioteca),
-    o None si no hay ninguna o hay más de una (ambiguo: mejor sin enlazar que enlazar la que no es).
+def peticion_que_enlazar(conn: sqlite3.Connection, item_id: int, tracker: str = EMU.id) -> Optional[int]:
+    """La petición abierta de `tracker` que enlazaría una subida de esta fila a ese tracker sin que nadie la elija (un
+    lote desde Biblioteca), o None si no hay ninguna o hay más de una (ambiguo: mejor sin enlazar que enlazar la que
+    no es).
 
     Las mismas reglas que el resto: una petición cuenta si su cruce guardado es «Compatible» (las que el Panel ofrece
     en «Listo para subir» con su `rec_request_id`), y es de esta fila si la fila a la que va (`_scoped_library_id`)
@@ -1177,10 +1269,10 @@ def peticion_que_enlazar(conn: sqlite3.Connection, item_id: int) -> Optional[int
             FROM request_matches rm
             JOIN request_items ri ON ri.id = rm.request_item_id
             JOIN library_items li ON li.id = rm.library_item_id
-            WHERE rm.library_item_id IN ({marcas}) AND rm.status = 'Compatible'
+            WHERE rm.library_item_id IN ({marcas}) AND rm.status = 'Compatible' AND ri.tracker = ?
               AND rm.id = (SELECT rm2.id FROM request_matches rm2 WHERE rm2.request_item_id = ri.id
                            ORDER BY rm2.confidence DESC LIMIT 1)""",
-        linea,
+        (*linea, tracker),
     ).fetchall()
     por_nivel: dict[int, set[int]] = {}
     for c in candidatas:
@@ -1205,7 +1297,7 @@ def peticiones_de_la_ficha(conn: sqlite3.Connection, fila: dict) -> dict:
 
     `peticiones_debajo`: en una serie o una temporada, las que guardan sus temporadas y capítulos (una serie con
     una petición por temporada), en orden. Solo para la ficha: son unas pocas consultas por elemento."""
-    mi_usuario = mi_usuario_emu(conn) or ""
+    mi_usuario = mis_usuarios(conn)
 
     def leer(peticion_id) -> Optional[dict]:
         if peticion_id is None:
@@ -1307,7 +1399,7 @@ def get_request_detail(conn: sqlite3.Connection, request_id: int) -> Optional[di
     req_row = conn.execute("SELECT * FROM request_items WHERE id = ?", (request_id,)).fetchone()
     if not req_row:
         return None
-    mi_usuario = mi_usuario_emu(conn) or ""
+    mi_usuario = mis_usuarios(conn)
     result = _safe_request_dict(dict(req_row), mi_usuario)
     # El de TMDb ('' = no tiene); el de la biblioteca, si hay cruce con póster, va delante.
     result["poster_url"] = result.get("tmdb_poster_url") or None
@@ -1484,7 +1576,7 @@ def normalize_title(value: str | None) -> str:
     return re.sub(r"\s+", " ", value).strip()
 
 
-def _safe_request_dict(d: dict, mi_usuario: Optional[str] = None) -> dict:
+def _safe_request_dict(d: dict, mi_usuario: "dict[str, str] | str | None" = None) -> dict:
     """Remove author info if author_visible=0.
 
     Also fills in compatibility_status when there's no request_matches row at
@@ -1518,7 +1610,6 @@ def dashboard_request_counters(conn: sqlite3.Connection) -> dict[str, int | str 
     autor visible no es tuya aunque el texto coincida por casualidad; y
     "Reclamadas" busca por subcadena porque eMuwarez no dice si la reclamación
     es tuya. Ese criterio es de dominio, no de HTTP."""
-    from .settings import get_setting_canonical
 
     def _cuenta(sql: str, params: tuple = ()) -> int:
         try:
@@ -1547,14 +1638,12 @@ def dashboard_request_counters(conn: sqlite3.Connection) -> dict[str, int | str 
             (status,),
         )
 
-    mias = 0
-    usuario = get_setting_canonical(conn, "emu.username")
-    if usuario:
-        mias = _cuenta(
-            "SELECT COUNT(*) AS cnt FROM request_items "
-            "WHERE author_visible = 1 AND LOWER(TRIM(author)) = LOWER(TRIM(?))",
-            (usuario,),
-        )
+    # Las tuyas en cada tracker, con tu usuario de allí.
+    mias = sum(_cuenta(
+        "SELECT COUNT(*) AS cnt FROM request_items "
+        "WHERE tracker = ? AND author_visible = 1 AND LOWER(TRIM(author)) = LOWER(TRIM(?))",
+        (tracker, usuario),
+    ) for tracker, usuario in usuarios_de_ajustes(conn).items() if usuario)
 
     return {
         "requests_total": total,

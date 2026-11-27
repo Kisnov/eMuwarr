@@ -97,11 +97,32 @@ def test_all_green_when_everything_passes(db_conn, tmp_path, monkeypatch):
     iid = _movie_with_path(db_conn, str(f))
     r = uc.run_upload_checks(db_conn, iid)
     ids = [c["id"] for c in r["checks"]]
-    assert ids == ["accesible", "carpeta_subida", "renameable", "spanish", "tipo",
+    assert ids == ["accesible", "carpeta_subida", "renameable", "idioma_audio", "formato", "spanish", "tipo",
                    "output", "qbittorrent", "imghosts", "emuwarez"]
     # Un archivo de la biblioteca no se renombra: esa no bloquea.
     assert {c["id"]: c["status"] for c in r["checks"]}["renameable"] == "skip"
     assert all(c["status"] == "ok" for c in r["checks"] if c["id"] != "renameable")
+    assert r["ready"] is True
+
+
+def test_una_subida_a_otro_tracker_no_comprueba_emuwarez(db_conn, tmp_path, monkeypatch):
+    """Solo N.O.B.S elegido: eMuwarez caído no la para (la comprobación sale omitida y no se llama)."""
+    from emuwarez_uploadrr.services.settings import set_setting
+    f = tmp_path / "movie.mkv"
+    f.write_bytes(b"x" * 2048)
+    (tmp_path / "tmp").mkdir()
+    set_setting(db_conn, "qbit.url", "http://localhost:8080")
+    set_setting(db_conn, "uploadrr.path", str(tmp_path))
+    import emuwarez_uploadrr.services.integration_tests as it
+    monkeypatch.setattr(it, "test_qbit_connection", lambda **k: {"ok": True, "message": "ok"})
+    monkeypatch.setattr(it, "test_emuwarez_connection",
+                        lambda **k: (_ for _ in ()).throw(AssertionError("no debe llamarse")))
+    import emuwarez_uploadrr.services.image_hosts as ih
+    monkeypatch.setattr(ih, "test_image_host", lambda hid, key=None, **k: {"ok": True})
+
+    r = uc.run_upload_checks(db_conn, _movie_with_path(db_conn, str(f)), tracker="nobs")
+    emu = {c["id"]: c for c in r["checks"]}["emuwarez"]
+    assert emu["status"] == "skip" and "N.O.B.S" in emu["message"]
     assert r["ready"] is True
 
 
@@ -348,6 +369,19 @@ def test_el_source_elegido_en_el_asistente_desbloquea(db_conn, tmp_path):
     assert (_tipo(r)["status"], _tipo(r)["message"], r["ready"]) == ("ok", "BluRay", True)
 
 
+@pytest.mark.parametrize("tracker, nombre", [("nobs", "N.O.B.S"), ("mnv", "Milnueve")])
+def test_un_tipo_que_el_tracker_no_tiene_bloquea(db_conn, tmp_path, tracker, nombre):
+    f = tmp_path / "movie.mkv"; f.write_bytes(b"x")
+    iid = _movie_with_path(db_conn, str(f), source="SD")
+    assert _tipo(uc.run_upload_checks(db_conn, iid, scope="content"))["status"] == "ok"  # eMuwarez sí lo tiene
+    r = uc.run_upload_checks(db_conn, iid, scope="content", tracker=tracker)
+    assert r["ready"] is False
+    assert _tipo(r) == {"id": "tipo", "label": f"{nombre} no tiene este tipo", "status": "fail",
+                        "message": f"{nombre} no tiene el tipo «SD»: esta copia no se puede subir ahí"}
+    assert _tipo(uc.run_upload_checks(db_conn, iid, scope="content", tracker=tracker,
+                                      ajustes={"source": "WEB-DL"}))["status"] == "ok"
+
+
 @pytest.mark.parametrize("source", ["", None, "WEB-DL", "BluRay", "DVD", "Full BluRay"])
 def test_la_comprobacion_y_el_comando_dicen_lo_mismo(db_conn, tmp_path, source):
     """Pasa si y solo si el comando lleva `-t`: los dos leen el formato de la misma propuesta."""
@@ -383,3 +417,74 @@ def test_un_pack_toma_el_tipo_de_su_plan(db_conn, tmp_path, monkeypatch, plan_so
     r = uc.run_upload_checks(db_conn, iid, scope="content", **({"ajustes": ajustes} if ajustes else {}))
     assert _tipo(r)["status"] == estado
     assert vistos == [(ajustes or {}).get("source")]  # el Source elegido llega al plan, del que sale el `-t`
+
+
+@pytest.mark.parametrize("nombre, estado", [("movie.avi", "fail"), ("movie.iso", "fail"), ("movie.m2ts", "fail"),
+                                            ("movie.mkv", "ok"), ("movie.mp4", "ok"), ("movie.ts", "ok")])
+def test_solo_se_sube_lo_que_sube_uploadrr(db_conn, tmp_path, nombre, estado):
+    f = tmp_path / nombre
+    f.write_bytes(b"x" * 2048)
+    r = uc.run_upload_checks(db_conn, _movie_with_path(db_conn, str(f)), scope="content")
+    formato = next(c for c in r["checks"] if c["id"] == "formato")
+    assert formato["status"] == estado and r["ready"] is (estado == "ok")
+    if nombre == "movie.iso":
+        assert formato["message"] == "Es un ISO: las imágenes de disco todavía no se pueden subir desde aquí."
+    elif estado == "fail":
+        assert formato["message"].startswith(f"Es un {f.suffix[1:].upper()}: Uploadrr-EMU solo sube MKV, MP4 y TS.")
+
+
+def test_un_pack_con_un_capitulo_en_otro_formato_no_se_sube(db_conn, tmp_path, monkeypatch):
+    from emuwarez_uploadrr.services import season_pack
+    caps = [tmp_path / "S01E01.mkv", tmp_path / "S01E02.avi"]
+    for cap in caps:
+        cap.write_bytes(b"x")
+    monkeypatch.setattr(season_pack, "build_season_pack_plan", lambda item_id, **kw: {
+        "status": "valid", "errors": [], "pack_folder": str(tmp_path), "source": "WEB-DL",
+        "episodes": [{"source_path": str(c), "episode_number": n} for n, c in enumerate(caps, 1)]})
+    db_conn.execute("""INSERT INTO library_items (item_type, title, local_status, request_status, nomenclature_status,
+                       season_number, updated_at)
+                       VALUES ('season', 'Serie - Temporada 1', 'Disponible', '', 'N/A', 1, CURRENT_TIMESTAMP)""")
+    db_conn.commit()
+    iid = db_conn.execute("SELECT id FROM library_items ORDER BY id DESC LIMIT 1").fetchone()["id"]
+    r = uc.run_upload_checks(db_conn, iid, scope="content")
+    formato = next(c for c in r["checks"] if c["id"] == "formato")
+    assert formato["status"] == "fail" and r["ready"] is False
+    assert formato["message"].startswith("Capítulo 2: Es un AVI: Uploadrr-EMU solo sube MKV, MP4 y TS.")
+
+
+def test_un_enlace_simbolico_en_la_carpeta_de_subidas_avisa_sin_bloquear(db_conn, tmp_path, monkeypatch):
+    """Carpeta de subidas en otro disco: el enlace sale simbólico y Uploadrr-EMU lo resuelve (nombre de la biblioteca)."""
+    import os
+    from emuwarez_uploadrr.services import carpeta_subida
+
+    def simbolico(origen, destino):
+        os.symlink(origen, destino)
+        return "simbólico"
+    monkeypatch.setattr(carpeta_subida, "_enlazar", simbolico)
+    f = tmp_path / "movie.mkv"
+    f.write_bytes(b"x" * 2048)
+    iid = _movie_with_path(db_conn, str(f))
+
+    r = uc.run_upload_checks(db_conn, iid, scope="content")
+
+    check = next(c for c in r["checks"] if c["id"] == "carpeta_subida")
+    assert check["status"] == "skip"
+    assert "(enlace simbólico)" in check["message"] and "otro disco" in check["message"]
+    assert "nombre de la biblioteca" in check["message"] and "UPLOADRR_UPLOADS_DIR" in check["message"]
+    assert [c["id"] for c in r["checks"]][-1] == "tipo"           # sigue con las demás
+
+
+def test_la_carpeta_de_subidas_que_abarca_la_biblioteca_bloquea(db_conn, tmp_path, monkeypatch):
+    """Con UPLOADRR_UPLOADS_DIR igual a la ruta permitida, el original se tomaría por un enlace y se renombraría."""
+    from emuwarez_uploadrr.services import carpeta_subida, uploadrr_contract
+    monkeypatch.setattr(carpeta_subida, "RAIZ_SUBIDAS", str(tmp_path))
+    monkeypatch.setattr(uploadrr_contract, "DEFAULT_ALLOWED_ROOTS", [str(tmp_path)])
+    (tmp_path / "media").mkdir()
+    f = tmp_path / "media" / "movie.mkv"
+    f.write_bytes(b"x" * 2048)
+    iid = _movie_with_path(db_conn, str(f))
+
+    r = uc.run_upload_checks(db_conn, iid, scope="content")
+
+    assert r["checks"][-1]["id"] == "carpeta_subida" and r["checks"][-1]["status"] == "fail"
+    assert "UPLOADRR_UPLOADS_DIR" in r["checks"][-1]["message"]

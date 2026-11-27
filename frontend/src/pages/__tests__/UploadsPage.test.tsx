@@ -5,14 +5,15 @@
  * del lote (contadores, cancelar pendientes, reintentar fallidas y borrar el lote) y el reintento de una cadena, solo
  * desde su punta.
  */
-import { act } from 'react'
+import { act, useState } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('../../api/uploads', () => ({
   getUploads: vi.fn(), countUploads: vi.fn(), getUploadJob: vi.fn(), startUploadJob: vi.fn(),
   retryUploadJobQueued: vi.fn(), cancelUploadJob: vi.fn(), getUploadJobLogs: vi.fn(), deleteUploadJob: vi.fn(),
   getLote: vi.fn(), cancelarLote: vi.fn(), reintentarLote: vi.fn(), borrarLote: vi.fn(),
-  contarSinTrailer: vi.fn(), marcarTrailerAMano: vi.fn(),
+  contarSinTrailer: vi.fn(), marcarTrailerAMano: vi.fn(), fetchTrackersParaSubir: vi.fn(async () => []),
+  getSubirTambien: vi.fn(async () => ({ trackers: [], subidas: [] })),
 }))
 vi.mock('../../api/instances', () => ({ getInstances: vi.fn(async () => []) }))
 vi.mock('../../api/seeding', () => ({ getSeeding: vi.fn(async () => null) }))
@@ -22,8 +23,8 @@ vi.mock('../../api/eventos', () => ({
 
 import { suscribirse } from '../../api/eventos'
 import {
-  borrarLote, cancelarLote, cancelUploadJob, contarSinTrailer, countUploads, deleteUploadJob, getLote, getUploadJob, getUploads,
-  reintentarLote, retryUploadJobQueued,
+  borrarLote, cancelarLote, cancelUploadJob, contarSinTrailer, countUploads, deleteUploadJob, fetchTrackersParaSubir, getLote,
+  getSubirTambien, getUploadJob, getUploads, reintentarLote, retryUploadJobQueued,
 } from '../../api/uploads'
 import { ApiClientError } from '../../api/client'
 import { SeccionVisible } from '../../context/SeccionVisible'
@@ -625,5 +626,70 @@ describe('el aviso «Sin trailer»', () => {
     await esperar(() => document.querySelectorAll('tbody tr').length === 1)
     await pulsar(boton('Ver todas')!)
     await esperar(() => !ultimaPeticion()?.sin_trailer)
+  })
+})
+
+describe('«Subir también a…»', () => {
+  const NOBS = { id: 'nobs', nombre: 'N.O.B.S' }
+  afterEach(() => {
+    vi.mocked(fetchTrackersParaSubir).mockImplementation(async () => [])
+    // Abrir la ficha deja /uploads/<id> en la URL, y la página siguiente la abriría al montarse.
+    window.history.replaceState(null, '', '/')
+  })
+
+  it('al abrir desde la lista una subida completada, la ficha ofrece los trackers que trae el GET de esa subida', async () => {
+    // La fila de la lista no lleva `subir_tambien_a`: solo el GET de una.
+    vi.mocked(getUploadJob).mockResolvedValue({ ...SUELTA, display_title: 'Película suelta (2024)', subir_tambien_a: [NOBS] })
+    await pagina()
+    await pulsar(filaDe('Película suelta').querySelector('.sub-titulo')!)
+    await esperar(() => boton('Subir también a N.O.B.S'))
+  })
+
+  it('la ficha abierta desde la lista enseña también los avisos que trae el GET de esa subida', async () => {
+    const aviso = 'Milnueve ya tiene uno igual o mejor.'
+    vi.mocked(getUploadJob).mockResolvedValue({
+      ...SUELTA, display_title: 'Película suelta (2024)', subir_tambien_a: [NOBS], subir_tambien_avisos: [aviso],
+    })
+    await pagina()
+    await pulsar(filaDe('Película suelta').querySelector('.sub-titulo')!)
+    await esperar(() => texto().includes(aviso))
+  })
+
+  it('el botón de la lista aparece al volver a Subidas tras poner la clave en Configuración, sin recargar', async () => {
+    let fijarVisible: (v: boolean) => void = () => {}
+    function Seccion() {
+      const [visible, setVisible] = useState(true)
+      fijarVisible = setVisible
+      return <SeccionVisible visible={visible}><UploadsPage onNavigate={vi.fn()} /></SeccionVisible>
+    }
+    await montar(
+      <SyncContext.Provider value={{ lastInvalidatedAt: 0, startAllSync: vi.fn(), isAnySyncing: false, todoPendiente: false } as never}>
+        <Seccion />
+      </SyncContext.Provider>,
+    )
+    await esperar(() => document.querySelectorAll('tbody tr').length > 0)
+    expect(boton('Subir también a…')).toBeUndefined()
+    // A Configuración (la sección se queda montada y oculta), se pone la clave de N.O.B.S y se vuelve.
+    await act(async () => { fijarVisible(false) })
+    vi.mocked(fetchTrackersParaSubir).mockImplementation(async () => [{ id: 'emu', nombre: 'eMuwarez' }, NOBS])
+    await act(async () => { fijarVisible(true) })
+    await esperar(() => boton('Subir también a…'))
+    expect(fetchTrackersParaSubir).toHaveBeenCalledTimes(2)
+  })
+
+  it('la fila que se puede subir a otro tracker lleva su botón, que abre el modal con ella marcada', async () => {
+    vi.mocked(fetchTrackersParaSubir).mockImplementation(async () => [{ id: 'emu', nombre: 'eMuwarez' }, NOBS])
+    vi.mocked(getSubirTambien).mockResolvedValue({ trackers: [NOBS], subidas: [
+      { job_id: SUELTA.id!, title: 'Película suelta', nombre: 'P.mkv', result_url: null, finished_at: null,
+        origen: { id: 'emu', nombre: 'eMuwarez' }, trackers: [NOBS] },
+    ] })
+    await pagina()
+    const enFila = (titulo: string) => filaDe(titulo).querySelector('[aria-label="Subir también a otro tracker"]')
+    await esperar(() => enFila('Película suelta'))
+    expect(enFila('Serie - S01E01')).toBeNull()
+
+    await pulsar(enFila('Película suelta') as HTMLElement)
+
+    await esperar(() => boton('Subir 1 subida'))
   })
 })

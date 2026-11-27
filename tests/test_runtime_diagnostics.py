@@ -200,3 +200,18 @@ def test_instancias_apagadas_dan_aviso(tmp_path, monkeypatch):
     assert result["status"] == "warning"
     assert result["details"]["radarr_total"] == 1
     assert result["details"]["radarr_enabled"] == 0
+
+
+def test_allowed_roots_avisa_si_la_carpeta_de_subidas_la_contiene(tmp_path, monkeypatch):
+    """UPLOADRR_UPLOADS_DIR=/data con la ruta permitida /data: la biblioteca entera contaría como carpeta de subidas."""
+    from emuwarez_uploadrr.services import carpeta_subida, uploadrr_contract
+    monkeypatch.setenv("CONFIG_DIR", str(tmp_path / "empty_config"))
+    import emuwarez_uploadrr.services.runtime_diagnostics as rd
+    importlib.reload(rd)
+    monkeypatch.setattr(uploadrr_contract, "DEFAULT_ALLOWED_ROOTS", [str(tmp_path / "data")])
+    (tmp_path / "data").mkdir()
+    monkeypatch.setattr(carpeta_subida, "RAIZ_SUBIDAS", str(tmp_path))
+    result = rd.check_allowed_roots_setting()
+    assert result["status"] == "warning" and "UPLOADRR_UPLOADS_DIR" in result["message"]
+    monkeypatch.setattr(carpeta_subida, "RAIZ_SUBIDAS", str(tmp_path / "data" / "uploads"))
+    assert rd.check_allowed_roots_setting()["status"] == "ok"

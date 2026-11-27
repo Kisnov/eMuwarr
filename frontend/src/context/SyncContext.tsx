@@ -220,9 +220,10 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
         const p = await getEmuSyncProgress()
         setCatalogProgress(p)
         if (p.done || !p.active) {
-          showMessage(p.error
+          const otros = p.error_otros ? `. ${p.error_otros}` : ''
+          showMessage((p.error
             ? `Error al sincronizar eMuwarez: ${p.error}`
-            : `Catálogo eMuwarez: ${p.torrents} torrents, ${p.items} elementos comparados`, !!p.error)
+            : `Catálogo eMuwarez: ${p.torrents} torrents, ${p.items} elementos comparados`) + otros, !!(p.error || otros))
           invalidarTodo()
           break
         }
@@ -261,7 +262,10 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
         const p = await getRequestsSyncProgress()
         setRequestsProgress(p)
         if (p.done || !p.active) {
-          showMessage(p.error ? `Error al sincronizar las peticiones: ${p.error}` : p.message || 'Peticiones sincronizadas', !!p.error)
+          const otros = p.error_otros ? ` ${p.error_otros}` : ''
+          const texto = p.error ? `Error al sincronizar las peticiones: ${p.error}` : p.message || 'Peticiones sincronizadas'
+          showMessage((otros && !/[.!?]$/.test(texto) ? `${texto}.` : texto) + otros,
+            !!(p.error || otros))
           invalidarTodo()
           break
         }

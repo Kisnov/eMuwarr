@@ -165,7 +165,7 @@ async def anadir_al_cliente(client: Clients, meta: Dict, tracker_name: str) -> b
     except Exception as e:
         eventos.fase("cliente", "fallida")
         eventos.cliente(False, (getattr(client, "cliente_info", None) or {}).get("cliente", "ninguno"), motivo="error")
-        # Línea fija, en una sola línea: emuwarez-uploadrr la lee para no dar el cliente por bueno.
+        # Línea fija, en una sola línea: eMuwarr la lee para no dar el cliente por bueno.
         # Va por print, así que hay que taparla a mano: el error de conexión lleva la clave de qui.
         motivo = redactor.redact(" ".join(str(e).split()))
         print(f"Torrent client add failed: {motivo or type(e).__name__}", flush=True)

@@ -22,6 +22,7 @@ from ..uploadrr_eventos import (
     SeguidorEventos,
     borrar_fichero,
     clasificar_con_eventos,
+    del_tracker,
     ficha_de_estado,
     preparar_fichero,
 )
@@ -39,15 +40,17 @@ from .comun import (
     logger,
     mensaje_qbit_fallo,
     redact_secrets,
+    subida_completada,
 )
 from .concurrencia import _upload_concurrency_gate
 from .config import (
     ConfigNoPreparada,
     borrar_config_de_la_subida,
     preparar_config_de_la_subida,
+    preparar_descripcion_de_la_subida,
     sin_config_por_subida,
 )
-from .consultas import build_uploadrr_execution_command, get_upload_job, validate_upload_job_start
+from .consultas import build_uploadrr_execution_command, get_upload_job, tracker_del_trabajo, validate_upload_job_start
 from .estado import (
     _avanzar_job,
     _check_trailer_and_log,
@@ -119,7 +122,11 @@ def _run_uploadrr_subprocess_body(job_id: int, cmd: dict, secrets: list[str]) ->
     proc: subprocess.Popen | None = None
     eventos_ruta = cmd.get("eventos")
     config_ruta = cmd.get("config")
+    descripcion_ruta = cmd.get("descripcion")
     try:
+        # El tracker de la subida: sus mensajes lo nombran a él, no a eMuwarez.
+        destino = tracker_del_trabajo(get_upload_job(job_id) or {})
+
         def _cancelado() -> None:
             append_upload_log(job_id, "info", "Subida cancelada antes de lanzar Uploadrr; no se lanza.", stream="system")
 
@@ -160,6 +167,8 @@ def _run_uploadrr_subprocess_body(job_id: int, cmd: dict, secrets: list[str]) ->
             if not config_ruta:
                 raise sin_config_por_subida(cwd)
             preparar_config_de_la_subida(job_id, cwd, config_ruta)
+        if descripcion_ruta:
+            preparar_descripcion_de_la_subida(descripcion_ruta, cmd["descripcion_texto"])
         if not _avanzar_job(job_id, "running", stage="running"):
             _cancelado()
             return
@@ -213,13 +222,14 @@ def _run_uploadrr_subprocess_body(job_id: int, cmd: dict, secrets: list[str]) ->
                     # gets written, so add_to_client() has nothing to add.
                     # Not a qBittorrent problem at all; the eMuwarez upload
                     # itself did succeed.
-                    append_upload_log(job_id, "error", QBIT_SIN_TORRENT_FIRMADO, stream="system")
+                    append_upload_log(job_id, "error", del_tracker(QBIT_SIN_TORRENT_FIRMADO, destino.nombre),
+                                      stream="system")
                 elif "Torrent client add failed:" in line:
                     motivo = redact_secrets(line.split("Torrent client add failed:", 1)[1].strip(), secrets)
                     append_upload_log(
                         job_id, "error",
                         f"qBittorrent: falló al añadir o etiquetar el torrent ({motivo}). Revisa qBittorrent. "
-                        "La subida a eMuwarez sí se completó.",
+                        f"{subida_completada(destino.nombre)}",
                         stream="system",
                     )
                 else:
@@ -253,7 +263,7 @@ def _run_uploadrr_subprocess_body(job_id: int, cmd: dict, secrets: list[str]) ->
             elif tipo == "paso":
                 _apuntar_clave(efecto[1])
                 if efecto[1] == "tracker":
-                    marcar_torrent_subido(job_id)
+                    marcar_torrent_subido(job_id, estado_ev.url, estado_ev.torrent_id)
             elif tipo == "qbit_ok":
                 with progress_lock:
                     progress_state["qbittorrent_add_failed"] = False
@@ -262,7 +272,8 @@ def _run_uploadrr_subprocess_body(job_id: int, cmd: dict, secrets: list[str]) ->
             elif tipo == "qbit_fallo":
                 with progress_lock:
                     progress_state["qbittorrent_add_failed"] = True
-                append_upload_log(job_id, "error", mensaje_qbit_fallo(efecto[1]), stream="system")
+                append_upload_log(job_id, "error", mensaje_qbit_fallo(efecto[1], nombre=destino.nombre),
+                                  stream="system")
 
         def _procesar_evento(ev: dict) -> None:
             for efecto in estado_ev.aplicar(ev):
@@ -287,6 +298,8 @@ def _run_uploadrr_subprocess_body(job_id: int, cmd: dict, secrets: list[str]) ->
                 logger.exception("Subida %s: no se pudo actualizar el progreso", job_id)
             try:
                 _apuntar_subpaso(line)
+                if ficha := _ficha_del_torrent(redact_secrets(line, secrets)):
+                    marcar_torrent_subido(job_id, ficha["result_url"], ficha["result_torrent_id"])
             except Exception:
                 logger.exception("Subida %s: no se pudo apuntar el paso que terminó Uploadrr", job_id)
 
@@ -309,7 +322,7 @@ def _run_uploadrr_subprocess_body(job_id: int, cmd: dict, secrets: list[str]) ->
             duration_seconds = int((finished_dt - started_dt).total_seconds())
             msg = f"Proceso cancelado por timeout ({timeout}s)."
             subido = _ficha("\n".join(stdout_lines))
-            _finalize_job_status(
+            if _finalize_job_status(
                 job_id, "failed",
                 stage="timeout",
                 exit_code=returncode,
@@ -319,9 +332,9 @@ def _run_uploadrr_subprocess_body(job_id: int, cmd: dict, secrets: list[str]) ->
                 **subido,
                 last_log_at=_now(),
                 last_error_at=finished_at,
-            )
-            append_upload_log(job_id, "error", msg, stream="system")
-            _notify_upload_failed(job_id, msg, result_url=subido.get("result_url"))
+            ):
+                append_upload_log(job_id, "error", msg, stream="system")
+                _notify_upload_failed(job_id, msg, result_url=subido.get("result_url"))
             return
 
         # Transient progress marker only, applied atomically and only while
@@ -349,7 +362,7 @@ def _run_uploadrr_subprocess_body(job_id: int, cmd: dict, secrets: list[str]) ->
         stderr_text = "\n".join(stderr_lines)
 
         if por_eventos:
-            result = clasificar_con_eventos(estado_ev, returncode)
+            result = clasificar_con_eventos(estado_ev, returncode, destino.nombre, destino.uploadrr)
             if (estado_ev.resultado or {}).get("codigo") == "rechazado" and result["status"] == "failed":
                 # El motivo del rechazo (lo que dijo el tracker) solo está en el texto, y los frenos del lote lo leen.
                 result["error_summary"] = (build_error_summary(stderr_text, stdout_text, returncode)
@@ -396,7 +409,7 @@ def _run_uploadrr_subprocess_body(job_id: int, cmd: dict, secrets: list[str]) ->
                 append_upload_log(
                     job_id, "error",
                     "qBittorrent: Uploadrr-EMU terminó sin confirmar que el torrent se añadiera. Revisa qBittorrent. "
-                    "La subida a eMuwarez sí se completó.",
+                    f"{subida_completada(destino.nombre)}",
                     stream="system",
                 )
             else:
@@ -421,7 +434,7 @@ def _run_uploadrr_subprocess_body(job_id: int, cmd: dict, secrets: list[str]) ->
             # Si el torrent llegó a subirse antes de fallar, su ficha sigue siendo útil y su enlace no se borra.
             subido = _ficha(stdout_text)
 
-            _finalize_job_status(
+            if not _finalize_job_status(
                 job_id, "failed",
                 stage="failed",
                 exit_code=returncode,
@@ -431,7 +444,8 @@ def _run_uploadrr_subprocess_body(job_id: int, cmd: dict, secrets: list[str]) ->
                 **subido,
                 last_log_at=_now(),
                 last_error_at=finished_at,
-            )
+            ):
+                return  # cancelada por el usuario: ni «fallida» ni aviso
             append_upload_log(
                 job_id, "error",
                 f"Proceso fallido (exit code {returncode}). Duración: {duration_seconds}s",
@@ -470,6 +484,7 @@ def _run_uploadrr_subprocess_body(job_id: int, cmd: dict, secrets: list[str]) ->
     finally:
         _soltar_proceso(job_id, proc)
         borrar_config_de_la_subida(config_ruta)
+        borrar_fichero(descripcion_ruta)
         borrar_fichero(eventos_ruta)
 
 

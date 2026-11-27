@@ -25,9 +25,13 @@ export interface CurrentUserResponse {
   last_login_at: string | null
 }
 
-// Tu cuenta de eMuwarez: /api/user de UNIT3D tal cual, guardado una hora en el servidor.
+// Tu cuenta de eMuwarez: /api/user de UNIT3D tal cual, guardado una hora en el servidor. En `otros`, la de cada otro
+// tracker con clave.
 export interface EmuPerfil {
   configured: boolean
+  tracker?: string
+  nombre?: string
+  url?: string
   username: string | null
   group: string | null
   uploaded: string | null
@@ -40,6 +44,7 @@ export interface EmuPerfil {
   hit_and_runs: number | null
   updated_at: string | null
   error: string | null
+  otros?: EmuPerfil[]
 }
 
 // Una instantánea diaria de tu cuenta de eMuwarez (Estadísticas); lo que no se pudo leer ese día va a null.
@@ -64,7 +69,7 @@ export interface RitmosCuenta {
   bonus_hora: number | null
 }
 
-// Una de tus subidas en eMuwarez (GET /estadisticas/mis-subidas).
+// Una de tus subidas en un tracker (GET /estadisticas/mis-subidas?tracker=…).
 export interface MiTorrent {
   torrent_id: number
   nombre: string
@@ -80,6 +85,7 @@ export interface MiTorrent {
 
 export interface MisTorrents {
   leido_at: string | null
+  url: string
   torrents: MiTorrent[]
   totales: {
     subidas: number
@@ -345,6 +351,8 @@ export interface RequestMatchResponse {
 
 export interface RequestItemResponse {
   id: number
+  tracker?: string
+  tracker_nombre?: string
   emu_id: string
   title: string
   category: string | null
@@ -651,6 +659,9 @@ export interface UploadJob {
   result_url?: string | null
   result_torrent_id?: string | null
   result_tracker?: string | null
+  // El tracker al que va la subida (services/trackers.py): su id y su nombre.
+  tracker?: string
+  tracker_nombre?: string
   // Los grupos de release de lo que se sube (el de la copia, o los de todos los capítulos de una temporada).
   release_groups?: string[]
   result_category?: string | null
@@ -696,6 +707,14 @@ export interface UploadJob {
   reenvio_qbit_estado?: 'en_curso' | 'ok' | 'fallido' | null
   reenvio_qbit_at?: string | null
   puede_reenviar_qbit?: boolean
+  // «Subir también a…»: a qué trackers se puede subir también esta subida (solo en el detalle), y en una
+  // subida creada así, la de origen cuyo fichero y torrent reutiliza.
+  subir_tambien_a?: { id: string; nombre: string }[]
+  // Los que no se ofrecen porque su catálogo local ya lo tiene, y los ofrecidos sin catálogo local.
+  subir_tambien_avisos?: string[]
+  copia_de_job_id?: number | null
+  // La descripción propia (BBCode) escrita en el Resumen; Uploadrr-EMU la añade a la que genera.
+  descripcion?: string | null
   // Completada pero eMuwarez aún no la enseña: se deduce de «Tus subidas» (cada 6 h), puede ir con retraso.
   pendiente_moderacion?: boolean
   nomenclature_snapshot?: UploadNomenclatureSnapshot | null

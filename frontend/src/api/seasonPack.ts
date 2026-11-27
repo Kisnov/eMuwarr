@@ -10,9 +10,12 @@ import type { TrackRemuxPreview, SourceComparison } from './nomenclature'
 // (utils/idiomasPack.ts); vale para todos los capítulos.
 export function previewSeasonPack(
   seasonId: number, provider?: string, idiomas?: Record<number, string>,
+  // Las normas de idioma de qué tracker (nobs, mnv); sin él, eMuwarez.
+  tracker?: string,
 ): Promise<SeasonPackPlanResponse> {
   const qs = new URLSearchParams()
   if (provider !== undefined) qs.set('provider', provider)
+  if (tracker) qs.set('tracker', tracker)
   if (idiomas && Object.keys(idiomas).length) qs.set('idiomas', JSON.stringify(idiomas))
   const query = qs.toString()
   return api.get<SeasonPackPlanResponse>(`/library/season/${seasonId}/pack-preview${query ? `?${query}` : ''}`)

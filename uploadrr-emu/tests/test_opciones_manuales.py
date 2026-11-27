@@ -1,4 +1,4 @@
-"""Opciones de la línea de órdenes que no usa emuwarez-uploadrr: banderas por elemento, -episode, -d/-df/-pb y -pr."""
+"""Opciones de la línea de órdenes que no usa eMuwarr: banderas por elemento, -episode, -d/-df/-pb y -pr."""
 from __future__ import annotations
 
 import asyncio
@@ -129,3 +129,10 @@ def test_pr_pone_la_firma_de_personal_release(fichero):
 def test_avbc_pide_el_aviso_de_baja_calidad():
     assert _meta(["-avbc"])["aviso_baja_calidad"] is True
     assert _meta([])["aviso_baja_calidad"] is False
+
+
+def test_variante_elige_la_categoria_del_tracker():
+    assert _meta(["--variante", "anime_catalan"])["variante"] == "anime_catalan"
+    assert _meta([])["variante"] is None
+    with pytest.raises(SystemExit):
+        _meta(["--variante", "documental"])

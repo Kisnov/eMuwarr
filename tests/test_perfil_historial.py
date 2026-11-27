@@ -46,7 +46,7 @@ def _dia(dias_atras: int) -> str:
 def test_base_nueva_trae_la_tabla(conn):
     assert get_state(conn, "schema_version") == str(SCHEMA_VERSION)
     columnas = [f[1] for f in conn.execute("PRAGMA table_info(perfil_historial)")]
-    assert columnas == ["dia", "ratio", "subido_bytes", "bajado_bytes", "bonus", "usuario", "actualizado_at",
+    assert columnas == ["tracker", "dia", "ratio", "subido_bytes", "bajado_bytes", "bonus", "usuario", "actualizado_at",
                         "buffer_bytes", "seeding", "leeching", "hit_and_runs", "grupo"]
 
 
@@ -241,7 +241,7 @@ def test_tarea_sin_clave_se_salta(conn):
 def test_tarea_lee_el_perfil_y_guarda_el_dia(conn, monkeypatch):
     _con_clave(conn)
     llamadas = []
-    monkeypatch.setattr(emu_perfil, "emu_get_user", lambda api_key, base_url=None: llamadas.append(1) or dict(USUARIO))
+    monkeypatch.setattr(emu_perfil, "emu_get_user", lambda api_key, base_url=None, **kw: llamadas.append(1) or dict(USUARIO))
     r = scheduler.run_scheduled_task(conn, scheduler.TASK_EMU_CUENTA)
     assert r["status"] == "completed" and "4.1" in r["summary"]
     assert len(_filas(conn)) == 1
@@ -253,7 +253,7 @@ def test_tarea_lee_el_perfil_y_guarda_el_dia(conn, monkeypatch):
 def test_tarea_con_fallo_de_emuwarez_queda_fallida(conn, monkeypatch):
     _con_clave(conn)
 
-    def falla(api_key, base_url=None):
+    def falla(api_key, base_url=None, **kw):
         raise IntegrationError("sin red")
 
     monkeypatch.setattr(emu_perfil, "emu_get_user", falla)
@@ -274,7 +274,7 @@ def _con_clave(conn):
 
 def test_leer_el_perfil_guarda_la_instantanea(conn, monkeypatch):
     _con_clave(conn)
-    monkeypatch.setattr(emu_perfil, "emu_get_user", lambda api_key, base_url=None: dict(USUARIO))
+    monkeypatch.setattr(emu_perfil, "emu_get_user", lambda api_key, base_url=None, **kw: dict(USUARIO))
     perfil_emu(conn)
     filas = _filas(conn)
     assert len(filas) == 1 and filas[0][1] == 4.1
@@ -283,7 +283,7 @@ def test_leer_el_perfil_guarda_la_instantanea(conn, monkeypatch):
 def test_un_fallo_de_emuwarez_no_guarda_nada(conn, monkeypatch):
     _con_clave(conn)
 
-    def falla(api_key, base_url=None):
+    def falla(api_key, base_url=None, **kw):
         raise IntegrationError("sin red")
 
     monkeypatch.setattr(emu_perfil, "emu_get_user", falla)
@@ -293,7 +293,7 @@ def test_un_fallo_de_emuwarez_no_guarda_nada(conn, monkeypatch):
 
 def test_si_el_historial_falla_el_perfil_se_guarda_igual(conn, monkeypatch):
     _con_clave(conn)
-    monkeypatch.setattr(emu_perfil, "emu_get_user", lambda api_key, base_url=None: dict(USUARIO))
+    monkeypatch.setattr(emu_perfil, "emu_get_user", lambda api_key, base_url=None, **kw: dict(USUARIO))
     conn.execute("DROP TABLE perfil_historial")
     assert perfil_emu(conn)["ratio"] == "4.1"
 
@@ -334,3 +334,33 @@ def test_endpoint_sin_instantaneas_devuelve_lista_vacia(client, auth_headers):
 @pytest.mark.parametrize("dias", ["0", "-1", "731", "x"])
 def test_endpoint_rechaza_rangos_absurdos(client, auth_headers, dias):
     assert client.get(f"/api/estadisticas/cuenta?dias={dias}", headers=auth_headers).status_code == 422
+
+
+def test_la_serie_y_los_ritmos_son_de_cada_tracker(client, auth_headers, conn):
+    from emuwarez_uploadrr.services.trackers import NOBS
+    hoy = datetime.now()
+    guardar_instantanea(conn, USUARIO, hoy - timedelta(days=1))
+    guardar_instantanea(conn, {**USUARIO, "ratio": "9"}, hoy - timedelta(days=1), tracker=NOBS)
+    guardar_instantanea(conn, {**USUARIO, "ratio": "9", "seedbonus": "12369.50"}, hoy, tracker=NOBS)
+    conn.commit()
+    assert [p["ratio"] for p in serie_cuenta(conn, 7)] == [4.1]
+    assert ritmos_cuenta(conn, tracker=NOBS)["bonus_hora"] == pytest.approx(1, abs=0.01)
+    cuerpo = client.get("/api/estadisticas/cuenta?tracker=nobs", headers=auth_headers).json()
+    assert [p["ratio"] for p in cuerpo["puntos"]] == [9, 9]
+    assert client.get("/api/estadisticas/cuenta?tracker=otro", headers=auth_headers).status_code == 422
+
+
+def test_tarea_lee_cada_tracker_con_clave(conn, monkeypatch):
+    _con_clave(conn)
+    set_setting(conn, "nobs.api_key", "clave-nobs")
+    conn.commit()
+
+    def falso(api_key, base_url=None, **kw):
+        if kw["tracker"] == "NOBS":
+            raise IntegrationError("sin red")
+        return dict(USUARIO)
+
+    monkeypatch.setattr(emu_perfil, "emu_get_user", falso)
+    r = scheduler.run_scheduled_task(conn, scheduler.TASK_EMU_CUENTA)
+    assert r["status"] == "failed" and r["summary"] == "eMuwarez: Ratio 4.1 · bonus 12345.50 · N.O.B.S: sin red"
+    assert len(_filas(conn)) == 1

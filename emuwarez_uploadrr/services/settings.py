@@ -23,10 +23,12 @@ from typing import Any, Optional
 from ..database import CANONICAL_SETTING_ALIASES
 from ..database import get_setting_canonical as _get_setting_canonical
 from .ajustes_registro import AJUSTES, CLAVES_SECRETAS, a_texto, desde_texto
+from .trackers import POR_DEFECTO
+from .trackers import obtener as obtener_tracker
 
 # Las claves secretas que expone Configuración están en el registro
 # (services/ajustes_registro.py). Lo que también es una clave aunque no salga
-# allí: emu.endpoint_url (lleva la clave en la query), los alias antiguos con
+# allí: emu.endpoint_url (ya no se lee, pero una instalación antigua la guarda con la clave en la query), los alias antiguos con
 # guion bajo de los secretos del registro y las API keys de los hosts de
 # imágenes (una por host, imghost.key.<id>). widget.api_key_hash es el hash de la
 # clave del widget de Homepage (services/widget.py): no se edita desde un PUT.
@@ -84,6 +86,14 @@ def get_setting_canonical(conn: sqlite3.Connection, key: str, default: Optional[
     underscore alias when unset. Dotted always wins. See
     database.CANONICAL_SETTING_ALIASES for the alias table."""
     return _get_setting_canonical(conn, key, default)
+
+
+def ajuste_de_tracker(conn: sqlite3.Connection, nombre: str, tracker: str = POR_DEFECTO,
+                      default: Optional[str] = None) -> Optional[str]:
+    """El ajuste `nombre` (`api_key`, `username`…) de un tracker; el de eMuwarez es `emu.<nombre>`. Las credenciales
+    de un tracker se leen siempre por aquí, no con la clave escrita a mano (test_ajustes_de_tracker.py): así el
+    segundo adaptador solo tiene que dar su prefijo."""
+    return get_setting_canonical(conn, obtener_tracker(tracker).clave(nombre), default)
 
 
 def set_setting_canonical(conn: sqlite3.Connection, key: str, value: str) -> None:
