@@ -44,6 +44,7 @@ describe('MisSubidasEmu', () => {
     await montar(<MisSubidasEmu visible />)
     await esperar(() => texto().includes('Aún no se han leído'))
     expect(document.querySelectorAll('.stat-card')).toHaveLength(0)
+    expect(texto()).not.toContain('cada 6 horas')
   })
 
   it('con otro tracker, lo pide a ese, lo nombra y enlaza a su ficha', async () => {
@@ -73,6 +74,7 @@ describe('MisSubidasEmu', () => {
       t.querySelector('.stat-card-label')!.textContent, t.querySelector('.stat-card-value')!.textContent]))
     expect(tarjetas).toEqual({ Subidas: '3', Completadas: '75', 'Completadas esta semana': '4', Seeders: '7', 'Sin seeders': '1' })
     expect(texto()).toContain('Leídas hace 2 h')
+    expect(texto()).not.toContain('cada 6 horas')
     expect(texto()).toContain('Las subidas anónimas no salen')
 
     expect(nombres()).toEqual(['Torrent 1', 'Torrent 3', 'Torrent 2'])   // las más completadas primero

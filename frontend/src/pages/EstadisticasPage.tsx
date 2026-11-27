@@ -139,7 +139,7 @@ export function EstadisticasPage() {
       <div className="page-header">
         <div>
           <h1 className="page-title">Estadísticas</h1>
-          <div className="page-subtitle">Tu biblioteca y tus peticiones, y cómo evoluciona tu cuenta de eMuwarez: una instantánea al día, que se guarda sola cada hora.</div>
+          <div className="page-subtitle">Tu biblioteca y tus peticiones, y cómo evoluciona tu cuenta de eMuwarez: una instantánea al día, que se guarda sola al leer tu perfil.</div>
         </div>
         <div className="est-rangos" role="group" aria-label="Rango de días">
           {RANGOS.map(r => (

@@ -7,7 +7,7 @@ import { currentPhaseInfo, phaseLabel, progressCounter, queuedWaitText, statusLa
 export const PENDIENTE_MODERACION = {
   texto: 'Pendiente de moderación',
   clase: 'badge status-partial',
-  ayuda: 'eMuwarez aún no enseña este torrent: está pendiente de moderación (hasta 24 h). Se deduce de «Tus subidas», que se lee cada 6 horas: una subida recién aprobada puede seguir marcada un rato, y una rechazada o borrada se ve igual.',
+  ayuda: 'eMuwarez aún no enseña este torrent: está pendiente de moderación (hasta 24 h). Se deduce de «Tus subidas», que lee la tarea «Leer tus subidas»: una subida recién aprobada puede seguir marcada un rato, y una rechazada o borrada se ve igual.',
 }
 
 // El estado de una subida tal como lo abre el detalle: una frase, su tono (el único color de la cabecera) y,

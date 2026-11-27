@@ -49,7 +49,7 @@ export function MisSubidasEmu({ visible, tracker = EMU }: { visible: boolean; tr
       <h2 className="est-grupo-titulo" id={titulo}>Tus subidas en {nombre}</h2>
       {aviso}
       {datos.leido_at === null ? (
-        <p className="est-nota">Aún no se han leído: la tarea «Leer tus subidas» lo hace cada 6 horas, y en Tareas se puede ejecutar ahora.</p>
+        <p className="est-nota">Aún no se han leído: lo hace la tarea «Leer tus subidas», y en Tareas se puede ejecutar ahora.</p>
       ) : (
         <>
           <div className="stat-cards-row" role="group" aria-label={`Totales de tus subidas en ${nombre}`}>
@@ -63,7 +63,7 @@ export function MisSubidasEmu({ visible, tracker = EMU }: { visible: boolean; tr
           </div>
           <div className="est-subidas-cab">
             <p className="est-nota">
-              Leídas {timeAgo(datos.leido_at)}, cada 6 horas. Las subidas anónimas no salen: {nombre} no las da al buscar por usuario.
+              Leídas {timeAgo(datos.leido_at)}. Las subidas anónimas no salen: {nombre} no las da al buscar por usuario.
             </p>
             <select className="form-input form-select est-subidas-orden" aria-label="Orden de tus subidas" value={orden}
               onChange={e => setOrden(e.target.value as Orden)}>
