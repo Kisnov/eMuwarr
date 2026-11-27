@@ -1823,6 +1823,18 @@ describe('el Resumen de una tanda lista el nombre de cada torrent', () => {
       await act(async () => { primera.resolver(LISTO) })
     })
 
+    it('al volver atrás con un pack a medio comprobar se deja de seguir su progreso', async () => {
+      const parar = vi.fn()
+      m(seguirProgreso).mockImplementation(() => parar)
+      m(subidas.runUploadChecks).mockImplementation(async (_id, alcance) => (
+        alcance === 'environment' ? ENTORNO : new Promise(() => {})) as never)
+      await alResumen()
+      await esperar(() => lista()[1]?.endsWith('En cola'))
+      parar.mockClear()
+      await pulsar(boton('← Volver'))
+      expect(parar).toHaveBeenCalledTimes(1)
+    })
+
     it('si una comprobación no llega, las que faltan dicen que se quedaron sin comprobar', async () => {
       m(subidas.runUploadChecks).mockImplementation(async (id, alcance) => {
         if (alcance === 'environment') return ENTORNO as never

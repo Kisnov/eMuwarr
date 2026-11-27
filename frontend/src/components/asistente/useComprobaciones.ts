@@ -139,6 +139,8 @@ export function useComprobacionesTanda({
     // Todo lo de este tracker sigue valiendo: el error de otro (uno elegido antes) ya no cuenta.
     if (entornoVale && batchQueue.every(sigueValiendo)) { setBatchChecksError(null); return }
     let alive = true
+    // El seguimiento del pack en curso: al abandonar la pasada se corta ya, sin esperar a su comprobación.
+    let dejarDeSeguir: (() => void) | undefined
     const run = async () => {
       setBatchChecksLoading(true)
       setBatchChecksIndex(0)
@@ -165,7 +167,7 @@ export function useComprobacionesTanda({
           // El servidor guarda el progreso del último plan de la temporada: uno ya completo (done = total) es de antes,
           // y una respuesta que llega tarde no hace retroceder la cuenta ni la repone cuando este pack ya acabó.
           let enCurso = true
-          const dejarDeSeguir = sonPacks ? seguirProgreso('plan-temporada-progreso', a => a.season_id === id, async () => {
+          dejarDeSeguir = sonPacks ? seguirProgreso('plan-temporada-progreso', a => a.season_id === id, async () => {
             try {
               const p = await getSeasonPlanProgress(id)
               if (!alive || !enCurso || p.done >= p.total) return
@@ -179,7 +181,7 @@ export function useComprobacionesTanda({
               : ajustes
               ? await runUploadChecks(id, 'content', proveedor, ajustes)
               : await runUploadChecks(id, 'content', proveedor)
-          } finally { enCurso = false; dejarDeSeguir?.() }
+          } finally { enCurso = false; dejarDeSeguir?.(); dejarDeSeguir = undefined }
           // Una pasada abandonada que responde tarde no pisa a la que la sustituyó.
           if (!alive) return
           acc.set(batchQueue[i], resultado)
@@ -194,7 +196,7 @@ export function useComprobacionesTanda({
       }
     }
     run()
-    return () => { alive = false; setBatchChecksLoading(false); setBatchProgreso(null) }
+    return () => { alive = false; dejarDeSeguir?.(); setBatchChecksLoading(false); setBatchProgreso(null) }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- se relanza al cambiar la tanda o su fase, no con cada elección
   }, [step, batchQueue.length, batchPhase, intento, tracker, trackersDeLaCola])
 
