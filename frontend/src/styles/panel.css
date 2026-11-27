@@ -16,7 +16,7 @@
      el bloque de referencia de lo que lleva `position: fixed` dentro. */
   container: panel / inline-size;
 }
-/* Cabecera: el título y «Sincronizar todo» arriba; tu cuenta en una franja debajo, a todo el ancho. Se coloca por
+/* Cabecera: el título y «Sincronizar todo» arriba; tus cuentas debajo, a todo el ancho. Se coloca por
    áreas porque el orden del DOM (título, cuenta, sincronizar) es el de lectura. */
 .page-header.panel-cabecera {
   flex-shrink: 0;
@@ -28,10 +28,7 @@
   margin-bottom: 16px;
 }
 .panel-cabecera .page-title { grid-area: titulo; flex-shrink: 0; white-space: nowrap; margin: 0; }
-.panel-cabecera .cuenta-emu { grid-area: cuenta; margin-top: 12px; }
-/* Con otros trackers con clave, una franja por tracker, una debajo de otra. */
-.panel-cabecera .cuenta-emu-lista { grid-area: cuenta; margin-top: 12px; display: grid; gap: 8px; min-width: 0; }
-.panel-cabecera .cuenta-emu-lista .cuenta-emu { grid-area: auto; margin-top: 0; }
+.panel-cabecera .cuentas { grid-area: cuenta; margin-top: 12px; }
 /* «Sincronizar todo» y, a su izquierda, cuándo fue y cuándo toca (dos líneas cortas, alineadas a la derecha). */
 .panel-sincronizar {
   grid-area: sincronizar;
@@ -426,25 +423,6 @@
   overflow-y: auto;
 }
 
-/* Entre 769 y 1400 px «Mis subidas» se queda en el icono (el nombre sigue accesible) y los huecos se aprietan para ir en una fila. */
-@media (min-width: 769px) and (max-width: 1400px) {
-  .cuenta-emu { column-gap: 12px; }
-  .cuenta-emu-cifras { column-gap: 12px; }
-}
-/* Con ratón el nombre está en el tooltip; con el dedo, que no lo abre, el enlace lleva su texto. */
-@media (min-width: 769px) and (max-width: 1400px) and (hover: hover) {
-  .cuenta-emu-enlace-texto {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    margin: -1px;
-    overflow: hidden;
-    clip-path: inset(50%);
-    white-space: nowrap;
-  }
-  .cuenta-emu-enlaces a { min-width: 28px; justify-content: center; }
-}
-
 /* Ventanas estrechas (≤768 px): el Panel se desplaza entero, y la cabecera y tu cuenta se recolocan. */
 @media (max-width: 768px) {
   .panel-pagina {
@@ -460,16 +438,6 @@
     align-items: flex-end;
     gap: 4px;
   }
-  /* Tu cuenta: las cifras en una rejilla de cuatro (etiqueta sobre cifra), los enlaces en su fila. */
-  .cuenta-emu { padding: 10px 12px; }
-  .cuenta-emu-cifras {
-    width: 100%;
-    display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 8px 6px;
-  }
-  .cuenta-emu-cifra { flex-direction: column; gap: 1px; min-width: 0; }
-  .cuenta-emu-enlaces { margin-left: 0; flex-wrap: wrap; gap: 6px 14px; }
 }
 
 /* Poco ancho para el Panel (tablet en vertical, ventana partida o el móvil): los carriles uno bajo otro, la banda en una
@@ -503,12 +471,6 @@
   .panel-franja { grid-template-columns: repeat(6, minmax(0, 1fr)); }
   .panel-franja .stat-card { grid-column: span 2; }
   .panel-franja .stat-card:nth-child(n + 4) { grid-column: span 3; }
-}
-
-/* Tu cuenta, entre el móvil y el escritorio: los enlaces y «Actualizar» suben a la fila del usuario y las cifras van
-   debajo, a todo el ancho (si no, bajaban solos a una tercera fila y dejaban un tercio de la franja vacío). */
-@container panel (min-width: 440px) and (max-width: 980px) {
-  .cuenta-emu-cifras { order: 1; flex: 1 1 100%; }
 }
 
 /* Muy estrecho (el móvil): la franja de dos en dos y la última a todo el ancho. */

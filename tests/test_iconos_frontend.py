@@ -67,3 +67,12 @@ def test_los_iconos_son_imagenes_y_no_pesan_de_mas():
         datos = p.read_bytes()
         assert _script().extension_de(datos) is not None, f"{p.name} no es una imagen que se sirva"
         assert len(datos) <= 20_000, f"{p.name} pesa {len(datos)} bytes: redúcelo a un PNG de 64 px"
+
+
+def test_cada_tracker_tiene_su_logo():
+    """LogoTracker pinta frontend/src/assets/trackers/<id>.png: uno por tracker de services/trackers.py, ni más ni menos."""
+    from emuwarez_uploadrr.services.trackers import TRACKERS
+    carpeta = RAIZ / "frontend" / "src" / "assets" / "trackers"
+    assert {p.name for p in carpeta.iterdir()} == {f"{t}.png" for t in TRACKERS}
+    for p in carpeta.iterdir():
+        assert _script().extension_de(p.read_bytes()) == "png" and p.stat().st_size <= 20_000, p.name

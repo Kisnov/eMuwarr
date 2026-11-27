@@ -6,7 +6,7 @@ import { useTour } from '../context/TourContext'
 import { pasosDelTour } from '../tour/steps'
 import { useTooltip } from './Tooltip'
 import { IconoAyuda, IconoBuscar, IconoCampana, IconoCorreo, IconoOjo, IconoSalir, IconoUsuario } from './Iconos'
-import { ServiceIcon } from './ServiceIcon'
+import { LogoTracker } from './LogoTracker'
 import { tapar, usePerfilEmu } from '../context/PerfilEmuContext'
 import { enlacesCuentaEmu } from '../utils/cuentaEmu'
 import { BotonMenu } from './BotonMenu'
@@ -81,7 +81,7 @@ export function Topbar({ user, pageTitle, onLogout, onBuscar, menu }: TopbarProp
             (en el móvil están en el cajón) */}
         {cuentaEmu && (
           <div className="topbar-emu" role="group" aria-label="Tu cuenta en eMuwarez">
-            <ServiceIcon type="emu" size={16} />
+            <LogoTracker tracker="emu" nombre="eMuwarez" size={18} />
             <a className="topbar-emu-enlace" href={cuentaEmu.mensajes} target="_blank" rel="noreferrer"
               aria-label="Mensajes en eMuwarez (se abre en otra pestaña)" {...mensajesTip.triggerProps}>
               <IconoCorreo size={16} />

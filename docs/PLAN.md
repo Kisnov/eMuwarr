@@ -118,6 +118,9 @@ descripción y el cliente.
        catalán y una en castellano, a eMuwarez y Milnueve).
   3. Después, los internacionales que ya tienen código en `uploadrr-emu/`, solo para contenido con el audio en inglés y
      donde haya permiso.
+     - Con 20 trackers o más, el Panel no puede enseñarlos todos: elegir qué trackers salen en el Panel (`Cuentas`
+       ya recibe la lista a pintar). El resto, en Estadísticas, en tarjetas con más información; al abrir una, el
+       detalle completo de ese tracker: todas sus estadísticas y las subidas hechas a él, con póster.
 - **Por estudiar: nekoBT (nekobt.to; añadido y estudiado el 22/11).** Tracker público de anime centrado en fansubs y
   grupos, en open beta y en pie (≈ 9.500 usuarios y 47.000 torrents). Iría después de la fase B, con adaptador propio:
   - **No es UNIT3D:** `/api/torrents/filter` da un 404 HTML; tiene su propia API JSON en `https://nekobt.to/api/v1`

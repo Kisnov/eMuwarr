@@ -10,6 +10,7 @@ describe('ChipTracker', () => {
   it('dice el tracker de una fila que no es de eMuwarez', async () => {
     await montar(<ChipTracker tracker="nobs" nombre="N.O.B.S" />)
     expect(document.querySelector('.sub-tracker-chip')?.textContent).toBe('N.O.B.S')
+    expect(document.querySelector('.sub-tracker-chip img')?.getAttribute('alt')).toBe('')
   })
 
   it.each([['emu', 'eMuwarez'], [undefined, undefined]])('con %s no pinta nada', async (tracker, nombre) => {
