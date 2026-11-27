@@ -1,7 +1,7 @@
 {
-  "commit": "32e6d63fc698899b727ffb172d132a129b45eca1",
-  "fecha": "2026-11-27 15:36 UTC",
-  "digest": "sha256:00ade596f927b061abe3e5e530d6ef1275542634cc1d63cb588d93ba06112b74",
-  "notas": "eMuwarr 2.0: subidas a varios trackers (eMuwarez, N.O.B.S y Milnueve) con el mismo fichero, carpeta manual sin Radarr/Sonarr, subida por lotes por tracker, cuentas y logos de cada tracker en el Panel, y las correcciones de la auditoría de noviembre.",
-  "version": "2.0.0"
+  "commit": "a4da5fd0fa3edb24f11c969e99ecaea0f3f4314b",
+  "fecha": "2026-11-27 20:40 UTC",
+  "digest": "sha256:ae1cd459dd67117a8d60776031fbfa68599f018be1663c645ab2bdd8c06e422e",
+  "notas": "Un pack de temporada con capítulos en códecs de vídeo distintos ya no se bloquea: avisa y se puede subir.",
+  "version": "2.0.1"
 }
