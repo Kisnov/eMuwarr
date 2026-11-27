@@ -1639,7 +1639,10 @@ def _paso_preparar(t: _Trabajo) -> bool:
         otra = _subida_que_lo_usa(conn, t.destino_uploadrr, job_id)
         # La misma subida a otro tracker: se comparte su fichero en vez de rehacerlo.
         de_otro_tracker = _preparada_para_otro_tracker(conn, t.destino_uploadrr, t) if otra is not None else None
-        if otra is None or de_otro_tracker is not None:
+        # Lo que ya hay en el destino y no explica ninguna subida no se rehace ni se apunta como propio: puede ser lo
+        # que siembra una borrada, y borrar después esta subida se lo llevaría.
+        sin_dueno = otra is None and _destino_sin_dueno(conn, t.destino_uploadrr, job_id, [f for _i, f, _n in ficheros])
+        if (otra is None and not sin_dueno) or de_otro_tracker is not None:
             conn.execute("UPDATE upload_jobs SET prepared_path = ?, updated_at = ? WHERE id = ?",
                          (t.destino_uploadrr, _now_iso(), job_id))
             conn.commit()
@@ -1654,6 +1657,12 @@ def _paso_preparar(t: _Trabajo) -> bool:
                       "o lo tiene en qBittorrent: no se rehace para no romper ese torrent. "
                       f"Abre la subida #{otra} para ver su estado: si ya está en su tracker, "
                       "no hace falta volver a subirlo.")
+        return False
+    if sin_dueno:
+        _fail(job_id, f"«{os.path.basename(t.destino_uploadrr)}» ya existe en la carpeta de subidas y puede estar "
+                      "sembrándose (de una subida que se borró de la lista, por ejemplo): no se rehace para no romper "
+                      f"ese torrent. Si qBittorrent ya no lo siembra, bórralo a mano de {RAIZ_SUBIDAS} y vuelve a "
+                      "intentarlo; si lo siembra, no se puede preparar otra subida de este contenido mientras siga ahí.")
         return False
 
     # Un reintento que reanuda reutiliza los ficheros que dejó preparados la subida anterior (lo caro:
@@ -1690,19 +1699,6 @@ def _paso_preparar(t: _Trabajo) -> bool:
             t.preparada = {"status": "ready", "metodos": ["reutilizada"]}
             t.que = f"{len(ficheros)} capítulo(s)" if is_season else "el archivo"
             return True
-
-    # Lo que ya hay en el destino y no explica ninguna subida no se rehace: puede ser lo que siembra una borrada.
-    with ENLACES:
-        sin_dueno = _destino_sin_dueno(conn, t.destino_uploadrr, job_id, [f for _i, f, _n in ficheros])
-        if sin_dueno:  # este intento tampoco lo explica para el siguiente
-            conn.execute("UPDATE upload_jobs SET prepared_path = NULL WHERE id = ?", (job_id,))
-            conn.commit()
-    if sin_dueno:
-        _fail(job_id, f"«{os.path.basename(t.destino_uploadrr)}» ya existe en la carpeta de subidas y puede estar "
-                      "sembrándose (de una subida que se borró de la lista, por ejemplo): no se rehace para no romper "
-                      f"ese torrent. Si qBittorrent ya no lo siembra, bórralo a mano de {RAIZ_SUBIDAS} y vuelve a "
-                      "intentarlo; si lo siembra, ese contenido ya está subido.")
-        return False
 
     por_nombre = {n: i for i, _f, n in ficheros}
     resultados = t.resultados

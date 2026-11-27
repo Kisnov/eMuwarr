@@ -67,6 +67,9 @@ RAIZ_SUBIDAS = os.environ.get("UPLOADRR_UPLOADS_DIR", "/config/Uploadrr/uploads"
 # Crear un enlace y guardarlo en prepared_path, o comprobar que nadie lo usa y
 # borrarlo, va de uno en uno: un borrado no se lleva el enlace de otra subida.
 ENLACES = threading.Lock()
+# El enlace de prueba (comprobar_enlace) lleva el mismo nombre en todos los hilos y suma un enlace al original mientras
+# existe: de uno en uno, y quien cuenta enlaces (motivo_para_no_editar) no ve el de otro.
+_PROBANDO = threading.RLock()
 
 
 def _enlazar(origen: str, destino: str) -> str:
@@ -321,12 +324,13 @@ def motivo_para_no_editar(fichero: str) -> Optional[str]:
 
     Un enlace simbólico de la carpeta de subidas no suma a `st_nlink`: con la carpeta en otro disco, el original
     parece no compartido aunque otra subida lo siembre a través de él."""
-    enlaces = os.stat(fichero).st_nlink
-    if enlaces > 1:
-        return f"lo comparten {enlaces} enlaces duros (un torrent que siembra o una subida anterior)"
-    if comprobar_enlace(fichero)["tipo"] == "simbólico":
-        return ("se enlaza con un enlace simbólico (la carpeta de subidas está en otro disco), que no cuenta como "
-                "enlace: puede sembrarlo un torrent")
+    with _PROBANDO:  # el enlace de prueba de otro hilo no se cuenta como enlace duro
+        enlaces = os.stat(fichero).st_nlink
+        if enlaces > 1:
+            return f"lo comparten {enlaces} enlaces duros (un torrent que siembra o una subida anterior)"
+        if comprobar_enlace(fichero)["tipo"] == "simbólico":
+            return ("se enlaza con un enlace simbólico (la carpeta de subidas está en otro disco), que no cuenta como "
+                    "enlace: puede sembrarlo un torrent")
     return None
 
 
@@ -352,16 +356,17 @@ def comprobar_enlace(fichero: str, *, raiz: Optional[str] = None) -> dict:
                 "error": f"No existe el archivo con el que probar: {fichero or '(sin ruta)'}"}
 
     prueba = os.path.join(raiz, f".prueba-enlace-{os.getpid()}")
-    try:
-        if os.path.lexists(prueba):
-            os.unlink(prueba)
-        tipo = _enlazar(fichero, prueba)
-        return {"ok": True, "tipo": tipo, "error": None}
-    except OSError as e:
-        return {"ok": False, "tipo": None, "error": f"{raiz}: {texto_de_error(e)}"}
-    finally:
+    with _PROBANDO:
         try:
             if os.path.lexists(prueba):
                 os.unlink(prueba)
-        except OSError:
-            pass
+            tipo = _enlazar(fichero, prueba)
+            return {"ok": True, "tipo": tipo, "error": None}
+        except OSError as e:
+            return {"ok": False, "tipo": None, "error": f"{raiz}: {texto_de_error(e)}"}
+        finally:
+            try:
+                if os.path.lexists(prueba):
+                    os.unlink(prueba)
+            except OSError:
+                pass
