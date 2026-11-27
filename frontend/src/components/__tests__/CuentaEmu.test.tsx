@@ -26,7 +26,7 @@ vi.mock('../../context/PerfilEmuContext', () => ({
 }))
 
 import { CuentaEmu, Cuentas } from '../CuentaEmu'
-import { desmontar, montar, pulsar } from './dom'
+import { desmontar, montar } from './dom'
 
 const cuentas = () => [...document.querySelectorAll('.cuenta-emu')]
 
@@ -57,7 +57,7 @@ describe('Cuentas', () => {
   beforeEach(() => { contexto.ocultarNombre = false })
 
   it('con varios trackers, una tarjeta por tracker con su logo, sus cifras y su «Mis subidas»', async () => {
-    await montar(<Cuentas cuentas={[PERFIL, NOBS]} onAnadirTracker={() => {}} />)
+    await montar(<Cuentas cuentas={[PERFIL, NOBS]} />)
     expect(document.querySelector('.cuentas-tarjetas')).not.toBeNull()
     expect(cuentas().map(f => f.getAttribute('aria-label'))).toEqual(['Tu cuenta en eMuwarez', 'Tu cuenta en N.O.B.S'])
     expect(cuentas().map(f => f.querySelector('img')!.getAttribute('alt'))).toEqual(['eMuwarez', 'N.O.B.S'])
@@ -65,8 +65,6 @@ describe('Cuentas', () => {
     expect(cuentas()[0].textContent).toContain('1,23 TiB')
     expect(cuentas()[0].querySelector('.es-aviso')!.textContent).toContain('2')
     expect(cuentas()[1].querySelector('.es-aviso')).toBeNull()
-    // «Añadir tracker» solo acompaña a un tracker solo.
-    expect(document.querySelector('.cuenta-anadir')).toBeNull()
   })
 
   it('pinta las cuentas que recibe, sean cuantas sean', async () => {
@@ -75,31 +73,23 @@ describe('Cuentas', () => {
     expect(cuentas()).toHaveLength(6)
   })
 
-  it('con un solo tracker y la variante de tabla, una fila', async () => {
-    await montar(<Cuentas cuentas={[PERFIL]} unaCuenta="tabla" onAnadirTracker={() => {}} />)
+  it('con un solo tracker, una fila de tabla', async () => {
+    await montar(<Cuentas cuentas={[PERFIL]} />)
     expect(document.querySelectorAll('.cuentas-tabla tbody tr')).toHaveLength(1)
-    expect(document.querySelector('.cuenta-anadir')).toBeNull()
+    expect(document.querySelector('.cuentas-tarjetas')).toBeNull()
   })
 
-  it('con un solo tracker y la variante de tarjeta, «Añadir tracker» lleva a Configuración', async () => {
-    const onAnadirTracker = vi.fn()
-    await montar(<Cuentas cuentas={[PERFIL]} unaCuenta="tarjeta" onAnadirTracker={onAnadirTracker} />)
-    const anadir = document.querySelector<HTMLAnchorElement>('.cuenta-anadir')!
-    expect(anadir.getAttribute('href')).toBe('/settings')
-    expect(anadir.textContent).toContain('Añadir tracker')
-    await pulsar(anadir)
-    expect(onAnadirTracker).toHaveBeenCalledTimes(1)
-  })
-
-  it.each(['tabla', 'tarjeta'] as const)('con el usuario oculto lo tapa (%s)', async unaCuenta => {
+  it.each([1, 2])('con el usuario oculto lo tapa (%i trackers)', async n => {
     contexto.ocultarNombre = true
-    await montar(<Cuentas cuentas={[PERFIL]} unaCuenta={unaCuenta} />)
+    await montar(<Cuentas cuentas={[PERFIL, NOBS].slice(0, n)} />)
     expect(document.body.textContent).not.toContain('Kisnov')
     expect(document.querySelector('.cuenta-emu-nombre')!.textContent).toBe('******')
+    expect(document.body.textContent).not.toContain('Gabi')
   })
 
-  it.each(['tabla', 'tarjeta'] as const)('sin leer aún, enseña el error con el logo del tracker (%s)', async unaCuenta => {
-    await montar(<Cuentas cuentas={[{ ...NOBS, username: null, ratio: null, error: 'La clave no vale' }]} unaCuenta={unaCuenta} />)
+  it.each([1, 2])('sin leer aún, enseña el error con el logo del tracker (%i trackers)', async n => {
+    const conError = { ...NOBS, username: null, ratio: null, error: 'La clave no vale' }
+    await montar(<Cuentas cuentas={n === 1 ? [conError] : [conError, { ...PERFIL, username: null, error: 'Otra' }]} />)
     expect(document.querySelector('.cuenta-emu-error')!.textContent).toContain('La clave no vale')
     expect(document.querySelector('.cuenta-emu img')!.getAttribute('alt')).toBe('N.O.B.S')
     expect(document.querySelector('.cuenta-emu-enlace')).toBeNull()

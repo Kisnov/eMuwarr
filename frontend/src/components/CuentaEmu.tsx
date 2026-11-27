@@ -15,25 +15,19 @@ const ETIQUETAS = ['Ratio', 'Subido', 'Bajado', 'Buffer', 'Sembrando', 'Descarga
 // Sin usuario aún (la primera lectura ha fallado) se enseña al menos el error.
 const seEnsena = (perfil: EmuPerfil) => !!(perfil.username || perfil.error)
 
-// Con un solo tracker hay dos variantes por elegir: la fila de tabla o su tarjeta con «Añadir tracker» al lado.
-const UNA_CUENTA = 'tabla' as 'tabla' | 'tarjeta'
-
 // Tu cuenta en cada tracker con clave y el enlace a «Mis subidas» (la API no lo da); mensajes y notificaciones están en
 // la barra superior y el cajón móvil.
-export function CuentaEmu({ onAnadirTracker }: { onAnadirTracker?: () => void }) {
+export function CuentaEmu() {
   const { perfil } = usePerfilEmu()
   // La de cada tracker que tiene algo que enseñar, aunque la de eMuwarez no lo tenga.
   const cuentas = perfil ? [perfil, ...(perfil.otros ?? [])].filter(seEnsena) : []
-  return <Cuentas cuentas={cuentas} onAnadirTracker={onAnadirTracker} />
+  return <Cuentas cuentas={cuentas} />
 }
 
-// Las cuentas que se piden, sean cuantas sean: con varias, una tarjeta por tracker.
-export function Cuentas({ cuentas, onAnadirTracker, unaCuenta = UNA_CUENTA }: {
-  cuentas: EmuPerfil[]; onAnadirTracker?: () => void; unaCuenta?: typeof UNA_CUENTA
-}) {
+// Las cuentas que se piden, sean cuantas sean: con una, su fila de tabla; con varias, una tarjeta por tracker.
+export function Cuentas({ cuentas }: { cuentas: EmuPerfil[] }) {
   if (!cuentas.length) return null
   if (cuentas.length > 1) return <CuentasEnTarjetas cuentas={cuentas} />
-  if (unaCuenta === 'tarjeta') return <CuentasEnTarjetas cuentas={cuentas} onAnadirTracker={onAnadirTracker} />
   return <CuentasEnTabla cuentas={cuentas} />
 }
 
@@ -104,18 +98,11 @@ function useCuenta(perfil: EmuPerfil, alturaLogo: number) {
   return { nombre, usuario, rol, cifras, error, acciones }
 }
 
-// Una tarjeta por tracker, una al lado de otra, y saltan de línea cuando no caben. Con `onAnadirTracker`, la última es
-// el enlace para añadir otro.
-function CuentasEnTarjetas({ cuentas, onAnadirTracker }: { cuentas: EmuPerfil[]; onAnadirTracker?: () => void }) {
+// Una tarjeta por tracker, una al lado de otra, y saltan de línea cuando no caben.
+function CuentasEnTarjetas({ cuentas }: { cuentas: EmuPerfil[] }) {
   return (
-    <div className={`cuentas cuentas-tarjetas${onAnadirTracker ? ' con-anadir' : ''}`}>
+    <div className="cuentas cuentas-tarjetas">
       {cuentas.map(b => <Tarjeta key={b.tracker ?? 'emu'} perfil={b} />)}
-      {onAnadirTracker && (
-        <a className="cuenta-anadir" href="/settings" onClick={e => { e.preventDefault(); onAnadirTracker() }}>
-          <span className="cuenta-anadir-titulo"><span aria-hidden="true">+</span> Añadir tracker</span>
-          <span className="cuenta-anadir-nota">Con la clave de otro tracker en Configuración, subes también allí.</span>
-        </a>
-      )}
     </div>
   )
 }
