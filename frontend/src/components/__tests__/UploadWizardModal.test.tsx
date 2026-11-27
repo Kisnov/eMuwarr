@@ -833,6 +833,26 @@ describe('varias temporadas de una serie', () => {
     mismoLote()
   })
 
+  it('desde una petición de la temporada 2, subir solo la 1 no la enlaza a la petición', async () => {
+    m(getRequestDetail).mockResolvedValue({ title: 'Serie S02', points: null } as never)
+    await abrir(SERIE, { preselect: { season: 2 }, requestId: 8 })
+    await pulsar(await esperar(() => boton('Temporada 2')))
+    await pulsar(boton('Temporada 1'))
+    await pulsar(boton('Continuar'))
+    await esperar(() => texto().includes('✓ 2 capítulo(s) listos'))
+    expect(temporada.previewSeasonPack).toHaveBeenCalledWith(31, undefined, undefined)
+    await pulsar(boton('Continuar'))
+    await esperar(() => texto().includes('✓ Todo listo para subir'))
+    const peticion = () => [...document.querySelectorAll('.asist-datos dt')].find(d => d.textContent === 'Petición')
+      ?.nextElementSibling?.textContent ?? ''
+    await esperar(() => peticion())
+    expect(peticion()).not.toContain('Cubre')
+
+    await pulsar(boton('Subir a eMuwarez'))
+    await esperar(() => onClose.mock.calls.length > 0)
+    expect(m(subidas.queueUpload).mock.calls.map(c => [c[0], c[5]])).toEqual([[31, undefined]])
+  })
+
   it('a varios trackers: una subida por temporada y tracker en el mismo lote; la que uno no admite se salta para él', async () => {
     m(subidas.fetchTrackersParaSubir).mockResolvedValue([{ id: 'emu', nombre: 'eMuwarez' }, { id: 'nobs', nombre: 'N.O.B.S' }])
     m(subidas.queueUpload).mockImplementation(async (id, ...resto) => (id === 32 && resto[7] === 'nobs'

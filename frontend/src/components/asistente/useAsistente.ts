@@ -1099,6 +1099,9 @@ export function useAsistente({ item, onClose: onCloseProp, onDone, onNavigate, p
       setTrackersElegidos(t => t.filter(x => !encolados.some(e => e.id === x)))
       return ` Ya en cola: ${encolados.map(e => e.nombre).join(', ')}; «Subir» reintenta solo lo que falta.`
     }
+    // Como en la tanda: una petición de otra temporada o capítulo no queda enlazada.
+    const fila = [item, ...seasons, ...episodes].find(x => x.id === targetId)
+    const peticion = !fila || peticionCubre(preselect, fila) ? requestId : undefined
     try {
       await saveNomenclatureFields(targetId, fields)
       const remuxSnapshot = remuxPreview
@@ -1114,7 +1117,7 @@ export function useAsistente({ item, onClose: onCloseProp, onDone, onNavigate, p
                 { source: fields.source, tag: fields.tag, title: fields.title }, proveedorElegido, targetId,
                 idiomasPorTemporada.get(targetId))
             : undefined,
-          requestId,
+          peticion,
           undefined,
           opcionesTracker,
           // eMuwarez no lo manda: es lo de siempre.
