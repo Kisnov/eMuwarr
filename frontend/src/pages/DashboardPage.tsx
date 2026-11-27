@@ -386,7 +386,7 @@ export function DashboardPage({ onNavigate }: DashboardPageProps = {}) {
     <div className="panel-pagina">
       <div className="page-header panel-cabecera">
         <h1 className="page-title">Panel</h1>
-        <CuentaEmu />
+        <CuentaEmu onAnadirTracker={() => onNavigate?.('settings')} />
         <div className="panel-sincronizar">
           <SyncCard />
           <div className="panel-sincronizacion">

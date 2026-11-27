@@ -15,19 +15,30 @@ const ETIQUETAS = ['Ratio', 'Subido', 'Bajado', 'Buffer', 'Sembrando', 'Descarga
 // Sin usuario aún (la primera lectura ha fallado) se enseña al menos el error.
 const seEnsena = (perfil: EmuPerfil) => !!(perfil.username || perfil.error)
 
+// Con un solo tracker hay dos variantes por elegir: la fila de tabla o su tarjeta con «Añadir tracker» al lado.
+const UNA_CUENTA = 'tabla' as 'tabla' | 'tarjeta'
+
 // Tu cuenta en cada tracker con clave y el enlace a «Mis subidas» (la API no lo da); mensajes y notificaciones están en
-// la barra superior y el cajón móvil. Dos disposiciones para elegir: una tarjeta por tracker o una tabla.
-export function CuentaEmu() {
+// la barra superior y el cajón móvil.
+export function CuentaEmu({ onAnadirTracker }: { onAnadirTracker?: () => void }) {
   const { perfil } = usePerfilEmu()
   // La de cada tracker que tiene algo que enseñar, aunque la de eMuwarez no lo tenga.
-  const bandas = perfil ? [perfil, ...(perfil.otros ?? [])].filter(seEnsena) : []
-  if (!bandas.length) return null
-  const Vista = DISPOSICIONES[DISPOSICION]
-  return <Vista bandas={bandas} />
+  const cuentas = perfil ? [perfil, ...(perfil.otros ?? [])].filter(seEnsena) : []
+  return <Cuentas cuentas={cuentas} onAnadirTracker={onAnadirTracker} />
+}
+
+// Las cuentas que se piden, sean cuantas sean: con varias, una tarjeta por tracker.
+export function Cuentas({ cuentas, onAnadirTracker, unaCuenta = UNA_CUENTA }: {
+  cuentas: EmuPerfil[]; onAnadirTracker?: () => void; unaCuenta?: typeof UNA_CUENTA
+}) {
+  if (!cuentas.length) return null
+  if (cuentas.length > 1) return <CuentasEnTarjetas cuentas={cuentas} />
+  if (unaCuenta === 'tarjeta') return <CuentasEnTarjetas cuentas={cuentas} onAnadirTracker={onAnadirTracker} />
+  return <CuentasEnTabla cuentas={cuentas} />
 }
 
 // Lo que comparten las dos disposiciones: enlaces, avisos, cifras y el botón de volver a leer.
-function useCuenta(perfil: EmuPerfil) {
+function useCuenta(perfil: EmuPerfil, alturaLogo: number) {
   const { actualizar, ocultarNombre } = usePerfilEmu()
   const espera = useCooldown()
   const [actualizando, setActualizando] = useState(false)
@@ -62,11 +73,11 @@ function useCuenta(perfil: EmuPerfil) {
 
   const usuario = enlaces ? (
     <a className="cuenta-emu-usuario hover-link" href={enlaces.perfil} target="_blank" rel="noreferrer">
-      <LogoTracker tracker={perfil.tracker} nombre={nombre} size={20} />
+      <LogoTracker tracker={perfil.tracker} nombre={nombre} size={alturaLogo} />
       <span className="cuenta-emu-nombre">{ocultarNombre ? tapar(enlaces.usuario) : enlaces.usuario}</span>
       <span className="solo-lector"> (tu perfil en {nombre}, se abre en otra pestaña)</span>
     </a>
-  ) : <span className="cuenta-emu-usuario"><LogoTracker tracker={perfil.tracker} nombre={nombre} size={20} /></span>
+  ) : <span className="cuenta-emu-usuario"><LogoTracker tracker={perfil.tracker} nombre={nombre} size={alturaLogo} /></span>
 
   const acciones = (
     <div className="cuenta-emu-acciones">
@@ -93,17 +104,24 @@ function useCuenta(perfil: EmuPerfil) {
   return { nombre, usuario, rol, cifras, error, acciones }
 }
 
-// Opción A: una tarjeta por tracker, una al lado de otra; con una sola (y sitio), todo en una fila.
-export function CuentasEnTarjetas({ bandas }: { bandas: EmuPerfil[] }) {
+// Una tarjeta por tracker, una al lado de otra, y saltan de línea cuando no caben. Con `onAnadirTracker`, la última es
+// el enlace para añadir otro.
+function CuentasEnTarjetas({ cuentas, onAnadirTracker }: { cuentas: EmuPerfil[]; onAnadirTracker?: () => void }) {
   return (
-    <div className={`cuentas cuentas-tarjetas${bandas.length === 1 ? ' es-una' : ''}`}>
-      {bandas.map(b => <Tarjeta key={b.tracker ?? 'emu'} perfil={b} />)}
+    <div className={`cuentas cuentas-tarjetas${onAnadirTracker ? ' con-anadir' : ''}`}>
+      {cuentas.map(b => <Tarjeta key={b.tracker ?? 'emu'} perfil={b} />)}
+      {onAnadirTracker && (
+        <a className="cuenta-anadir" href="/settings" onClick={e => { e.preventDefault(); onAnadirTracker() }}>
+          <span className="cuenta-anadir-titulo"><span aria-hidden="true">+</span> Añadir tracker</span>
+          <span className="cuenta-anadir-nota">Con la clave de otro tracker en Configuración, subes también allí.</span>
+        </a>
+      )}
     </div>
   )
 }
 
 function Tarjeta({ perfil }: { perfil: EmuPerfil }) {
-  const c = useCuenta(perfil)
+  const c = useCuenta(perfil, 24)
   return (
     <section className="cuenta-emu cuenta-tarjeta" aria-label={`Tu cuenta en ${c.nombre}`}>
       <div className="cuenta-tarjeta-cuerpo">
@@ -122,8 +140,8 @@ function Tarjeta({ perfil }: { perfil: EmuPerfil }) {
   )
 }
 
-// Opción B: una tabla, una fila por tracker y las cifras en columnas alineadas, con las etiquetas una sola vez.
-export function CuentasEnTabla({ bandas }: { bandas: EmuPerfil[] }) {
+// Una tabla, una fila por tracker y las cifras en columnas alineadas, con las etiquetas una sola vez.
+function CuentasEnTabla({ cuentas }: { cuentas: EmuPerfil[] }) {
   return (
     <div className="cuentas cuentas-tabla-caja">
       <table className="cuentas-tabla">
@@ -136,7 +154,7 @@ export function CuentasEnTabla({ bandas }: { bandas: EmuPerfil[] }) {
           </tr>
         </thead>
         <tbody>
-          {bandas.map(b => <Fila key={b.tracker ?? 'emu'} perfil={b} />)}
+          {cuentas.map(b => <Fila key={b.tracker ?? 'emu'} perfil={b} />)}
         </tbody>
       </table>
     </div>
@@ -144,7 +162,7 @@ export function CuentasEnTabla({ bandas }: { bandas: EmuPerfil[] }) {
 }
 
 function Fila({ perfil }: { perfil: EmuPerfil }) {
-  const c = useCuenta(perfil)
+  const c = useCuenta(perfil, 20)
   return (
     <tr className="cuenta-emu" aria-label={`Tu cuenta en ${c.nombre}`}>
       <th scope="row" className="cuentas-tabla-cuenta">
@@ -158,7 +176,3 @@ function Fila({ perfil }: { perfil: EmuPerfil }) {
     </tr>
   )
 }
-
-// Cuál de las dos se enseña (temporal, mientras se elige).
-const DISPOSICIONES = { tarjetas: CuentasEnTarjetas, tabla: CuentasEnTabla }
-const DISPOSICION: keyof typeof DISPOSICIONES = 'tarjetas'

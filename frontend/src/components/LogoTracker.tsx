@@ -15,7 +15,7 @@ export function LogoTracker({ tracker, nombre, size = 16, conNombre = false }: {
 }) {
   const id = tracker || 'emu'
   const url = POR_ID.get(id)
-  if (!url) return <>{nombre}</>
+  if (!url) return conNombre ? <>{nombre}</> : <span className="logo-tracker-sin-logo">{nombre}</span>
   const img = <img className={PIXELADOS.has(id) ? 'logo-tracker es-pixel' : 'logo-tracker'} src={url}
     alt={conNombre ? '' : nombre} title={conNombre ? undefined : nombre} height={size} style={{ maxWidth: size * 1.4 }} />
   return conNombre ? <span className="logo-tracker-con-nombre">{img}{nombre}</span> : img

@@ -7,8 +7,9 @@
 }
 .sync-card button.btn { white-space: nowrap; }
 
-/* Tus cuentas en los trackers: bajo el título del Panel (ver `.panel-cabecera` en panel.css, que la coloca). Dos
-   disposiciones: una tarjeta por tracker (`.cuentas-tarjetas`) o una tabla con una fila por tracker (`.cuentas-tabla`). */
+/* Tus cuentas en los trackers: bajo el título del Panel (ver `.panel-cabecera` en panel.css, que la coloca). Con varios,
+   una tarjeta por tracker (`.cuentas-tarjetas`); con uno, una tabla de una fila (`.cuentas-tabla`) o su tarjeta con
+   «Añadir tracker» al lado (`UNA_CUENTA` en CuentaEmu.tsx). */
 .cuenta-emu-usuario {
   min-width: 0;
   min-height: 24px;
@@ -76,13 +77,33 @@ td.cuenta-emu-cifra.es-aviso,
   white-space: nowrap;
 }
 
-/* Opción A: tarjetas una al lado de otra; cada una mira su propio ancho. Estrecha, la cabecera arriba y las cifras en
-   dos filas de cuatro (etiqueta sobre cifra); ancha (un solo tracker), todo en una fila. */
+/* Con varios trackers, una tarjeta por tracker: la cabecera arriba y las cifras en dos filas de cuatro (etiqueta sobre
+   cifra). Llenan el ancho y, si no caben, saltan de línea. Con «Añadir tracker» al lado (un solo tracker), cada una
+   ocupa lo que una columna, en vez de estirarse a todo el ancho. */
 .cuentas-tarjetas {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr));
   gap: 10px;
 }
+.cuentas-tarjetas.con-anadir { grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr)); }
+.cuenta-anadir {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
+  padding: 10px 14px;
+  font-size: 12px;
+  color: var(--text-muted);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-card);
+  transition: border-color 0.15s, color 0.15s;
+}
+.cuenta-anadir-titulo {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-accent);
+}
+.cuenta-anadir:hover { border-color: var(--border-hover); color: var(--text-secondary); }
 .cuenta-tarjeta {
   min-width: 0;
   container: tarjeta / inline-size;
@@ -138,17 +159,8 @@ td.cuenta-emu-cifra.es-aviso,
     white-space: nowrap;
   }
 }
-@container tarjeta (min-width: 900px) {
-  .cuenta-tarjeta-cuerpo {
-    grid-template-columns: auto minmax(0, 1fr) auto;
-    grid-template-areas: "cabecera cifras acciones" "error error error";
-    column-gap: 28px;
-    padding: 8px 10px 8px 14px;
-  }
-  .cuenta-tarjeta .cuenta-emu-cifras { grid-template-columns: repeat(8, auto); justify-content: start; column-gap: 26px; }
-}
 
-/* Opción B: una tabla, una fila por tracker y las cifras en columnas alineadas a la derecha. */
+/* Con un solo tracker, una tabla de una fila: las cifras en columnas alineadas a la derecha. */
 .cuentas-tabla-caja {
   min-width: 0;
   overflow-x: auto;
