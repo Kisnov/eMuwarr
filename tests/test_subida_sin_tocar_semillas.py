@@ -523,6 +523,27 @@ def test_en_la_carpeta_de_subidas_se_renombra_y_se_titula_en_su_sitio(entorno, m
     assert r["refrescos"] == [peli["id"]]
 
 
+def test_no_se_renombra_un_capitulo_de_un_pack_que_siembra_otra_subida(entorno, mkv_base, monkeypatch):
+    """La subida del pack apunta a su carpeta, no al fichero: renombrarlo se lo quitaba al torrent del pack."""
+    from emuwarez_uploadrr.services import carpeta_subida
+    monkeypatch.setattr(carpeta_subida, "clonar", _reflink("no"))
+    _modo(entorno, "ninguno")
+    pack = entorno["uploads"] / "Serie S01 2020 1080p WEB-DL"
+    peli = _pelicula(entorno, mkv_base, carpeta=pack, nombre="Serie.S01E01.mkv", semilla=False)
+    conn = entorno["conn"]
+    sembradora = conn.execute(
+        """INSERT INTO upload_jobs (library_item_id, status, stage, title, path, source_path, prepared_path,
+                                    created_at, updated_at)
+           VALUES (?, 'completed', 'completed', 'Pack', '', '', ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)""",
+        (peli["id"], str(pack))).lastrowid
+    conn.commit()
+
+    r = _subir(entorno, peli["id"], peli["proposal_id"])
+
+    assert sorted(os.listdir(pack)) == ["Serie.S01E01.mkv"], r["logs"]
+    assert any(f"la subida #{sembradora} siembra desde ahí" in m for m in r["logs"])
+
+
 # ---------------------------------------------------------------------------
 # Un pack desde la biblioteca (/data/media), de punta a punta
 # ---------------------------------------------------------------------------

@@ -358,6 +358,20 @@ def test_el_escaneo_no_ve_enlaces_rotos_ficheros_de_mac_ni_la_carpeta_de_subidas
     assert carpeta.probar_carpeta(str(carpeta_dir))["message"] == "3 vídeos en la carpeta"
 
 
+def test_la_carpeta_de_subidas_no_vale_como_carpeta_manual_pero_una_de_dentro_si(conn, tmp_path, monkeypatch):
+    """Sus enlaces saldrían como elementos y renombrar uno se lo quitaba al torrent que lo siembra."""
+    from emuwarez_uploadrr.services import carpeta_subida
+    subidas = tmp_path / "uploads"
+    (subidas / "Up").mkdir(parents=True)
+    monkeypatch.setattr(carpeta_subida, "RAIZ_SUBIDAS", str(subidas))
+    for ruta in (str(subidas), str(subidas) + "/", str(subidas / "Up" / "..")):
+        resultado = carpeta.probar_carpeta(ruta, conn)
+        assert resultado["ok"] is False and "carpeta de subidas" in resultado["error"]
+        with pytest.raises(ValueError):
+            carpeta.ruta_de_carpeta(ruta)
+    assert carpeta.probar_carpeta(str(subidas / "Up"), conn)["ok"] is True
+
+
 def test_capitulos_sin_resolucion_en_el_nombre_se_separan_por_la_del_fichero(
         conn, instancia, carpeta_dir, monkeypatch, lecturas, busquedas):
     medidas = []

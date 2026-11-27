@@ -1121,12 +1121,12 @@ def _renombrar_si_esta_en_subidas(job_id: int, item_id: int, origen: str | None,
 
 
 def _subida_que_lo_usa(conn, ruta: str, job_id: int) -> int | None:
-    """La otra subida que siembra (o prepara) desde `ruta`, con el mismo criterio
-    que el borrado: quitarle el enlace o reescribirlo rompería su torrent."""
+    """La otra subida que siembra (o prepara) desde `ruta`, o desde la carpeta de pack que la contiene, con el mismo
+    criterio que el borrado: quitarle el enlace o reescribirlo rompería su torrent."""
     fila = conn.execute(
-        "SELECT id FROM upload_jobs WHERE prepared_path = ? AND id != ? "
-        "AND (status NOT IN ('cancelled', 'failed') OR torrent_subido = 1) LIMIT 1",
-        (ruta, job_id)).fetchone()
+        "SELECT id FROM upload_jobs WHERE (prepared_path = ? OR substr(?, 1, length(prepared_path) + 1) = "
+        "prepared_path || '/') AND id != ? AND (status NOT IN ('cancelled', 'failed') OR torrent_subido = 1) LIMIT 1",
+        (ruta, ruta, job_id)).fetchone()
     return fila["id"] if fila else None
 
 
