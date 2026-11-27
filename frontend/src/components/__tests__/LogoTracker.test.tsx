@@ -12,7 +12,7 @@ describe('LogoTracker', () => {
     const img = document.querySelector('img')!
     expect(img.getAttribute('alt')).toBe(nombre)
     expect(img.getAttribute('title')).toBe(nombre)
-    expect(img.getAttribute('src')).toMatch(new RegExp(`${tracker}.*\.png`))
+    expect(img.getAttribute('src')).toMatch(new RegExp(`${tracker}.*\\.png`))
   })
 
   it('sin tracker es eMuwarez', async () => {
