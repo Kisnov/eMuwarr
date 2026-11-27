@@ -312,3 +312,18 @@ def test_la_api_lista_cuenta_y_lee_el_registro_por_partes(client, auth_headers, 
     append_upload_log(ids[0], "info", "linea 5", stream="stdout", conn=db_conn)
     r = client.get(f"/api/uploads/{ids[0]}/logs", params={"after_sequence": ultima}, headers=auth_headers)
     assert [l["message"] for l in r.json()["logs"]] == ["linea 5"]
+
+
+def test_los_campos_de_adorno_dicen_la_serie_de_una_temporada_y_de_un_capitulo(db_conn):
+    """Subidas pliega bajo su serie las de sus temporadas y capítulos; una película o la serie misma no tienen."""
+    from emuwarez_uploadrr.services.library import library_display_fields
+    nuevo = lambda sql, *a: db_conn.execute(sql, a).lastrowid  # noqa: E731
+    pelicula = nuevo("INSERT INTO library_items (item_type, title, local_status) VALUES ('movie', 'Peli', 'Disponible')")
+    serie = nuevo("INSERT INTO library_items (item_type, title, local_status) VALUES ('series', 'Serie', 'Disponible')")
+    temporada = nuevo("INSERT INTO library_items (item_type, title, local_status, parent_id) VALUES ('season', 'T1', 'Disponible', ?)", serie)
+    capitulo = nuevo("INSERT INTO library_items (item_type, title, local_status, parent_id) VALUES ('episode', 'E1', 'Disponible', ?)", temporada)
+
+    fichas = library_display_fields({pelicula, serie, temporada, capitulo}, db_conn)
+
+    assert {i: (f["serie_id"], f["serie_titulo"]) for i, f in fichas.items()} == {
+        pelicula: (None, None), serie: (None, None), temporada: (serie, "Serie"), capitulo: (serie, "Serie")}

@@ -148,6 +148,34 @@
   border-bottom-color: transparent;
 }
 
+/* La fila de una serie con varias subidas: un botón a todo el ancho que las despliega. */
+.sub-serie-boton {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  width: 100%;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.sub-serie-estados {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-left: auto;
+}
+
+/* Las subidas de una serie desplegada, metidas hacia dentro. */
+.data-table tr.sub-de-serie > td:first-child {
+  padding-left: 34px;
+}
+
 /* Chip «Lote · N» junto al título: un botón que filtra la lista por ese lote. */
 .sub-lote-chip {
   flex-shrink: 0;
@@ -684,6 +712,16 @@ input.sub-confirmar.sub-confirmar-ok:not([type="checkbox"]):not([type="radio"]):
   .sub-scroll .data-table tbody,
   .sub-scroll .data-table thead {
     display: block;
+  }
+
+  /* La fila de una serie ocupa la tarjeta entera y sus estados bajan de línea. */
+  .sub-scroll .data-table tr.sub-fila-serie,
+  .sub-scroll .data-table tr.sub-fila-serie > td {
+    display: block;
+  }
+
+  .sub-serie-boton {
+    flex-wrap: wrap;
   }
 
   .sub-scroll .data-table thead tr {

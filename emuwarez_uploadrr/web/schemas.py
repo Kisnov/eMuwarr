@@ -1189,6 +1189,9 @@ class UploadJobDetail(BaseModel):
     reintento_reutiliza: list[str] = []
     # Media type (movie/series/…) from the linked library item, for filtering.
     media_type: Optional[str] = None
+    # La serie de una temporada o un capítulo: Subidas las pliega bajo ella.
+    serie_id: Optional[int] = None
+    serie_titulo: Optional[str] = None
     # Poster thumbnail from the linked library item, for the Subidas row.
     poster_url: Optional[str] = None
     # Fanart/backdrop from the linked library item — hero background on the

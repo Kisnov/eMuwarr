@@ -122,6 +122,7 @@ def _con_ficha(j: dict, ficha: dict | None, **kw) -> UploadJobDetail:
         f.get("instance_type") or None, f.get("instance_name") or None, f.get("request_status") or None,
         f.get("year") or None, f.get("instance_id") or None, f.get("tmdb_id") or None, f.get("title_slug") or None,
         release_groups=f.get("release_groups") or [],
+        serie_id=f.get("serie_id"), serie_titulo=f.get("serie_titulo"),
         **kw,
     )
 
@@ -144,6 +145,8 @@ def _job_to_detail(
     release_groups: list[str] | None = None,
     lote_total: int | None = None,
     pendiente_moderacion: bool = False,
+    serie_id: int | None = None,
+    serie_titulo: str | None = None,
 ) -> UploadJobDetail:
     prepared = j.get("prepared_path")
     source = j.get("source_path") or j.get("path")
@@ -151,6 +154,8 @@ def _job_to_detail(
     tracker = trackers.TRACKERS.get(j.get("tracker") or trackers.POR_DEFECTO, trackers.EMU)
     return UploadJobDetail(
         media_type=media_type,
+        serie_id=serie_id,
+        serie_titulo=serie_titulo,
         poster_url=poster_url,
         backdrop_url=backdrop_url,
         year=year,

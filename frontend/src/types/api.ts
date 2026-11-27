@@ -677,6 +677,9 @@ export interface UploadJob {
   command_preview?: string | null
   progress_phase?: string | null
   media_type?: string | null
+  // La serie de una temporada o un capítulo: Subidas las pliega bajo ella.
+  serie_id?: number | null
+  serie_titulo?: string | null
   poster_url?: string | null
   backdrop_url?: string | null
   year?: number | null

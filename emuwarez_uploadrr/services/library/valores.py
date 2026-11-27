@@ -202,7 +202,16 @@ def library_display_fields(item_ids, conn) -> dict[int, dict]:
         f"SELECT {_CAMPOS_ADORNO} FROM library_items WHERE id IN ({marcas})", tuple(ids)
     ).fetchall()
     grupos = _grupos_de_release_de(ids, conn)
-    return {r["id"]: {**dict(r), "release_groups": grupos.get(r["id"], [])} for r in filas}
+    # La serie de cada temporada o capítulo: Subidas las pliega bajo ella.
+    series = {r["id"]: (r["serie_id"], r["serie_titulo"]) for r in conn.execute(
+        f"""SELECT li.id, s.id AS serie_id, s.title AS serie_titulo FROM library_items li
+            LEFT JOIN library_items p ON p.id = li.parent_id
+            JOIN library_items s ON s.id = CASE li.item_type WHEN 'season' THEN li.parent_id
+                                                             WHEN 'episode' THEN p.parent_id END
+            WHERE li.id IN ({marcas})""", tuple(ids))}
+    return {r["id"]: {**dict(r), "release_groups": grupos.get(r["id"], []),
+                      "serie_id": series.get(r["id"], (None, None))[0],
+                      "serie_titulo": series.get(r["id"], (None, None))[1]} for r in filas}
 
 
 def library_display_fields_one(item_id: int, conn) -> dict | None:

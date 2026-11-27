@@ -693,3 +693,30 @@ describe('«Subir también a…»', () => {
     await esperar(() => boton('Subir 1 subida'))
   })
 })
+
+describe('las subidas de una serie', () => {
+  const T1 = trabajo({ id: 11, title: 'Serie - Temporada 1', media_type: 'season', serie_id: 7, serie_titulo: 'Serie' })
+  const T2 = trabajo({ id: 12, title: 'Serie - Temporada 2', media_type: 'season', status: 'queued', serie_id: 7, serie_titulo: 'Serie' })
+
+  it('van plegadas bajo la fila de la serie, que dice cuántas hay en cada estado, y se despliegan al pulsarla', async () => {
+    vi.mocked(getUploads).mockResolvedValue([T1, T2, SUELTA])
+    await pagina()
+    const fila = document.querySelector('tr.sub-fila-serie')!
+    expect(fila.textContent).toContain('Serie')
+    expect(fila.textContent).toContain('2 subidas')
+    expect(filaDe('Serie - Temporada 1')).toBeUndefined()
+    expect(filaDe('Película suelta')).toBeDefined()
+
+    await pulsar(fila.querySelector('button') ?? undefined)
+    expect(filaDe('Serie - Temporada 1').className).toContain('sub-de-serie')
+    expect(filaDe('Serie - Temporada 2')).toBeDefined()
+    expect(fila.querySelector('button')!.getAttribute('aria-expanded')).toBe('true')
+  })
+
+  it('una sola subida de una serie no se pliega', async () => {
+    vi.mocked(getUploads).mockResolvedValue([T1, SUELTA])
+    await pagina()
+    expect(document.querySelector('tr.sub-fila-serie')).toBeNull()
+    expect(filaDe('Serie - Temporada 1')).toBeDefined()
+  })
+})

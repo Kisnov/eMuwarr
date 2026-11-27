@@ -38,6 +38,7 @@ import { SubirTambienModal } from '../components/SubirTambien'
 import { BannerSinTrailer, ChipSinTrailer, faltaTrailer } from '../components/AvisoTrailer'
 import { FilasVirtuales } from '../components/FilasVirtuales'
 import { UMBRAL_VIRTUAL } from '../utils/ventana'
+import { agruparPorSerie, esBloqueSerie, estadosDeSerie, type Bloque, type BloqueSerie } from '../utils/subidasPorSerie'
 
 // Backend-real gates — mirror cancel_upload_job()/queue_retry_for_job() in
 // services/upload_execution.py / upload_queue.py exactly, so the button is
@@ -63,7 +64,8 @@ const CONFIRMATION_TOKEN = 'INICIAR_UPLOADRR'
 const COLUMNAS = 9
 // Lo que mide una fila antes de pintarla (FilasVirtuales la corrige con la media de las que va midiendo).
 const ALTO_FILA = 65
-const claveDeGrupo = (grupo: UploadJob[]) => grupo[0].id!
+// Los ids de subida son positivos: una serie va con el suyo en negativo.
+const claveDeBloque = (b: Bloque) => (esBloqueSerie(b) ? -b.serieId : b[0].id!)
 
 // Only real upload states — a job now only exists once the user uploads, so
 // the preparatory "ready"/"blocked" states no longer appear here. 'preparing'
@@ -220,7 +222,7 @@ function AccionDeFila({ etiqueta, tono, clase, onClick, children }: {
 // Va memorizada: con el progreso real llegando cada medio segundo, solo tiene que repintarse la fila cuya subida
 // cambió. Para que el memo sirva, todas las props son valores o funciones con identidad estable (nada de objetos o
 // flechas hechos en cada pintado del padre): por eso el chip de reintentos son dos valores y `onOpen` recibe el id.
-const JobRow = memo(function JobRow({ job, instances, seeding, onOpen, indent, enGrupo, otrosTrackers, trackersAbiertos, otroFallido, onToggleTrackers, intentosAnteriores, desplegada, onToggleCadena, onCancel, onRetry, onDelete, onFiltrarLote, subirTambienId, onSubirTambien }: {
+const JobRow = memo(function JobRow({ job, instances, seeding, onOpen, indent, enGrupo, deSerie, otrosTrackers, trackersAbiertos, otroFallido, onToggleTrackers, intentosAnteriores, desplegada, onToggleCadena, onCancel, onRetry, onDelete, onFiltrarLote, subirTambienId, onSubirTambien }: {
   job: UploadJob
   seeding: SeedingEstado
   instances: InstanceSafeResponse[]
@@ -228,6 +230,8 @@ const JobRow = memo(function JobRow({ job, instances, seeding, onOpen, indent, e
   indent?: boolean
   // El mismo elemento subido a varios trackers: la primera fila lleva el título; las otras, solo su tracker.
   enGrupo?: 'primera' | 'otra'
+  // Bajo la fila desplegada de su serie.
+  deSerie?: boolean
   // En la primera: los otros trackers («N.O.B.S · eMuwarez»), si se ven sus filas y si alguna no terminó bien.
   otrosTrackers?: string
   trackersAbiertos?: boolean
@@ -265,7 +269,7 @@ const JobRow = memo(function JobRow({ job, instances, seeding, onOpen, indent, e
   return (
     // Por debajo de 760 px la fila es una tarjeta (subidas.css): título y la acción que toca, el estado, y en gris
     // tipo · origen · fecha y los chips. Las clases sub-col-* y sub-meta dicen qué va en cada línea.
-    <tr className={indent ? 'sub-tarjeta sub-fila-antigua' : otra ? 'sub-tarjeta sub-fila-tracker' : 'sub-tarjeta'}>
+    <tr className={`${indent ? 'sub-tarjeta sub-fila-antigua' : otra ? 'sub-tarjeta sub-fila-tracker' : 'sub-tarjeta'}${deSerie ? ' sub-de-serie' : ''}`}>
       <td className="sub-celda-titulo">
         <div className={`sub-titulo-fila${indent ? ' sub-titulo-fila-antigua' : otra ? ' sub-titulo-fila-tracker' : ''}`}>
           {!otra && <div className="poster-thumb sub-poster">
@@ -409,6 +413,33 @@ const JobRow = memo(function JobRow({ job, instances, seeding, onOpen, indent, e
   )
 })
 
+// La fila de una serie con varias subidas: plegada, dice cuántas hay en cada estado.
+function FilaSerie({ bloque, abierta, onToggle }: { bloque: BloqueSerie; abierta: boolean; onToggle: (id: number) => void }) {
+  const primera = bloque.elementos[0][0]
+  const estados = estadosDeSerie(bloque).sort((a, b) => ordenDeEstado(a[0]) - ordenDeEstado(b[0]))
+  return (
+    <tr className="sub-fila-serie">
+      <td colSpan={COLUMNAS}>
+        <button type="button" className="sub-serie-boton" aria-expanded={abierta} onClick={() => onToggle(bloque.serieId)}>
+          <IconoDesplegar abierto={abierta} size={12} />
+          <span className="poster-thumb sub-poster">
+            {primera.poster_url
+              ? <img src={posterUrl(primera.poster_url, 'w92')} alt="" loading="lazy" decoding="async" className="sub-poster-img" />
+              : <span className="sub-poster-icono"><IconoTipo serie /></span>}
+          </span>
+          <span className="sub-titulo">{bloque.titulo}</span>
+          <span className="sub-muted sub-t12 sub-no-encoge">{bloque.elementos.length} subidas</span>
+          <span className="sub-serie-estados">
+            {estados.map(([estado, n]) => (
+              <span key={estado} className={STATUS_CLASS[estado] || 'badge req-unknown'}>{n} · {statusLabel(estado)}</span>
+            ))}
+          </span>
+        </button>
+      </td>
+    </tr>
+  )
+}
+
 export function UploadsPage({ onNavigate }: { onNavigate?: (page: string) => void } = {}) {
   const [jobs, setJobs] = useState<UploadJob[]>([])
   // Only needed to build the Origen deep link (same as Biblioteca's own column).
@@ -492,6 +523,15 @@ export function UploadsPage({ onNavigate }: { onNavigate?: (page: string) => voi
   const [expandedChains, setExpandedChains] = useState<Set<number>>(new Set())
   // Plegado elegido a mano de las subidas a otros trackers, por elemento de la biblioteca.
   const [trackersElegidos, setTrackersElegidos] = useState<Map<number, boolean>>(new Map())
+  // Las series desplegadas: plegadas por defecto, como en Biblioteca.
+  const [seriesAbiertas, setSeriesAbiertas] = useState<Set<number>>(new Set())
+  const toggleSerie = useCallback((id: number) => {
+    setSeriesAbiertas(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id); else next.add(id)
+      return next
+    })
+  }, [])
   const toggleTrackers = useCallback((elementoId: number, abiertos: boolean) => {
     setTrackersElegidos(prev => new Map(prev).set(elementoId, !abiertos))
   }, [])
@@ -901,7 +941,7 @@ export function UploadsPage({ onNavigate }: { onNavigate?: (page: string) => voi
     : selectedJob
 
   // La fila del último intento de una cadena y, si está desplegada, sus intentos anteriores.
-  const pintarCadena = (job: UploadJob, enGrupo?: 'primera' | 'otra', loteArriba?: string | null, otras?: UploadJob[], trackersAbiertos?: boolean) => {
+  const pintarCadena = (job: UploadJob, enGrupo?: 'primera' | 'otra', loteArriba?: string | null, otras?: UploadJob[], trackersAbiertos?: boolean, deSerie?: boolean) => {
     const ancestors = ancestorsOf(job)
     const expanded = expandedChains.has(job.id!)
     return [
@@ -912,6 +952,7 @@ export function UploadsPage({ onNavigate }: { onNavigate?: (page: string) => voi
         seeding={seeding}
         onOpen={openUpload}
         enGrupo={enGrupo}
+        deSerie={deSerie}
         otrosTrackers={otras?.map(o => o.tracker_nombre).join(' · ')}
         trackersAbiertos={trackersAbiertos}
         otroFallido={otras?.some(o => RETRYABLE_STATUSES.has(o.status))}
@@ -930,20 +971,30 @@ export function UploadsPage({ onNavigate }: { onNavigate?: (page: string) => voi
         onFiltrarLote={job.lote_id === loteFiltro || (enGrupo === 'otra' && job.lote_id === loteArriba) ? undefined : setLoteFiltro}
       />,
       ...(expanded ? ancestors.map(a => (
-        <JobRow key={a.id} job={a} instances={instances} seeding={seeding} indent onOpen={openUpload} onCancel={alCancelar} onRetry={alReintentar} onDelete={setDeleteJob} />
+        <JobRow key={a.id} job={a} instances={instances} seeding={seeding} indent deSerie={deSerie} onOpen={openUpload} onCancel={alCancelar} onRetry={alReintentar} onDelete={setDeleteJob} />
       )) : []),
     ]
   }
   // Un elemento: la cadena de cada tracker, una debajo de otra; las de los otros trackers, si el grupo está abierto.
-  const pintarGrupo = (grupo: UploadJob[]) => {
+  const pintarGrupo = (grupo: UploadJob[], deSerie = false) => {
     const [primera, ...otras] = grupo
-    if (!otras.length) return pintarCadena(primera)
+    if (!otras.length) return pintarCadena(primera, undefined, undefined, undefined, undefined, deSerie)
     const abiertos = trackersElegidos.get(primera.library_item_id!) ?? otras.some(o => o.status !== 'completed')
     return [
-      ...pintarCadena(primera, 'primera', null, otras, abiertos),
-      ...(abiertos ? otras.flatMap(o => pintarCadena(o, 'otra', primera.lote_id)) : []),
+      ...pintarCadena(primera, 'primera', null, otras, abiertos, deSerie),
+      ...(abiertos ? otras.flatMap(o => pintarCadena(o, 'otra', primera.lote_id, undefined, undefined, deSerie)) : []),
     ]
   }
+  // Una serie con varias subidas: su fila y, desplegada, las de sus elementos.
+  const pintarBloque = (b: Bloque) => {
+    if (!esBloqueSerie(b)) return pintarGrupo(b)
+    const abierta = seriesAbiertas.has(b.serieId)
+    return [
+      <FilaSerie key={`serie-${b.serieId}`} bloque={b} abierta={abierta} onToggle={toggleSerie} />,
+      ...(abierta ? b.elementos.flatMap(g => pintarGrupo(g, true)) : []),
+    ]
+  }
+  const bloques = useMemo(() => agruparPorSerie(grupos), [grupos])
   const scrollRef = useRef<HTMLDivElement>(null)
   const theadRef = useRef<HTMLTableSectionElement>(null)
 
@@ -1133,18 +1184,18 @@ export function UploadsPage({ onNavigate }: { onNavigate?: (page: string) => voi
               )}
               {/* Pasadas las UMBRAL_VIRTUAL subidas solo se pintan las que se ven: cada elemento es la fila del último
                   intento de cada tracker con sus intentos anteriores desplegados, en su propio <tbody>. */}
-              {grupos.length > UMBRAL_VIRTUAL ? (
+              {bloques.length > UMBRAL_VIRTUAL ? (
                 <FilasVirtuales
-                  items={grupos}
-                  clave={claveDeGrupo}
+                  items={bloques}
+                  clave={claveDeBloque}
                   alturaEstimada={ALTO_FILA}
                   columnas={COLUMNAS}
                   contenedor={scrollRef}
                   cabecera={theadRef}
-                  pintar={pintarGrupo}
+                  pintar={pintarBloque}
                 />
               ) : (
-                <tbody>{grupos.flatMap(pintarGrupo)}</tbody>
+                <tbody>{bloques.flatMap(pintarBloque)}</tbody>
               )}
             </table>
           </div>
