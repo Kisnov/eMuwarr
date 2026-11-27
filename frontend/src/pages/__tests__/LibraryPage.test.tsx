@@ -306,3 +306,30 @@ describe('Carpeta manual', () => {
     expect(texto()).toContain('Ficha confirmada')
   })
 })
+
+describe('Biblioteca: lo que se recarga sola tras una sincronización', () => {
+  let invalidar: () => void = () => {}
+  function ConMarca() {
+    const [marca, setMarca] = useState(0)
+    invalidar = () => setMarca(m => m + 1)
+    return (
+      <SyncContext.Provider value={{ ...SYNC, lastInvalidatedAt: marca } as never}>
+        <SeccionVisible visible><LibraryPage onNavigate={vi.fn()} /></SeccionVisible>
+      </SyncContext.Provider>
+    )
+  }
+  afterEach(() => { history.replaceState(null, '', '/') })
+
+  it('una recarga en segundo plano que falla deja la lista que ya se veía', async () => {
+    localStorage.setItem('emuwarez_uploadrr_library_view', 'list')
+    await montar(<ConMarca />)
+    await esperar(() => texto().includes('Alien'))
+    vi.mocked(getLibrary).mockRejectedValue(new Error('503'))
+    const antes = vi.mocked(getLibrary).mock.calls.length
+    await act(async () => { invalidar() })
+    await esperar(() => vi.mocked(getLibrary).mock.calls.length > antes)
+    await act(async () => { await new Promise(r => setTimeout(r, 20)) })
+    expect(texto()).toContain('Alien')
+    expect(texto()).not.toContain('Error al cargar la biblioteca')
+  })
+})

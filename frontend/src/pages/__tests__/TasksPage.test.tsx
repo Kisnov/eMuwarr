@@ -10,7 +10,10 @@ vi.mock('../../api/scheduledTasks', () => ({
   getScheduledTasks: vi.fn(), updateScheduledTaskSchedule: vi.fn(), updateScheduledTaskOptions: vi.fn(),
   runScheduledTaskNow: vi.fn(), getScheduledTaskLogs: vi.fn(),
 }))
-vi.mock('../../hooks/useRefrescoPorAvisos', () => ({ useRefrescoPorAvisos: () => {} }))
+let recargarPorAviso: () => unknown = () => {}
+vi.mock('../../hooks/useRefrescoPorAvisos', () => ({
+  useRefrescoPorAvisos: (_avisos: string[], recargar: () => unknown) => { recargarPorAviso = recargar },
+}))
 
 import { getScheduledTasks, getScheduledTaskLogs, updateScheduledTaskSchedule, updateScheduledTaskOptions } from '../../api/scheduledTasks'
 import { TasksPage } from '../TasksPage'
@@ -125,6 +128,14 @@ describe('Tareas', () => {
     expect(cuerpo).toContain('no guarda historial')
     expect(cuerpo).toContain('2 instancias responden')
     expect(cuerpo).not.toContain('Sin ejecuciones registradas todavía')
+  })
+
+  it('un refresco en segundo plano que falla deja las tarjetas que ya se veían', async () => {
+    await montar()
+    vi.mocked(getScheduledTasks).mockRejectedValue(new Error('503'))
+    await act(async () => { await recargarPorAviso() })
+    expect(texto()).toContain('Sincronizar peticiones')
+    expect(texto()).not.toContain('Error al cargar las tareas automáticas')
   })
 
   it('una tarea que va bien no enseña el enlace', async () => {

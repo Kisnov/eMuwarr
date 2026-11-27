@@ -412,12 +412,14 @@ export function TasksPage({ onNavigate }: { onNavigate?: (page: string) => void 
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  const load = useCallback(async () => {
-    setError(null)
+  // Con `silencioso`, una recarga en segundo plano que falla deja las tarjetas que ya había.
+  const load = useCallback(async (silencioso = false) => {
+    if (!silencioso) setError(null)
     try {
       setTasks(await getScheduledTasks())
+      setError(null)
     } catch {
-      setError('Error al cargar las tareas automáticas')
+      if (!silencioso) setError('Error al cargar las tareas automáticas')
     } finally {
       setLoading(false)
     }
@@ -428,7 +430,7 @@ export function TasksPage({ onNavigate }: { onNavigate?: (page: string) => void 
   // "Últimas tareas ejecutadas" se actualiza en cuanto termina una, en vez de
   // hasta 30 segundos después. El sondeo se espacia a dos minutos de red de
   // seguridad mientras el canal esté vivo.
-  useRefrescoPorAvisos(['tarea-terminada'], load, {
+  useRefrescoPorAvisos(['tarea-terminada'], () => load(true), {
     cadaSinCanal: 30_000,
     cadaConCanal: 120_000,
   })
@@ -443,7 +445,7 @@ export function TasksPage({ onNavigate }: { onNavigate?: (page: string) => void 
         {!loading && !error && <ResumenTareas tasks={tasks} />}
       </div>
 
-      {loading ? <LoadingState label="Cargando tareas…" /> : error ? <ErrorState message={error} onRetry={load} /> : (
+      {loading ? <LoadingState label="Cargando tareas…" /> : error ? <ErrorState message={error} onRetry={() => load()} /> : (
         tasks.length === 0 ? (
           <EmptyState title="Sin tareas programadas" body="Las tareas aparecen aquí cuando el servidor las registra al arrancar." />
         ) : <div data-tour="tasks-content" className="tareas-lista">

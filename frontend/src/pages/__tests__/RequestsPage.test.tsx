@@ -517,3 +517,31 @@ describe('«Subir seleccionadas» en Peticiones', () => {
     expect(titulosLote()).toEqual(['Lost (2016) - Temporada 2'])
   })
 })
+
+describe('Peticiones: lo que se recarga sola tras una sincronización', () => {
+  let invalidar: () => void = () => {}
+  function ConMarca() {
+    const [marca, setMarca] = useState(0)
+    invalidar = () => setMarca(m => m + 1)
+    return (
+      <SyncContext.Provider value={{
+        requestsSyncing: false, requestsStatus: null, startRequestsSync: vi.fn(), lastInvalidatedAt: marca, isAnySyncing: false,
+      } as never}>
+        <SeccionVisible visible><RequestsPage /></SeccionVisible>
+      </SyncContext.Provider>
+    )
+  }
+  afterEach(() => { sessionStorage.clear(); history.replaceState(null, '', '/') })
+
+  it('una recarga en segundo plano que falla deja la tabla que ya se veía', async () => {
+    await montar(<ConMarca />)
+    await esperar(() => document.querySelector('table.data-table tbody tr'))
+    vi.mocked(getRequests).mockRejectedValue(new Error('503'))
+    const antes = vi.mocked(getRequests).mock.calls.length
+    await act(async () => { invalidar() })
+    await esperar(() => vi.mocked(getRequests).mock.calls.length > antes)
+    await esperar(() => !document.querySelector('.pet-cargando'))
+    expect(document.querySelector('table.data-table tbody tr')).not.toBeNull()
+    expect(texto()).not.toContain('503')
+  })
+})

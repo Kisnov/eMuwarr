@@ -795,11 +795,12 @@ export function RequestsPage({ onNavigate }: { onNavigate?: (page: string) => vo
 
   // Solo cuenta la última petición: marcar varias casillas seguidas lanza
   // varias, y una vieja más lenta no pisa la nueva (igual que en Biblioteca).
+  // Con `silencioso`, una recarga en segundo plano que falla deja la tabla que ya había.
   const ultimaCarga = useRef(0)
-  const loadItems = useCallback(async (off = 0) => {
+  const loadItems = useCallback(async (off = 0, silencioso = false) => {
     const esta = ++ultimaCarga.current
     setLoading(true)
-    setError(null)
+    if (!silencioso) setError(null)
     try {
       const res = await getRequests({
         search: debouncedSearch || undefined,
@@ -814,6 +815,7 @@ export function RequestsPage({ onNavigate }: { onNavigate?: (page: string) => vo
         offset: off,
       })
       if (esta !== ultimaCarga.current) return
+      setError(null)
       setItems(res.items)
       setTotal(res.total)
       setOffset(off)
@@ -822,7 +824,7 @@ export function RequestsPage({ onNavigate }: { onNavigate?: (page: string) => vo
         setTotalSinFiltro(res.total)
       }
     } catch (e: unknown) {
-      if (esta === ultimaCarga.current) setError(e instanceof Error ? e.message : 'Error cargando peticiones')
+      if (esta === ultimaCarga.current && !silencioso) setError(e instanceof Error ? e.message : 'Error cargando peticiones')
     } finally {
       if (esta === ultimaCarga.current) setLoading(false)
     }
@@ -853,7 +855,7 @@ export function RequestsPage({ onNavigate }: { onNavigate?: (page: string) => vo
   // sync finishing (peticiones u otra), or coming back to the tab.
   useEffect(() => {
     if (lastInvalidatedAt) {
-      loadItems(0)
+      loadItems(0, true)
       if (!isUnfiltered) loadFacets()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- solo cuando algo invalida la lista

@@ -390,25 +390,26 @@ export function LibraryPage({ onNavigate }: { onNavigate?: (page: string) => voi
     searchProvider, searchQuality, searchSource, searchGroup, filterEmu, filterAporte, porIdentificar, sortBy])
   const [cargandoMas, setCargandoMas] = useState(false)
   const [fallaMas, setFallaMas] = useState(false)
-  const load = useCallback(async () => {
+  // Con `silencioso`, una recarga en segundo plano que falla deja la lista que ya había.
+  const load = useCallback(async (silencioso = false) => {
     const esta = ++ultimaCarga.current
     recargaPendiente.current = false
     cargando.current = true
     setLoading(true)
-    setError(null)
+    if (!silencioso) setError(null)
     setFallaMas(false)
     // Una tanda de "Cargar más" en marcha ya no vale: su respuesta se tira y el botón no espera por ella.
     setCargandoMas(false)
     try {
       const result = await consulta(offset)
-      if (esta === ultimaCarga.current) startTransition(() => setData(result))
+      if (esta === ultimaCarga.current) { setError(null); startTransition(() => setData(result)) }
     } catch {
-      if (esta === ultimaCarga.current) setError('Error al cargar la biblioteca')
+      if (esta === ultimaCarga.current && !silencioso) setError('Error al cargar la biblioteca')
     } finally {
       if (esta === ultimaCarga.current) {
         cargando.current = false
         setLoading(false)
-        if (recargaPendiente.current) load()
+        if (recargaPendiente.current) load(true)
       }
     }
   }, [consulta, offset])
@@ -560,7 +561,7 @@ export function LibraryPage({ onNavigate }: { onNavigate?: (page: string) => voi
   useEffect(() => {
     if (!lastInvalidatedAt) return
     if (cargando.current) recargaPendiente.current = true
-    else load()
+    else load(true)
     // eslint-disable-next-line react-hooks/exhaustive-deps -- `load` cambia con cada filtro y recargaría dos veces (ver arriba)
   }, [lastInvalidatedAt])
 
@@ -907,7 +908,7 @@ export function LibraryPage({ onNavigate }: { onNavigate?: (page: string) => voi
           </div>
         )
       ) : error ? (
-        <ErrorState message={error} onRetry={load} />
+        <ErrorState message={error} onRetry={() => load()} />
       ) : items.length === 0 && !filtrando ? (
         <EmptyState
           icon={<IconoLibros />}
