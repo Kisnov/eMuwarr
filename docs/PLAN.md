@@ -176,6 +176,21 @@ para antes de preparar nada. Para hacerlo falta ver:
 - cómo se llama el release, y qué hace la app con sus pistas, que no puede etiquetar;
 - una subida real en el NAS con un ISO.
 
+## Por hacer después de la 2.0: tráiler cuando no se encuentra
+
+Hoy el tráiler solo sale de TMDb (en castellano, luego en otros idiomas, el original y el de la temporada); si no hay,
+la subida va sin él y el aviso «Falta el trailer» manda a editarla a mano en el tracker.
+
+- **Aprobado: un campo en el Resumen.** Cuando no se ha encontrado ninguno, pegar el enlace de YouTube y que vaya a la
+  descripción. Uploadrr-EMU ya tiene `--trailer` (`uploadrr-emu/src/args.py`); falta el campo, el argv
+  (`services/uploadrr_contract.py`) y validar que es un enlace de YouTube.
+- **Aprobado: AniList para el anime.** Su API da el tráiler de cada título, sin clave, y Uploadrr-EMU ya le pregunta
+  para casar el anime (`uploadrr-emu/src/databases/anilist.py`): pedir también `trailer { id site }` y usarlo cuando
+  TMDb no tiene. Antes, ver cuántos títulos antiguos lo tienen.
+- **Por decidir: buscar en YouTube.** Es donde más resultados habría, pero pide una clave de la API de YouTube
+  (gratuita, con un cupo diario que da para unas cien búsquedas) y el primer resultado puede ser un vídeo de un fan o
+  de otra versión: serían sugerencias que se confirman, nunca automático.
+
 ## Por probar en el NAS (`:multitracker`)
 
 - La carpeta manual: escanear una carpeta real con WEB-DL de películas y de series, identificar en TMDb (una a
