@@ -11,6 +11,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 vi.mock('../../api/library', () => ({
   getLibrary: vi.fn(), getLibraryFilterOptions: vi.fn(async () => ({})), getLibraryItem: vi.fn(async () => ({})),
   TOP_LEVEL_PARENT_FILTER: 0, identificarSugeridas: vi.fn(), getTmdbCandidatos: vi.fn(), identificarTmdb: vi.fn(),
+  getEmuComparison: vi.fn(() => new Promise(() => {})),
 }))
 vi.mock('../../api/instances', () => ({ getInstances: vi.fn(async () => []) }))
 vi.mock('../../api/settings', () => ({ fetchSettings: vi.fn(async () => ({ upload_max_concurrent: 1 })) }))
@@ -19,7 +20,7 @@ vi.mock('../../api/uploads', async original => ({
   fetchTrackersParaSubir: vi.fn(async () => [{ id: 'emu', nombre: 'eMuwarez' }]),
 }))
 
-import { getLibrary, getLibraryFilterOptions, getTmdbCandidatos, identificarSugeridas, identificarTmdb } from '../../api/library'
+import { getLibrary, getLibraryFilterOptions, getLibraryItem, getTmdbCandidatos, identificarSugeridas, identificarTmdb } from '../../api/library'
 import { fetchTrackersParaSubir } from '../../api/uploads'
 import { SeccionVisible } from '../../context/SeccionVisible'
 import { SyncContext } from '../../context/SyncContext'
@@ -331,5 +332,19 @@ describe('Biblioteca: lo que se recarga sola tras una sincronización', () => {
     await act(async () => { await new Promise(r => setTimeout(r, 20)) })
     expect(texto()).toContain('Alien')
     expect(texto()).not.toContain('Error al cargar la biblioteca')
+  })
+
+  it('la ficha abierta se vuelve a pedir y enseña lo de después de la sincronización', async () => {
+    vi.mocked(getLibraryItem).mockResolvedValue(DUNE)
+    localStorage.setItem('emuwarez_uploadrr_library_view', 'list')
+    await montar(<ConMarca />)
+    await esperar(() => texto().includes('Alien'))
+    const enlace = [...document.querySelectorAll('a.lib-title-link')].find(a => a.textContent?.includes('Dune'))!
+    await act(async () => { enlace.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })) })
+    await esperar(() => vi.mocked(getLibraryItem).mock.calls.length === 1)
+    vi.mocked(getLibraryItem).mockResolvedValue({ ...DUNE, display_title: 'Dune al día' } as LibraryItemResponse)
+    await act(async () => { invalidar() })
+    await esperar(() => texto().includes('Dune al día'))
+    expect(vi.mocked(getLibraryItem).mock.calls.map(c => c[0])).toEqual([1, 1])
   })
 })

@@ -544,4 +544,22 @@ describe('Peticiones: lo que se recarga sola tras una sincronización', () => {
     expect(document.querySelector('table.data-table tbody tr')).not.toBeNull()
     expect(texto()).not.toContain('503')
   })
+
+  it('la ficha abierta se vuelve a pedir y enseña lo de después de la sincronización', async () => {
+    vi.mocked(getReadiness).mockResolvedValue(null as never)
+    vi.mocked(getRequestDetail).mockResolvedValue({
+      ...DATOS[1], match: { status: 'Compatible', library_item_id: 40, library_target_id: 41 },
+    } as unknown as RequestDetailResponse)
+    await montar(<ConMarca />)
+    await esperar(() => document.querySelector('table.data-table tbody tr'))
+    await pulsar([...document.querySelectorAll('tr.clickable .lib-title-link')].find(t => t.textContent === 'Petición 2'))
+    await esperar(() => document.querySelector('.pet-veredicto'))
+    vi.mocked(getRequestDetail).mockResolvedValue({
+      ...DATOS[1], title: 'Petición 2 al día', match: { status: 'Compatible', library_item_id: 40, library_target_id: 41 },
+    } as unknown as RequestDetailResponse)
+    await act(async () => { invalidar() })
+    await esperar(() => texto().includes('Petición 2 al día'))
+    expect(vi.mocked(getRequestDetail).mock.calls.map(c => c[0])).toEqual([2, 2])
+    expect(getReadiness).toHaveBeenCalledTimes(2)
+  })
 })

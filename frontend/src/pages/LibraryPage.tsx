@@ -562,6 +562,10 @@ export function LibraryPage({ onNavigate }: { onNavigate?: (page: string) => voi
     if (!lastInvalidatedAt) return
     if (cargando.current) recargaPendiente.current = true
     else load(true)
+    // La ficha abierta también, para que enseñe lo que cambió la sincronización.
+    if (selected) {
+      getLibraryItem(selected.id).then(full => setSelected(prev => (prev && prev.id === full.id ? full : prev))).catch(() => {})
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- `load` cambia con cada filtro y recargaría dos veces (ver arriba)
   }, [lastInvalidatedAt])
 

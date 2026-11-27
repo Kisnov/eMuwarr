@@ -857,6 +857,15 @@ export function RequestsPage({ onNavigate }: { onNavigate?: (page: string) => vo
     if (lastInvalidatedAt) {
       loadItems(0, true)
       if (!isUnfiltered) loadFacets()
+      // La ficha abierta también; se descarta si mientras tanto se abre otra o se cierra.
+      if (selectedId !== null) {
+        const esta = ultimoDetalle.current
+        Promise.all([getRequestDetail(selectedId), getReadiness(selectedId).catch(() => null)]).then(([d, rr]) => {
+          if (esta !== ultimoDetalle.current) return
+          setDetail(d)
+          setReadiness(rr as RequestReadinessResponse | null)
+        }).catch(() => {})
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- solo cuando algo invalida la lista
   }, [lastInvalidatedAt])
