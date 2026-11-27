@@ -24,7 +24,8 @@ import sys
 import tempfile
 from datetime import datetime, timezone
 
-REPO_POR_DEFECTO = "Kisnov/uploadrr-version"
+REPO_POR_DEFECTO = "Kisnov/eMuwarr"
+RAMA = "version"  # huérfana: solo tiene el manifiesto
 FICHERO = "latest.json"
 
 # Este fichero es PÚBLICO. La nota de cada versión la lee cualquiera, incluido
@@ -87,7 +88,7 @@ def version_publicada(repo: str) -> str | None:
     import base64
     try:
         salida = subprocess.run(
-            ["gh", "api", f"repos/{repo}/contents/{FICHERO}", "--jq", ".content"],
+            ["gh", "api", f"repos/{repo}/contents/{FICHERO}?ref={RAMA}", "--jq", ".content"],
             capture_output=True, text=True, check=True, timeout=20).stdout
     except subprocess.CalledProcessError as e:
         # 404 es también «ese repo no existe o no se ve»: solo es «nada publicado» si el repo responde.
@@ -111,9 +112,9 @@ def _numeros(version: str) -> tuple[int, ...] | None:
 
 
 def publicar(manifiesto: dict, repo: str) -> None:
-    """Sube el manifiesto al repositorio público, con un commit por versión."""
+    """Sube el manifiesto a su rama del repositorio, con un commit por versión."""
     with tempfile.TemporaryDirectory() as tmp:
-        subprocess.run(["gh", "repo", "clone", repo, tmp, "--", "--depth", "1"],
+        subprocess.run(["gh", "repo", "clone", repo, tmp, "--", "--depth", "1", "--branch", RAMA],
                        check=True, capture_output=True)
         destino = pathlib.Path(tmp) / FICHERO
         # UTF-8 explícito: sin él, en Windows sale en cp1252 y la app, que lo
@@ -124,7 +125,7 @@ def publicar(manifiesto: dict, repo: str) -> None:
         subprocess.run(["git", "-C", tmp, "commit", "-m",
                         f"{manifiesto['commit'][:7]}: {manifiesto['notas']}"], check=True)
         subprocess.run(["git", "-C", tmp, "push"], check=True)
-    print(f"✓ publicado en {repo}/{FICHERO}")
+    print(f"✓ publicado en {repo}, rama {RAMA}: {FICHERO}")
 
 
 def main() -> int:

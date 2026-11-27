@@ -163,8 +163,8 @@ if [[ "$PRUEBA" -eq 0 ]]; then
   # Y que gh puede escribir el manifiesto: el endpoint de push de git solo da 200 a quien puede.
   # El token va por stdin (printf es interno), no en los argumentos de curl.
   if ! printf 'user = "x:%s"\n' "$(gh auth token)" | curl -sf -o /dev/null --connect-timeout 10 --max-time 30 \
-      --config - "https://github.com/Kisnov/uploadrr-version.git/info/refs?service=git-receive-pack"; then
-    echo "gh no puede escribir en Kisnov/uploadrr-version: no se sube ninguna imagen." >&2
+      --config - "https://github.com/Kisnov/eMuwarr.git/info/refs?service=git-receive-pack"; then
+    echo "gh no puede escribir en Kisnov/eMuwarr: no se sube ninguna imagen." >&2
     exit 1
   fi
 fi
