@@ -10,7 +10,7 @@
 [![Python](https://img.shields.io/python/required-version-toml?tomlFilePath=https%3A%2F%2Fraw.githubusercontent.com%2FKisnov%2FeMuwarr%2Fdev%2Fpyproject.toml&logo=python&logoColor=white&color=3776AB)](pyproject.toml)
 [![Node 26](https://img.shields.io/badge/node-26-5FA04E?logo=nodedotjs&logoColor=white)](frontend/package.json)
 
-Aplicación web autoalojada para subir a **[eMuwarez](https://emu-warez.com)**, y también a **N.O.B.S** y
+Aplicación web autoalojada para subir a **eMuwarez**, y también a **N.O.B.S** y
 **Milnueve**, lo que ya tienes en **Radarr** y **Sonarr** o en una carpeta. Te dice qué puedes subir, pone el nombre
 que pide el tracker, sube el torrent y lo deja sembrando en qBittorrent. Todo desde el navegador.
 
@@ -207,64 +207,31 @@ qBittorrent, «Reenviar a qBittorrent» lo vuelve a añadir sin subir nada.
 
 ## Arranque rápido (Docker Compose)
 
-Requiere Docker 24+ con Compose v2, en amd64 o arm64 (en ARM, mejor con 2 GB de RAM o más y una subida a la vez). No hace falta clonar el repo: copia esto en un `docker-compose.yml`, ajusta
-las rutas de los volúmenes y levántalo. Usa la imagen publicada en `ghcr.io/kisnov/emuwarr`, así que no
-compila nada.
+Requiere Docker 24+ con Compose v2, en amd64 o arm64. No hace falta clonar el repo: copia esto en un
+`docker-compose.yml` y cambia las rutas de los volúmenes.
 
 ```yaml
 services:
   emuwarr:
-    image: ghcr.io/kisnov/emuwarr:${EMUWAREZ_UPLOADRR_TAG:-latest}
+    image: ghcr.io/kisnov/emuwarr:latest
     container_name: emuwarr
     restart: unless-stopped
-    # Un init como proceso 1: recoge los procesos que quedan sueltos al cancelar una subida (ffmpeg, mkbrr...).
     init: true
-
+    user: "1000:1000"   # el dueño de tu media (PUID:PGID)
     ports:
-      - "${EMUWAREZ_UPLOADRR_PORT:-9494}:9494"
-
-    # Ajusta PUID/PGID al UID/GID del usuario propietario de los archivos de media
-    user: "${PUID:-1000}:${PGID:-1000}"
-
-    # Límite de recursos del contenedor. Ajusta a lo que tenga disponible tu
-    # equipo: es lo que marca cuántas "Subidas en Paralelo" (Configuración)
-    # se sostienen de verdad, porque cada subida activa puede llegar a saturar
-    # un núcleo entero (hasheo del torrent) y usar ~0.8 GB de RAM
-    # (capturas/remux/transferencia). Con estos 2 núcleos y 2 GB caben
-    # teóricamente 2 subidas en paralelo reales. Si quieres más, sube los dos
-    # valores a la vez: subir "Subidas en Paralelo" sin darle más CPU y RAM al
-    # contenedor no acelera nada.
-    cpus: "2"
-    mem_limit: "2g"
-
+      - "9494:9494"
     environment:
-      TZ: ${TZ:-Europe/Madrid}
-      CONFIG_DIR: /config
-      # Carpeta donde se enlaza lo que se sube. Uploadrr-EMU se la da a
-      # qBittorrent como ruta de guardado, así que tiene que estar en el mismo
-      # sistema de ficheros que la media (para que sea un enlace duro) y
-      # qBittorrent tiene que verla en esta misma ruta.
-      UPLOADRR_UPLOADS_DIR: /data/uploads/emu
-
+      TZ: Europe/Madrid
+      UPLOADRR_UPLOADS_DIR: /data/uploads/emu   # carpeta de subidas, en el disco de la media
     volumes:
-      # Configuración persistente: base de datos SQLite, settings, y el
-      # config.yaml/temporales de Uploadrr-EMU (bajo /config/Uploadrr).
-      - /srv/emuwarr/config:/config
-
-      # Raíz de datos compartida: media de Radarr/Sonarr y carpeta de subidas.
-      - /srv/data:/data
+      - /srv/emuwarr/config:/config   # base de datos y ajustes
+      - /srv/data:/data               # media de Radarr/Sonarr y carpeta de subidas
 ```
 
-Opcionalmente, crea al lado un `.env` para no editar el compose:
+Cada subida en marcha puede ocupar un núcleo y unos 0,8 GB de RAM: si limitas el contenedor (`cpus`, `mem_limit`),
+ajusta también «Subidas en paralelo» en Configuración. En ARM, mejor con 2 GB o más y una subida a la vez.
 
-```env
-PUID=1000
-PGID=1000
-TZ=Europe/Madrid
-EMUWAREZ_UPLOADRR_PORT=9494
-```
-
-Y levanta el contenedor:
+Levántalo:
 
 ```bash
 docker compose up -d
@@ -275,7 +242,7 @@ Abre `http://localhost:9494`: el asistente de configuración inicial se abre sol
 <p align="center"><img src="docs/capturas/asistente.png" width="460" alt="Pantalla de bienvenida del asistente de configuración"></p>
 
 > Las API keys (TMDb, eMuwarez, Radarr/Sonarr…) se configuran desde el asistente web o desde Configuración, nunca
-> en el compose ni en el `.env`.
+> en el compose.
 
 ### Rutas: lo único delicado
 
@@ -283,12 +250,12 @@ Abre `http://localhost:9494`: el asistente de configuración inicial se abre sol
   Cuando no se puede crear un enlace duro (otro sistema de ficheros, un montaje CIFS o NFS que no los admite, o el
   límite de enlaces del fichero), la aplicación crea uno simbólico, y solo se siembra si qBittorrent puede resolver
   a dónde apunta. Sin la variable, la carpeta es `/config/Uploadrr/uploads`, normalmente en otro disco.
-- **Créala antes de arrancar**, con el mismo dueño que `PUID:PGID`: si `/srv/data` es de root, el contenedor no
+- **Créala antes de arrancar**, con el mismo dueño que `user:`: si `/srv/data` es de root, el contenedor no
   puede crearla y las subidas se quedan sin preparar.
 
   ```bash
   mkdir -p /srv/data/uploads/emu
-  chown 1000:1000 /srv/data/uploads/emu   # tu PUID:PGID
+  chown 1000:1000 /srv/data/uploads/emu   # el de `user:`
   ```
 - **qBittorrent** tiene que ver la carpeta de subidas en la misma ruta que este contenedor. Si quieres «Abrir en
   qBittorrent» en el detalle de una subida completada, pon en Configuración → qBittorrent la *URL pública del WebUI*
@@ -302,7 +269,7 @@ Abre `http://localhost:9494`: el asistente de configuración inicial se abre sol
 
 ### Versiones y volver atrás
 
-La imagen se publica con varias etiquetas, y `EMUWAREZ_UPLOADRR_TAG` (en el `.env`) elige cuál usa el compose:
+La imagen se publica con varias etiquetas; la que pongas en `image:` es la que usa el compose:
 
 | Etiqueta | Qué es | Para qué |
 |---|---|---|
@@ -314,8 +281,8 @@ La imagen se publica con varias etiquetas, y `EMUWAREZ_UPLOADRR_TAG` (en el `.en
 Las versiones las publica el workflow *Publicar versión* (a mano, o solo los días impares del mes si hay cambios
 suficientes, siempre después de pasar los tests) o `scripts/desplegar.sh` desde tu equipo.
 
-```bash
-EMUWAREZ_UPLOADRR_TAG=1.0.0 docker compose up -d
+```yaml
+    image: ghcr.io/kisnov/emuwarr:1.0.0
 ```
 
 Si la versión nueva cambió el esquema de la base, la versión vieja no arranca y lo dice en el registro: la base ya
@@ -342,9 +309,9 @@ pasar por el registro:
 
 ```bash
 git -c core.autocrlf=false archive HEAD | docker build -t ghcr.io/kisnov/emuwarr:dev   --build-arg APP_COMMIT=$(git rev-parse HEAD) -
-docker save ghcr.io/kisnov/emuwarr:dev | gzip > emuwarez-dev.tar.gz
-# En el servidor: carga la imagen y recrea el contenedor sin descargar nada
-docker load -i emuwarez-dev.tar.gz && EMUWAREZ_UPLOADRR_TAG=dev docker compose up -d --pull never
+docker save ghcr.io/kisnov/emuwarr:dev | gzip > emuwarr-dev.tar.gz
+# En el servidor, con `:dev` en `image:`: carga la imagen y recrea el contenedor sin descargar nada
+docker load -i emuwarr-dev.tar.gz && docker compose up -d --pull never
 ```
 
 ## Uso sin Docker
