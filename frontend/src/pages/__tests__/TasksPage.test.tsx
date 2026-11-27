@@ -71,6 +71,24 @@ describe('Tareas', () => {
     expect(texto()).not.toContain('✓ Horario guardado')
   })
 
+  it('el intervalo enseña el que tiene la tarea aunque no esté en la lista, y se puede volver a semanal', async () => {
+    vi.mocked(getScheduledTasks).mockResolvedValue([
+      { ...structuredClone(TAREA), task_key: 'vigilar-instancias', interval_minutes: 5, min_interval_minutes: 5 },
+      { ...structuredClone(TAREA), task_key: 'sync-emu-catalog-full', interval_minutes: 1440, min_interval_minutes: 1440 },
+    ])
+    await montar()
+    const [vigilar, catalogo] = [...contenedor.querySelectorAll<HTMLSelectElement>('select[id$="-intervalo"]')]
+    expect(vigilar.value).toBe('5')
+    expect(vigilar.selectedOptions[0].textContent).toBe('5 min')
+    expect([...catalogo.options].map(o => o.value)).toEqual(['1440', '10080'])
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')!.set!.call(catalogo, '10080')
+      catalogo.dispatchEvent(new Event('change', { bubbles: true }))
+    })
+    await esperar()
+    expect(updateScheduledTaskSchedule).toHaveBeenCalledWith('sync-emu-catalog-full', { interval_minutes: 10080 })
+  })
+
   it('una opción guardada al salir del campo dice «Guardado»', async () => {
     await montar()
     const campo = contenedor.querySelector<HTMLInputElement>('input[type="number"]')!
