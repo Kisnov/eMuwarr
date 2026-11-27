@@ -176,16 +176,17 @@ came in from `Kisnov/Uploadrr-EMU` with `git subtree add`, history kept; that re
   versión": by hand, or on odd days of the month when 3+ PRs from `feat/` or `fix/` branches (merge commits, or `feat:`/`fix:` squash
   commits) merged since the last `__version__` change) runs
   the full CI on dev's tip, bumps `__version__` (`auto`: minor if any `feat/` PR, else patch), pushes that commit to `dev`, fast-forwards
-  `main` to it and pushes `vX.Y.Z` (all atomic), builds `:X.Y.Z`, `:<sha>`, `:latest` and `:dev`, publishes the manifest (secret
-  `UPLOADRR_VERSION_TOKEN`) and creates the GitHub release with the PRs merged since the previous tag; after a failure, "Re-run failed jobs" (or a new run on the already tagged version commit) completes that same version. Release when Gabriel asks: `gh workflow run publicar.yml -f notas="…"`, with a
+  `main` to it and pushes `vX.Y.Z` (all atomic), builds `:X.Y.Z`, `:<sha>`, `:latest` and `:dev`, publishes the manifest
+  and creates the GitHub release with the PRs merged since the previous tag; after a failure, "Re-run failed jobs" (or a new run on the already tagged version commit) completes that same version. Release when Gabriel asks: `gh workflow run publicar.yml -f notas="…"`, with a
   neutral public note. Every push to `dev` (except docs/`.md`-only) and `solo_prueba=true` build `:dev` from dev's tip only (no tests). The long-lived branch `multitracker` (Gabriel's multi-tracker work, `docs/PLAN.md`; its PRs target it, `dev` is merged into it, never rebased) builds `:multitracker` the same way and can never publish a version; `auto` only sees the one merge of it into `dev`, not its PRs, so publish that merge with `escala=minor`. `ref=<commit|branch|tag>` publishes that commit's version instead (no tests; the version commit and tag go to `release/vX.Y.Z`, to merge into dev afterwards; neither `main` nor `:dev` moves). `scripts/desplegar.sh` is
   the local fallback (no Actions minutes, no tests, amd64 only: a version published with it leaves `:latest` without
   arm64, so prefer `publicar.yml`, which builds amd64 and arm64 via QEMU) and pushes in the same order; `--solo-prueba` pushes only
   `:dev`. It refuses a commit that is not in GitHub's `dev` (`--fuera-de-dev` to do it on purpose). The image copies `uploadrr-emu/` from the same commit (`.dockerignore` keeps out its tests and any local
   `config.yaml` or cookies), so a feat/fix PR there counts towards a release like any other.
-- Version manifest: the Diagnóstico card compares the image's `APP_COMMIT` with `latest.json` in the public
-  repo `Kisnov/uploadrr-version` (a fork of `Rovaal-code/uploadrr-version`); to test against another
-  manifest, set `UPLOADRR_VERSION_MANIFEST_URL`. It is a separate repo so the app reads one
+- Version manifest: the Diagnóstico card compares the image's `APP_COMMIT` with `latest.json` in this repo's
+  orphan branch `version` (never merge or delete it; until 1.4.0 it lived in `Kisnov/uploadrr-version`, now deleted, so those
+  installs no longer see the notice); to test against another
+  manifest, set `UPLOADRR_VERSION_MANIFEST_URL`. The app reads one
   static JSON with no token, instead of asking GHCR's registry API (anonymous tokens weren't issued).
   `desplegar.sh` publishes it after `docker push` via `scripts/publicar_version.py --repo`; don't edit it by
   hand, run that script. The file is public: keep `--notas` neutral.

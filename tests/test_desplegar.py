@@ -38,9 +38,9 @@ esac
 _GH = r"""#!/bin/sh
 case "$1 $2" in
   "auth token") echo x ;;
-  "api repos/Kisnov/uploadrr-version/contents/latest.json")
+  "api repos/Kisnov/eMuwarr/contents/latest.json?ref=version")
     git --git-dir="$FALSO/manifiesto.git" show HEAD:latest.json | base64 ;;
-  "repo clone") git clone -q --depth 1 "file://$FALSO/manifiesto.git" "$4" ;;
+  "repo clone") destino="$4"; shift 5; git clone -q "$@" "file://$FALSO/manifiesto.git" "$destino" ;;
   *) echo "gh simulado no sabe: $*" >&2; exit 1 ;;
 esac
 """
@@ -76,7 +76,7 @@ def entorno(tmp_path):
     git("push", "-q", "origin", "dev", cwd=repo)
 
     manifiesto = tmp_path / "m"
-    git("init", "-q", "-b", "main", str(manifiesto))
+    git("init", "-q", "-b", "version", str(manifiesto))
     (manifiesto / "latest.json").write_text(json.dumps({"version": "0.0.1", "commit": "0" * 40}))
     git("add", ".", cwd=manifiesto)
     git("commit", "-qm", "0.0.1", cwd=manifiesto)

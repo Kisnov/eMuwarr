@@ -1,6 +1,6 @@
 # Publica una versión: pasa los tests completos sobre la punta de dev, sube
 # __version__ (en dev, y main avanza hasta ese commit: main es siempre la última versión),
-# la etiqueta vX.Y.Z, construye la imagen (:X.Y.Z, :<sha>, :latest y :dev), publica el manifiesto en Kisnov/uploadrr-version, que es lo que
+# la etiqueta vX.Y.Z, construye la imagen (:X.Y.Z, :<sha>, :latest y :dev), publica el manifiesto en la rama version, que es lo que
 # lee el aviso de actualización de la app, y crea el release con sus PR.
 #
 # A mano (Actions → Publicar versión → Run workflow), o solo los días impares del mes si desde
@@ -11,9 +11,6 @@
 # Con «ref» (un commit de dev, una rama o una etiqueta) publica la versión de ESE commit: sin tests (la CI solo corre sobre
 # la punta), con la versión y su etiqueta en la rama release/vX.Y.Z en vez de en dev (que ya avanzó; se fusiona después), sin
 # mover main ni :dev, que sigue siendo la punta de dev. Si falla después de subir la versión, se reanuda con ref=release/vX.Y.Z.
-#
-# Necesita el secreto UPLOADRR_VERSION_TOKEN: un token con permiso de escritura
-# solo en Kisnov/uploadrr-version (GITHUB_TOKEN no puede escribir en otro repo).
 name: Publicar versión
 
 on:
@@ -75,15 +72,14 @@ jobs:
           PRUEBA: ${{ inputs.solo_prueba || false }}
           REF: ${{ inputs.ref }}
           NOTAS: ${{ inputs.notas || 'Correcciones y mejoras' }}
-          TOKEN: ${{ secrets.UPLOADRR_VERSION_TOKEN }}
         run: |
           if [ "$PRUEBA" = true ] && [ -n "$REF" ]; then
             echo "::error::solo_prueba y ref no se combinan: :dev es la punta de dev."
             exit 1
           fi
-          # El flujo ejecuta los scripts del commit elegido: uno anterior a --solo-comprobar no sirve.
-          if [ -n "$REF" ] && ! grep -q -- '--solo-comprobar' scripts/publicar_version.py 2>/dev/null; then
-            echo "::error::El commit de ref es demasiado antiguo: su scripts/publicar_version.py no admite --solo-comprobar."
+          # El flujo ejecuta los scripts del commit elegido: uno que no publica el manifiesto en la rama version no sirve.
+          if [ -n "$REF" ] && ! grep -q '^RAMA = "version"' scripts/publicar_version.py 2>/dev/null; then
+            echo "::error::El commit de ref es demasiado antiguo: su scripts/publicar_version.py publica el manifiesto en un repo que ya no existe."
             exit 1
           fi
           if [ "$RAMA" = multitracker ] && [ "$PRUEBA" != true ] && [ "$EVENTO" != push ]; then
@@ -114,12 +110,6 @@ jobs:
             escala="patch"
           fi
           # Antes de los tests y la imagen, lo que podría pararlo al final.
-          # El endpoint de push de git solo responde 200 a quien puede escribir, y no escribe nada.
-          if [ -z "$TOKEN" ] || ! printf 'user = "x:%s"\n' "$TOKEN" | curl -sf -o /dev/null --connect-timeout 10 --max-time 30 \
-              --config - "https://github.com/Kisnov/uploadrr-version.git/info/refs?service=git-receive-pack"; then
-            echo "::error::UPLOADRR_VERSION_TOKEN falta, ha caducado o no puede escribir en Kisnov/uploadrr-version."
-            exit 1
-          fi
           python3 scripts/publicar_version.py --solo-comprobar --notas "$NOTAS"
           echo "accion=publicar" >> "$GITHUB_OUTPUT"
           echo "escala=$escala" >> "$GITHUB_OUTPUT"
@@ -180,7 +170,7 @@ jobs:
             git checkout -q "$subida"
             echo "subida=true" >> "$GITHUB_OUTPUT"
             # Si el manifiesto ya la anuncia, estaba entera: reconstruir cambiaría el digest de :latest.
-            publicado="$(gh api repos/Kisnov/uploadrr-version/contents/latest.json --jq .content | base64 -d | jq -r .commit)"
+            publicado="$(gh api "repos/$GITHUB_REPOSITORY/contents/latest.json?ref=version" --jq .content | base64 -d | jq -r .commit)"
             if [ "$publicado" = "$(git rev-parse HEAD)" ]; then
               echo "::notice::Esta versión ya estaba publicada entera; no se toca nada."
               echo "hecha=true" >> "$GITHUB_OUTPUT"
@@ -277,7 +267,7 @@ jobs:
 
       - if: env.ACCION == 'publicar' && steps.version.outputs.hecha != 'true'
         env:
-          GH_TOKEN: ${{ secrets.UPLOADRR_VERSION_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
           DIGEST: ${{ steps.etiquetas.outputs.digest }}
           NOTAS: ${{ inputs.notas || 'Correcciones y mejoras' }}
         run: |
