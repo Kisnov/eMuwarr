@@ -25,8 +25,10 @@ nueva, el torrent se llama como debe, y la biblioteca no se toca.
 CUÁNDO NO SE PUEDE. Un enlace duro exige que las dos rutas estén en el mismo
 sistema de ficheros. Es habitual tener la configuración en un SSD y los medios
 en otro disco, y ahí `os.link` falla con EXDEV. En ese caso se cae a un enlace
-simbólico, que cruza sistemas de ficheros sin copiar: mkvmerge y qBittorrent
-leen a través de él sin enterarse.
+simbólico, que cruza sistemas de ficheros sin copiar, pero no es lo mismo:
+Uploadrr-EMU lo resuelve y un archivo suelto sale con el nombre y la carpeta de
+la biblioteca, y el original no cuenta el enlace (st_nlink), así que no se edita
+en su sitio. La comprobación de la subida lo avisa.
 
 TODO PASA POR AQUÍ, no solo los packs, y el nombre de eMuwarez se pone AQUÍ:
 el fichero de la biblioteca conserva el nombre de Radarr/Sonarr (Jellyfin lo
@@ -65,6 +67,9 @@ RAIZ_SUBIDAS = os.environ.get("UPLOADRR_UPLOADS_DIR", "/config/Uploadrr/uploads"
 # Crear un enlace y guardarlo en prepared_path, o comprobar que nadie lo usa y
 # borrarlo, va de uno en uno: un borrado no se lleva el enlace de otra subida.
 ENLACES = threading.Lock()
+# El enlace de prueba (comprobar_enlace) lleva el mismo nombre en todos los hilos y suma un enlace al original mientras
+# existe: de uno en uno, y quien cuenta enlaces (motivo_para_no_editar) no ve el de otro.
+_PROBANDO = threading.RLock()
 
 
 def _enlazar(origen: str, destino: str) -> str:
@@ -234,9 +239,32 @@ def en_carpeta_de_subidas(ruta: str, *, raiz: Optional[str] = None) -> bool:
     fuera de la raíz.
     """
     raiz = raiz or RAIZ_SUBIDAS
+    # La propia carpeta de subidas («uploads/», «uploads/.», «uploads/x/..») no está dentro de sí misma.
+    if os.path.basename(os.path.normpath(ruta)) in ("", ".", "..") or os.path.realpath(ruta) == os.path.realpath(raiz):
+        return False
     padre, raiz = os.path.realpath(os.path.dirname(ruta)), os.path.realpath(raiz)
     # Por componentes: con startswith, /data/uploads-old pasaba por /data/uploads.
     return os.path.commonpath((padre, raiz)) == raiz
+
+
+def dentro_de(ruta: str, carpeta: str) -> bool:
+    """Si `ruta` es `carpeta` o está dentro, por componentes y sin resolver enlaces: «/x/./P/E01» está en «/x/P» y
+    «/x/P2/E01», no."""
+    ruta, carpeta = os.path.abspath(ruta), os.path.abspath(carpeta)
+    return os.path.commonpath((ruta, carpeta)) == carpeta
+
+
+def abarca_la_biblioteca(raices: Iterable[str], *, raiz: Optional[str] = None) -> Optional[str]:
+    """Por qué no vale la carpeta de subidas si es una ruta permitida (allowed_roots) o la contiene: los archivos de la
+    biblioteca contarían como «en la carpeta de subidas» y se renombrarían. None si no."""
+    raiz = raiz or RAIZ_SUBIDAS
+    real = os.path.realpath(raiz)
+    dentro = next((r for r in raices if r and os.path.commonpath((os.path.realpath(r), real)) == real), None)
+    if dentro is None:
+        return None
+    return (f"La carpeta de subidas ({raiz}) es o contiene la ruta permitida {dentro}, donde está la biblioteca: sus "
+            "archivos se tomarían por enlaces de subida y se renombrarían. Pon UPLOADRR_UPLOADS_DIR en una carpeta "
+            "propia, p. ej. /data/uploads/emu.")
 
 
 def borrar_de_subidas(ruta: Optional[str], *, raiz: Optional[str] = None) -> bool:
@@ -298,6 +326,54 @@ def asegurar_raiz(raiz: Optional[str] = None) -> bool:
         return False
 
 
+def _sembrado_por_un_simbolico(fichero: str, conn) -> Optional[str]:
+    """Por qué no se edita `fichero` si una subida que siembra (o la de un enlace sembrado sin fila) apunta a él con
+    un enlace simbólico: el fichero suelto que es su `prepared_path`, o un capítulo de la carpeta del pack. También si
+    no se pudo mirar una de esas carpetas (una que ya no existe no siembra nada). None si no."""
+    from ..database import db, get_json_state
+    from .upload_execution.ciclo_de_vida import ENLACES_SEMBRADOS_SIN_FILA
+    if conn is None:
+        with db() as propia:
+            return _sembrado_por_un_simbolico(fichero, propia)
+    real = os.path.realpath(fichero)
+    rutas = {f["prepared_path"] for f in conn.execute(
+        "SELECT prepared_path FROM upload_jobs WHERE prepared_path IS NOT NULL "
+        "AND (status NOT IN ('cancelled', 'failed') OR torrent_subido = 1)")}
+    rutas |= set(get_json_state(conn, ENLACES_SEMBRADOS_SIN_FILA) or [])
+    dudosa = None
+    for ruta in rutas:
+        try:
+            enlaces = ([e.path for e in os.scandir(ruta)] if os.path.isdir(ruta) and not os.path.islink(ruta)
+                       else [ruta])
+        except FileNotFoundError:
+            continue
+        except OSError as e:
+            dudosa = dudosa or f"no se pudo mirar si {ruta} lo siembra con un enlace simbólico ({texto_de_error(e)})"
+            continue
+        if any(os.path.islink(e) and os.path.realpath(e) == real for e in enlaces):
+            return "lo siembra una subida a través de un enlace simbólico"
+    return dudosa
+
+
+def motivo_para_no_editar(fichero: str, conn) -> Optional[str]:
+    """Por qué no se edita `fichero` en su sitio (un torrent puede sembrarlo), o None.
+
+    Un enlace simbólico de la carpeta de subidas no suma a `st_nlink`: con la carpeta en otro disco, el original
+    parece no compartido aunque otra subida lo siembre a través de él. Sin poder probar el enlace no se sabe, y no se
+    edita; y un simbólico de una subida de cuando la carpeta estaba en otro disco tampoco lo dice la prueba de hoy."""
+    with _PROBANDO:  # el enlace de prueba de otro hilo no se cuenta como enlace duro
+        enlaces = os.stat(fichero).st_nlink
+        if enlaces > 1:
+            return f"lo comparten {enlaces} enlaces duros (un torrent que siembra o una subida anterior)"
+        prueba = comprobar_enlace(fichero)
+    if not prueba["ok"]:
+        return f"no se puede comprobar el enlace en la carpeta de subidas ({prueba['error']})"
+    if prueba["tipo"] == "simbólico":
+        return ("se enlaza con un enlace simbólico (la carpeta de subidas está en otro disco), que no cuenta como "
+                "enlace: puede sembrarlo un torrent")
+    return _sembrado_por_un_simbolico(fichero, conn)
+
+
 def comprobar_enlace(fichero: str, *, raiz: Optional[str] = None) -> dict:
     """Si se puede enlazar ESE fichero dentro de la carpeta de subidas.
 
@@ -306,9 +382,10 @@ def comprobar_enlace(fichero: str, *, raiz: Optional[str] = None) -> dict:
     lados dan el mismo `st_dev` y aun así `os.link` falla con EPERM. Cuesta
     microsegundos y no puede equivocarse.
 
-    Devuelve {ok, tipo, error}. `tipo` es "duro" o "simbólico": el segundo
-    también vale —Uploadrr y qBittorrent leen a través de él— pero conviene
-    decirlo, porque significa que la carpeta de subidas está en otro disco.
+    Devuelve {ok, tipo, error}. `tipo` es "duro" o "simbólico". El segundo
+    significa que la carpeta de subidas está en otro disco: se puede subir, pero
+    Uploadrr-EMU resuelve el enlace y un archivo suelto sale con el nombre de la
+    biblioteca, sembrando el original.
     """
     raiz = raiz or RAIZ_SUBIDAS
     if not asegurar_raiz(raiz):
@@ -319,16 +396,17 @@ def comprobar_enlace(fichero: str, *, raiz: Optional[str] = None) -> dict:
                 "error": f"No existe el archivo con el que probar: {fichero or '(sin ruta)'}"}
 
     prueba = os.path.join(raiz, f".prueba-enlace-{os.getpid()}")
-    try:
-        if os.path.lexists(prueba):
-            os.unlink(prueba)
-        tipo = _enlazar(fichero, prueba)
-        return {"ok": True, "tipo": tipo, "error": None}
-    except OSError as e:
-        return {"ok": False, "tipo": None, "error": f"{raiz}: {texto_de_error(e)}"}
-    finally:
+    with _PROBANDO:
         try:
             if os.path.lexists(prueba):
                 os.unlink(prueba)
-        except OSError:
-            pass
+            tipo = _enlazar(fichero, prueba)
+            return {"ok": True, "tipo": tipo, "error": None}
+        except OSError as e:
+            return {"ok": False, "tipo": None, "error": f"{raiz}: {texto_de_error(e)}"}
+        finally:
+            try:
+                if os.path.lexists(prueba):
+                    os.unlink(prueba)
+            except OSError:
+                pass

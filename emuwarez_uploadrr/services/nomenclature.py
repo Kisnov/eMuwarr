@@ -914,7 +914,9 @@ def build_nomenclature_apply_plan(
             or "archivo"
         )
         nombre = proposed_filename + _os.path.splitext(source_path)[1]
-        renombrable = en_carpeta_de_subidas(source_path)
+        from .carpeta_subida import abarca_la_biblioteca
+        from .uploadrr_contract import get_allowed_roots
+        renombrable = en_carpeta_de_subidas(source_path) and not abarca_la_biblioteca(get_allowed_roots(conn))
         # `path` se guarda en el convenio de Radarr/Sonarr: tras renombrar, la misma carpeta.
         raw_source = item.get("path")
         return {

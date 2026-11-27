@@ -62,11 +62,11 @@ describe('pistas', () => {
 })
 
 describe('copia', () => {
-  const check = (status: 'ok' | 'fail', message: string) => [{ id: 'carpeta_subida', label: '', status, message }] as never
+  const check = (status: 'ok' | 'skip' | 'fail', message: string) => [{ id: 'carpeta_subida', label: '', status, message }] as never
 
-  it('el tipo de enlace sale del mensaje de la comprobación, solo si pasó', () => {
+  it('el tipo de enlace sale del mensaje de la comprobación, si no falló', () => {
     expect(tipoDeEnlace(check('ok', '/config/Uploadrr/uploads (enlace duro)'))).toBe('duro')
-    expect(tipoDeEnlace(check('ok', '/config/Uploadrr/uploads (enlace simbólico)'))).toBe('simbólico')
+    expect(tipoDeEnlace(check('skip', '/config/Uploadrr/uploads (enlace simbólico): está en otro disco'))).toBe('simbólico')
     expect(tipoDeEnlace(check('fail', '/config (enlace duro)'))).toBeNull()
     expect(tipoDeEnlace(undefined)).toBeNull()
   })

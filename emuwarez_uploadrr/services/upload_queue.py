@@ -1101,18 +1101,32 @@ def _renombrar_si_esta_en_subidas(job_id: int, item_id: int, origen: str | None,
     """Renombra en su sitio un archivo que ya está en la carpeta de subidas (los de
     la biblioteca, nunca). Devuelve la ruta con la que seguir, o None si falló
     (el trabajo ya queda fallido)."""
-    from .carpeta_subida import ENLACES, en_carpeta_de_subidas
+    from .carpeta_subida import ENLACES, abarca_la_biblioteca, dentro_de, en_carpeta_de_subidas
     from .nomenclature import renombrar_en_subidas
     from .upload_execution import append_upload_log
-    if not origen or not en_carpeta_de_subidas(origen) or os.path.basename(origen) == nombre:
+    from .uploadrr_contract import get_allowed_roots
+    from ..database import get_json_state
+    from .upload_execution.ciclo_de_vida import ENLACES_SEMBRADOS_SIN_FILA
+    if not origen or not en_carpeta_de_subidas(origen):
+        return origen
+    # Con la carpeta de subidas abarcando la biblioteca, «en la carpeta de subidas» puede ser el original.
+    amplia = abarca_la_biblioteca(get_allowed_roots(conn))
+    if amplia:
+        _fail(job_id, amplia)
+        return None
+    if os.path.basename(origen) == nombre:
         return origen
     destino = os.path.join(os.path.dirname(origen), nombre)
     with ENLACES:
         # Si otra subida siembra desde ahí, renombrarlo le quita el fichero a qBittorrent.
         otra = _subida_que_lo_usa(conn, origen, job_id)
-        r = None if otra is not None else renombrar_en_subidas(item_id, origen, destino, conn=conn, **kw)
+        # O una ya borrada cuyo enlace otra subida compartía (enlaces_sembrados_sin_fila), suelto o su pack.
+        borrada = otra is None and any(dentro_de(origen, ruta) for ruta in
+                                       get_json_state(conn, ENLACES_SEMBRADOS_SIN_FILA) or [])
+        r = None if otra is not None or borrada else renombrar_en_subidas(item_id, origen, destino, conn=conn, **kw)
     if r is None:
-        append_upload_log(job_id, "info", f"No se renombra «{os.path.basename(origen)}»: la subida #{otra} "
+        quien = f"la subida #{otra}" if otra is not None else "una subida borrada de la lista"
+        append_upload_log(job_id, "info", f"No se renombra «{os.path.basename(origen)}»: {quien} "
                                           "siembra desde ahí. Se enlaza con el nombre de eMuwarez.",
                           stream="system", conn=conn)
         return origen
@@ -1127,20 +1141,37 @@ def _renombrar_si_esta_en_subidas(job_id: int, item_id: int, origen: str | None,
 
 
 def _subida_que_lo_usa(conn, ruta: str, job_id: int) -> int | None:
-    """La otra subida que siembra (o prepara) desde `ruta`, con el mismo criterio
-    que el borrado: quitarle el enlace o reescribirlo rompería su torrent."""
+    """La otra subida que siembra (o prepara) desde `ruta`, o desde la carpeta de pack que la contiene, con el mismo
+    criterio que el borrado: quitarle el enlace o reescribirlo rompería su torrent."""
+    ruta = os.path.normpath(ruta)  # «uploads/./Pack/E01» es de «uploads/Pack»
     fila = conn.execute(
-        "SELECT id FROM upload_jobs WHERE prepared_path = ? AND id != ? "
-        "AND (status NOT IN ('cancelled', 'failed') OR torrent_subido = 1) LIMIT 1",
-        (ruta, job_id)).fetchone()
+        "SELECT id FROM upload_jobs WHERE (prepared_path = ? OR substr(?, 1, length(prepared_path) + 1) = "
+        "prepared_path || '/') AND id != ? AND (status NOT IN ('cancelled', 'failed') OR torrent_subido = 1) LIMIT 1",
+        (ruta, ruta, job_id)).fetchone()
     return fila["id"] if fila else None
 
 
-def _motivo_para_no_tocar(origen: str) -> str | None:
+def _destino_sin_dueno(conn, destino: str, job_id: int, origenes: list[str]) -> bool:
+    """Si en `destino` ya hay algo que no dejó ninguna otra subida con fila (una borrada de la lista, que qBittorrent
+    puede seguir sembrando), o que contiene los propios originales: prepararlo lo borraría antes de enlazar."""
+    from ..database import get_json_state
+    from .upload_execution.ciclo_de_vida import ENLACES_SEMBRADOS_SIN_FILA
+    if not os.path.lexists(destino) or any(os.path.abspath(f) == os.path.abspath(destino) for f in origenes):
+        return False
+    if any(os.path.dirname(os.path.abspath(f)) == os.path.abspath(destino) for f in origenes):
+        return True
+    if destino in (get_json_state(conn, ENLACES_SEMBRADOS_SIN_FILA) or []):
+        return True
+    return conn.execute("SELECT 1 FROM upload_jobs WHERE prepared_path = ? AND id != ? LIMIT 1",
+                        (destino, job_id)).fetchone() is None
+
+
+def _motivo_para_no_tocar(origen: str, conn) -> str | None:
     """None si se puede escribir en el original; si no, por qué no."""
-    enlaces = os.stat(origen).st_nlink
-    if enlaces > 1:
-        return f"lo comparten {enlaces} enlaces duros (un torrent que siembra o una subida anterior)"
+    from .carpeta_subida import motivo_para_no_editar
+    motivo = motivo_para_no_editar(origen, conn)
+    if motivo:
+        return motivo
     if not (os.access(origen, os.W_OK) and os.access(os.path.dirname(origen), os.W_OK)):
         return "no se puede escribir en él"
     return None
@@ -1197,7 +1228,7 @@ def _preparar_fichero(job_id: int, item_id: int, origen: str, destino: str, modo
     if not origen.lower().endswith(".mkv"):
         return fin([], False, None, "no es MKV")
 
-    motivo = _motivo_para_no_tocar(origen)
+    motivo = _motivo_para_no_tocar(origen, conn)
     # Con el idioma elegido para una pista sin idioma: si solo cambia eso, también hay que escribirlo.
     plan = build_remux_plan(item_id, conn=conn, ruta=origen, reordenar=motivo is None,
                             idiomas=idiomas_elegidos(overrides))
@@ -1625,7 +1656,10 @@ def _paso_preparar(t: _Trabajo) -> bool:
         otra = _subida_que_lo_usa(conn, t.destino_uploadrr, job_id)
         # La misma subida a otro tracker: se comparte su fichero en vez de rehacerlo.
         de_otro_tracker = _preparada_para_otro_tracker(conn, t.destino_uploadrr, t) if otra is not None else None
-        if otra is None or de_otro_tracker is not None:
+        # Lo que ya hay en el destino y no explica ninguna subida no se rehace ni se apunta como propio: puede ser lo
+        # que siembra una borrada, y borrar después esta subida se lo llevaría.
+        sin_dueno = otra is None and _destino_sin_dueno(conn, t.destino_uploadrr, job_id, [f for _i, f, _n in ficheros])
+        if (otra is None and not sin_dueno) or de_otro_tracker is not None:
             conn.execute("UPDATE upload_jobs SET prepared_path = ?, updated_at = ? WHERE id = ?",
                          (t.destino_uploadrr, _now_iso(), job_id))
             conn.commit()
@@ -1673,9 +1707,21 @@ def _paso_preparar(t: _Trabajo) -> bool:
                 + (f" Uploadrr no repetirá: {', '.join(n.lower() for n in aprovecha)}." if aprovecha else ""),
                 stream="system", conn=conn,
             )
+            if sin_dueno:  # reutilizarlo sin rehacerlo sí vale: ahora es de esta subida
+                with ENLACES:
+                    conn.execute("UPDATE upload_jobs SET prepared_path = ?, updated_at = ? WHERE id = ?",
+                                 (t.destino_uploadrr, _now_iso(), job_id))
+                    conn.commit()
             t.preparada = {"status": "ready", "metodos": ["reutilizada"]}
             t.que = f"{len(ficheros)} capítulo(s)" if is_season else "el archivo"
             return True
+
+    if sin_dueno:
+        _fail(job_id, f"«{os.path.basename(t.destino_uploadrr)}» ya existe en la carpeta de subidas y puede estar "
+                      "sembrándose (de una subida que se borró de la lista, por ejemplo): no se rehace para no romper "
+                      f"ese torrent. Si qBittorrent ya no lo siembra, bórralo a mano de {RAIZ_SUBIDAS} y vuelve a "
+                      "intentarlo; si lo siembra, no se puede preparar otra subida de este contenido mientras siga ahí.")
+        return False
 
     por_nombre = {n: i for i, _f, n in ficheros}
     resultados = t.resultados

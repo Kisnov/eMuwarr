@@ -1060,11 +1060,11 @@ def apply_remux(
 
         # Un enlace duro es el MISMO fichero: escribir aquí cambiaría también el
         # torrent que lo siembra, y sus piezas dejarían de cuadrar.
-        enlaces = p.stat().st_nlink
-        if enlaces > 1:
+        from .carpeta_subida import motivo_para_no_editar
+        motivo = motivo_para_no_editar(str(p), conn)
+        if motivo:
             return {**preview, "status": "blocked", "dry_run": False, "apply": False,
-                    "errors": [f"No se edita {p.name}: lo comparten {enlaces} enlaces duros "
-                               "(un torrent que siembra o una subida anterior)."]}
+                    "errors": [f"No se edita {p.name}: {motivo}."]}
 
         if not plan["order_changed"]:
             # Solo cambian nombres y banderas: eso se edita EN LA CABECERA con
