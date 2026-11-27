@@ -1,4 +1,4 @@
-"""Opciones de la línea de órdenes que no usa emuwarez-uploadrr: banderas por elemento, -episode, -d/-df/-pb y -pr."""
+"""Opciones de la línea de órdenes que no usa eMuwarr: banderas por elemento, -episode, -d/-df/-pb y -pr."""
 from __future__ import annotations
 
 import asyncio

@@ -8,7 +8,7 @@ from ..database import db_path
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="emuwarez-uploadrr",
+        prog="emuwarr",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         description="CLI modular de eMuwarr. Espejo funcional de la futura interfaz web.",
     )

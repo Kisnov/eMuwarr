@@ -76,7 +76,7 @@ async def marcar_paso_hecho(meta: Dict, paso: str, base_dir: Optional[Path] = No
     """Anota ``paso`` en ``meta["pasos_hechos"]``, guarda meta.json y avisa a quien lanza Uploadrr.
 
     La línea ``Step done: <paso>`` va con ``print`` y no con Rich, que parte las líneas a 80 columnas en una
-    tubería; emuwarez-uploadrr la lee tal cual. Se imprime también cuando el paso se reutiliza en un
+    tubería; eMuwarr la lee tal cual. Se imprime también cuando el paso se reutiliza en un
     ``--resume``, para que la lista de cada ejecución esté completa.
     """
     pasos = meta.get("pasos_hechos")

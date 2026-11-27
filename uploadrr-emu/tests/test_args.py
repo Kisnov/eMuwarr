@@ -21,7 +21,7 @@ def _meta(argv, config=None):
     ],
 )
 def test_el_argv_de_emuwarez_uploadrr_llega_al_meta(tmp_path, extra, esperado):
-    # El mismo orden que build_uploadrr_emu_command en emuwarez-uploadrr.
+    # El mismo orden que build_uploadrr_emu_command en eMuwarr.
     video = tmp_path / "Peli.mkv"
     video.write_bytes(b"")
     nombre = "Peli 2020 1080p BluRay REMUX-GRP"
@@ -45,7 +45,7 @@ def test_el_argv_de_emuwarez_uploadrr_llega_al_meta(tmp_path, extra, esperado):
 def test_solo_cliente_lleva_el_id_y_conserva_tmp_como_resume(tmp_path):
     video = tmp_path / "Peli.mkv"
     video.write_bytes(b"")
-    # Lo que añade emuwarez-uploadrr al argv de siempre.
+    # Lo que añade eMuwarr al argv de siempre.
     items, global_argv = group_args_by_path([str(video), "-tk", "EMU", "-ua", "--resume", "-sc", "123"])
     meta = apply_special_logic(normalize_args(build_parser({}).parse_args(global_argv)))
 

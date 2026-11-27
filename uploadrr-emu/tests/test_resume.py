@@ -1,6 +1,6 @@
 """``--resume``: sin él cada ítem borra su ``tmp/<uuid>``; con él se reutiliza solo lo marcado en ``pasos_hechos``.
 
-Las líneas ``Step done: screenshots`` / ``Step done: torrent`` las lee emuwarez-uploadrr tal cual."""
+Las líneas ``Step done: screenshots`` / ``Step done: torrent`` las lee eMuwarr tal cual."""
 
 from __future__ import annotations
 
