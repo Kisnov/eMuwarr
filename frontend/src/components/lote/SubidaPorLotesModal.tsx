@@ -67,6 +67,7 @@ export function SubidaPorLotesModal({ entradas, onClose, onDone, onNavigate }: {
   // Dos peticiones sobre el mismo elemento: la elegida a mano; si no, la primera.
   const [peticionElegida, setPeticionElegida] = useState<ReadonlyMap<number, number>>(() => new Map())
   const peticionDe = (id: number): number | undefined => peticionElegida.get(id) ?? expansion.peticiones.get(id)?.[0]
+  const trackerDePeticion = new Map(copia.map(e => [e.requestId, e.tracker] as const))
   const enCola = elementos.filter(e => marcadas.has(e.id) && !razon(e))
   const cola = enCola.map(e => e.id)
   const [fase, setFase] = useState<'idle' | 'processing' | 'done'>('idle')
@@ -227,10 +228,13 @@ export function SubidaPorLotesModal({ entradas, onClose, onDone, onNavigate }: {
           elementos={elementos} marcadas={marcadas} onAlternar={alternar} elegibilidad={elegibilidad}
           comprobandoIdiomas={!destinosListos || !elegibilidadLista}
           onContinuar={() => {
-            // Como el asistente, si cambió lo marcado: eMuwarez si admite todo; si no, también los que admiten lo demás.
-            if (colaAlContinuar.current !== cola.join(',')) {
-              colaAlContinuar.current = cola.join(',')
-              setTrackersElegidos(destinosDeEntradaDeVarios(enCola.map(e => elegibilidad.get(e.id))))
+            // Como el asistente, si cambió lo marcado o su petición: el tracker de la petición de cada uno si lo
+            // admite; si no, eMuwarez, o los que lo admiten.
+            const clave = enCola.map(e => `${e.id}:${peticionDe(e.id) ?? ''}`).join(',')
+            if (colaAlContinuar.current !== clave) {
+              colaAlContinuar.current = clave
+              setTrackersElegidos([...new Set(enCola.flatMap(e =>
+                destinosDeEntradaDeVarios([elegibilidad.get(e.id)], trackerDePeticion.get(peticionDe(e.id)))))])
             }
             setPaso('resumen')
           }}

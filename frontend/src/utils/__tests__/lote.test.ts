@@ -199,6 +199,12 @@ describe('las filas del Panel', () => {
       .toEqual({ item: ficha, requestId: 78, alcance: { season: 1, episode: 12 } })
     expect(entradaDelPanel(fila({ season_number: 2 }), ficha)).toEqual({ item: ficha })
   })
+
+  it('una petición lleva también su tracker', () => {
+    expect(entradaDelPanel(fila({ rec_request_id: 77, rec_request_tracker: 'nobs' }), ficha).tracker).toBe('nobs')
+    expect(entradaDePeticion({ id: 70, req_scope: null, req_season: null, req_episode: null, tracker: 'mnv' }, ficha).tracker)
+      .toBe('mnv')
+  })
 })
 
 describe('las peticiones de Peticiones', () => {
