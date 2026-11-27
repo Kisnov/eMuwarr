@@ -164,8 +164,9 @@ def _pelicula(entorno, mkv_base, *, carpeta: Path, nombre="Peli (2024) WEBDL-108
     return {"id": iid, "proposal_id": pid, "f": f, "seed": seed}
 
 
-def _subir(entorno, item_id: int, proposal_id: int | None = None) -> dict:
-    """Pasa un trabajo por toda la cola, hasta justo antes de arrancar Uploadrr."""
+def _subir(entorno, item_id: int, proposal_id: int | None = None, **columnas) -> dict:
+    """Pasa un trabajo por toda la cola, hasta justo antes de arrancar Uploadrr. `columnas`: más de la fila
+    (tracker, retry_of_job_id, reutiliza_preparacion…)."""
     from emuwarez_uploadrr.services.upload_execution import _upload_concurrency_gate, get_upload_job_logs
     conn = entorno["conn"]
     jid = conn.execute(
@@ -173,6 +174,8 @@ def _subir(entorno, item_id: int, proposal_id: int | None = None) -> dict:
                                     nomenclature_proposal_id, created_at, updated_at)
            VALUES (?, 'queued', 'queued', 'X', '', '', ?,
                    CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)""", (item_id, proposal_id)).lastrowid
+    for columna, valor in columnas.items():
+        conn.execute(f"UPDATE upload_jobs SET {columna} = ? WHERE id = ?", (valor, jid))
     conn.commit()
     visto, refrescos = {}, []
 
@@ -691,6 +694,47 @@ def test_lo_que_sembraba_una_subida_borrada_no_lo_explica_la_fallida_que_lo_comp
     set_json_state(conn, ENLACES_SEMBRADOS_SIN_FILA, [str(destino)])
     conn.commit()
     assert uq._destino_sin_dueno(conn, str(destino), 999, ["/data/Peli.mkv"]) is True
+
+
+@pytest.mark.parametrize("reutilizable", [True, False])
+def test_el_reintento_de_la_fallida_que_compartia_el_fichero_de_una_borrada(entorno, mkv_base, monkeypatch,
+                                                                             reutilizable):
+    """A eMuwarez completada (borrada de la lista) y a N.O.B.S fallida con el mismo fichero: queda en
+    enlaces_sembrados_sin_fila. Reintentar la de N.O.B.S reutilizando lo preparado vale; rehacerlo, no."""
+    from emuwarez_uploadrr.database import get_json_state
+    from emuwarez_uploadrr.services import carpeta_subida
+    from emuwarez_uploadrr.services.settings import set_setting
+    from emuwarez_uploadrr.services.upload_execution.ciclo_de_vida import ENLACES_SEMBRADOS_SIN_FILA
+    monkeypatch.setattr(carpeta_subida, "clonar", _reflink("no"))
+    _modo(entorno, "ninguno")
+    conn = entorno["conn"]
+    set_setting(conn, "nobs.api_key", "c")
+    peli = _pelicula(entorno, mkv_base, carpeta=entorno["tmp"] / "media" / "Peli (2024)", semilla=False)
+    emu = _subir(entorno, peli["id"], peli["proposal_id"])
+    destino = emu["visto"]["prepared_path"]
+    nobs = conn.execute(
+        """INSERT INTO upload_jobs (library_item_id, status, stage, title, path, source_path, prepared_path, tracker,
+                                    etapa_parada, remux_snapshot_json, huellas_preparacion_json, created_at, updated_at)
+           SELECT library_item_id, 'failed', 'failed', title, path, source_path, prepared_path, 'nobs', ?,
+                  remux_snapshot_json, ?, created_at, updated_at FROM upload_jobs WHERE id = ?""",
+        ("preflight", emu["job"]["huellas_preparacion_json"] if reutilizable else "{}", emu["id"])).lastrowid
+    conn.execute("UPDATE upload_jobs SET status = 'completed' WHERE id = ?", (emu["id"],))
+    conn.commit()
+    _borrar(entorno, emu["id"])
+    assert get_json_state(conn, ENLACES_SEMBRADOS_SIN_FILA) == [destino]
+    inodo = os.stat(destino).st_ino
+
+    r = _subir(entorno, peli["id"], peli["proposal_id"], tracker="nobs", retry_of_job_id=nobs,
+               reutiliza_preparacion=1)
+
+    assert os.stat(destino).st_ino == inodo and os.path.samefile(destino, peli["f"])
+    if reutilizable:
+        assert r["visto"] == {"prepared_path": destino, "status": "ready"}, r["logs"]
+        assert any(f"Se reutiliza la preparación de la subida #{nobs}" in m for m in r["logs"])
+    else:
+        assert r["job"]["status"] == "failed" and r["visto"] == {}
+        assert "ya existe en la carpeta de subidas" in r["job"]["error_message"]
+        assert r["job"]["prepared_path"] is None
 
 
 def test_un_reintento_tras_un_fallo_rehace_lo_que_dejo_su_intento(entorno, mkv_base, monkeypatch):
