@@ -107,8 +107,8 @@ contraseña en la URL. La WebUI no tiene enlace directo a un torrent, así que j
 pegarlo en su filtro.
 
 Para no editar el compose, copia [`.env.example`](../.env.example) a `.env` al lado y ajusta `PUID`, `PGID`, `TZ`,
-`EMUWARR_PORT` y `EMUWARR_TAG` (los nombres antiguos, `EMUWAREZ_UPLOADRR_PORT` y `EMUWAREZ_UPLOADRR_TAG`, siguen
-valiendo). Luego:
+`EMUWARR_PORT` y `EMUWARR_TAG`. Un `.env` de antes, con `EMUWAREZ_UPLOADRR_PORT` y `EMUWAREZ_UPLOADRR_TAG`, sigue
+valiendo tal cual; si están los dos nombres, manda el nuevo. Luego:
 
 ```bash
 docker compose up -d
