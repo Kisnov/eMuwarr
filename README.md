@@ -10,25 +10,29 @@
 [![Python](https://img.shields.io/python/required-version-toml?tomlFilePath=https%3A%2F%2Fraw.githubusercontent.com%2FKisnov%2FeMuwarr%2Fdev%2Fpyproject.toml&logo=python&logoColor=white&color=3776AB)](pyproject.toml)
 [![Node 26](https://img.shields.io/badge/node-26-5FA04E?logo=nodedotjs&logoColor=white)](frontend/package.json)
 
-Aplicación web autoalojada para subir a **[eMuwarez](https://emu-warez.com)** lo que ya tienes en **Radarr** y
-**Sonarr**. Te dice qué puedes subir, pone el nombre que pide el tracker, sube el torrent y lo deja sembrando en
-qBittorrent. Todo desde el navegador.
+Aplicación web autoalojada para subir a **[eMuwarez](https://emu-warez.com)**, y también a **N.O.B.S** y
+**Milnueve**, lo que ya tienes en **Radarr** y **Sonarr** o en una carpeta. Te dice qué puedes subir, pone el nombre
+que pide el tracker, sube el torrent y lo deja sembrando en qBittorrent. Todo desde el navegador.
 
 ![Panel](docs/capturas/panel.webp)
 
-**En esta página:** [Cómo funciona](#cómo-funciona) · [Qué necesitas](#qué-necesitas) ·
+**En esta página:** [Cómo funciona](#cómo-funciona) · [Trackers](#trackers) ·
+[Tu biblioteca](#qué-se-toca-de-tu-biblioteca) · [Qué necesitas](#qué-necesitas) ·
 [Pantallas](#pantallas) · [Arranque rápido](#arranque-rápido-docker-compose) ·
 [Rutas](#rutas-lo-único-delicado) · [Versiones](#versiones-y-volver-atrás) · [Sin Docker](#uso-sin-docker) ·
 [Desarrollo](#desarrollo)
 
 ## Cómo funciona
 
-1. **Sincroniza** tu biblioteca de Radarr y Sonarr, el catálogo de eMuwarez y sus peticiones abiertas.
+1. **Sincroniza** tu biblioteca de Radarr y Sonarr, y el catálogo y las peticiones abiertas de cada tracker con clave.
 2. **Cruza** las tres cosas: qué tienes que no está en el tracker, y qué peticiones puedes cubrir (con su recompensa).
 3. **Prepara** la subida: genera el nombre con la nomenclatura de eMuwarez, revisa las pistas y enlaza los ficheros
    en una carpeta de subidas, sin tocar los nombres de tu biblioteca.
 4. **Sube** con [Uploadrr-EMU](uploadrr-emu/), que va dentro de la imagen: capturas,
-   torrent, subida a eMuwarez y alta en qBittorrent, con el progreso en directo.
+   torrent, subida a cada tracker elegido y alta en qBittorrent, con el progreso en directo.
+
+Se suben ficheros MKV, MP4 y TS. Las imágenes de disco (ISO) todavía no: la comprobación de formato lo dice antes de
+preparar nada.
 
 **Sin Radarr ni Sonarr:** en Instancias añade una **carpeta manual** (por ejemplo `/data/torrents/manual`) y deja ahí
 los vídeos. Al escanearla, la aplicación lee del nombre de cada fichero el título, el año, la temporada y el capítulo,
@@ -36,12 +40,49 @@ la fuente y el grupo, y busca la ficha en TMDb. Tú la confirmas en Biblioteca (
 y a partir de ahí se sube como lo demás. La carpeta tiene que estar en el mismo disco que la de subidas y dentro de las
 rutas permitidas.
 
+## Trackers
+
+eMuwarez es el tracker principal. **N.O.B.S** y **Milnueve**, dos UNIT3D, se activan poniendo su API key en
+Configuración → Otros trackers; ahí también van las marcas de cada grupo (Personal release, anónimo), que de entrada
+son las de eMuwarez.
+
+- **Una subida por tracker.** En el Resumen del asistente y en el de «Subir por lotes» marcas a qué trackers va. Todas
+  usan el mismo fichero de la carpeta de subidas, el mismo nombre y las mismas piezas: el fichero se hashea una vez y
+  los torrents valen para cross-seed.
+- **Las normas de cada uno.** eMuwarez pide castellano en el audio o en los subtítulos; N.O.B.S admite castellano,
+  latino o VOSE, y Milnueve, además, catalán. El anime va a sus categorías de anime y, en Milnueve, lo que solo tiene
+  catalán o latino, a las suyas. N.O.B.S y Milnueve no tienen el tipo SD. Lo que un tracker no admite no se le sube, y
+  el Resumen dice por qué.
+- **Lo que ya hay.** El Resumen enseña lo que ya tiene cada tracker elegido del mismo título y si lo tuyo lo mejora.
+  En un lote, el tracker que ya lo tiene igual o mejor se salta para esa subida.
+- **«Subir también a…».** Una subida completada con eMuwarr se sube a otro tracker con clave, desde su detalle o
+  eligiendo varias en Subidas, sin preparar ni hashear nada otra vez. Antes comprueba que qBittorrent tiene ese torrent
+  entero.
+- **Cada tracker, lo suyo.** El catálogo, las peticiones, «Tus subidas» y el perfil se leen de cada tracker con su
+  clave y su límite de la API. En Subidas y Peticiones, las filas de otro tracker llevan su logo.
+
+La aplicación habla con cada tracker a través de un adaptador, así que se pueden añadir otros.
+
+## Qué se toca de tu biblioteca
+
+- **El nombre de un fichero de la biblioteca no se cambia nunca.** El nombre del release lo lleva su enlace en la
+  carpeta de subidas, que es de donde siembra qBittorrent.
+- **El enlace es duro**: no ocupa disco. Si la carpeta de subidas está en otro disco (u otro caso de los de
+  [Rutas](#rutas-lo-único-delicado)), sale simbólico, y la comprobación de la subida lo dice.
+- **Las pistas y el título interno** de un MKV (según el modo de «Renombrar/Ordenar pistas») se editan en su sitio
+  solo si el fichero tiene un único enlace, es decir, si no lo comparte ningún torrent. Si lo comparte, se edita una
+  copia por reflink en la carpeta de subidas, que solo ocupa lo que cambia. Si el disco no admite reflink, o con «No
+  hacer nunca copias reflink» (Configuración → Otros), esas ediciones se omiten con un aviso y se sube tal cual.
+  Reordenar las pistas de un fichero compartido se omite siempre.
+- **Lo que ya siembra no se rehace**: subir a otro tracker reutiliza el mismo fichero, y borrar una subida o un lote no
+  quita un enlace que usa otra.
+
 ## Qué necesitas
 
 - Un equipo con **Docker** (24+ con Compose v2). La imagen lleva todo lo demás.
 - **Radarr** y/o **Sonarr** con tu biblioteca, o una **carpeta manual** con lo que quieras subir sin pasar por ellos.
 - Una cuenta de **eMuwarez** con su API key, y una API key de **TMDb** (gratuita). Para subir también a **N.O.B.S** o
-  **Milnueve**, sus claves van en Configuración → Otros trackers.
+  **Milnueve**, una cuenta allí con su API key, que va en Configuración → Otros trackers.
 - **qBittorrent**, que vea la carpeta de subidas en la misma ruta que este contenedor.
 - La media y la carpeta de subidas en el **mismo sistema de ficheros**, para que la subida sea un enlace duro y no
   ocupe el doble.
@@ -52,9 +93,9 @@ Las claves se ponen en el asistente web la primera vez que entras; no van en nin
 
 ### Panel
 
-Lo que puedes subir hoy. Arriba, tu perfil de eMuwarez (ratio, subido, buffer, BON). «Listo para subir» son las
-peticiones que ya puedes cubrir, ordenadas por recompensa; «En curso», las subidas en marcha y las últimas
-terminadas. Es la captura de arriba.
+Lo que puedes subir hoy. Arriba, tu cuenta en cada tracker con clave (ratio, subido, buffer, BON), una tarjeta con su
+logo por tracker si tienes más de uno. «Listo para subir» son las peticiones que ya puedes cubrir, ordenadas por
+recompensa; «En curso», las subidas en marcha y las últimas terminadas. Es la captura de arriba.
 
 ### Biblioteca
 
@@ -71,21 +112,23 @@ identificadores, con «Subir» a un clic.
 
 ### Peticiones
 
-Las peticiones abiertas de eMuwarez cruzadas con lo que tienes, agrupadas en «Lista para subir», «Parcial», «No la
-tienes» y «Cerradas», con la mayor recompensa primero. La ficha compara lo que piden con tu copia.
+Las peticiones abiertas de cada tracker con clave cruzadas con lo que tienes, agrupadas en «Lista para subir»,
+«Parcial», «No la tienes» y «Cerradas», con la mayor recompensa primero. La ficha compara lo que piden con tu copia, y
+su «Subir a» abre el asistente para el tracker de la petición.
 
 ![Ficha de una petición lista para subir](docs/capturas/peticion.webp)
 
 ### Subir
 
 Un asistente de tres pasos (contenido, nombre y pistas, resumen) comprueba el contenido, propone el nombre (también
-para packs de temporada) y enseña lo que ya hay en eMuwarez del mismo título antes de pulsar «Subir».
+para packs de temporada) y enseña lo que ya hay del mismo título en cada tracker elegido antes de pulsar «Subir».
 
 ![Asistente de subida con la revisión de pistas](docs/capturas/pistas.webp)
 
 ### Subidas
 
-Todas tus subidas, con su grupo, su petición, su estado y cómo va la siembra en qBittorrent.
+Todas tus subidas, con su grupo, su petición, su estado y cómo va la siembra en qBittorrent. Las subidas del mismo
+contenido a varios trackers van juntas, cada una con el logo de su tracker.
 
 ![Subidas](docs/capturas/subidas.webp)
 
@@ -102,15 +145,16 @@ qBittorrent, «Reenviar a qBittorrent» lo vuelve a añadir sin subir nada.
 - **Tareas**: sincronización periódica, vigilancia de instancias, copias automáticas y aviso de versión nueva.
 - **Instancias**: tus Radarr y Sonarr, y tus carpetas manuales.
 - **Logs**: registros de la aplicación y de cada subida, con los secretos tapados.
-- **Configuración**: claves, qBittorrent, proveedores de imágenes, notificaciones (Discord, Telegram, webhook), un
+- **Configuración**: claves (las de N.O.B.S y Milnueve, en Otros trackers), qBittorrent, proveedores de imágenes, notificaciones (Discord, Telegram, webhook), un
   widget para [Homepage](https://gethomepage.dev), diagnóstico y copias de seguridad.
 - **Ctrl+K** abre una paleta para saltar a una sección o a un título. En pantallas estrechas el menú es un cajón.
 
 <details>
 <summary><strong>Todo lo que hace, con detalle</strong></summary>
 
-- **Panel**: lo que puedes subir hoy. Arriba, tu perfil de eMuwarez (ratio, subido, bajado, buffer, BON…) y un solo
-  «Sincronizar todo» (biblioteca, catálogo y peticiones, una tras otra). «Listo para subir» son las peticiones que ya
+- **Panel**: lo que puedes subir hoy. Arriba, tu perfil en cada tracker con clave (ratio, subido, bajado, buffer,
+  BON…), en una tarjeta por tracker cuando hay más de uno, y un solo «Sincronizar todo» (biblioteca, catálogo y
+  peticiones, una tras otra). «Listo para subir» son las peticiones que ya
   puedes cubrir, por recompensa, con el grupo de release y los idiomas de cada copia; «Subir» abre el asistente sobre
   la petición. «En curso» enseña las subidas en marcha y las últimas terminadas. Una banda «Necesita atención» avisa
   si eMuwarez o TMDb dan error (una clave caducada, por ejemplo), de instancias caídas, subidas fallidas y versión
@@ -121,14 +165,15 @@ qBittorrent, «Reenviar a qBittorrent» lo vuelve a añadir sin subir nada.
   cabecera, con varias opciones a la vez, y una combinación de filtros y orden se guarda como **vista** para volver
   a ella con un clic. En la ficha de cada ítem: MediaInfo, pistas, temporadas y capítulos, el grupo de release y la
   petición que cubre.
-- **Peticiones**: las peticiones abiertas de eMuwarez cruzadas con lo que ya tienes, agrupadas por lo que puedes
-  hacer: «Lista para subir», «Parcial», «No la tienes» y «Cerradas» (reclamadas, llenas o ya subidas), con la mayor
+- **Peticiones**: las peticiones abiertas de cada tracker con clave cruzadas con lo que ya tienes (con las normas de
+  idioma de ese tracker), agrupadas por lo que puedes hacer: «Lista para subir», «Parcial», «No la tienes» y «Cerradas» (reclamadas, llenas o ya subidas), con la mayor
   recompensa primero. La columna Autor está oculta salvo que la actives. Se sincronizan una vez al día, y «Rellenar
   petición» abre la petición con la URL del torrent ya copiada al acabar una subida.
 - **Subidas**: un asistente con pasos (contenido, nombre y pistas, **resumen**) comprueba el contenido, genera el nombre
   (también para packs de temporada) y lanza Uploadrr-EMU. El resumen enseña lo que se sube (nombre, ficheros,
-  categoría, petición, pistas y tipo de copia) y lo que ya hay en eMuwarez del mismo contenido, con si lo tuyo es
-  mejor, igual o peor, antes de pulsar «Subir». Opcionalmente renombra y reordena las pistas (cuatro modos; por defecto
+  categoría, petición, pistas y tipo de copia), los trackers a los que va (una subida por tracker) y lo que ya hay
+  en cada uno del mismo contenido, con si lo tuyo es mejor, igual o peor, antes de pulsar «Subir». Varias temporadas
+  o varios capítulos elegidos en el asistente se suben en tanda, con «Subir todas» o «Subir todos». Opcionalmente renombra y reordena las pistas (cuatro modos; por defecto
   «Solo renombrar»). El detalle de una subida terminada abre por el resultado (enlace a eMuwarez, estado de siembra en
   qBittorrent y dónde se fue el tiempo); si falla, se reintenta desde el paso que falló, y si el torrent ya estaba
   en eMuwarez pero no llegó a qBittorrent, «Reenviar a qBittorrent» lo vuelve a añadir sin subir nada. Progreso en
@@ -136,23 +181,27 @@ qBittorrent, «Reenviar a qBittorrent» lo vuelve a añadir sin subir nada.
   como Personal release o anónimo, y el Resumen de la subida deja cambiarlo para esa subida. «Seleccionar» en
   Biblioteca marca varias películas, series o temporadas y «Subir por lotes» las encola de una vez (una serie se
   abre en sus temporadas y solo entran como pack las que están listas; las demás se listan con su motivo), con su
-  nombre, sus comprobaciones y lo que ya hay en eMuwarez de cada una; en el Panel, «Seleccionar» en «Listo para
+  nombre, sus comprobaciones y lo que ya hay de cada una en cada tracker elegido; en el Panel, «Seleccionar» en «Listo para
   subir» hace lo mismo con las peticiones (cada subida, enlazada a su petición) y las otras ideas, y en Peticiones,
   con las peticiones que ya se pueden subir. Desde Biblioteca, cada subida se enlaza a la petición abierta que la
   cubre si hay una sola. En Subidas el lote se sigue, se cancela, se reintenta o se borra junto (las que siguen en
-  cola o subiendo no se borran). En Ajustes → Notificaciones se elige si un lote avisa una vez por subida o una sola
+  cola o subiendo no se borran). Si cinco seguidas de un tracker fallan por lo mismo (una clave que ya no vale, por
+  ejemplo), las que quedan en cola para ese tracker no se lanzan, y el lote dice por qué. «Subir también a…» en
+  Subidas sube varias subidas completadas a otro tracker, en un lote. En Ajustes → Notificaciones se elige si un lote avisa una vez por subida o una sola
   vez al terminar, con el resumen.
-- **Estadísticas**: tu ratio, lo subido, lo bajado y el bonus en gráficos, día a día, junto a las cifras de la
-  biblioteca y de las peticiones.
+- **Estadísticas**: tu ratio, lo subido, lo bajado y el bonus en gráficos, día a día (con varios trackers, eliges de
+  cuál), junto a las cifras de la biblioteca y de las peticiones, y «Tus subidas» en cada tracker.
 - **Guía**: cada campo de la nomenclatura de eMuwarez, con ejemplos y de dónde lo saca la aplicación.
 - **Tareas**: sincronización periódica de biblioteca y peticiones, vigilancia de instancias (sincroniza una Radarr o
   Sonarr cuando vuelve a responder), mantenimiento nocturno con copias automáticas y aviso de versión nueva en la campana.
 - **Instancias**: tus Radarr y Sonarr, y tus carpetas manuales.
 - **Logs**: registros de la aplicación y de cada subida, con los secretos redactados.
 - **Configuración**: un índice de secciones con buscador y una barra de guardado que cuenta los campos cambiados.
-  Claves de TMDb, eMuwarez y hosts de imágenes (se comprueban contra el proveedor), qBittorrent, mapeo de rutas,
-  notificaciones (Discord, Telegram, webhook), un widget para [Homepage](https://gethomepage.dev) con su propia clave de
-  solo lectura, diagnóstico, backup y mantenimiento.
+  Claves de TMDb, eMuwarez y hosts de imágenes (se comprueban contra el proveedor), las de N.O.B.S y Milnueve con las
+  marcas de cada grupo (Otros trackers), qBittorrent, mapeo de rutas, notificaciones (Discord, Telegram, webhook), un
+  widget para [Homepage](https://gethomepage.dev) con su propia clave de solo lectura, diagnóstico, backup y
+  mantenimiento. Restaurar una copia se niega mientras haya subidas en marcha, y antes guarda lo que había: restaurar
+  esa copia deshace la restauración.
 
 </details>
 
@@ -352,13 +401,15 @@ los dos lados, cambia el otro en el mismo PR.
 
 - [`docs/DEPLOYMENT_DOCKER.md`](docs/DEPLOYMENT_DOCKER.md): despliegue Docker paso a paso y troubleshooting.
 - [`docs/source_engine.md`](docs/source_engine.md): motor de detección de source y nomenclatura.
+- [`docs/trackers-ids.md`](docs/trackers-ids.md): ids de categoría, tipo y resolución de N.O.B.S y Milnueve, y sus
+  normas.
 - [`README_CLI_READY.md`](README_CLI_READY.md): referencia de la CLI, generada con `scripts/referencia_cli.py`.
 
 ## Stack
 
 - Backend: Python (FastAPI) + SQLite.
 - Frontend: React + Vite + TypeScript, servido como estáticos por el backend.
-- Integraciones: Radarr, Sonarr, TMDb, eMuwarez (UNIT3D), Uploadrr-EMU, qBittorrent.
+- Integraciones: Radarr, Sonarr, TMDb, eMuwarez, N.O.B.S y Milnueve (UNIT3D), Uploadrr-EMU, qBittorrent.
 
 ## Reportar algo
 
