@@ -3,7 +3,7 @@
    que retocan un `.btn` o un `.form-input` se apoyan en ir después. */
 
 /* Marco: pasos y ancho del modal. El paso actual es el único con relleno; los hechos llevan su ✓. */
-.modal-wide.asist-modal-ancho { max-width: 900px; }
+.modal-wide.asist-modal-ancho { max-width: 1100px; }
 /* El asistente no hace scroll entero: el panel es una columna (cabecera, pasos, paso) y solo el cuerpo del paso
    se desplaza, así el pie (Volver, Continuar, Subir) se ve a cualquier alto de ventana. Va solo en el asistente:
    los modales que se abren encima (nombres, comparación) siguen haciendo scroll como siempre. */
@@ -429,8 +429,6 @@
   margin: 0 0 10px;
   padding: 0;
   list-style: none;
-  max-height: 220px;
-  overflow-y: auto;
   font-size: 13px;
 }
 .asist-lista-subida > li { padding: 6px 0; border-top: 1px solid var(--border); }
