@@ -497,6 +497,40 @@ describe('película', () => {
     expect(nom.saveNomenclatureFields).toHaveBeenLastCalledWith(10, expect.objectContaining({ source: 'BluRay' }))
   })
 
+  it('si eMuwarez se encola y N.O.B.S no, reintentar le sube la descripción que tenía para él', async () => {
+    m(subidas.fetchTrackersParaSubir).mockResolvedValue([{ id: 'emu', nombre: 'eMuwarez' }, { id: 'nobs', nombre: 'N.O.B.S' }])
+    m(subidas.queueUpload)
+      .mockResolvedValueOnce({ status: 'queued', job: { id: 99 } } as never)
+      .mockResolvedValueOnce({ status: 'blocked', errors: ['N.O.B.S no responde'] } as never)
+      .mockResolvedValueOnce({ status: 'queued', job: { id: 100 } } as never)
+    await abrir(PELICULA)
+    await esperar(() => texto().includes('Dune WEB-DL AMZN [GRP]'))
+    await pulsar(boton('Continuar'))
+    await esperar(() => texto().includes('✓ Todo listo para subir'))
+    const casilla = (nombre: string) => [...document.querySelectorAll<HTMLLabelElement>('label.asist-casilla')]
+      .find(l => l.textContent?.trim() === nombre)!.querySelector('input')!
+    const area = (nombre: string) => document.querySelector<HTMLTextAreaElement>(`textarea[aria-label="${nombre}"]`)!
+    const escribirEn = async (el: HTMLTextAreaElement, valor: string) => {
+      await act(async () => {
+        Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(el, valor)
+        el.dispatchEvent(new Event('input', { bubbles: true }))
+      })
+    }
+    await pulsar(casilla('N.O.B.S'))
+    await escribirEn(area('Descripción propia (BBCode)'), 'Común')
+    await pulsar(casilla('Otra para N.O.B.S'))
+    await escribirEn(area('Descripción para N.O.B.S'), 'Solo N.O.B.S')
+    await pulsar(boton('Subir a eMuwarez y N.O.B.S'))
+    await esperar(() => texto().includes('Ya en cola: eMuwarez'))
+    // Con un solo destino el Resumen enseña solo la común: pasa a ser la de N.O.B.S.
+    expect(area('Descripción propia (BBCode)').value).toBe('Solo N.O.B.S')
+
+    await pulsar(boton('Subir a N.O.B.S'))
+    await esperar(() => onClose.mock.calls.length > 0)
+    expect(m(subidas.queueUpload).mock.calls.map(c => [c[8], c[9]])).toEqual([
+      [undefined, 'Común'], ['nobs', 'Solo N.O.B.S'], ['nobs', 'Solo N.O.B.S']])
+  })
+
   it('un source que no es WEB-DL quita el proveedor', async () => {
     await abrir(PELICULA)
     await esperar(() => campo('Proveedor'))

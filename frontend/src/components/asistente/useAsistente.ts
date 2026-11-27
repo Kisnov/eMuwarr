@@ -1097,6 +1097,10 @@ export function useAsistente({ item, onClose: onCloseProp, onDone, onNavigate, p
     const yaEnCola = () => {
       if (!encolados.length) return ''
       setTrackersElegidos(t => t.filter(x => !encolados.some(e => e.id === x)))
+      // Si queda un solo destino con descripción propia, pasa a ser la común: con uno solo es la que se enseña y se sube.
+      const quedan = destinos.filter(d => !encolados.some(e => e.id === d.id))
+      const propia = quedan.length === 1 ? descripcionPorTracker[quedan[0].id] : undefined
+      if (propia !== undefined) { setDescripcion(propia); descripcionPropia(quedan[0].id, false) }
       return ` Ya en cola: ${encolados.map(e => e.nombre).join(', ')}; «Subir» reintenta solo lo que falta.`
     }
     // Como en la tanda: una petición de otra temporada o capítulo no queda enlazada.
