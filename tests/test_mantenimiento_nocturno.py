@@ -306,3 +306,35 @@ def test_si_el_mantenimiento_revienta_queda_failed_en_su_registro(conn):
         run = run_scheduled_task(conn, TASK_MAINTENANCE, manual=True)
     assert run["status"] == "failed" and "disco lleno" in run["summary"]
     assert conn.execute("SELECT status FROM task_runs WHERE name = ?", (TASK_MAINTENANCE,)).fetchone()[0] == "failed"
+
+
+def test_se_borran_los_temporales_de_un_remux_matado_junto_a_la_biblioteca(conn, tmp_path):
+    """mkvmerge escribe <nombre>.remux.mkv.part junto al original; si lo matan, solo otro remux en esa carpeta lo barría."""
+    import os
+    carpeta = tmp_path / "media" / "Peli (2024)"
+    carpeta.mkdir(parents=True)
+    (carpeta / "Peli (2024).mkv").write_bytes(b"original")
+    pack = tmp_path / "uploads" / "Serie S01"
+    pack.mkdir(parents=True)
+    ajena = tmp_path / "otra"
+    ajena.mkdir()
+    viejo, reciente = AHORA.timestamp() - 3600, AHORA.timestamp() - 600
+    ficheros = {carpeta / "Peli (2024).remux.mkv.part": viejo, carpeta / "Otra.remux.mkv.part": reciente,
+                carpeta / "tmpabcd1234.mkv.part": viejo, carpeta / "Peli (2024).mkv.part": viejo,
+                pack / "Serie.S01E01.remux.mkv.part": viejo, ajena / "X.remux.mkv.part": viejo}
+    for f, mtime in ficheros.items():
+        f.write_bytes(b"a medias")
+        os.utime(f, (mtime, mtime))
+    conn.execute("INSERT INTO library_items(item_type, title, local_status, path) VALUES ('movie', 'Peli', 'Disponible', ?)",
+                 (str(carpeta / "Peli (2024).mkv"),))
+    conn.execute("INSERT INTO upload_jobs(library_item_id, status, stage, title, path, source_path, prepared_path, "
+                 "created_at, updated_at) VALUES (1, 'completed', 'completed', 'X', '', '', ?, 'x', 'x')", (str(pack),))
+    conn.commit()
+
+    estado, resumen = mant.ejecutar_mantenimiento(conn, AHORA)
+
+    assert estado == "completed" and "2 temporales de remux abandonados" in resumen
+    assert sorted(str(f) for f in ficheros if f.exists()) == sorted(
+        str(f) for f in (carpeta / "Otra.remux.mkv.part", carpeta / "tmpabcd1234.mkv.part",
+                         carpeta / "Peli (2024).mkv.part", ajena / "X.remux.mkv.part"))
+    assert (carpeta / "Peli (2024).mkv").read_bytes() == b"original"
