@@ -1138,6 +1138,21 @@ def _subida_que_lo_usa(conn, ruta: str, job_id: int) -> int | None:
     return fila["id"] if fila else None
 
 
+def _destino_sin_dueno(conn, destino: str, job_id: int, origenes: list[str]) -> bool:
+    """Si en `destino` ya hay algo que no dejó ninguna otra subida con fila (una borrada de la lista, que qBittorrent
+    puede seguir sembrando), o que contiene los propios originales: prepararlo lo borraría antes de enlazar."""
+    from ..database import get_json_state
+    from .upload_execution.ciclo_de_vida import ENLACES_SEMBRADOS_SIN_FILA
+    if not os.path.lexists(destino) or any(os.path.abspath(f) == os.path.abspath(destino) for f in origenes):
+        return False
+    if any(os.path.dirname(os.path.abspath(f)) == os.path.abspath(destino) for f in origenes):
+        return True
+    if destino in (get_json_state(conn, ENLACES_SEMBRADOS_SIN_FILA) or []):
+        return True
+    return conn.execute("SELECT 1 FROM upload_jobs WHERE prepared_path = ? AND id != ? LIMIT 1",
+                        (destino, job_id)).fetchone() is None
+
+
 def _motivo_para_no_tocar(origen: str) -> str | None:
     """None si se puede escribir en el original; si no, por qué no."""
     from .carpeta_subida import motivo_para_no_editar
@@ -1675,6 +1690,19 @@ def _paso_preparar(t: _Trabajo) -> bool:
             t.preparada = {"status": "ready", "metodos": ["reutilizada"]}
             t.que = f"{len(ficheros)} capítulo(s)" if is_season else "el archivo"
             return True
+
+    # Lo que ya hay en el destino y no explica ninguna subida no se rehace: puede ser lo que siembra una borrada.
+    with ENLACES:
+        sin_dueno = _destino_sin_dueno(conn, t.destino_uploadrr, job_id, [f for _i, f, _n in ficheros])
+        if sin_dueno:  # este intento tampoco lo explica para el siguiente
+            conn.execute("UPDATE upload_jobs SET prepared_path = NULL WHERE id = ?", (job_id,))
+            conn.commit()
+    if sin_dueno:
+        _fail(job_id, f"«{os.path.basename(t.destino_uploadrr)}» ya existe en la carpeta de subidas y puede estar "
+                      "sembrándose (de una subida que se borró de la lista, por ejemplo): no se rehace para no romper "
+                      f"ese torrent. Si qBittorrent ya no lo siembra, bórralo a mano de {RAIZ_SUBIDAS} y vuelve a "
+                      "intentarlo; si lo siembra, ese contenido ya está subido.")
+        return False
 
     por_nombre = {n: i for i, _f, n in ficheros}
     resultados = t.resultados

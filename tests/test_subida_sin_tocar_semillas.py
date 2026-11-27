@@ -634,6 +634,44 @@ def test_un_pack_de_la_biblioteca_va_a_su_carpeta_con_los_nombres_de_emuwarez(en
     assert len(episodios) == 2
 
 
+def test_tras_borrar_el_pack_completado_no_se_rehace_su_carpeta(entorno, mkv_base, monkeypatch):
+    """La carpeta del pack entera se borraba (rmtree) y se rehacía, con el torrent viejo aún sembrando de ella."""
+    from emuwarez_uploadrr.services import carpeta_subida
+    monkeypatch.setattr(carpeta_subida, "clonar", _reflink("no"))
+    _modo(entorno, "ninguno")
+    pack = _temporada(entorno, mkv_base)
+    primera = _subir(entorno, pack["id"])
+    carpeta = Path(primera["visto"]["prepared_path"])
+    entorno["conn"].execute("UPDATE upload_jobs SET status = 'completed' WHERE id = ?", (primera["id"],))
+    entorno["conn"].commit()
+    _borrar(entorno, primera["id"])
+    (carpeta / "extra.nfo").write_text("de la subida borrada")
+    antes = {n: (carpeta / n).stat().st_ino for n in os.listdir(carpeta)}
+
+    r = _subir(entorno, pack["id"])
+
+    assert r["job"]["status"] == "failed" and r["visto"] == {}
+    assert "ya existe en la carpeta de subidas" in r["job"]["error_message"]
+    assert {n: (carpeta / n).stat().st_ino for n in os.listdir(carpeta)} == antes
+    for cap in pack["capitulos"]:
+        assert cap["f"].stat().st_nlink == 3 and _sha(cap["f"]) == cap["sha"]
+
+
+def test_un_reintento_tras_un_fallo_rehace_lo_que_dejo_su_intento(entorno, mkv_base, monkeypatch):
+    """Lo que dejó una subida fallida con su fila sí se rehace: es suyo y nadie lo siembra."""
+    from emuwarez_uploadrr.services import carpeta_subida
+    monkeypatch.setattr(carpeta_subida, "clonar", _reflink("no"))
+    _modo(entorno, "ninguno")
+    pack = _temporada(entorno, mkv_base)
+    primera = _subir(entorno, pack["id"])
+    entorno["conn"].execute("UPDATE upload_jobs SET status = 'failed' WHERE id = ?", (primera["id"],))
+    entorno["conn"].commit()
+
+    r = _subir(entorno, pack["id"])
+
+    assert r["visto"]["status"] == "ready" and r["visto"]["prepared_path"] == primera["visto"]["prepared_path"]
+
+
 @pytest.mark.parametrize("como", ["completada", "fallida con el torrent en qBittorrent"])
 def test_no_se_rehace_el_enlace_que_siembra_otra_subida(entorno, mkv_base, monkeypatch, como):
     """Quitar ese enlace dejaba el original con un solo enlace: se editaba en el
@@ -695,6 +733,39 @@ def test_con_enlace_simbolico_el_original_que_siembra_otra_subida_no_se_edita(en
     assert any("sin reflink" in m for m in r["logs"])
     assert any("enlace simbólico" in m and "el original no se ha tocado" in m for m in r["logs"])
     assert json.loads(r["job"]["remux_snapshot_json"]) == {"omitida": "sin reflink"}
+
+
+def _borrar(entorno, job_id: int) -> None:
+    from emuwarez_uploadrr.services.upload_execution import DELETE_CONFIRMATION_TOKEN, delete_upload_job
+    assert delete_upload_job(job_id, confirmation=DELETE_CONFIRMATION_TOKEN, conn=entorno["conn"])["ok"]
+
+
+def test_tras_borrar_la_subida_completada_no_se_rehace_el_fichero_que_aun_siembra(entorno, mkv_base, monkeypatch):
+    """Borrar la fila deja el enlace (qBittorrent lo siembra) sin nadie que lo explique: una subida nueva lo borraba,
+    editaba el original, que ya volvía a tener un solo enlace, y lo enlazaba otra vez."""
+    from emuwarez_uploadrr.services import carpeta_subida
+    monkeypatch.setattr(carpeta_subida, "clonar", _reflink("no"))
+    _modo(entorno, "ninguno")
+    peli = _pelicula(entorno, mkv_base, carpeta=entorno["tmp"] / "media" / "Peli (2024)", semilla=False)
+    primera = _subir(entorno, peli["id"], peli["proposal_id"])
+    entorno["conn"].execute("UPDATE upload_jobs SET status = 'completed' WHERE id = ?", (primera["id"],))
+    entorno["conn"].commit()
+    _borrar(entorno, primera["id"])
+    destino = entorno["uploads"] / f"{PROPUESTO}.mkv"
+    inodo, sembrado = destino.stat().st_ino, _sha(destino)
+    assert os.path.samefile(destino, peli["f"]) and peli["f"].stat().st_nlink == 2
+    _modo(entorno, "solo_renombrar")       # la nueva editaría el original
+
+    r = _subir(entorno, peli["id"], peli["proposal_id"])
+
+    assert r["job"]["status"] == "failed" and r["visto"] == {}
+    assert "ya existe en la carpeta de subidas" in r["job"]["error_message"]
+    assert r["job"]["prepared_path"] is None          # este intento fallido no lo explica para el siguiente
+    assert destino.stat().st_ino == inodo and os.path.samefile(destino, peli["f"])
+    assert _sha(destino) == sembrado and _sha(peli["f"]) == sembrado
+
+    os.unlink(destino)                     # qBittorrent ya no lo siembra y el usuario lo borra
+    assert _subir(entorno, peli["id"], peli["proposal_id"])["visto"]["status"] == "ready"
 
 
 # ---------------------------------------------------------------------------
