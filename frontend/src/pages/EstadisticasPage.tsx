@@ -181,7 +181,7 @@ export function EstadisticasPage() {
           ) : (
             <EmptyState
               title="Todavía no hay datos"
-              body={`Se empieza a guardar hoy: la primera instantánea sale en cuanto se lea tu perfil de ${tracker.nombre}, como mucho en una hora (hace falta su API key en Configuración).`}
+              body={`Se empieza a guardar hoy: la primera instantánea sale en cuanto la tarea «Leer tu cuenta» lea tu perfil de ${tracker.nombre} (hace falta su API key en Configuración).`}
             />
           )}
           {tracker.id === 'emu' && <ObjetivosCuenta visible={seVe} ultimo={undefined} ritmos={null} />}

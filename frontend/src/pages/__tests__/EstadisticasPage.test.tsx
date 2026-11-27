@@ -315,6 +315,9 @@ describe('EstadisticasPage', () => {
     await montar(<EstadisticasPage />)
     await esperar(() => texto().includes('Todavía no hay datos'))
     expect(texto()).toContain('Se empieza a guardar hoy')
+    // La tarea «Leer tu cuenta» se cambia en Tareas: el aviso no da un plazo fijo.
+    expect(texto()).toContain('la tarea «Leer tu cuenta»')
+    expect(texto()).not.toContain('como mucho en una hora')
     expect(document.querySelector('svg[role="img"]')).toBeNull()
   })
 
