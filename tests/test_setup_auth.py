@@ -240,7 +240,7 @@ def test_setup_emu_success(client, auth_headers, monkeypatch):
     )
     resp = client.post(
         "/api/setup/emu",
-        json={"api_key": "abc123emu", "endpoint_url": "https://emu.example.com/api"},
+        json={"api_key": "abc123emu"},
         headers=auth_headers,
     )
     assert resp.status_code == 200
@@ -248,6 +248,22 @@ def test_setup_emu_success(client, auth_headers, monkeypatch):
 
     status_resp = client.get("/api/setup/status")
     assert status_resp.json()["emu_configured"] is True
+
+
+def test_setup_emu_no_guarda_una_url_propia(client, auth_headers, monkeypatch):
+    """eMuwarez va siempre a su URL fija: una url en la petición ni se prueba ni se guarda."""
+    from emuwarez_uploadrr.database import connect, db_path, get_setting_canonical
+    urls = []
+    monkeypatch.setattr(
+        "emuwarez_uploadrr.services.integration_tests.test_emuwarez_connection",
+        lambda *a, **k: urls.append(k.get("base_url")) or _ok_test_result("emuwarez"),
+    )
+    resp = client.post("/api/setup/emu", json={"api_key": "abc123emu", "endpoint_url": "https://emu.example.com/api"},
+                       headers=auth_headers)
+    assert resp.status_code == 200
+    assert urls == [None]
+    with connect(db_path()) as conn:
+        assert get_setting_canonical(conn, "emu.endpoint_url") is None
 
 
 def test_setup_emu_rejects_invalid_key(client, auth_headers, monkeypatch):

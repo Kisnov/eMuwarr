@@ -18,7 +18,6 @@ export function testTmdbConnection(params: {
 
 export function testEmuwarezConnection(params: {
   api_key?: string
-  base_url?: string
 } = {}): Promise<IntegrationTestResult> {
   return api.post<IntegrationTestResult>('/integrations/test/emuwarez', params)
 }

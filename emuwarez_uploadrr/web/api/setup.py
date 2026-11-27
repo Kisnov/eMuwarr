@@ -146,7 +146,7 @@ def setup_emu(
     from ..services.setup_service import SetupError, setup_emu as _setup_emu
     with _get_conn() as conn:
         try:
-            _setup_emu(conn, body.api_key, body.endpoint_url)
+            _setup_emu(conn, body.api_key)
             conn.commit()
         except SetupError as exc:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=texto_de_error(exc, body.api_key))
