@@ -167,6 +167,27 @@ def test_el_reintento_de_una_subida_a_nobs_sigue_siendo_a_nobs(db_conn, tmp_path
     assert r["status"] == "queued" and _fila(db_conn, r["job"]["id"])["tracker"] == "nobs"
 
 
+def test_el_reintento_a_emuwarez_vuelve_a_mirar_el_castellano(db_conn, tmp_path):
+    _clave(db_conn, "emu")
+    iid = _peli(db_conn, str(tmp_path / "a.mkv"))
+    fallida = _trabajo(db_conn, iid, status="failed", stage="failed")
+    db_conn.execute("UPDATE library_items SET audio_languages = 'eng' WHERE id = ?", (iid,))  # Radarr la cambió
+    db_conn.commit()
+
+    r = uq.queue_retry_for_job(fallida, conn=db_conn)
+
+    assert r["status"] == "blocked" and r["job"] is None
+    assert r["errors"] == ["Ni el audio (eng) ni los subtítulos (sin detectar) están en castellano."]
+    assert db_conn.execute("SELECT COUNT(*) FROM upload_jobs").fetchone()[0] == 1
+
+
+def test_el_reintento_a_emuwarez_con_el_mismo_fichero_sigue_pasando(db_conn, tmp_path):
+    _clave(db_conn, "emu")
+    iid = _peli(db_conn, str(tmp_path / "a.mkv"))
+    fallida = _trabajo(db_conn, iid, status="failed", stage="failed")
+    assert uq.queue_retry_for_job(fallida, conn=db_conn)["status"] == "queued"
+
+
 def test_la_api_rechaza_con_422_una_subida_sin_la_clave_de_su_tracker(client, auth_headers, db_conn, tmp_path):
     iid = _peli(db_conn, str(tmp_path / "a.mkv"))
     r = client.post(f"/api/library/{iid}/upload/queue", json={"tracker": "nobs"}, headers=auth_headers)

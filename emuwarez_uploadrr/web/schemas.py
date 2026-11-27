@@ -233,7 +233,6 @@ class SetupImghostsRequest(BaseModel):
 
 class SetupEmuRequest(BaseModel):
     api_key: str
-    endpoint_url: Optional[str] = None
 
     @field_validator("api_key")
     @classmethod
@@ -1635,7 +1634,6 @@ class TestTmdbRequest(BaseModel):
 
 class TestEmuwarezRequest(BaseModel):
     api_key: Optional[str] = None
-    base_url: Optional[str] = None
 
 
 class TestArrRequest(BaseModel):

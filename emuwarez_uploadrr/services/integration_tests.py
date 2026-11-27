@@ -18,10 +18,10 @@ import urllib.parse
 from pathlib import Path
 from typing import Any, Optional
 
-from ..constants import EMU_BASE_URL
 from ..integrations import http_cliente
 from ..integrations.base import tapar_claves, texto_de_error, url_sin_claves
 from .settings import ajuste_de_tracker
+from .trackers import EMU
 
 _TIMEOUT = 10  # seconds — short timeout for connection probes
 _CABECERAS_PRUEBA = {"Accept": "application/json", "User-Agent": "emuwarr/3"}
@@ -179,14 +179,13 @@ def test_tmdb_connection(
 
 def test_emuwarez_connection(
     api_key: Optional[str] = None,
-    base_url: Optional[str] = None,
     *,
     conn=None,
     enforce_rate_limit: bool = True,
 ) -> dict:
     """Probe eMuwarez using GET /api/torrents/filter?perPage=1 (read-only).
 
-    If api_key/base_url are None, reads stored values from DB.
+    If api_key is None, reads the stored key from DB. The URL is always the tracker's fixed one, like every sync and upload.
     Never creates requests. Never uploads torrents.
 
     enforce_rate_limit=False skips the 1/minute throttle below — used when
@@ -195,41 +194,20 @@ def test_emuwarez_connection(
     button, which is what the throttle is meant to protect against.
     """
     _key = api_key
-    _base = base_url
+    _base = EMU.url
 
-    if conn is not None:
-        from .settings import get_setting_canonical
-        if not _key:
-            _key = ajuste_de_tracker(conn, "api_key")
-        if not _base:
-            _base = get_setting_canonical(conn, "emu.endpoint_url")
+    if conn is not None and not _key:
+        _key = ajuste_de_tracker(conn, "api_key")
 
     if not _key or not _key.strip():
         return _fail("emuwarez", "not_configured", "API key de eMuwarez no configurada")
 
     _key = _key.strip()
-    _base = (_base or EMU_BASE_URL).rstrip("/")
-
-    # Validate URL shape before hitting network
-    if not _base.startswith(("http://", "https://")):
-        return _fail("emuwarez", "invalid_url", f"URL de eMuwarez inválida: {url_sin_claves(_base)}")
-
-    # La clave viaja en la query: por http se vería en claro (o iría a un proxy del entorno). Solo https.
-    try:
-        _partes = urllib.parse.urlsplit(_base)
-    except ValueError:  # p. ej. «http://[::1»
-        return _fail("emuwarez", "invalid_url", "URL de eMuwarez inválida")
-    if _partes.scheme == "http":
-        return _fail(
-            "emuwarez",
-            "insecure_url",
-            "La URL de eMuwarez debe usar https:// para no enviar la API key sin cifrar",
-        )
 
     # Rate-limit: at most one live probe per minute, to avoid saturating the
     # real eMuwarez server from the "Probar conexión" button. Only enforced
     # when we have a DB connection to persist the timestamp; the early
-    # not_configured/invalid_url/insecure_url returns above never reach the network and are
+    # not_configured return above never reaches the network and is
     # deliberately not throttled.
     if conn is not None and enforce_rate_limit:
         wait = _emu_test_wait_seconds(conn)

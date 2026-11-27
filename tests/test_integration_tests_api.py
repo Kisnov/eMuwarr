@@ -113,19 +113,20 @@ def test_emuwarez_invalid_key(client, auth_headers):
     assert resp.json()["status"] == "invalid_key"
 
 
-def test_emuwarez_invalid_url(client, auth_headers):
-    with patch("emuwarez_uploadrr.services.integration_tests.test_emuwarez_connection") as mock_svc:
-        mock_svc.return_value = {"ok": False, "service": "emuwarez", "status": "invalid_url", "message": "bad url", "details": {}}
-        resp = client.post("/api/integrations/test/emuwarez", json={"api_key": "k", "base_url": "not-a-url"}, headers=auth_headers)
-    assert resp.status_code == 200
-    assert resp.json()["status"] == "invalid_url"
+def test_emuwarez_una_url_en_la_peticion_no_cambia_adonde_va_la_clave(client, auth_headers, http_falso):
+    from tests.http_falso import respuesta
+    http_falso.responde(respuesta(200))
+    resp = client.post("/api/integrations/test/emuwarez",
+                       json={"api_key": "key123", "base_url": "https://otra.example"}, headers=auth_headers)
+    assert resp.json()["ok"] is True
+    assert str(http_falso.ultima.url) == "https://emu-warez.com/api/torrents/filter?perPage=1"
 
 
 def test_emuwarez_response_never_contains_raw_key(client, auth_headers):
     secret = "emu_secret_key_99999"
     with patch("emuwarez_uploadrr.services.integration_tests.test_emuwarez_connection") as mock_svc:
-        mock_svc.return_value = {"ok": False, "service": "emuwarez", "status": "invalid_url", "message": "bad", "details": {}}
-        resp = client.post("/api/integrations/test/emuwarez", json={"api_key": secret, "base_url": "bad"}, headers=auth_headers)
+        mock_svc.return_value = {"ok": False, "service": "emuwarez", "status": "invalid_key", "message": "bad", "details": {}}
+        resp = client.post("/api/integrations/test/emuwarez", json={"api_key": secret}, headers=auth_headers)
     assert secret not in resp.text
 
 

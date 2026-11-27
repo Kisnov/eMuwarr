@@ -110,3 +110,13 @@ def test_una_temporada_con_solo_capitulos_sueltos_aporta_el_pack_si_los_tienes_t
     ficha = _guardado_y_ficha(db_conn, temporada)
 
     assert ficha["only_episodes"] and ficha["aportes"] == aportes
+
+
+@pytest.mark.parametrize("audio", ["spa / eng", "ESP / ENG", "eng / es", "es", "Latino", "LAT", "eng / spa-419", "zxx"])
+def test_tu_audio_en_castellano_es_el_de_la_columna_espanol(db_conn, audio):
+    """Si tu copia aporta audio ESP lo decide la misma regla que la columna Español: el latino no cuenta."""
+    from emuwarez_uploadrr.services.emu_format import has_castellano
+    item = _peli(db_conn, audio=audio)
+    _torrent(db_conn, "Peli (2020) 1080p WEB-DL VOSE", has_spanish=0)
+
+    assert _guardado_y_ficha(db_conn, item)["mine"]["has_es"] is (has_castellano(audio) == 1)

@@ -221,10 +221,12 @@ def _insert_and_start_queued_job(
     motivo = trackers.motivo_para_no_subir(conn, tracker)
     if motivo:
         return {"status": "blocked", "errors": [motivo], "job": None}
-    if tracker != trackers.POR_DEFECTO or copia_de_job_id:
+    reintento_suelto = retry_of_job_id is not None and item.get("item_type") != "season"
+    if tracker != trackers.POR_DEFECTO or copia_de_job_id or reintento_suelto:
         # Las normas de idioma de otro tracker (services/reglas_tracker.py), antes de crear nada: lo que no admite no
         # llega a lanzarse. Las de eMuwarez siguen donde siempre (comprobaciones del asistente y plan del pack), salvo
-        # en una copia de otro tracker, que no pasa por el asistente.
+        # en una copia de otro tracker y en el reintento de un fichero suelto, que no pasan por el asistente (y el
+        # fichero pudo cambiar desde la subida original).
         from .reglas_tracker import reglas_para_subir
         reglas = reglas_para_subir(conn, item, tracker, overrides=remux_overrides,
                                    idiomas=(season_overrides or {}).get("idiomas"))
@@ -1057,6 +1059,7 @@ def _check_season_integrity(job_id: int, season_id: int, conn) -> bool:
     from .media_info_service import mediainfo_available, read_media_info_summary
     from .path_mapping import resolve_local_path
     from .upload_execution import append_upload_log
+    from .uploadrr_contract import motivo_formato_no_subible
 
     episodes = _get_season_episodes(season_id, conn=conn)
     available = [e for e in episodes if e.get("local_status") == LocalStatus.AVAILABLE.value]
@@ -1076,6 +1079,9 @@ def _check_season_integrity(job_id: int, season_id: int, conn) -> bool:
             return False
         if _fuera_de_raices(ep_path, conn):
             _fail(job_id, f"El archivo del {label} está fuera de los allowed_roots configurados: {ep_path}")
+            return False
+        if motivo := motivo_formato_no_subible(ep_path):
+            _fail(job_id, f"Capítulo {ep.get('episode_number')}: {motivo}")
             return False
         if mediainfo_available():
             info = read_media_info_summary(ep_path)
@@ -1449,6 +1455,7 @@ def _paso_comprobar(t: _Trabajo) -> bool:
     from .mkv_remux import check_mkvmerge_available, read_tracks_json
     from .media_info_service import mediainfo_available, read_media_info_summary
     from .path_mapping import resolve_local_path, ruta_de_lectura
+    from .uploadrr_contract import motivo_formato_no_subible
 
     job_id, conn = t.job_id, t.conn
     append_upload_log(job_id, "info", "Comprobando integridad del archivo…", stream="system", conn=conn)
@@ -1464,6 +1471,9 @@ def _paso_comprobar(t: _Trabajo) -> bool:
             return False
         if _fuera_de_raices(local_path, conn):
             _fail(job_id, f"El archivo está fuera de los allowed_roots configurados: {local_path}")
+            return False
+        if motivo := motivo_formato_no_subible(local_path):
+            _fail(job_id, motivo)
             return False
         if mediainfo_available():
             info = read_media_info_summary(local_path)
@@ -1875,15 +1885,18 @@ def _run_queued_job(job_id: int) -> None:
 
 def dashboard_upload_counters(conn) -> dict:
     """Los contadores de subidas del Panel. Vivían dentro del endpoint."""
+    from .upload_execution.consultas import CONDICION_PUNTA
     try:
         cuentas = {r["status"]: int(r["cnt"] or 0) for r in conn.execute(
             "SELECT status, COUNT(*) AS cnt FROM upload_jobs GROUP BY status")}
+        # Como Subidas: una fallida ya reintentada no cuenta.
+        fallidas = conn.execute(f"SELECT COUNT(*) FROM upload_jobs WHERE status = 'failed' AND {CONDICION_PUNTA}").fetchone()[0]
         ultima = conn.execute("SELECT MAX(updated_at) AS last_at FROM upload_jobs").fetchone()
         return {
             "uploads_ready": cuentas.get("ready", 0),
             "uploads_running": cuentas.get("running", 0),
             "uploads_completed": cuentas.get("completed", 0),
-            "uploads_failed": cuentas.get("failed", 0),
+            "uploads_failed": int(fallidas or 0),
             "last_upload_at": ultima["last_at"] if ultima else None,
         }
     except Exception:

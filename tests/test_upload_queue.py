@@ -32,8 +32,9 @@ def db_conn(isolated_db):
 
 def _movie_with_path(conn, path: str, title: str = "X") -> int:
     conn.execute(
-        """INSERT INTO library_items (item_type, title, local_status, request_status, nomenclature_status, path, size_bytes, updated_at)
-           VALUES ('movie', ?, 'Disponible', 'Sin petición', 'N/A', ?, 100, CURRENT_TIMESTAMP)""",
+        """INSERT INTO library_items (item_type, title, local_status, request_status, nomenclature_status, path, size_bytes,
+                                      audio_languages, updated_at)
+           VALUES ('movie', ?, 'Disponible', 'Sin petición', 'N/A', ?, 100, 'spa', CURRENT_TIMESTAMP)""",
         (title, path),
     )
     conn.commit()
@@ -250,6 +251,43 @@ def test_run_queued_job_fails_when_file_outside_allowed_roots(db_conn, tmp_path,
     assert "fuera de los allowed_roots" in (job["error_message"] or "")
     # Ni renombrado ni enlazado: el fichero sigue como estaba.
     assert [p.name for p in fuera.parent.iterdir()] == ["Peli.2024.mkv"]
+
+
+@pytest.mark.usefixtures("ficheros_de_mentira")
+def test_un_formato_que_uploadrr_no_sube_falla_antes_de_preparar(db_conn, tmp_path):
+    """Un reintento o una llamada directa a la API no pasan por las comprobaciones del asistente."""
+    from emuwarez_uploadrr.services.upload_execution import get_upload_job
+    from emuwarez_uploadrr.services.uploadrr_contract import motivo_formato_no_subible
+    f = tmp_path / "Peli.2024.avi"
+    f.write_bytes(b"x" * 100)
+    iid = _movie_with_path(db_conn, str(f))
+    job_id = _queued_job_row(db_conn, iid, path=str(f))
+
+    with patch.object(uq, "_paso_nombre", side_effect=AssertionError("pasó de las comprobaciones")):
+        uq._run_queued_job(job_id)
+
+    job = get_upload_job(job_id, conn=db_conn)
+    assert job["status"] == "failed" and job["error_message"] == motivo_formato_no_subible(str(f))
+
+
+@pytest.mark.usefixtures("ficheros_de_mentira")
+def test_un_capitulo_de_un_pack_en_otro_formato_falla_antes_de_preparar(db_conn, tmp_path):
+    from emuwarez_uploadrr.services.upload_execution import get_upload_job
+    from emuwarez_uploadrr.services.uploadrr_contract import motivo_formato_no_subible
+    season_id, episode_ids = _seed_season_with_episodes(db_conn, n=2)
+    for n, (ep, ext) in enumerate(zip(episode_ids, (".mkv", ".avi")), 1):
+        f = tmp_path / f"S01E0{n}{ext}"
+        f.write_bytes(b"x" * 100)
+        db_conn.execute("UPDATE library_items SET path = ? WHERE id = ?", (str(f), ep))
+    db_conn.commit()
+    job_id = _queued_job_row(db_conn, season_id)
+
+    with patch.object(uq, "_paso_nombre", side_effect=AssertionError("pasó de las comprobaciones")):
+        uq._run_queued_job(job_id)
+
+    job = get_upload_job(job_id, conn=db_conn)
+    assert job["status"] == "failed"
+    assert job["error_message"] == f"Capítulo 2: {motivo_formato_no_subible(str(tmp_path / 'S01E02.avi'))}"
 
 
 def test_run_queued_job_releases_concurrency_slot_on_early_failure(db_conn):

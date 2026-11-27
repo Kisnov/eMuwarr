@@ -29,8 +29,9 @@ def _peli(conn, tmp_path) -> int:
     f = tmp_path / "movie.mkv"
     f.write_bytes(b"x" * 10)
     cur = conn.execute(
-        """INSERT INTO library_items (item_type, title, local_status, request_status, nomenclature_status, path, size_bytes, updated_at)
-           VALUES ('movie', 'Dune', 'Disponible', 'Sin petición', 'N/A', ?, 10, CURRENT_TIMESTAMP)""",
+        """INSERT INTO library_items (item_type, title, local_status, request_status, nomenclature_status, path, size_bytes,
+                                      audio_languages, updated_at)
+           VALUES ('movie', 'Dune', 'Disponible', 'Sin petición', 'N/A', ?, 10, 'spa', CURRENT_TIMESTAMP)""",
         (str(f),),
     )
     conn.commit()

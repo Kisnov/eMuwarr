@@ -30,14 +30,14 @@ def db_conn(isolated_db):
     conn.close()
 
 
-def _peli(conn, tmp_path, titulo: str = "Peli") -> int:
+def _peli(conn, tmp_path, titulo: str = "Peli", audio: str | None = "spa") -> int:
     f = tmp_path / f"{titulo}.mkv"
     f.write_bytes(b"x" * 10)
     cur = conn.execute(
         """INSERT INTO library_items (item_type, title, local_status, request_status, nomenclature_status, path,
-                                      size_bytes, updated_at)
-           VALUES ('movie', ?, 'Disponible', 'Sin petición', 'N/A', ?, 10, CURRENT_TIMESTAMP)""",
-        (titulo, str(f)),
+                                      size_bytes, audio_languages, updated_at)
+           VALUES ('movie', ?, 'Disponible', 'Sin petición', 'N/A', ?, 10, ?, CURRENT_TIMESTAMP)""",
+        (titulo, str(f), audio),
     )
     conn.commit()
     return cur.lastrowid
@@ -318,6 +318,18 @@ def test_reintentar_fallidas_salta_la_que_ya_no_se_puede_reintentar(db_conn, tmp
     assert hecho["reintentadas"] == 0
     assert [s["job_id"] for s in hecho["saltadas"]] == [job]
     assert hecho["saltadas"][0]["errors"]
+
+
+def test_reintentar_fallidas_salta_la_que_ya_no_tiene_castellano(db_conn, tmp_path):
+    job = _encolar(db_conn, _peli(db_conn, tmp_path))
+    _fallar(db_conn, job)
+    db_conn.execute("UPDATE library_items SET audio_languages = 'eng'")  # Radarr cambió el fichero
+    db_conn.commit()
+
+    hecho = lotes.reintentar_fallidas(db_conn, LOTE)
+
+    assert hecho["reintentadas"] == 0
+    assert hecho["saltadas"][0]["errors"] == ["Ni el audio (eng) ni los subtítulos (sin detectar) están en castellano."]
 
 
 def test_solo_se_reintenta_la_punta_de_la_cadena(db_conn, tmp_path):
@@ -802,7 +814,7 @@ def test_un_lote_a_varios_trackers_crea_una_subida_por_elemento_y_tracker(db_con
 def test_lo_que_un_tracker_no_admite_se_salta_solo_para_ese(db_conn, tmp_path, sin_comprobaciones):
     _clave(db_conn, "nobs")
     admitida = _con_castellano(db_conn, _peli(db_conn, tmp_path, "A"))
-    sin_idiomas = _peli(db_conn, tmp_path, "B")
+    sin_idiomas = _peli(db_conn, tmp_path, "B", audio=None)
 
     r = lotes.encolar_lote(db_conn, [_el(admitida), _el(sin_idiomas)], ["emu", "nobs"])
 
@@ -840,7 +852,7 @@ def test_si_el_unico_que_lo_admite_ya_lo_tiene_no_escribe_nada(db_conn, tmp_path
     from emuwarez_uploadrr.services import nomenclature
     monkeypatch.setattr(nomenclature, "save_manual_nomenclature_fields", lambda *a, **k: pytest.fail("guardó campos"))
     _clave(db_conn, "nobs")
-    sin_idiomas = _peli(db_conn, tmp_path)  # eMuwarez la admite y N.O.B.S no
+    sin_idiomas = _peli(db_conn, tmp_path, audio=None)  # eMuwarez la admite y N.O.B.S no
 
     r = lotes.encolar_lote(db_conn, [_el(sin_idiomas, campos={"title": "X"}, omitir=["emu"])], ["emu", "nobs"])
 

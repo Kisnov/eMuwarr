@@ -64,11 +64,7 @@ def test_emuwarez(
     """Probe eMuwarez using the provided (or stored) credentials. Never stores credentials."""
     from emuwarez_uploadrr.services.integration_tests import test_emuwarez_connection
     with _get_conn() as conn:
-        result = test_emuwarez_connection(
-            api_key=body.api_key or None,
-            base_url=body.base_url or None,
-            conn=conn,
-        )
+        result = test_emuwarez_connection(api_key=body.api_key or None, conn=conn)
     return IntegrationTestResult(**result)
 
 

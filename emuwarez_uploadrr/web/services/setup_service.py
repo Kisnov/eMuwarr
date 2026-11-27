@@ -163,21 +163,15 @@ def setup_imghosts(
     _avanzar_paso(conn, "complete")
 
 
-def setup_emu(
-    conn: sqlite3.Connection,
-    api_key: str,
-    endpoint_url: Optional[str] = None,
-) -> None:
+def setup_emu(conn: sqlite3.Connection, api_key: str) -> None:
     if not api_key.strip():
         raise SetupError("La API key de eMuwarez no puede estar vacía")
     api_key = api_key.strip()
     from emuwarez_uploadrr.services.integration_tests import test_emuwarez_connection
-    result = test_emuwarez_connection(api_key=api_key, base_url=endpoint_url, conn=conn, enforce_rate_limit=False)
+    result = test_emuwarez_connection(api_key=api_key, conn=conn, enforce_rate_limit=False)
     if not result.get("ok"):
         raise SetupError(result.get("message") or "API key de eMuwarez inválida")
     set_setting(conn, EMU.clave("api_key"), api_key)
-    if endpoint_url and endpoint_url.strip():
-        set_setting(conn, "emu.endpoint_url", endpoint_url.strip())
 
 
 def setup_add_instance(

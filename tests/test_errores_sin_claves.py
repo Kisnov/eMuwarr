@@ -250,14 +250,6 @@ def test_setup_emu_con_la_red_caida_no_devuelve_la_clave(client, auth_headers, h
     _limpio(resp, caplog)
 
 
-def test_setup_emu_con_una_url_con_clave_no_la_repite(client, auth_headers, caplog):
-    caplog.set_level(logging.DEBUG)
-    resp = client.post("/api/setup/emu", headers=auth_headers,
-                       json={"api_key": "una-clave-de-prueba", "endpoint_url": f"ftp://host/x?api_token={SECRETO}"})
-    assert resp.status_code == 400
-    _limpio(resp, caplog)
-
-
 def test_setup_instancia_con_un_fallo_inesperado_no_devuelve_la_clave(client, auth_headers, caplog):
     caplog.set_level(logging.DEBUG)
     with patch("emuwarez_uploadrr.web.services.setup_service.setup_add_instance",
@@ -286,15 +278,6 @@ def test_probar_emuwarez_con_la_red_caida_no_devuelve_la_clave(client, auth_head
     caplog.set_level(logging.DEBUG)
     http_falso.responde(falla_conexion(f"fallo en https://emu-warez.com/api/torrents/filter?api_token={SECRETO}"))
     resp = client.post("/api/integrations/test/emuwarez", headers=auth_headers, json={"api_key": SECRETO})
-    assert resp.status_code == 200
-    assert resp.json()["ok"] is False
-    _limpio(resp, caplog)
-
-
-def test_probar_emuwarez_con_una_url_con_clave_no_la_devuelve(client, auth_headers, caplog):
-    caplog.set_level(logging.DEBUG)
-    resp = client.post("/api/integrations/test/emuwarez", headers=auth_headers,
-                       json={"api_key": "una-clave-de-prueba", "base_url": f"emu-warez.com?api_token={SECRETO}"})
     assert resp.status_code == 200
     assert resp.json()["ok"] is False
     _limpio(resp, caplog)

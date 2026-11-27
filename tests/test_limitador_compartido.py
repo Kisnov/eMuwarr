@@ -296,7 +296,7 @@ def test_la_prueba_de_conexion_respeta_retry_after(http_falso, limitador_emuware
     from tests.http_falso import respuesta
 
     http_falso.responde(respuesta(429, headers={"Retry-After": "20"}))
-    assert test_emuwarez_connection(api_key=CLAVE, base_url="https://t.x")["ok"] is False
+    assert test_emuwarez_connection(api_key=CLAVE)["ok"] is False
     estado = limitador_emuwarez._claves[lc.huella(CLAVE)]
     assert estado.penalizado_hasta - limitador_emuwarez.reloj.ahora == pytest.approx(21.0)
 

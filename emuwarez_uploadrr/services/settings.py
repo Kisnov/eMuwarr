@@ -28,7 +28,7 @@ from .trackers import obtener as obtener_tracker
 
 # Las claves secretas que expone Configuración están en el registro
 # (services/ajustes_registro.py). Lo que también es una clave aunque no salga
-# allí: emu.endpoint_url (lleva la clave en la query), los alias antiguos con
+# allí: emu.endpoint_url (ya no se lee, pero una instalación antigua la guarda con la clave en la query), los alias antiguos con
 # guion bajo de los secretos del registro y las API keys de los hosts de
 # imágenes (una por host, imghost.key.<id>). widget.api_key_hash es el hash de la
 # clave del widget de Homepage (services/widget.py): no se edita desde un PUT.

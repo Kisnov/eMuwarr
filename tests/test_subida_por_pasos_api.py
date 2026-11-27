@@ -17,8 +17,8 @@ def db_conn(client):
 def _peli(conn, ruta="/fake/movie.mkv"):
     conn.execute(
         """INSERT INTO library_items (item_type, title, local_status, request_status, nomenclature_status, path,
-                                      size_bytes, updated_at)
-           VALUES ('movie', 'Peli', 'Disponible', 'Sin petición', 'N/A', ?, 100, CURRENT_TIMESTAMP)""", (ruta,))
+                                      size_bytes, audio_languages, updated_at)
+           VALUES ('movie', 'Peli', 'Disponible', 'Sin petición', 'N/A', ?, 100, 'spa', CURRENT_TIMESTAMP)""", (ruta,))
     conn.commit()
     return conn.execute("SELECT id FROM library_items ORDER BY id DESC LIMIT 1").fetchone()["id"]
 

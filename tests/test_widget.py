@@ -212,6 +212,23 @@ def test_los_contadores_son_los_del_panel(client, clave, auth_headers):
     assert widget["peticiones_listas"] == panel["requests_ready_to_upload"] == 1
 
 
+def test_una_fallida_ya_reintentada_no_cuenta(client, clave, auth_headers):
+    """Como en Subidas: de una cadena de reintentos solo cuenta el último intento."""
+    conn = _conn()
+    _subida(conn, "failed")
+    _subida(conn, "completed")
+    conn.execute("UPDATE upload_jobs SET retry_of_job_id = 1 WHERE id = 2")
+    _subida(conn, "failed")
+    _subida(conn, "failed")
+    conn.execute("UPDATE upload_jobs SET retry_of_job_id = 3 WHERE id = 4")
+    conn.commit()
+    conn.close()
+
+    panel = client.get("/api/dashboard/summary", headers=auth_headers).json()
+    widget = client.get("/api/widget", headers={"X-Api-Key": clave}).json()
+    assert widget["subidas_fallidas"] == panel["uploads_failed"] == 1
+
+
 def test_subidas_hoy_cuenta_desde_la_medianoche_de_la_zona_del_servidor(isolated_db, monkeypatch):
     from zoneinfo import ZoneInfo
     monkeypatch.setenv("TZ", "Pacific/Kiritimati")  # UTC+14: su «hoy» y el de UTC casi nunca coinciden

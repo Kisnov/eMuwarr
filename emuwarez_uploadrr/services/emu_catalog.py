@@ -32,6 +32,7 @@ from .upload_states import ACTIVE_JOB_STATUSES
 from .eventos import EVENTO_SYNC_EMPEZADA, EVENTO_SYNC_TERMINADA, publicar
 from .trackers import EMU, TRACKERS, Tracker, tiene_clave
 from .settings import ajuste_de_tracker
+from .emu_format import has_castellano
 
 logger = logging.getLogger("emuwarez.emu")
 
@@ -409,10 +410,16 @@ def _aportes(mine: dict, matches: list[dict], eps: Optional[list[dict]] = None) 
 def _temporada_en_castellano(eps: list[dict]) -> bool:
     """Si el pack va en castellano: todos los capítulos con fichero, no uno solo."""
     con_fichero = [e for e in eps if e["size_bytes"]]
-    return bool(con_fichero) and all(_episode_lang_has_es(e["audio_languages"]) for e in con_fichero)
+    return bool(con_fichero) and all(_audio_en_castellano(e["audio_languages"]) for e in con_fichero)
+
+
+def _audio_en_castellano(langs: Optional[str]) -> bool:
+    """El audio de la biblioteca, con la misma regla que la columna Español."""
+    return has_castellano(langs) == 1
 
 
 def _episode_lang_has_es(langs: Optional[str]) -> bool:
+    """El resumen de audio del nombre (ESP-ENG, DUAL, MULTI…)."""
     if not langs:
         return False
     up = langs.upper()
@@ -486,7 +493,7 @@ def _compute_and_store_item_status(conn: sqlite3.Connection) -> int:
             continue
         mine = {"resolution": m["resolution"], "source": m["source"],
                 "codec": _norm_codec(m["video_codec"] or "") or m["video_codec"],
-                "has_es": _episode_lang_has_es(m["audio_languages"]), "size": m["size_bytes"]}
+                "has_es": _audio_en_castellano(m["audio_languages"]), "size": m["size_bytes"]}
         save(m["id"], 1, _aportes(mine, _comparados(mine, matches, "movie")))
 
     # Seasons (aggregate their episodes) — series' tvdb_id + id come from the join.
@@ -555,7 +562,7 @@ def _compute_and_store_item_status(conn: sqlite3.Connection) -> int:
             continue
         mine = {"resolution": e["resolution"], "source": e["source"],
                 "codec": _norm_codec(e["video_codec"] or "") or e["video_codec"],
-                "has_es": _episode_lang_has_es(e["audio_languages"]), "size": e["size_bytes"]}
+                "has_es": _audio_en_castellano(e["audio_languages"]), "size": e["size_bytes"]}
         save(e["id"], 1, _aportes(mine, _comparados(mine, matches, "episode")))
 
     # Series rollup: 0 = no seasons on eMuwarez, 1 = all seasons on eMuwarez,
@@ -753,7 +760,7 @@ def get_item_comparison(conn: sqlite3.Connection, item_id: int, *,
     if itype == "movie":
         mine = {"resolution": item["resolution"], "source": item["source"],
                 "codec": _norm_codec(item["video_codec"] or "") or item["video_codec"],
-                "has_es": _episode_lang_has_es(item["audio_languages"]), "size": item["size_bytes"],
+                "has_es": _audio_en_castellano(item["audio_languages"]), "size": item["size_bytes"],
                 "release_groups": [item["release_group"]] if item["release_group"] else []}
     elif itype == "season":
         eps = [dict(e) for e in conn.execute(
@@ -771,7 +778,7 @@ def get_item_comparison(conn: sqlite3.Connection, item_id: int, *,
     elif itype == "episode":
         mine = {"resolution": item["resolution"], "source": item["source"],
                 "codec": _norm_codec(item["video_codec"] or "") or item["video_codec"],
-                "has_es": _episode_lang_has_es(item["audio_languages"]), "size": item["size_bytes"],
+                "has_es": _audio_en_castellano(item["audio_languages"]), "size": item["size_bytes"],
                 "release_groups": [item["release_group"]] if item["release_group"] else []}
     else:
         # Series is a rollup (drill into its seasons).
