@@ -562,4 +562,15 @@ describe('Peticiones: lo que se recarga sola tras una sincronización', () => {
     expect(vi.mocked(getRequestDetail).mock.calls.map(c => c[0])).toEqual([2, 2])
     expect(getReadiness).toHaveBeenCalledTimes(2)
   })
+
+  it('si la recarga silenciosa tira la de un filtro nuevo y falla, el error se ve', async () => {
+    await montar(<ConMarca />)
+    await esperar(() => document.querySelector('table.data-table tbody tr'))
+    vi.mocked(getRequests)
+      .mockImplementationOnce(() => new Promise(() => {}))
+      .mockRejectedValueOnce(new Error('503'))
+    await elegir(document.querySelector('select.form-select') as HTMLSelectElement, 'created_desc')
+    await act(async () => { invalidar() })
+    await esperar(() => texto().includes('503'))
+  })
 })

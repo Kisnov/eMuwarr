@@ -795,12 +795,16 @@ export function RequestsPage({ onNavigate }: { onNavigate?: (page: string) => vo
 
   // Solo cuenta la última petición: marcar varias casillas seguidas lanza
   // varias, y una vieja más lenta no pisa la nueva (igual que en Biblioteca).
-  // Con `silencioso`, una recarga en segundo plano que falla deja la tabla que ya había.
+  // Con `silencioso`, una recarga en segundo plano que falla deja la tabla que ya había; si aún no hay respuesta
+  // buena para los filtros de ahora (la de un filtro nuevo se ha tirado), avisa como cualquier otra.
   const ultimaCarga = useRef(0)
+  const sinRespuestaBuena = useRef(true)
   const loadItems = useCallback(async (off = 0, silencioso = false) => {
     const esta = ++ultimaCarga.current
+    if (!silencioso) sinRespuestaBuena.current = true
+    const callar = silencioso && !sinRespuestaBuena.current
     setLoading(true)
-    if (!silencioso) setError(null)
+    if (!callar) setError(null)
     try {
       const res = await getRequests({
         search: debouncedSearch || undefined,
@@ -815,6 +819,7 @@ export function RequestsPage({ onNavigate }: { onNavigate?: (page: string) => vo
         offset: off,
       })
       if (esta !== ultimaCarga.current) return
+      sinRespuestaBuena.current = false
       setError(null)
       setItems(res.items)
       setTotal(res.total)
@@ -824,7 +829,7 @@ export function RequestsPage({ onNavigate }: { onNavigate?: (page: string) => vo
         setTotalSinFiltro(res.total)
       }
     } catch (e: unknown) {
-      if (esta === ultimaCarga.current && !silencioso) setError(e instanceof Error ? e.message : 'Error cargando peticiones')
+      if (esta === ultimaCarga.current && !callar) setError(e instanceof Error ? e.message : 'Error cargando peticiones')
     } finally {
       if (esta === ultimaCarga.current) setLoading(false)
     }
