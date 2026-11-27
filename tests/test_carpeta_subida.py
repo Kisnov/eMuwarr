@@ -512,3 +512,15 @@ def test_un_nombre_absoluto_no_borra_nada_fuera(biblioteca, tmp_path):
     r = preparar_fichero_suelto(biblioteca["ficheros"][0], str(victima), raiz=biblioteca["uploads"])
     assert r["status"] == "blocked"
     assert victima.read_bytes() == b"no tocar"
+
+
+@pytest.mark.parametrize("sufijo", ["/", "/.", "/x/..", "/x/../"])
+def test_la_propia_carpeta_de_subidas_no_cuenta_como_dentro_ni_se_borra(biblioteca, sufijo):
+    """Con barra final, «/.» o «x/..» el padre era la raíz y borrar_de_subidas hacía rmtree de todo."""
+    from emuwarez_uploadrr.services.carpeta_subida import en_carpeta_de_subidas
+    raiz = biblioteca["uploads"]
+    preparar_fichero_suelto(biblioteca["ficheros"][0], raiz=raiz)
+    assert not en_carpeta_de_subidas(raiz + sufijo, raiz=raiz)
+    assert borrar_de_subidas(raiz + sufijo, raiz=raiz) is False
+    assert os.listdir(raiz) == ["Serie S01E01.mkv"]
+    assert en_carpeta_de_subidas(os.path.join(raiz, "Serie S01E01.mkv"), raiz=raiz)

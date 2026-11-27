@@ -234,6 +234,9 @@ def en_carpeta_de_subidas(ruta: str, *, raiz: Optional[str] = None) -> bool:
     fuera de la raíz.
     """
     raiz = raiz or RAIZ_SUBIDAS
+    # La propia carpeta de subidas («uploads/», «uploads/.», «uploads/x/..») no está dentro de sí misma.
+    if os.path.basename(os.path.normpath(ruta)) in ("", ".", "..") or os.path.realpath(ruta) == os.path.realpath(raiz):
+        return False
     padre, raiz = os.path.realpath(os.path.dirname(ruta)), os.path.realpath(raiz)
     # Por componentes: con startswith, /data/uploads-old pasaba por /data/uploads.
     return os.path.commonpath((padre, raiz)) == raiz
