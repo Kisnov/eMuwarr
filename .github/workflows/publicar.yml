@@ -77,9 +77,9 @@ jobs:
             echo "::error::solo_prueba y ref no se combinan: :dev es la punta de dev."
             exit 1
           fi
-          # El flujo ejecuta los scripts del commit elegido: uno anterior a --solo-comprobar no sirve.
-          if [ -n "$REF" ] && ! grep -q -- '--solo-comprobar' scripts/publicar_version.py 2>/dev/null; then
-            echo "::error::El commit de ref es demasiado antiguo: su scripts/publicar_version.py no admite --solo-comprobar."
+          # El flujo ejecuta los scripts del commit elegido: uno que no publica el manifiesto en la rama version no sirve.
+          if [ -n "$REF" ] && ! grep -q '^RAMA = "version"' scripts/publicar_version.py 2>/dev/null; then
+            echo "::error::El commit de ref es demasiado antiguo: su scripts/publicar_version.py publica el manifiesto en un repo que ya no existe."
             exit 1
           fi
           if [ "$RAMA" = multitracker ] && [ "$PRUEBA" != true ] && [ "$EVENTO" != push ]; then
