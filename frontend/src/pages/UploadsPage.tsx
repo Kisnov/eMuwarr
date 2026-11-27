@@ -9,6 +9,7 @@ import { GruposDeRelease } from '../components/GruposDeRelease'
 import { ErrorState } from '../components/ErrorState'
 import { HeaderFilter } from '../components/HeaderFilter'
 import { ChipTracker } from '../components/ChipTracker'
+import { LogoTracker } from '../components/LogoTracker'
 import { UploadJobDetailPage } from '../components/UploadJobDetailPage'
 import { DeleteUploadModal } from '../components/DeleteUploadModal'
 import { PeticionDeSubida } from '../components/PeticionDeSubida'
@@ -288,7 +289,7 @@ const JobRow = memo(function JobRow({ job, instances, seeding, onOpen, indent, e
             <HoverTitle as="span" className={otra ? 'lib-title-link sub-titulo sub-tracker-chip' : 'lib-title-link sub-titulo'}
               href={`/uploads/${job.id}`} onClick={abrir} tip="Ver progreso / detalle"
               aria-label={otra ? `${job.title} en ${job.tracker_nombre}` : undefined}>
-              {otra ? job.tracker_nombre : job.title || '—'}
+              {otra ? <LogoTracker tracker={job.tracker} nombre={job.tracker_nombre ?? ''} size={14} conNombre /> : job.title || '—'}
             </HoverTitle>
             {!otra && job.year ? <span className="sub-muted sub-t11 sub-no-encoge sub-anio">({job.year})</span> : null}
           </div>
@@ -298,7 +299,7 @@ const JobRow = memo(function JobRow({ job, instances, seeding, onOpen, indent, e
             {enGrupo === 'primera' ? (
               <HoverTitle as="span" className="lib-title-link sub-tracker-chip" href={`/uploads/${job.id}`} onClick={abrir}
                 tip="Ver progreso / detalle" aria-label={`${job.title} en ${job.tracker_nombre}`}>
-                {job.tracker_nombre}
+                <LogoTracker tracker={job.tracker} nombre={job.tracker_nombre ?? ''} size={14} conNombre />
               </HoverTitle>
             ) : !otra && <ChipTracker tracker={job.tracker} nombre={job.tracker_nombre} />}
             {otrosTrackers && onToggleTrackers && (

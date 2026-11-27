@@ -102,3 +102,7 @@
   flex-shrink: 0;
   overflow: hidden;
 }
+
+/* LogoTracker: el favicon de cada tracker, a la altura pedida; el de N.O.B.S es apaisado y sale más ancho. */
+.logo-tracker { display: block; flex-shrink: 0; width: auto; border-radius: 3px; }
+.logo-tracker-con-nombre { display: inline-flex; align-items: center; gap: 5px; }

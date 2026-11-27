@@ -1,6 +1,7 @@
 import { Campo, EstadoSecreto } from '../Campo'
 import { CabeceraTarjeta } from '../CabeceraTarjeta'
 import { alternar, OTROS_TRACKERS, type ConfigForm } from './useConfigForm'
+import { LogoTracker } from '../../../components/LogoTracker'
 
 // Las claves de los otros trackers (fase B del plan multitracker). Opcionales: sin clave no se sube a ese tracker.
 // No se prueban al guardar; una clave mala sale en el registro de la primera subida.
@@ -95,7 +96,7 @@ export function OtrosTrackersCard({ form }: { form: ConfigForm }) {
       />
       {OTROS_TRACKERS.map(({ id, nombre }) => (
         <fieldset key={id} className="aj-grupo-eventos">
-          <legend className="aj-titulo-grupo">{nombre}</legend>
+          <legend className="aj-titulo-grupo"><LogoTracker tracker={id} nombre={nombre} size={18} conNombre /></legend>
           <ClaveTracker nombre={nombre} {...claves[id]} />
           <MarcasTracker id={id} nombre={nombre} form={form} />
         </fieldset>
