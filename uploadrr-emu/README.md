@@ -67,13 +67,13 @@ Para eMuwarez hace falta:
 | `TORRENT_CLIENTS.qbit` | qBittorrent al que se añade el torrent para sembrarlo |
 | `TORRENT_CLIENTS.qbit.qui_proxy_url` | Opcional: la URL del proxy de [qui](https://getqui.com/docs/features/reverse-proxy) (`http://qui:7476/proxy/<clave>`). Con ella se habla con qBittorrent a través de qui y sobran `qbit_url`, `qbit_port`, `qbit_user` y `qbit_pass` |
 
-Con emuwarez-uploadrr no hace falta tocarlo a mano: la aplicación escribe estas claves antes de cada subida y las
+Con eMuwarr no hace falta tocarlo a mano: la aplicación escribe estas claves antes de cada subida y las
 restaura después. El resto de opciones están en `data/backup/example_config.yaml` y en la
 [guía de configuración de Uploadrr](https://codeberg.org/CvT/Uploadrr/wiki/Full-Config-Guide).
 
 ## Uso
 
-Así lo lanza emuwarez-uploadrr para una película:
+Así lo lanza eMuwarr para una película:
 
 ```bash
 python upload.py "/ruta/a/la/película" -tk EMU -mt "Nombre del torrent" -tmdb 603 -ua -c movie -res 1080p

@@ -1,6 +1,6 @@
 """La salida de una subida entera de EMU, línea a línea, contra tests/golden/*.txt.
 
-emuwarez-uploadrr lee esa salida con regex (``uploadrr_progress.py``, ``upload_result_parser.py``): los ficheros de
+eMuwarr lee esa salida con regex (``uploadrr_progress.py``, ``upload_result_parser.py``): los ficheros de
 tests/golden son lo que de verdad escribe esta herramienta, generado aquí y no a mano. La app los reproduce por sus
 parsers. Qué es real y qué está sustituido: tests/flujo_emu.py. Para regenerarlos tras un cambio a propósito:
 ``REGENERAR_GOLDEN=1 python -m pytest tests/test_transcripcion_dorada.py`` y revisa el diff en git."""
