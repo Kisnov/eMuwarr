@@ -26,6 +26,11 @@ describe('LogoTracker', () => {
     expect(document.body.textContent).toBe('N.O.B.S')
   })
 
+  it('el de Milnueve, arte de píxel, se escala sin suavizar', async () => {
+    await montar(<LogoTracker tracker="mnv" nombre="Milnueve" />)
+    expect(document.querySelector('img')!.classList.contains('es-pixel')).toBe(true)
+  })
+
   it('un tracker sin logo enseña su nombre', async () => {
     await montar(<LogoTracker tracker="otro" nombre="Otro" />)
     expect(document.querySelector('img')).toBeNull()
