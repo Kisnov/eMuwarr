@@ -40,7 +40,6 @@ from .nomenclature import (
     _build_proposed_filename,
     anio_de_temporada,
     build_nomenclature_proposal,
-    tag_por_defecto,
 )
 
 # Progress reporting while build_season_pack_plan() churns through episodes
@@ -220,6 +219,16 @@ def _mayoritario(episode_entries: list[dict], getter, sin: str) -> tuple[Optiona
         return None, por_valor
     # max() se queda con el primero en caso de empate.
     return max(conocidos, key=lambda v: len(conocidos[v])), por_valor
+
+
+def _tag_del_pack(grupos: list) -> str:
+    """El grupo de release de más capítulos, sin distinguir mayúsculas, o ""
+    si lo que más hay son capítulos sin grupo: el pack va entonces sin Tag. Si
+    empatan, el del primer capítulo."""
+    limpios = [(g or "").strip() for g in grupos]
+    claves = [g.casefold() for g in limpios]
+    # max() se queda con el primero en caso de empate.
+    return max(limpios, key=lambda g: claves.count(g.casefold()), default="")
 
 
 def _detalle_y_motivo(elegido: str, por_valor: dict[str, list], sin: str, masculino: bool = False) -> tuple[str, str]:
@@ -655,9 +664,7 @@ def reglas_del_pack(season: dict, tracker: str, conn, idiomas: dict | None = Non
     return Reglas(True, "Todos los capítulos tienen idiomas admitidos.", variante_del_pack(entries, tracker, anime=anime))
 
 
-def _decidir_proveedor_pack(
-    episodios: list[dict], source_override: str | None, provider_override: str | None, conn,
-) -> dict:
+def _decidir_proveedor_pack(episodios: list[dict], provider_override: str | None, conn) -> dict:
     """El proveedor del pack, decidido UNA vez para la carpeta y todos los
     capítulos, y de dónde sale. Por orden:
 
@@ -689,7 +696,7 @@ def _decidir_proveedor_pack(
     debiles: dict[str, list] = {}
     primero: Optional[dict] = None
     for ep in episodios:
-        sources[ep["id"]] = source_override or _infer_source_from_item(ep)
+        sources[ep["id"]] = _infer_source_from_item(ep)
         codigo, origen = detectar_proveedor(ep, sources[ep["id"]])
         if origen == ORIGEN_NOMBRE:
             decision["por_capitulo"][ep["id"]] = codigo
@@ -750,11 +757,11 @@ def build_season_pack_plan(
     episodes that differ in HDR/DV. A mixed video codec, resolution or source
     only warns.
 
-    `source_override`/`provider_override`/`tag_override` (set either by the
-    automated-upload source-disparity gate, or by hand in the manual
-    wizard's now-editable Source/Proveedor/Tag fields) are applied to every
-    episode's own proposal — a pack requires every episode to share the same
-    source anyway, so the override applies uniformly.
+    `source_override`/`tag_override` (el Source y el Tag del asistente) solo
+    cambian el NOMBRE DEL PACK: cada capítulo conserva su source y su grupo de
+    release, y el que no tiene grupo va sin Tag. Sin ellos el pack lleva los
+    de más capítulos; `tag_override` "" es «Sin Tag» elegido a mano.
+    `provider_override` sí vale para el pack y para todos sus capítulos.
 
     `title_override` is the Título dropdown's pick (Spanish by default, or the
     original). A season has no nomenclature proposal row of its own to save it
@@ -852,7 +859,7 @@ def build_season_pack_plan(
         # published as each one completes so the wizard can show "Comprobando
         # N de M capítulos…" while this (possibly slow) request is in flight.
         grupos = [e.get("release_group") for e in available_episodes]
-        release_tag = tag_override or tag_por_defecto(grupos, conn=conn)
+        release_tag = tag_override.strip() if tag_override is not None else _tag_del_pack(grupos)
         total = len(available_episodes)
         _clear_season_plan_cancel(season_id)
         _set_season_plan_progress(season_id, done=0, total=total)
@@ -860,7 +867,7 @@ def build_season_pack_plan(
         # Una sola decisión de proveedor para el pack y TODOS sus capítulos
         # (ver _decidir_proveedor_pack). Antes cada capítulo decidía el suyo y
         # el pack otro: la carpeta salía con "FLMN" y los capítulos sin él.
-        decision = _decidir_proveedor_pack(available_episodes, source_override, provider_override, conn)
+        decision = _decidir_proveedor_pack(available_episodes, provider_override, conn)
         provider = decision["provider"]
         warnings: list[str] = list(decision["warnings"])
         errors.extend(decision["errors"])
@@ -884,8 +891,7 @@ def build_season_pack_plan(
             impuesto = provider if provider and decision["por_capitulo"].get(ep["id"]) != provider else None
             proposal = build_nomenclature_proposal(
                 ep["id"], conn=conn,
-                source_override=source_override, provider_override=impuesto or provider_override,
-                tag_override=tag_override, title_override=title_override,
+                provider_override=impuesto or provider_override, title_override=title_override,
                 # Lo que impone el pack (detectado o elegido a mano, también «Sin proveedor») no se
                 # guarda como propuesta del capítulo: no es suya, y la caducaría. Los idiomas, igual.
                 guardar=impuesto is None and provider_override is None and not idiomas_audio,
@@ -895,9 +901,8 @@ def build_season_pack_plan(
                     and (proposal.get("provider_final") or None) != provider):
                 # Una propuesta guardada editada a mano con otro proveedor: manda el del pack.
                 proposal = build_nomenclature_proposal(
-                    ep["id"], conn=conn, source_override=source_override,
-                    provider_override=provider or "",
-                    tag_override=tag_override, title_override=title_override, guardar=False,
+                    ep["id"], conn=conn, provider_override=provider or "",
+                    title_override=title_override, guardar=False,
                     idiomas_audio=idiomas_audio,
                 )
             episode_entries.append({"episode": ep, "proposal": proposal})
@@ -908,8 +913,11 @@ def build_season_pack_plan(
         con_idiomas = _con_idiomas(episode_entries, idiomas_audio)
         errors.extend(_spanish_errors(con_idiomas, tracker, anime=anime))
         # Se suman a los avisos de la decisión del proveedor, no los sustituyen.
-        for aviso in (_codec_del_pack(episode_entries)[1], _resolucion_del_pack(episode_entries)[1],
-                      _fuente_del_pack(episode_entries)[1]):
+        aviso_fuente = _fuente_del_pack(episode_entries)[1]
+        if aviso_fuente and source_override:
+            # Ya se ha elegido: no se propone otra.
+            aviso_fuente = f"{aviso_fuente.split(' Se propone ')[0]} El nombre del pack lleva {source_override}."
+        for aviso in (_codec_del_pack(episode_entries)[1], _resolucion_del_pack(episode_entries)[1], aviso_fuente):
             if aviso:
                 warnings.append(aviso)
         # Va aparte de `warnings`: el asistente lo enseña junto al selector de
@@ -934,6 +942,8 @@ def build_season_pack_plan(
         # Del conjunto de capítulos, no del primero: ya no tienen por qué
         # coincidir en todo (ver _aggregate_pack_fields).
         pack_fields = _aggregate_pack_fields(episode_entries, conn, idiomas_audio)
+        if source_override:
+            pack_fields["source"] = source_override
         season_pack_title = _build_season_pack_title(
             title=series_title,
             year=year,
@@ -953,13 +963,13 @@ def build_season_pack_plan(
             raw_source_path = ep.get("path")
             source_path = local_paths.get(ep["id"]) or raw_source_path
             proposed_filename = proposal.get("proposed_filename") or ep.get("title") or f"episode-{ep['id']}"
-            # Cada capítulo lleva el Tag del pack, aunque su propuesta guardada
-            # traiga otro (grupos mezclados): reconstruirla la sobrescribiría.
-            # El nombre de archivo lleva "-tag" ya pasado por to_filesystem_name.
+            # Cada capítulo lleva su grupo de release, aunque su propuesta guardada traiga otro Tag; el que no
+            # tiene grupo va sin Tag. El nombre de archivo lleva "-tag" ya pasado por to_filesystem_name.
+            grupo = (ep.get("release_group") or "").strip()
             viejo = to_filesystem_name(f"-{proposal.get('release_tag')}") if proposal.get("release_tag") else ""
-            nuevo = to_filesystem_name(f"-{release_tag}")
-            if viejo and viejo != nuevo and proposed_filename.endswith(viejo):
-                proposed_filename = f"{proposed_filename[:-len(viejo)]}{nuevo}"
+            nuevo = to_filesystem_name(f"-{grupo}") if grupo else ""
+            if viejo != nuevo and proposed_filename.endswith(viejo):
+                proposed_filename = f"{proposed_filename[:len(proposed_filename) - len(viejo)]}{nuevo}"
             ext = ""
             if source_path and os.path.isfile(source_path):
                 ext = os.path.splitext(source_path)[1]
@@ -1073,20 +1083,15 @@ def _episode_display_title(conn, ep: dict) -> str:
 
 
 def get_season_episode_names(
-    season_id: int, conn=None,
-    source_override: str | None = None, provider_override: str | None = None,
-    tag_override: str | None = None, idiomas_audio: dict | None = None,
+    season_id: int, conn=None, provider_override: str | None = None, idiomas_audio: dict | None = None,
 ) -> dict:
     """Per-episode final torrent name + internal MKV title — backs the
     wizard's "Ver nombre de todos los capítulos" button (a season pack has
     no single "título del archivo interno", each episode file has its own).
 
-    `source_override`/`provider_override`/`tag_override` — the season's own
-    Source/Proveedor/Tag fields, if the user edited them by hand — applied
-    uniformly to every episode, same as build_season_pack_plan(). Without
-    this, each episode kept showing its own auto-detected values even after
-    overriding the season pack's title, so they visibly disagreed. Lo mismo con
-    `idiomas_audio`, los idiomas elegidos para las pistas sin idioma."""
+    Como en build_season_pack_plan(): `provider_override` e `idiomas_audio`
+    valen para todos los capítulos; el Source y el Tag del pack no, cada
+    capítulo lleva su source y su grupo (sin grupo, sin Tag)."""
     idiomas_audio = _idiomas_del_pack(idiomas_audio)
     own = conn is None
     conn = conn or connect()
@@ -1098,9 +1103,8 @@ def get_season_episode_names(
         out = []
         for ep in available:
             fields = build_editable_nomenclature_fields(
-                ep["id"], conn=conn,
-                source_override=source_override, provider_override=provider_override,
-                tag_override=tag_override, idiomas_audio=idiomas_audio,
+                ep["id"], conn=conn, provider_override=provider_override,
+                tag_override=None if (ep.get("release_group") or "").strip() else "", idiomas_audio=idiomas_audio,
             )
             blocked = bool(fields.get("blocked"))
             out.append({

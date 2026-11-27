@@ -38,10 +38,8 @@ export function PasoTemporada({ a }: { a: Asistente }) {
   // shows. Título/Año/Resolución/Códec/Audio/Subtítulos stay read-only (read
   // straight from the actual files — every episode already has to agree, or
   // build_season_pack_plan blocks otherwise). Source/Proveedor/Tag are
-  // editable exactly like a movie/episode: applied uniformly across every
-  // episode (source_override/provider_override/tag_override) instead of
-  // being stuck with whatever the filename/Radarr-Sonarr happened to say —
-  // the same kind of misdetection the Internal Source Tool exists to catch.
+  // editable: Source and Tag only change the pack's own name, Proveedor also
+  // applies to every episode.
   const seasonTitleOptions = seasonPlan?.title_options ?? []
   // Los avisos del plan, tanto si el pack es válido como si está bloqueado.
   const avisosDelPlan = seasonPlan?.warnings?.map((w, i) => (
@@ -226,7 +224,8 @@ export function PasoTemporada({ a }: { a: Asistente }) {
                 <p className="text-muted asist-t12 asist-mt-0 asist-mb-12">
                   Se sube como un único pack de temporada. Si los capítulos difieren en códec de vídeo,
                   resolución o source, se avisa y el nombre lleva el de más capítulos.
-                  Source, Proveedor y Tag se pueden corregir a mano y se aplican a todos los capítulos por igual.
+                  Source y Tag solo cambian el nombre del pack: cada capítulo conserva su source y su grupo (sin
+                  grupo, va sin Tag). El Proveedor se aplica también a todos los capítulos.
                 </p>
                 {seasonFieldBox}
                 {seasonDerivados}

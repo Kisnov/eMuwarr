@@ -99,19 +99,16 @@ export interface SeasonEpisodeName {
 
 // Backs "Ver nombre de todos los capítulos" — a season pack has no single
 // "título del archivo interno", each episode file has its own.
-// `overrides` — the season's own Source/Proveedor/Tag as currently edited in
-// the wizard, so every episode's name reflects the same choice as the
-// season pack's own title instead of its own auto-detected values.
+// `overrides`: el Proveedor del pack y los idiomas elegidos, que valen para todos los capítulos. El Source y el Tag
+// del pack no: cada capítulo lleva los suyos.
 export function getSeasonEpisodeNames(
   seasonId: number,
-  overrides?: { source?: string | null; provider?: string | null; tag?: string | null; idiomas?: Record<number, string> },
+  overrides?: { provider?: string | null; idiomas?: Record<number, string> },
 ): Promise<{ episodes: SeasonEpisodeName[] }> {
   const qs = new URLSearchParams()
   if (overrides?.idiomas && Object.keys(overrides.idiomas).length) qs.set('idiomas', JSON.stringify(overrides.idiomas))
-  if (overrides?.source) qs.set('source', overrides.source)
   // '' es "Sin proveedor" elegido a mano: también se manda.
   if (overrides?.provider != null) qs.set('provider', overrides.provider)
-  if (overrides?.tag) qs.set('tag', overrides.tag)
   const query = qs.toString()
   return api.get<{ episodes: SeasonEpisodeName[] }>(`/library/season/${seasonId}/episode-names${query ? `?${query}` : ''}`)
 }

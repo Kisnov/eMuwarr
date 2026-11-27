@@ -415,8 +415,8 @@ def queue_upload_for_item(
         # provider_override "" ("Sin proveedor" elegido a mano) también cuenta.
         from .mkv_remux import idiomas_por_posicion
         idiomas = idiomas_por_posicion(idiomas_audio) if is_season else {}
-        if is_season and (source_override or provider_override is not None or tag_override or title_override
-                          or idiomas):
+        if is_season and (source_override or provider_override is not None or tag_override is not None
+                          or title_override or idiomas):
             season_overrides = {
                 "source": source_override, "provider": provider_override,
                 "tag": tag_override, "title": title_override,
@@ -1182,7 +1182,7 @@ AJUSTE_SIN_COPIAS_REFLINK = _AJUSTES["remux_no_reflink_copies"].clave
 
 
 def _preparar_fichero(job_id: int, item_id: int, origen: str, destino: str, modo: str, conn, *,
-                      overrides: dict | None = None, on_progress=None) -> dict:
+                      overrides: dict | None = None, on_progress=None, de_pack: bool = False) -> dict:
     """Pone `origen` en `destino` (carpeta de subidas, ya libre) sin romper nunca
     un torrent que lo siembre.
 
@@ -1203,6 +1203,8 @@ def _preparar_fichero(job_id: int, item_id: int, origen: str, destino: str, modo
     from .upload_execution import append_upload_log
 
     nombre = os.path.basename(destino)
+    # En un pack el título interno sale del nombre que le da el pack, no de la propuesta propia del capítulo.
+    nombre_del_titulo = os.path.splitext(nombre)[0] if de_pack else None
     # Un archivo de la carpeta de subidas que ya está donde va: no se enlaza a sí mismo.
     en_su_sitio = os.path.abspath(origen) == os.path.abspath(destino)
 
@@ -1211,7 +1213,8 @@ def _preparar_fichero(job_id: int, item_id: int, origen: str, destino: str, modo
 
     def titulo(ruta: str) -> str | None:
         r = apply_internal_title_update(item_id, apply=True, dry_run=False,
-                                        confirmation=MKV_CONFIRMATION_TOKEN, conn=conn, ruta=ruta)
+                                        confirmation=MKV_CONFIRMATION_TOKEN, conn=conn, ruta=ruta,
+                                        nombre=nombre_del_titulo)
         return None if r.get("status") == "applied" else ("; ".join(r.get("errors") or []) or r.get("status"))
 
     def fin(hecho: list[str], editado: bool, pistas, omitida, metodo: str | None = None) -> dict:
@@ -1255,7 +1258,8 @@ def _preparar_fichero(job_id: int, item_id: int, origen: str, destino: str, modo
             hecho.append("pistas editadas en el original, que no comparte nadie")
 
     # Con el nombre de eMuwarez de `destino`, no con el de la biblioteca.
-    deseado = preview_internal_title_update(item_id, conn=conn, ruta=destino).get("internal_mkv_title")
+    deseado = preview_internal_title_update(
+        item_id, conn=conn, ruta=destino, nombre=nombre_del_titulo).get("internal_mkv_title")
     titulo_en_copia = bool(deseado) and titulo_actual(origen) != deseado
     if titulo_en_copia and motivo is None:
         fallo = titulo(origen)
@@ -1737,7 +1741,7 @@ def _paso_preparar(t: _Trabajo) -> bool:
         # En un pack, solo los idiomas elegidos para las pistas sin idioma, por capítulo.
         r = _preparar_fichero(job_id, fid, origen, destino, modo_de_pistas, conn,
                               overrides=_overrides_de_pack(origen, t.season_overrides) if is_season
-                              else t.overrides, on_progress=progreso)
+                              else t.overrides, on_progress=progreso, de_pack=is_season)
         resultados.append({**r, "item_id": fid})
         update_phase_progress(job_id, "remux", int((idx + 1) * 100 / total))
         return r["metodo"]

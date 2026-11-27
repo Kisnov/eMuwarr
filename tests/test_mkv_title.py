@@ -276,3 +276,18 @@ def test_titulo_actual_sin_poder_leer_el_mkv_es_none():
     with patch("emuwarez_uploadrr.services.mkv_remux.read_tracks_json",
                return_value={"ok": False, "error": "no es Matroska"}):
         assert titulo_actual("/no/existe.mkv") is None
+
+
+def test_el_titulo_de_un_capitulo_de_pack_sale_del_nombre_que_le_da_el_pack(tmp_path):
+    """Su propuesta propia puede llevar otro Tag (el de Ajustes): dentro del pack manda el nombre del pack."""
+    mkv = tmp_path / "Serie.S01E01.1080p.WEB-DL.mkv"
+    mkv.write_bytes(b"x")
+    conn = _make_conn(tmp_path)
+    item_id = _insert_library_item(conn, title="Serie", prepared_path=str(mkv))
+    _insert_proposal(conn, item_id, "Serie.S01E01.1080p.WEB-DL-EMUWAREZ")
+
+    from emuwarez_uploadrr.services.mkv_title import preview_internal_title_update
+    propio = preview_internal_title_update(item_id, conn=conn, ruta=str(mkv))
+    en_pack = preview_internal_title_update(item_id, conn=conn, ruta=str(mkv), nombre="Serie.S01E01.1080p.WEB-DL")
+    assert propio["internal_mkv_title"].endswith("-EMUWAREZ")
+    assert en_pack["internal_mkv_title"] == "Serie.S01E01.1080p.WEB-DL"

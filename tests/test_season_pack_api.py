@@ -72,7 +72,8 @@ def test_pack_preview_exposes_field_breakdown(client, auth_headers, isolated_db,
     assert data["series_title"] == "One Piece"
     assert data["year"] == 1999
     assert data["resolution"] == "1080p"
-    assert data["release_tag"]
+    # Ningún capítulo tiene grupo de release: el pack va sin Tag.
+    assert data["release_tag"] == ""
 
 
 def test_pack_preview_exposes_season_number(client, auth_headers, isolated_db, tmp_path):
@@ -247,8 +248,11 @@ def test_las_comprobaciones_reciben_lo_editado_a_mano(client, auth_headers, isol
         "&idiomas=%7B%222%22%3A%22spa%22%7D", headers=auth_headers)
     assert visto["ajustes"] == {"source": "BluRay", "tag": "MYTAG", "title": "Un título", "idiomas": {"2": "spa"}}
     # Vacíos o un JSON roto cuentan como nada elegido.
-    client.post("/api/library/1/upload/checks?source=&tag=%20&idiomas=%7Broto", headers=auth_headers)
+    client.post("/api/library/1/upload/checks?source=&idiomas=%7Broto", headers=auth_headers)
     assert visto["ajustes"] is None
+    # Salvo el Tag: vacío es «Sin Tag» elegido a mano.
+    client.post("/api/library/1/upload/checks?tag=", headers=auth_headers)
+    assert visto["ajustes"] == {"tag": ""}
 
 
 def test_el_nombre_de_las_comprobaciones_lleva_lo_editado_a_mano(client, auth_headers, isolated_db, tmp_path):

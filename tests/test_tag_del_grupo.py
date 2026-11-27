@@ -59,14 +59,36 @@ def test_un_pack_de_un_solo_grupo_lleva_ese_tag(isolated_db, tmp_path):
     assert all(e["proposed_filename"].endswith("-Loco87") for e in plan["episodes"])
 
 
-def test_un_pack_con_grupos_mezclados_usa_uno_para_todos(isolated_db, tmp_path):
-    """Si cada capítulo propusiera el suyo, la vista previa no coincidiría con
-    lo que se sube, que lleva el Tag del pack en todos."""
+def test_un_pack_con_grupos_mezclados_lleva_el_de_mas_capitulos_y_cada_capitulo_el_suyo(isolated_db, tmp_path):
+    conn = _open(isolated_db)
+    plan = build_season_pack_plan(_pack(conn, tmp_path, ["Loco87", "Okeda", "Okeda"]), conn=conn)
+    assert plan["status"] == "valid", plan["errors"]
+    assert plan["release_tag"] == "Okeda" and plan["season_pack_title"].endswith("-Okeda")
+    assert [e["proposed_filename"].rsplit("-", 1)[1] for e in plan["episodes"]] == ["Loco87", "Okeda", "Okeda"]
+
+
+def test_si_los_grupos_empatan_el_pack_lleva_el_del_primer_capitulo(isolated_db, tmp_path):
     conn = _open(isolated_db)
     plan = build_season_pack_plan(_pack(conn, tmp_path, ["Loco87", "Okeda"]), conn=conn)
+    assert plan["release_tag"] == "Loco87"
+
+
+def test_un_capitulo_sin_grupo_va_sin_tag_y_el_pack_tambien_si_son_mayoria(isolated_db, tmp_path):
+    """Sin grupo no se pone el Tag de Ajustes: el release no es de quien lo sube."""
+    conn = _open(isolated_db)
+    plan = build_season_pack_plan(_pack(conn, tmp_path, ["Loco87", None, None]), conn=conn)
     assert plan["status"] == "valid", plan["errors"]
-    assert plan["release_tag"] == "EMUWAREZ"
-    assert all(e["proposed_filename"].endswith("-EMUWAREZ") for e in plan["episodes"])
+    assert plan["release_tag"] == "" and "EMUWAREZ" not in plan["season_pack_title"]
+    con_grupo, *sin_grupo = (e["proposed_filename"] for e in plan["episodes"])
+    assert con_grupo.endswith("-Loco87")
+    assert all("Loco87" not in n and "EMUWAREZ" not in n for n in sin_grupo)
+
+
+def test_sin_tag_elegido_a_mano_quita_el_del_pack_y_no_el_de_los_capitulos(isolated_db, tmp_path):
+    conn = _open(isolated_db)
+    plan = build_season_pack_plan(_pack(conn, tmp_path, ["Loco87", "Loco87"]), conn=conn, tag_override="")
+    assert plan["release_tag"] == "" and "Loco87" not in plan["season_pack_title"]
+    assert all(e["proposed_filename"].endswith("-Loco87") for e in plan["episodes"])
 
 
 def test_ver_un_pack_mezclado_no_reescribe_las_propuestas_de_los_capitulos(isolated_db, tmp_path):
@@ -75,26 +97,27 @@ def test_ver_un_pack_mezclado_no_reescribe_las_propuestas_de_los_capitulos(isola
     season_id = _pack(conn, tmp_path, ["Loco87", "Okeda"])
     build_season_pack_plan(season_id, conn=conn)
     antes = conn.execute("SELECT COUNT(*) FROM nomenclature_proposals").fetchone()[0]
-    plan = build_season_pack_plan(season_id, conn=conn)
-    assert conn.execute("SELECT COUNT(*) FROM nomenclature_proposals").fetchone()[0] == antes
-    assert all(e["proposed_filename"].endswith("-EMUWAREZ") for e in plan["episodes"])
-
-
-def test_el_tag_del_pack_cambia_aunque_el_grupo_lleve_espacios_acentos_o_puntos(isolated_db, tmp_path):
-    """El nombre de archivo lleva el grupo sin acentos y con puntos."""
-    conn = _open(isolated_db)
-    season_id = _pack(conn, tmp_path, ["adrià & hakyra", ".GROUP"])
     build_season_pack_plan(season_id, conn=conn)
-    plan = build_season_pack_plan(season_id, conn=conn)
-    assert all(e["proposed_filename"].endswith("-EMUWAREZ") for e in plan["episodes"])
+    assert conn.execute("SELECT COUNT(*) FROM nomenclature_proposals").fetchone()[0] == antes
+
+
+def test_un_capitulo_sin_grupo_pierde_el_tag_aunque_el_de_ajustes_lleve_espacios_acentos_o_puntos(
+        isolated_db, tmp_path):
+    """El nombre de archivo lleva el Tag sin acentos y con puntos."""
+    from emuwarez_uploadrr.services.settings import set_setting_canonical
+    conn = _open(isolated_db)
+    set_setting_canonical(conn, "default_release_tag", "adrià & hakyra")
+    conn.commit()
+    plan = build_season_pack_plan(_pack(conn, tmp_path, [None, None]), conn=conn)
+    assert all(e["proposed_filename"].endswith("SUBS") for e in plan["episodes"]), plan["episodes"]
 
 
 def test_el_tag_elegido_gana_al_grupo(isolated_db, tmp_path):
     conn = _open(isolated_db)
     season_id = _pack(conn, tmp_path, ["Loco87", "Loco87"])
     plan = build_season_pack_plan(season_id, conn=conn, tag_override="MYTAG")
-    assert plan["release_tag"] == "MYTAG"
-    assert all(e["proposed_filename"].endswith("-MYTAG") for e in plan["episodes"])
+    assert plan["release_tag"] == "MYTAG" and plan["season_pack_title"].endswith("-MYTAG")
+    assert all(e["proposed_filename"].endswith("-Loco87") for e in plan["episodes"])
 
 
 @pytest.mark.usefixtures("ficheros_de_mentira")
@@ -112,3 +135,15 @@ def test_el_asistente_propone_el_grupo_de_la_pelicula(client, auth_headers, tmp_
         resp = client.get(f"/api/library/{item_id}/nomenclature/fields", headers=auth_headers)
     assert resp.status_code == 200, resp.text
     assert resp.json()["fields"]["tag"] == "FLUX"
+
+
+def test_un_capitulo_guardado_sin_tag_recupera_su_grupo_en_el_pack(isolated_db, tmp_path):
+    """La propuesta propia del capítulo puede estar guardada con «Sin Tag»: en el pack lleva su grupo igualmente."""
+    conn = _open(isolated_db)
+    season_id = _pack(conn, tmp_path, ["Loco87", "Loco87"])
+    build_season_pack_plan(season_id, conn=conn)
+    conn.execute("UPDATE nomenclature_proposals SET release_tag = NULL, "
+                 "proposed_filename = REPLACE(proposed_filename, '-Loco87', '')")
+    conn.commit()
+    plan = build_season_pack_plan(season_id, conn=conn)
+    assert all(e["proposed_filename"].endswith("-Loco87") for e in plan["episodes"]), plan["episodes"]

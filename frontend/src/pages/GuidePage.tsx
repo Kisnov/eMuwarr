@@ -71,7 +71,7 @@ const FIELD_SOURCES: { field: string; example: string; source: string }[] = [
   {
     field: 'Tag / Grupo',
     example: 'EMUWAREZ',
-    source: 'El grupo de release del archivo, el que Radarr/Sonarr leen del nombre (columna Grupo de Biblioteca). En un pack, el que comparten todos los capítulos. Si no hay uno solo, el tag de subida de Ajustes, y sin ninguno configurado, "EMUWAREZ". En el asistente se puede cambiar por cualquiera de los guardados.',
+    source: 'El grupo de release del archivo, el que Radarr/Sonarr leen del nombre (columna Grupo de Biblioteca). Si el archivo no tiene grupo, el tag de subida de Ajustes, y sin ninguno configurado, "EMUWAREZ". En un pack, el nombre lleva el grupo de más capítulos (sin Tag si lo que más hay son capítulos sin grupo) y cada capítulo el suyo; el que no tiene grupo va sin Tag. En el asistente se puede cambiar por cualquiera de los guardados o por «Sin Tag».',
   },
 ]
 

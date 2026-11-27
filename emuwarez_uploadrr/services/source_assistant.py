@@ -561,7 +561,8 @@ def build_editable_nomenclature_fields(
             resolution = resolution or proposal.get("resolution")
             source = source or proposal.get("source")
 
-        tag = tag_override or tag_por_defecto([item.get("release_group")], conn=conn)
+        # tag_override "" es «Sin Tag».
+        tag = tag_override if tag_override is not None else tag_por_defecto([item.get("release_group")], conn=conn)
 
         season_episode = None
         if media_type in ("season", "episode"):

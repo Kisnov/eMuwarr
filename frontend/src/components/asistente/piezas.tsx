@@ -158,6 +158,7 @@ export function CampoTag({ value, opciones, onChange }: {
   return (
     <label htmlFor={`${idCampo}-tag`}><FieldLabel label="Tag" info={FIELD_INFO.tag} />
       <select id={`${idCampo}-tag`} className="form-input form-select" value={value || ''} onChange={e => onChange(e.target.value)}>
+        <option value="">Sin Tag</option>
         {opciones.map(t => (
           <option key={t} value={t}>{t}</option>
         ))}
