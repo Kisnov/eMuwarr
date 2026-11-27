@@ -1101,7 +1101,7 @@ def _renombrar_si_esta_en_subidas(job_id: int, item_id: int, origen: str | None,
     """Renombra en su sitio un archivo que ya está en la carpeta de subidas (los de
     la biblioteca, nunca). Devuelve la ruta con la que seguir, o None si falló
     (el trabajo ya queda fallido)."""
-    from .carpeta_subida import ENLACES, abarca_la_biblioteca, en_carpeta_de_subidas
+    from .carpeta_subida import ENLACES, abarca_la_biblioteca, dentro_de, en_carpeta_de_subidas
     from .nomenclature import renombrar_en_subidas
     from .upload_execution import append_upload_log
     from .uploadrr_contract import get_allowed_roots
@@ -1121,7 +1121,7 @@ def _renombrar_si_esta_en_subidas(job_id: int, item_id: int, origen: str | None,
         # Si otra subida siembra desde ahí, renombrarlo le quita el fichero a qBittorrent.
         otra = _subida_que_lo_usa(conn, origen, job_id)
         # O una ya borrada cuyo enlace otra subida compartía (enlaces_sembrados_sin_fila), suelto o su pack.
-        borrada = otra is None and any(origen == ruta or origen.startswith(ruta + "/") for ruta in
+        borrada = otra is None and any(dentro_de(origen, ruta) for ruta in
                                        get_json_state(conn, ENLACES_SEMBRADOS_SIN_FILA) or [])
         r = None if otra is not None or borrada else renombrar_en_subidas(item_id, origen, destino, conn=conn, **kw)
     if r is None:
@@ -1143,6 +1143,7 @@ def _renombrar_si_esta_en_subidas(job_id: int, item_id: int, origen: str | None,
 def _subida_que_lo_usa(conn, ruta: str, job_id: int) -> int | None:
     """La otra subida que siembra (o prepara) desde `ruta`, o desde la carpeta de pack que la contiene, con el mismo
     criterio que el borrado: quitarle el enlace o reescribirlo rompería su torrent."""
+    ruta = os.path.normpath(ruta)  # «uploads/./Pack/E01» es de «uploads/Pack»
     fila = conn.execute(
         "SELECT id FROM upload_jobs WHERE (prepared_path = ? OR substr(?, 1, length(prepared_path) + 1) = "
         "prepared_path || '/') AND id != ? AND (status NOT IN ('cancelled', 'failed') OR torrent_subido = 1) LIMIT 1",

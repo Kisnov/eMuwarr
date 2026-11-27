@@ -247,6 +247,13 @@ def en_carpeta_de_subidas(ruta: str, *, raiz: Optional[str] = None) -> bool:
     return os.path.commonpath((padre, raiz)) == raiz
 
 
+def dentro_de(ruta: str, carpeta: str) -> bool:
+    """Si `ruta` es `carpeta` o está dentro, por componentes y sin resolver enlaces: «/x/./P/E01» está en «/x/P» y
+    «/x/P2/E01», no."""
+    ruta, carpeta = os.path.abspath(ruta), os.path.abspath(carpeta)
+    return os.path.commonpath((ruta, carpeta)) == carpeta
+
+
 def abarca_la_biblioteca(raices: Iterable[str], *, raiz: Optional[str] = None) -> Optional[str]:
     """Por qué no vale la carpeta de subidas si es una ruta permitida (allowed_roots) o la contiene: los archivos de la
     biblioteca contarían como «en la carpeta de subidas» y se renombrarían. None si no."""
@@ -319,9 +326,10 @@ def asegurar_raiz(raiz: Optional[str] = None) -> bool:
         return False
 
 
-def _sembrado_por_un_simbolico(fichero: str, conn) -> bool:
-    """Si una subida que siembra (o la de un enlace sembrado sin fila) apunta a `fichero` con un enlace simbólico: el
-    fichero suelto que es su `prepared_path`, o un capítulo de la carpeta del pack."""
+def _sembrado_por_un_simbolico(fichero: str, conn) -> Optional[str]:
+    """Por qué no se edita `fichero` si una subida que siembra (o la de un enlace sembrado sin fila) apunta a él con
+    un enlace simbólico: el fichero suelto que es su `prepared_path`, o un capítulo de la carpeta del pack. También si
+    no se pudo mirar una de esas carpetas (una que ya no existe no siembra nada). None si no."""
     from ..database import db, get_json_state
     from .upload_execution.ciclo_de_vida import ENLACES_SEMBRADOS_SIN_FILA
     if conn is None:
@@ -332,15 +340,19 @@ def _sembrado_por_un_simbolico(fichero: str, conn) -> bool:
         "SELECT prepared_path FROM upload_jobs WHERE prepared_path IS NOT NULL "
         "AND (status NOT IN ('cancelled', 'failed') OR torrent_subido = 1)")}
     rutas |= set(get_json_state(conn, ENLACES_SEMBRADOS_SIN_FILA) or [])
+    dudosa = None
     for ruta in rutas:
         try:
             enlaces = ([e.path for e in os.scandir(ruta)] if os.path.isdir(ruta) and not os.path.islink(ruta)
                        else [ruta])
-        except OSError:
+        except FileNotFoundError:
+            continue
+        except OSError as e:
+            dudosa = dudosa or f"no se pudo mirar si {ruta} lo siembra con un enlace simbólico ({texto_de_error(e)})"
             continue
         if any(os.path.islink(e) and os.path.realpath(e) == real for e in enlaces):
-            return True
-    return False
+            return "lo siembra una subida a través de un enlace simbólico"
+    return dudosa
 
 
 def motivo_para_no_editar(fichero: str, conn) -> Optional[str]:
@@ -359,9 +371,7 @@ def motivo_para_no_editar(fichero: str, conn) -> Optional[str]:
     if prueba["tipo"] == "simbólico":
         return ("se enlaza con un enlace simbólico (la carpeta de subidas está en otro disco), que no cuenta como "
                 "enlace: puede sembrarlo un torrent")
-    if _sembrado_por_un_simbolico(fichero, conn):
-        return "lo siembra una subida a través de un enlace simbólico"
-    return None
+    return _sembrado_por_un_simbolico(fichero, conn)
 
 
 def comprobar_enlace(fichero: str, *, raiz: Optional[str] = None) -> dict:
