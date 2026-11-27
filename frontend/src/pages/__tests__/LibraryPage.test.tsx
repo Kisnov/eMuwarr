@@ -11,6 +11,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 vi.mock('../../api/library', () => ({
   getLibrary: vi.fn(), getLibraryFilterOptions: vi.fn(async () => ({})), getLibraryItem: vi.fn(async () => ({})),
   TOP_LEVEL_PARENT_FILTER: 0, identificarSugeridas: vi.fn(), getTmdbCandidatos: vi.fn(), identificarTmdb: vi.fn(),
+  getEmuComparison: vi.fn(() => new Promise(() => {})),
 }))
 vi.mock('../../api/instances', () => ({ getInstances: vi.fn(async () => []) }))
 vi.mock('../../api/settings', () => ({ fetchSettings: vi.fn(async () => ({ upload_max_concurrent: 1 })) }))
@@ -19,7 +20,7 @@ vi.mock('../../api/uploads', async original => ({
   fetchTrackersParaSubir: vi.fn(async () => [{ id: 'emu', nombre: 'eMuwarez' }]),
 }))
 
-import { getLibrary, getLibraryFilterOptions, getTmdbCandidatos, identificarSugeridas, identificarTmdb } from '../../api/library'
+import { getLibrary, getLibraryFilterOptions, getLibraryItem, getTmdbCandidatos, identificarSugeridas, identificarTmdb } from '../../api/library'
 import { fetchTrackersParaSubir } from '../../api/uploads'
 import { SeccionVisible } from '../../context/SeccionVisible'
 import { SyncContext } from '../../context/SyncContext'
@@ -304,5 +305,114 @@ describe('Carpeta manual', () => {
     expect(identificarTmdb).toHaveBeenCalledWith(4, '693134', 'movie')
     expect(vi.mocked(getLibrary).mock.calls.length).toBeGreaterThan(cargas)
     expect(texto()).toContain('Ficha confirmada')
+  })
+})
+
+describe('Biblioteca: lo que se recarga sola tras una sincronización', () => {
+  let invalidar: () => void = () => {}
+  function ConMarca() {
+    const [marca, setMarca] = useState(0)
+    invalidar = () => setMarca(m => m + 1)
+    return (
+      <SyncContext.Provider value={{ ...SYNC, lastInvalidatedAt: marca } as never}>
+        <SeccionVisible visible><LibraryPage onNavigate={vi.fn()} /></SeccionVisible>
+      </SyncContext.Provider>
+    )
+  }
+  afterEach(() => { history.replaceState(null, '', '/') })
+
+  it('una recarga en segundo plano que falla deja la lista que ya se veía', async () => {
+    localStorage.setItem('emuwarez_uploadrr_library_view', 'list')
+    await montar(<ConMarca />)
+    await esperar(() => texto().includes('Alien'))
+    vi.mocked(getLibrary).mockRejectedValue(new Error('503'))
+    const antes = vi.mocked(getLibrary).mock.calls.length
+    await act(async () => { invalidar() })
+    await esperar(() => vi.mocked(getLibrary).mock.calls.length > antes)
+    await act(async () => { await new Promise(r => setTimeout(r, 20)) })
+    expect(texto()).toContain('Alien')
+    expect(texto()).not.toContain('Error al cargar la biblioteca')
+  })
+
+  it('la ficha abierta se vuelve a pedir y enseña lo de después de la sincronización', async () => {
+    vi.mocked(getLibraryItem).mockResolvedValue(DUNE)
+    localStorage.setItem('emuwarez_uploadrr_library_view', 'list')
+    await montar(<ConMarca />)
+    await esperar(() => texto().includes('Alien'))
+    const enlace = [...document.querySelectorAll('a.lib-title-link')].find(a => a.textContent?.includes('Dune'))!
+    await act(async () => { enlace.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })) })
+    await esperar(() => vi.mocked(getLibraryItem).mock.calls.length === 1)
+    vi.mocked(getLibraryItem).mockResolvedValue({ ...DUNE, display_title: 'Dune al día' } as LibraryItemResponse)
+    await act(async () => { invalidar() })
+    await esperar(() => texto().includes('Dune al día'))
+    expect(vi.mocked(getLibraryItem).mock.calls.map(c => c[0])).toEqual([1, 1])
+  })
+
+  const abrirFicha = async (titulo: string) => {
+    const enlace = [...document.querySelectorAll('a.lib-title-link')].find(a => a.textContent?.includes(titulo))!
+    await act(async () => { enlace.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })) })
+  }
+
+  it('dos recargas de la ficha que responden al revés: se queda la más nueva', async () => {
+    vi.mocked(getLibraryItem).mockResolvedValue(DUNE)
+    localStorage.setItem('emuwarez_uploadrr_library_view', 'list')
+    await montar(<ConMarca />)
+    await esperar(() => texto().includes('Alien'))
+    await abrirFicha('Dune')
+    await esperar(() => vi.mocked(getLibraryItem).mock.calls.length === 1)
+    let soltarVieja: () => void = () => {}
+    vi.mocked(getLibraryItem)
+      .mockImplementationOnce(() => new Promise(r => { soltarVieja = () => r({ ...DUNE, display_title: 'Dune vieja' } as LibraryItemResponse) }))
+      .mockResolvedValueOnce({ ...DUNE, display_title: 'Dune nueva' } as LibraryItemResponse)
+    await act(async () => { invalidar() })
+    await act(async () => { invalidar() })
+    await esperar(() => texto().includes('Dune nueva'))
+    await act(async () => { soltarVieja() })
+    await act(async () => { await new Promise(r => setTimeout(r, 20)) })
+    expect(texto()).toContain('Dune nueva')
+    expect(texto()).not.toContain('Dune vieja')
+  })
+
+  it('la tabla de temporadas de la ficha abierta se pone al día tras una sincronización, sin «Cargando…»', async () => {
+    const temporada = (id: number, n: number) => item(id, `Serie - Temporada ${n}`, { item_type: 'season', parent_id: 3, season_number: n })
+    let temporadas = [temporada(31, 1)]
+    vi.mocked(getLibrary).mockImplementation(async q => (q?.parent_id === 3
+      ? { items: temporadas, total: temporadas.length }
+      : { items: [DUNE, ALIEN, SERIE], total: 3, archivos: 2 }) as never)
+    vi.mocked(getLibraryItem).mockResolvedValue(SERIE)
+    localStorage.setItem('emuwarez_uploadrr_library_view', 'list')
+    await montar(<ConMarca />)
+    await esperar(() => texto().includes('Alien'))
+    await abrirFicha('Serie')
+    await esperar(() => texto().includes('Temporada 1'))
+    temporadas = [temporada(31, 1), temporada(32, 2)]
+    await act(async () => { invalidar() })
+    expect(document.querySelector('.hijos-aviso')).toBeNull()
+    await esperar(() => texto().includes('Temporada 2'))
+  })
+
+  it('dos recargas de la tabla de temporadas que responden al revés: se queda la más nueva', async () => {
+    const temporada = (id: number, n: number) => item(id, `Serie - Temporada ${n}`, { item_type: 'season', parent_id: 3, season_number: n })
+    const respuestas: (() => Promise<unknown>)[] = []
+    vi.mocked(getLibrary).mockImplementation(async q => (q?.parent_id === 3
+      ? (respuestas.shift() ?? (async () => ({ items: [temporada(31, 1)], total: 1 })))()
+      : { items: [DUNE, ALIEN, SERIE], total: 3, archivos: 2 }) as never)
+    vi.mocked(getLibraryItem).mockResolvedValue(SERIE)
+    localStorage.setItem('emuwarez_uploadrr_library_view', 'list')
+    await montar(<ConMarca />)
+    await esperar(() => texto().includes('Alien'))
+    await abrirFicha('Serie')
+    await esperar(() => texto().includes('Temporada 1'))
+    let soltarVieja: () => void = () => {}
+    respuestas.push(
+      () => new Promise(r => { soltarVieja = () => r({ items: [temporada(31, 1)], total: 1 }) }),
+      async () => ({ items: [temporada(31, 1), temporada(32, 2)], total: 2 }),
+    )
+    await act(async () => { invalidar() })
+    await act(async () => { invalidar() })
+    await esperar(() => texto().includes('Temporada 2'))
+    await act(async () => { soltarVieja() })
+    await act(async () => { await new Promise(r => setTimeout(r, 20)) })
+    expect(texto()).toContain('Temporada 2')
   })
 })

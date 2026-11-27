@@ -795,11 +795,16 @@ export function RequestsPage({ onNavigate }: { onNavigate?: (page: string) => vo
 
   // Solo cuenta la última petición: marcar varias casillas seguidas lanza
   // varias, y una vieja más lenta no pisa la nueva (igual que en Biblioteca).
+  // Con `silencioso`, una recarga en segundo plano que falla deja la tabla que ya había; si aún no hay respuesta
+  // buena para los filtros de ahora (la de un filtro nuevo se ha tirado), avisa como cualquier otra.
   const ultimaCarga = useRef(0)
-  const loadItems = useCallback(async (off = 0) => {
+  const sinRespuestaBuena = useRef(true)
+  const loadItems = useCallback(async (off = 0, silencioso = false) => {
     const esta = ++ultimaCarga.current
+    if (!silencioso) sinRespuestaBuena.current = true
+    const callar = silencioso && !sinRespuestaBuena.current
     setLoading(true)
-    setError(null)
+    if (!callar) setError(null)
     try {
       const res = await getRequests({
         search: debouncedSearch || undefined,
@@ -814,6 +819,8 @@ export function RequestsPage({ onNavigate }: { onNavigate?: (page: string) => vo
         offset: off,
       })
       if (esta !== ultimaCarga.current) return
+      sinRespuestaBuena.current = false
+      setError(null)
       setItems(res.items)
       setTotal(res.total)
       setOffset(off)
@@ -822,7 +829,7 @@ export function RequestsPage({ onNavigate }: { onNavigate?: (page: string) => vo
         setTotalSinFiltro(res.total)
       }
     } catch (e: unknown) {
-      if (esta === ultimaCarga.current) setError(e instanceof Error ? e.message : 'Error cargando peticiones')
+      if (esta === ultimaCarga.current && !callar) setError(e instanceof Error ? e.message : 'Error cargando peticiones')
     } finally {
       if (esta === ultimaCarga.current) setLoading(false)
     }
@@ -853,8 +860,19 @@ export function RequestsPage({ onNavigate }: { onNavigate?: (page: string) => vo
   // sync finishing (peticiones u otra), or coming back to the tab.
   useEffect(() => {
     if (lastInvalidatedAt) {
-      loadItems(0)
+      loadItems(0, true)
       if (!isUnfiltered) loadFacets()
+      // La ficha abierta también; se descarta si mientras tanto se abre otra, se cierra o ya llegó una más nueva.
+      if (selectedId !== null) {
+        const esta = ultimoDetalle.current
+        const pedida = ++pedidaFicha.current
+        Promise.all([getRequestDetail(selectedId), getReadiness(selectedId).catch(() => null)]).then(([d, rr]) => {
+          if (esta !== ultimoDetalle.current || pedida <= aplicadaFicha.current) return
+          aplicadaFicha.current = pedida
+          setDetail(d)
+          setReadiness(rr as RequestReadinessResponse | null)
+        }).catch(() => {})
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- solo cuando algo invalida la lista
   }, [lastInvalidatedAt])
@@ -863,6 +881,9 @@ export function RequestsPage({ onNavigate }: { onNavigate?: (page: string) => vo
   // Solo vale el detalle de la última petición abierta: la campana puede abrir dos seguidas, y la primera,
   // si llega la última, dejaba su ficha bajo el id de la segunda.
   const ultimoDetalle = useRef(0)
+  // Abrir y refrescar la ficha piden en orden: una respuesta más vieja que la última aplicada se tira.
+  const pedidaFicha = useRef(0)
+  const aplicadaFicha = useRef(0)
   const closeRequestDetail = () => {
     ultimoDetalle.current++
     closeDetailPath('requests')
@@ -875,6 +896,7 @@ export function RequestsPage({ onNavigate }: { onNavigate?: (page: string) => vo
 
   const openRequestDetail = async (id: number) => {
     const esta = ++ultimoDetalle.current
+    const pedida = ++pedidaFicha.current
     pushDetailPath('requests', id)
     setSelectedId(id)
     setShowCandidates(false)
@@ -884,7 +906,8 @@ export function RequestsPage({ onNavigate }: { onNavigate?: (page: string) => vo
         getRequestDetail(id),
         getReadiness(id).catch(() => null),
       ])
-      if (esta !== ultimoDetalle.current) return
+      if (esta !== ultimoDetalle.current || pedida <= aplicadaFicha.current) return
+      aplicadaFicha.current = pedida
       setDetail(d.status === 'fulfilled' ? d.value : null)
       setReadiness(rr.status === 'fulfilled' && rr.value !== null ? rr.value as RequestReadinessResponse : null)
     } catch { if (esta === ultimoDetalle.current) setDetail(null) }

@@ -177,13 +177,19 @@ export function useRefrescoPorAvisos(
   // sección pedía sus datos tres veces en el primer segundo.
   const teniaCanal = useRef(vivo)
   const primeraPasada = useRef(true)
+  // El canal volvió con la sección oculta: recarga al volver a verse.
+  const vueltaPendiente = useRef(false)
   useEffect(() => {
     const volvio = vivo && !teniaCanal.current && !primeraConexion.current
     teniaCanal.current = vivo
     const alMontar = primeraPasada.current
     primeraPasada.current = false
     if (alMontar) return
-    if (seVe && (volvio || !vivo)) recargarRef.current()
+    if (volvio && !seVe) vueltaPendiente.current = true
+    if (seVe && (volvio || !vivo || vueltaPendiente.current)) {
+      vueltaPendiente.current = false
+      recargarRef.current()
+    }
   }, [vivo, seVe])
 
   return { canalVivo: vivo }

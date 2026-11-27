@@ -14,7 +14,7 @@ import {
   tonoDeEstado, etiquetaDeEstado, cuentaAtras, duracion, etiquetaIntervalo, type TonoTarea,
 } from '../utils/tareas'
 
-const INTERVAL_OPTIONS_MINUTES = [15, 30, 45, 60, 90, 120, 180, 360, 720, 1440]
+const INTERVAL_OPTIONS_MINUTES = [15, 30, 45, 60, 90, 120, 180, 360, 720, 1440, 10080]
 const HORA_POR_DEFECTO = '04:00'
 // Cuánto se ve el «✓ Guardado» de un cambio que se guarda solo.
 const MS_CONFIRMACION = 3000
@@ -274,7 +274,9 @@ function TaskCard({ task, onChanged, onNavigate }: { task: ScheduledTask; onChan
     }
   }
 
-  const options = INTERVAL_OPTIONS_MINUTES.filter(m => m >= task.min_interval_minutes)
+  // El intervalo que tiene la tarea sale siempre, aunque no esté en la lista (los 5 min de «Vigilar instancias»).
+  const options = [...new Set([...INTERVAL_OPTIONS_MINUTES, task.interval_minutes])]
+    .filter(m => m >= task.min_interval_minutes).sort((a, b) => a - b)
   const tono = task.enabled ? tonoDeEstado(task.last_status) : 'neutro'
   const idTitulo = `${base}-titulo`
   const arreglo = task.enabled && task.last_status === 'failed' ? DONDE_SE_ARREGLA[task.task_key] : undefined
@@ -410,12 +412,14 @@ export function TasksPage({ onNavigate }: { onNavigate?: (page: string) => void 
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  const load = useCallback(async () => {
-    setError(null)
+  // Con `silencioso`, una recarga en segundo plano que falla deja las tarjetas que ya había.
+  const load = useCallback(async (silencioso = false) => {
+    if (!silencioso) setError(null)
     try {
       setTasks(await getScheduledTasks())
+      setError(null)
     } catch {
-      setError('Error al cargar las tareas automáticas')
+      if (!silencioso) setError('Error al cargar las tareas automáticas')
     } finally {
       setLoading(false)
     }
@@ -426,7 +430,7 @@ export function TasksPage({ onNavigate }: { onNavigate?: (page: string) => void 
   // "Últimas tareas ejecutadas" se actualiza en cuanto termina una, en vez de
   // hasta 30 segundos después. El sondeo se espacia a dos minutos de red de
   // seguridad mientras el canal esté vivo.
-  useRefrescoPorAvisos(['tarea-terminada'], load, {
+  useRefrescoPorAvisos(['tarea-terminada'], () => load(true), {
     cadaSinCanal: 30_000,
     cadaConCanal: 120_000,
   })
@@ -441,7 +445,7 @@ export function TasksPage({ onNavigate }: { onNavigate?: (page: string) => void 
         {!loading && !error && <ResumenTareas tasks={tasks} />}
       </div>
 
-      {loading ? <LoadingState label="Cargando tareas…" /> : error ? <ErrorState message={error} onRetry={load} /> : (
+      {loading ? <LoadingState label="Cargando tareas…" /> : error ? <ErrorState message={error} onRetry={() => load()} /> : (
         tasks.length === 0 ? (
           <EmptyState title="Sin tareas programadas" body="Las tareas aparecen aquí cuando el servidor las registra al arrancar." />
         ) : <div data-tour="tasks-content" className="tareas-lista">

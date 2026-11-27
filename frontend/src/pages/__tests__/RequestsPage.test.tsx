@@ -517,3 +517,100 @@ describe('«Subir seleccionadas» en Peticiones', () => {
     expect(titulosLote()).toEqual(['Lost (2016) - Temporada 2'])
   })
 })
+
+describe('Peticiones: lo que se recarga sola tras una sincronización', () => {
+  let invalidar: () => void = () => {}
+  function ConMarca() {
+    const [marca, setMarca] = useState(0)
+    invalidar = () => setMarca(m => m + 1)
+    return (
+      <SyncContext.Provider value={{
+        requestsSyncing: false, requestsStatus: null, startRequestsSync: vi.fn(), lastInvalidatedAt: marca, isAnySyncing: false,
+      } as never}>
+        <SeccionVisible visible><RequestsPage /></SeccionVisible>
+      </SyncContext.Provider>
+    )
+  }
+  afterEach(() => { sessionStorage.clear(); history.replaceState(null, '', '/') })
+
+  it('una recarga en segundo plano que falla deja la tabla que ya se veía', async () => {
+    await montar(<ConMarca />)
+    await esperar(() => document.querySelector('table.data-table tbody tr'))
+    vi.mocked(getRequests).mockRejectedValue(new Error('503'))
+    const antes = vi.mocked(getRequests).mock.calls.length
+    await act(async () => { invalidar() })
+    await esperar(() => vi.mocked(getRequests).mock.calls.length > antes)
+    await esperar(() => !document.querySelector('.pet-cargando'))
+    expect(document.querySelector('table.data-table tbody tr')).not.toBeNull()
+    expect(texto()).not.toContain('503')
+  })
+
+  it('la ficha abierta se vuelve a pedir y enseña lo de después de la sincronización', async () => {
+    vi.mocked(getReadiness).mockResolvedValue(null as never)
+    vi.mocked(getRequestDetail).mockResolvedValue({
+      ...DATOS[1], match: { status: 'Compatible', library_item_id: 40, library_target_id: 41 },
+    } as unknown as RequestDetailResponse)
+    await montar(<ConMarca />)
+    await esperar(() => document.querySelector('table.data-table tbody tr'))
+    await pulsar([...document.querySelectorAll('tr.clickable .lib-title-link')].find(t => t.textContent === 'Petición 2'))
+    await esperar(() => document.querySelector('.pet-veredicto'))
+    vi.mocked(getRequestDetail).mockResolvedValue({
+      ...DATOS[1], title: 'Petición 2 al día', match: { status: 'Compatible', library_item_id: 40, library_target_id: 41 },
+    } as unknown as RequestDetailResponse)
+    await act(async () => { invalidar() })
+    await esperar(() => texto().includes('Petición 2 al día'))
+    expect(vi.mocked(getRequestDetail).mock.calls.map(c => c[0])).toEqual([2, 2])
+    expect(getReadiness).toHaveBeenCalledTimes(2)
+  })
+
+  it('si la recarga silenciosa tira la de un filtro nuevo y falla, el error se ve', async () => {
+    await montar(<ConMarca />)
+    await esperar(() => document.querySelector('table.data-table tbody tr'))
+    vi.mocked(getRequests)
+      .mockImplementationOnce(() => new Promise(() => {}))
+      .mockRejectedValueOnce(new Error('503'))
+    await elegir(document.querySelector('select.form-select') as HTMLSelectElement, 'created_desc')
+    await act(async () => { invalidar() })
+    await esperar(() => texto().includes('503'))
+  })
+
+  it('dos recargas de la ficha que responden al revés: se queda la más nueva', async () => {
+    const detalle = (title: string) => ({
+      ...DATOS[1], title, match: { status: 'Compatible', library_item_id: 40, library_target_id: 41 },
+    }) as unknown as RequestDetailResponse
+    vi.mocked(getReadiness).mockResolvedValue(null as never)
+    vi.mocked(getRequestDetail).mockResolvedValue(detalle('Petición 2'))
+    await montar(<ConMarca />)
+    await esperar(() => document.querySelector('table.data-table tbody tr'))
+    await pulsar([...document.querySelectorAll('tr.clickable .lib-title-link')].find(t => t.textContent === 'Petición 2'))
+    await esperar(() => document.querySelector('.pet-veredicto'))
+    let soltarVieja: () => void = () => {}
+    vi.mocked(getRequestDetail)
+      .mockImplementationOnce(() => new Promise(r => { soltarVieja = () => r(detalle('Petición 2 vieja')) }))
+      .mockResolvedValueOnce(detalle('Petición 2 nueva'))
+    await act(async () => { invalidar() })
+    await act(async () => { invalidar() })
+    await esperar(() => texto().includes('Petición 2 nueva'))
+    await act(async () => { soltarVieja() })
+    await act(async () => { await new Promise(r => setTimeout(r, 20)) })
+    expect(texto()).toContain('Petición 2 nueva')
+    expect(texto()).not.toContain('Petición 2 vieja')
+  })
+
+  it('una recarga que falla mientras se abre la ficha no la deja sin abrir', async () => {
+    vi.mocked(getReadiness).mockResolvedValue(null as never)
+    let abrirla: () => void = () => {}
+    vi.mocked(getRequestDetail)
+      .mockImplementationOnce(() => new Promise(r => {
+        abrirla = () => r({ ...DATOS[1], match: { status: 'Compatible', library_item_id: 40, library_target_id: 41 } } as never)
+      }))
+      .mockRejectedValueOnce(new Error('503'))
+    await montar(<ConMarca />)
+    await esperar(() => document.querySelector('table.data-table tbody tr'))
+    await pulsar([...document.querySelectorAll('tr.clickable .lib-title-link')].find(t => t.textContent === 'Petición 2'))
+    await act(async () => { invalidar() })
+    await act(async () => { await new Promise(r => setTimeout(r, 20)) })
+    await act(async () => { abrirla() })
+    await esperar(() => document.querySelector('.pet-veredicto'))
+  })
+})

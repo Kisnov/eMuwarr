@@ -497,6 +497,55 @@ describe('película', () => {
     expect(nom.saveNomenclatureFields).toHaveBeenLastCalledWith(10, expect.objectContaining({ source: 'BluRay' }))
   })
 
+  it('si eMuwarez se encola y N.O.B.S no, reintentar le sube la descripción que tenía para él', async () => {
+    m(subidas.fetchTrackersParaSubir).mockResolvedValue([{ id: 'emu', nombre: 'eMuwarez' }, { id: 'nobs', nombre: 'N.O.B.S' }])
+    m(subidas.queueUpload)
+      .mockResolvedValueOnce({ status: 'queued', job: { id: 99 } } as never)
+      .mockResolvedValueOnce({ status: 'blocked', errors: ['N.O.B.S no responde'] } as never)
+      .mockResolvedValueOnce({ status: 'queued', job: { id: 100 } } as never)
+    await abrir(PELICULA)
+    await esperar(() => texto().includes('Dune WEB-DL AMZN [GRP]'))
+    await pulsar(boton('Continuar'))
+    await esperar(() => texto().includes('✓ Todo listo para subir'))
+    const casilla = (nombre: string) => [...document.querySelectorAll<HTMLLabelElement>('label.asist-casilla')]
+      .find(l => l.textContent?.trim() === nombre)!.querySelector('input')!
+    const area = (nombre: string) => document.querySelector<HTMLTextAreaElement>(`textarea[aria-label="${nombre}"]`)!
+    const escribirEn = async (el: HTMLTextAreaElement, valor: string) => {
+      await act(async () => {
+        Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(el, valor)
+        el.dispatchEvent(new Event('input', { bubbles: true }))
+      })
+    }
+    await pulsar(casilla('N.O.B.S'))
+    await escribirEn(area('Descripción propia (BBCode)'), 'Común')
+    await pulsar(casilla('Otra para N.O.B.S'))
+    await escribirEn(area('Descripción para N.O.B.S'), 'Solo N.O.B.S')
+    await pulsar(boton('Subir a eMuwarez y N.O.B.S'))
+    await esperar(() => texto().includes('Ya en cola: eMuwarez'))
+    // Con un solo destino el Resumen enseña solo la común: pasa a ser la de N.O.B.S.
+    expect(area('Descripción propia (BBCode)').value).toBe('Solo N.O.B.S')
+
+    await pulsar(boton('Subir a N.O.B.S'))
+    await esperar(() => onClose.mock.calls.length > 0)
+    expect(m(subidas.queueUpload).mock.calls.map(c => [c[8], c[9]])).toEqual([
+      [undefined, 'Común'], ['nobs', 'Solo N.O.B.S'], ['nobs', 'Solo N.O.B.S']])
+  })
+
+  it('la vista previa del nombre que responde tarde no pisa la de lo último editado', async () => {
+    await abrir(PELICULA)
+    await esperar(() => texto().includes('Dune WEB-DL AMZN [GRP]'))
+    const lenta = diferida<Awaited<ReturnType<typeof nom.previewNomenclatureFields>>>()
+    m(nom.previewNomenclatureFields).mockImplementationOnce(() => lenta.promesa)
+    await elegir(campo('Tag'), 'OTRO')
+    await esperar(() => m(nom.previewNomenclatureFields).mock.calls.some(c => c[1].tag === 'OTRO'))
+    await elegir(campo('Tag'), 'GRP')
+    await esperar(() => m(nom.previewNomenclatureFields).mock.calls.filter(c => c[1].tag === 'GRP').length === 2)
+    await act(async () => { lenta.resolver({ torrent_name: 'Dune WEB-DL AMZN [OTRO]', internal_mkv_title: 'Dune.mkv' } as never) })
+    await act(async () => { await new Promise(r => setTimeout(r, 20)) })
+    expect(texto()).toContain('Dune WEB-DL AMZN [GRP]')
+    expect(texto()).not.toContain('AMZN [OTRO]')
+  })
+
   it('un source que no es WEB-DL quita el proveedor', async () => {
     await abrir(PELICULA)
     await esperar(() => campo('Proveedor'))
@@ -796,6 +845,31 @@ describe('varios capítulos de una temporada', () => {
   })
 })
 
+describe('varios capítulos: respuestas tardías al cambiar de capítulo', () => {
+  it('el proveedor que TMDb sugiere para un capítulo no cae en el siguiente', async () => {
+    m(biblioteca.getLibrary).mockResolvedValue({ items: [E1, E2], total: 2 } as never)
+    m(nom.getNomenclatureFields).mockImplementation(async id => respuestaCampos({
+      title: 'Serie', tag: `G${id}`, provider: id === 21 ? undefined : 'AMZN' }) as never)
+    const sugerencia = diferida<Awaited<ReturnType<typeof biblioteca.suggestProvider>>>()
+    m(biblioteca.suggestProvider).mockImplementation(() => sugerencia.promesa)
+    await abrir(TEMPORADA)
+    await pulsar(await esperar(() => tarjeta('Selección de capítulos')))
+    await pulsar(boton('E01'))
+    await pulsar(boton('E02'))
+    await pulsar(boton('Continuar'))
+    await esperar(() => texto().includes('Serie WEB-DL [G21]'))
+    await esperar(() => m(biblioteca.suggestProvider).mock.calls.length === 1, 3000)
+    expect(biblioteca.suggestProvider).toHaveBeenCalledWith(21)
+
+    await elegir(document.querySelector<HTMLSelectElement>('.modal-body > div > select') ?? undefined, '22')
+    await esperar(() => texto().includes('Serie WEB-DL AMZN [G22]'))
+    await act(async () => { sugerencia.resolver({ suggested: 'NF' } as never) })
+    await act(async () => { await new Promise(r => setTimeout(r, 20)) })
+    expect(campo('Proveedor')!.value).toBe('AMZN')
+    expect(texto()).toContain('Serie WEB-DL AMZN [G22]')
+  })
+})
+
 describe('varias temporadas de una serie', () => {
   beforeEach(() => {
     m(biblioteca.getLibrary).mockResolvedValue({ items: [T1, T2], total: 2 } as never)
@@ -831,6 +905,26 @@ describe('varias temporadas de una serie', () => {
     expect(m(subidas.queueUpload).mock.calls[0][4]).toEqual({ source: 'WEB-DL', provider: undefined, tag: 'GRP', title: 'Serie' })
     expect(m(subidas.queueUpload).mock.calls[0][5]).toBeUndefined()
     mismoLote()
+  })
+
+  it('desde una petición de la temporada 2, subir solo la 1 no la enlaza a la petición', async () => {
+    m(getRequestDetail).mockResolvedValue({ title: 'Serie S02', points: null } as never)
+    await abrir(SERIE, { preselect: { season: 2 }, requestId: 8 })
+    await pulsar(await esperar(() => boton('Temporada 2')))
+    await pulsar(boton('Temporada 1'))
+    await pulsar(boton('Continuar'))
+    await esperar(() => texto().includes('✓ 2 capítulo(s) listos'))
+    expect(temporada.previewSeasonPack).toHaveBeenCalledWith(31, undefined, undefined)
+    await pulsar(boton('Continuar'))
+    await esperar(() => texto().includes('✓ Todo listo para subir'))
+    const peticion = () => [...document.querySelectorAll('.asist-datos dt')].find(d => d.textContent === 'Petición')
+      ?.nextElementSibling?.textContent ?? ''
+    await esperar(() => peticion())
+    expect(peticion()).not.toContain('Cubre')
+
+    await pulsar(boton('Subir a eMuwarez'))
+    await esperar(() => onClose.mock.calls.length > 0)
+    expect(m(subidas.queueUpload).mock.calls.map(c => [c[0], c[5]])).toEqual([[31, undefined]])
   })
 
   it('a varios trackers: una subida por temporada y tracker en el mismo lote; la que uno no admite se salta para él', async () => {

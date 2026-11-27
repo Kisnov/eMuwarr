@@ -40,7 +40,7 @@ export function ResumenSubida({ a }: { a: Asistente }) {
     || (reglasDe(id)?.some(r => r.tracker === preselect.tracker && r.permitido) ?? true)
   const cubiertos = !aSuTracker ? 0 : esTanda
     ? filas.filter(f => !f || (peticionCubre(preselect, f) && vaASuTracker(f.id))).length
-    : requestId != null ? 1 : 0
+    : requestId != null && (!objetivo || peticionCubre(preselect, objetivo)) ? 1 : 0
 
   const { yaHayEn, peticion } = useResumen({
     ids, trackers: destinos, requestId, cubiertos,

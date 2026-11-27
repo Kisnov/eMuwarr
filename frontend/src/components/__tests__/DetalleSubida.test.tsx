@@ -65,7 +65,9 @@ describe('detalle de una subida completada', () => {
     const chip = [...document.querySelectorAll('[role="status"] .badge')].find(b => b.textContent === 'Pendiente de moderación')!
     // La ayuda se abre también con el teclado o al tocarlo: el chip coge el foco y su descripción ya está montada.
     expect(chip.getAttribute('tabindex')).toBe('0')
-    expect(document.body.textContent).toContain('cada 6 horas')
+    // La cadencia de «Leer tus subidas» se cambia en Tareas: la ayuda no da una cifra fija.
+    expect(document.body.textContent).toContain('la tarea «Leer tus subidas»')
+    expect(document.body.textContent).not.toContain('cada 6 horas')
     expect(boton('Ver registro')).toBeDefined()
   })
 

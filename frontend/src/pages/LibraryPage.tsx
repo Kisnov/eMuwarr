@@ -209,6 +209,17 @@ export function LibraryPage({ onNavigate }: { onNavigate?: (page: string) => voi
   // Keeps /library/:id in sync with whichever item's detail page is open —
   // works uniformly for a movie, series, season, or episode row, since they
   // all share the same library_items.id regardless of item_type.
+  // Pide la ficha entera: una respuesta más vieja que la última aplicada se tira.
+  const pedidaFicha = useRef(0)
+  const aplicadaFicha = useRef(0)
+  const pedirFicha = useCallback((id: number) => {
+    const pedida = ++pedidaFicha.current
+    getLibraryItem(id).then(full => {
+      if (pedida <= aplicadaFicha.current) return
+      aplicadaFicha.current = pedida
+      setSelected(prev => (prev && prev.id === id ? full : prev))
+    }).catch(() => {})
+  }, [])
   const openDetail = useCallback((item: LibraryItemResponse) => {
     pushDetailPath('library', item.id)
     setSelected(item)
@@ -216,10 +227,8 @@ export function LibraryPage({ onNavigate }: { onNavigate?: (page: string) => voi
     // (only the single-item GET computes the canonical "Serie (Año)"-style
     // title, to avoid a parent-walk query per list row) — refresh once so
     // the dedicated page ends up with the full title instead of the raw one.
-    getLibraryItem(item.id).then(full => {
-      setSelected(prev => (prev && prev.id === item.id ? full : prev))
-    }).catch(() => {})
-  }, [])
+    pedirFicha(item.id)
+  }, [pedirFicha])
   const closeDetail = useCallback(() => {
     closeDetailPath('library')
     setSelected(null)
@@ -390,25 +399,26 @@ export function LibraryPage({ onNavigate }: { onNavigate?: (page: string) => voi
     searchProvider, searchQuality, searchSource, searchGroup, filterEmu, filterAporte, porIdentificar, sortBy])
   const [cargandoMas, setCargandoMas] = useState(false)
   const [fallaMas, setFallaMas] = useState(false)
-  const load = useCallback(async () => {
+  // Con `silencioso`, una recarga en segundo plano que falla deja la lista que ya había.
+  const load = useCallback(async (silencioso = false) => {
     const esta = ++ultimaCarga.current
     recargaPendiente.current = false
     cargando.current = true
     setLoading(true)
-    setError(null)
+    if (!silencioso) setError(null)
     setFallaMas(false)
     // Una tanda de "Cargar más" en marcha ya no vale: su respuesta se tira y el botón no espera por ella.
     setCargandoMas(false)
     try {
       const result = await consulta(offset)
-      if (esta === ultimaCarga.current) startTransition(() => setData(result))
+      if (esta === ultimaCarga.current) { setError(null); startTransition(() => setData(result)) }
     } catch {
-      if (esta === ultimaCarga.current) setError('Error al cargar la biblioteca')
+      if (esta === ultimaCarga.current && !silencioso) setError('Error al cargar la biblioteca')
     } finally {
       if (esta === ultimaCarga.current) {
         cargando.current = false
         setLoading(false)
-        if (recargaPendiente.current) load()
+        if (recargaPendiente.current) load(true)
       }
     }
   }, [consulta, offset])
@@ -560,7 +570,9 @@ export function LibraryPage({ onNavigate }: { onNavigate?: (page: string) => voi
   useEffect(() => {
     if (!lastInvalidatedAt) return
     if (cargando.current) recargaPendiente.current = true
-    else load()
+    else load(true)
+    // La ficha abierta también, para que enseñe lo que cambió la sincronización.
+    if (selected) pedirFicha(selected.id)
     // eslint-disable-next-line react-hooks/exhaustive-deps -- `load` cambia con cada filtro y recargaría dos veces (ver arriba)
   }, [lastInvalidatedAt])
 
@@ -602,9 +614,7 @@ export function LibraryPage({ onNavigate }: { onNavigate?: (page: string) => voi
     loadRef.current()
     contarPorIdentificar()
     // En la ficha, el título, el póster y los botones cambian con la ficha confirmada.
-    if (selected) {
-      getLibraryItem(selected.id).then(full => setSelected(prev => (prev && prev.id === full.id ? full : prev))).catch(() => {})
-    }
+    if (selected) pedirFicha(selected.id)
   }
 
   // Enter aplica la búsqueda ya, sin esperar al retardo. El cambio de `debouncedSearch` es lo que recarga: llamar
@@ -907,7 +917,7 @@ export function LibraryPage({ onNavigate }: { onNavigate?: (page: string) => voi
           </div>
         )
       ) : error ? (
-        <ErrorState message={error} onRetry={load} />
+        <ErrorState message={error} onRetry={() => load()} />
       ) : items.length === 0 && !filtrando ? (
         <EmptyState
           icon={<IconoLibros />}

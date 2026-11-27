@@ -1,5 +1,6 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useContext, useRef } from 'react'
 import { getLibrary } from '../api/library'
+import { SyncContext } from '../context/SyncContext'
 import type { LibraryItemResponse, InstanceSafeResponse } from '../types/api'
 import { LibraryTreeRow, type LibraryActionKind } from './LibraryTreeRow'
 import { useTooltip } from './Tooltip'
@@ -26,13 +27,29 @@ export function LibraryChildrenSection({ parentId, childType, title, instances, 
   const [loading, setLoading] = useState(true)
   const [reloadKey, setReloadKey] = useState(0)
 
+  // Solo cuenta la última petición, la de entrar o la de tras una sincronización: una más vieja no pisa la nueva.
+  const ultimaPedida = useRef(0)
   useEffect(() => {
+    const esta = ++ultimaPedida.current
     setLoading(true)
     getLibrary({ parent_id: parentId, type: childType, limit: 500 })
-      .then(r => setChildren(r.items))
-      .catch(() => setChildren([]))
-      .finally(() => setLoading(false))
+      .then(r => { if (esta === ultimaPedida.current) setChildren(r.items) })
+      .catch(() => { if (esta === ultimaPedida.current) setChildren([]) })
+      .finally(() => { if (esta === ultimaPedida.current) setLoading(false) })
   }, [parentId, childType, reloadKey])
+
+  // Tras una sincronización se vuelven a pedir sin «Cargando…»: la tabla, su desplazamiento y lo desplegado se quedan.
+  // Si falla, se queda lo que había.
+  const lastInvalidatedAt = useContext(SyncContext)?.lastInvalidatedAt ?? 0
+  useEffect(() => {
+    if (!lastInvalidatedAt) return
+    const esta = ++ultimaPedida.current
+    getLibrary({ parent_id: parentId, type: childType, limit: 500 })
+      .then(r => { if (esta === ultimaPedida.current) setChildren(r.items) })
+      .catch(() => {})
+      .finally(() => { if (esta === ultimaPedida.current) setLoading(false) })
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- solo cuando algo invalida la lista
+  }, [lastInvalidatedAt])
 
   const emptyLabel = childType === 'season' ? 'Sin temporadas' : 'Sin capítulos'
 

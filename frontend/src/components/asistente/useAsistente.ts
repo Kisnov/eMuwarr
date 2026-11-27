@@ -775,7 +775,7 @@ export function useAsistente({ item, onClose: onCloseProp, onDone, onNavigate, p
       try {
         const res = await suggestProvider(targetId)
         // Como setField('provider', …, false) fuera de una temporada, sin depender de él: se recrea en cada pintado.
-        if (res.suggested) setFields(prev => ({ ...prev, provider: res.suggested }))
+        if (res.suggested && objetivoActual.current === targetId) setFields(prev => ({ ...prev, provider: res.suggested }))
       } catch { /* non-blocking — leave "Sin provider" */ }
       finally { setDetectingProvider(false) }
     }, 500)
@@ -927,10 +927,15 @@ export function useAsistente({ item, onClose: onCloseProp, onDone, onNavigate, p
   useEffect(() => {
     if (targetIsSeason) return
     if (targetId == null || !Object.keys(fields).length) return
+    // Una respuesta lenta de lo editado antes no pisa la de ahora.
+    let vigente = true
     const t = setTimeout(async () => {
-      try { setPreview(await previewNomenclatureFields(targetId, fields, false)) } catch { /* non-blocking */ }
+      try {
+        const r = await previewNomenclatureFields(targetId, fields, false)
+        if (vigente) setPreview(r)
+      } catch { /* non-blocking */ }
     }, 400)
-    return () => clearTimeout(t)
+    return () => { vigente = false; clearTimeout(t) }
   }, [targetId, targetIsSeason, fields])
 
   // Season target: same debounced live recompute, but cheap (no disk/DB
@@ -1097,8 +1102,15 @@ export function useAsistente({ item, onClose: onCloseProp, onDone, onNavigate, p
     const yaEnCola = () => {
       if (!encolados.length) return ''
       setTrackersElegidos(t => t.filter(x => !encolados.some(e => e.id === x)))
+      // Si queda un solo destino con descripción propia, pasa a ser la común: con uno solo es la que se enseña y se sube.
+      const quedan = destinos.filter(d => !encolados.some(e => e.id === d.id))
+      const propia = quedan.length === 1 ? descripcionPorTracker[quedan[0].id] : undefined
+      if (propia !== undefined) { setDescripcion(propia); descripcionPropia(quedan[0].id, false) }
       return ` Ya en cola: ${encolados.map(e => e.nombre).join(', ')}; «Subir» reintenta solo lo que falta.`
     }
+    // Como en la tanda: una petición de otra temporada o capítulo no queda enlazada.
+    const fila = [item, ...seasons, ...episodes].find(x => x.id === targetId)
+    const peticion = !fila || peticionCubre(preselect, fila) ? requestId : undefined
     try {
       await saveNomenclatureFields(targetId, fields)
       const remuxSnapshot = remuxPreview
@@ -1114,7 +1126,7 @@ export function useAsistente({ item, onClose: onCloseProp, onDone, onNavigate, p
                 { source: fields.source, tag: fields.tag, title: fields.title }, proveedorElegido, targetId,
                 idiomasPorTemporada.get(targetId))
             : undefined,
-          requestId,
+          peticion,
           undefined,
           opcionesTracker,
           // eMuwarez no lo manda: es lo de siempre.
