@@ -390,4 +390,29 @@ describe('Biblioteca: lo que se recarga sola tras una sincronización', () => {
     expect(document.querySelector('.hijos-aviso')).toBeNull()
     await esperar(() => texto().includes('Temporada 2'))
   })
+
+  it('dos recargas de la tabla de temporadas que responden al revés: se queda la más nueva', async () => {
+    const temporada = (id: number, n: number) => item(id, `Serie - Temporada ${n}`, { item_type: 'season', parent_id: 3, season_number: n })
+    const respuestas: (() => Promise<unknown>)[] = []
+    vi.mocked(getLibrary).mockImplementation(async q => (q?.parent_id === 3
+      ? (respuestas.shift() ?? (async () => ({ items: [temporada(31, 1)], total: 1 })))()
+      : { items: [DUNE, ALIEN, SERIE], total: 3, archivos: 2 }) as never)
+    vi.mocked(getLibraryItem).mockResolvedValue(SERIE)
+    localStorage.setItem('emuwarez_uploadrr_library_view', 'list')
+    await montar(<ConMarca />)
+    await esperar(() => texto().includes('Alien'))
+    await abrirFicha('Serie')
+    await esperar(() => texto().includes('Temporada 1'))
+    let soltarVieja: () => void = () => {}
+    respuestas.push(
+      () => new Promise(r => { soltarVieja = () => r({ items: [temporada(31, 1)], total: 1 }) }),
+      async () => ({ items: [temporada(31, 1), temporada(32, 2)], total: 2 }),
+    )
+    await act(async () => { invalidar() })
+    await act(async () => { invalidar() })
+    await esperar(() => texto().includes('Temporada 2'))
+    await act(async () => { soltarVieja() })
+    await act(async () => { await new Promise(r => setTimeout(r, 20)) })
+    expect(texto()).toContain('Temporada 2')
+  })
 })
