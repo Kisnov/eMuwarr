@@ -115,8 +115,7 @@ export function LibraryDetailPage({ item, instances, onBack, onSelect, onAction,
   const tarjetasSecundarias = (
     <>
       {/* En una serie o temporada, el valor de la fila solo está
-          relleno cuando TODOS los capítulos coinciden: es la señal que
-          usa la regla del pack. Para enseñar es pobre (una temporada
+          relleno cuando TODOS los capítulos coinciden. Para enseñar es pobre (una temporada
           con x264 y x265 salía con un guion), así que la ficha usa la
           suma de lo que hay debajo: "x264, x265". */}
       <Card title="Información técnica" icon={<TechInfoCardIcon />} {...TARJETA}>

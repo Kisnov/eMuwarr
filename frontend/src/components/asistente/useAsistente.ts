@@ -114,11 +114,9 @@ export function useAsistente({ item, onClose: onCloseProp, onDone, onNavigate, p
   const objetivoActual = useRef(targetId)
   objetivoActual.current = targetId
 
-  // Season upload mode. A season that can't ship as a PACK (episodes disagree
-  // on codec/audio/resolution, or it's incomplete) can still have its episodes
-  // uploaded one by one: those rules exist because a pack carries a single
-  // release name for everything inside it, and an individual episode carries
-  // its own, which can state its own codec and audio truthfully.
+  // Season upload mode. A season that can't ship as a PACK (it's incomplete,
+  // or its episodes disagree on HDR/DV) can still have its episodes uploaded
+  // one by one.
   const [seasonUploadMode, setSeasonUploadMode] = useState<'whole' | 'episodes' | null>(null)
   const [episodeSelected, setEpisodeSelected] = useState<Set<number>>(new Set())
   // Nomenclature is generated for EVERY selected episode up front, not lazily

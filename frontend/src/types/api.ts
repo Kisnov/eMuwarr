@@ -199,8 +199,8 @@ export interface LibraryItemResponse {
   peticiones_debajo?: PeticionDeLaFicha[] | null
   // Todos los valores técnicos presentes bajo una serie o temporada
   // ("x264, x265"), solo para enseñar. Los campos sueltos siguen guardando el
-  // valor único (o null cuando los capítulos no coinciden), que es lo que usa
-  // la regla del pack. Solo llega en la ficha, no en la lista.
+  // valor único (o null cuando los capítulos no coinciden). Solo llega en la
+  // ficha, no en la lista.
   rollup_all?: Record<string, string> | null
   providers_all?: { code: string; label: string | null }[] | null
   id: number

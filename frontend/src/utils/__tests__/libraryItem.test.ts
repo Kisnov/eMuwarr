@@ -3,10 +3,7 @@
  *
  * Hasta hoy el frontend no tenía con qué probarse (hallazgo 7.1 de la
  * auditoría): 20.200 líneas verificadas a ojo. Se empieza por aquí porque es
- * donde vive la lógica que habilita o bloquea los botones, y porque
- * `SEASON_CONSISTENCY_FIELDS` es la última copia viva de la regla del pack
- * (hallazgo 2.1): el backend la genera desde una definición, el navegador no
- * puede llamar a Python y la tiene escrita a mano.
+ * donde vive la lógica que habilita o bloquea los botones.
  */
 import { describe, it, expect } from 'vitest'
 import {
@@ -48,7 +45,6 @@ describe('una temporada lista para subir como pack', () => {
     // deshabilitada sin nada que enseñar al pasar por encima.
     const rotas = [
       item({ local_status: 'Faltante' }),
-      item({ video_codec: null }),
       item({ has_spanish_ok: 0 }),
       item({ has_spanish_ok: null }),
     ]
@@ -64,10 +60,10 @@ describe('una temporada lista para subir como pack', () => {
     expect(seasonNotReadyReason(t)).toBeNull()
   })
 
-  it('no lo está si no coinciden en códec de vídeo', () => {
+  it('lo está aunque no coincidan en códec de vídeo: eso solo avisa', () => {
     const t = item({ video_codec: null })
-    expect(isSeasonReady(t)).toBe(false)
-    expect(seasonNotReadyReason(t)).toContain('códec')
+    expect(isSeasonReady(t)).toBe(true)
+    expect(seasonNotReadyReason(t)).toBeNull()
   })
 
   it('no lo está sin castellano', () => {

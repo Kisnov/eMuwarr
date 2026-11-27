@@ -582,8 +582,6 @@ def _pack_blocked_reason(conn: sqlite3.Connection, matched_item: dict, req: dict
     """
     if req.get("req_scope") == "episode":
         return None
-    from .season_pack import can_pack_from_rollup
-
     season_id = _scoped_library_id(conn, matched_item, req)
     row = conn.execute(
         "SELECT * FROM library_items WHERE id = ? AND item_type = 'season'", (season_id,)
@@ -597,13 +595,9 @@ def _pack_blocked_reason(conn: sqlite3.Connection, matched_item: dict, req: dict
         # En otro tracker lo que vale es lo que admiten sus normas (latino, catalán…), no el castellano de eMuwarez.
         if reglas_para_subir(conn, season, tracker).permitido:
             season["has_spanish_ok"] = 1
-    if can_pack_from_rollup(season):
+    if season.get("has_spanish_ok") == 1:
         return None
-    if not season.get("video_codec"):
-        falta = "los capítulos no coinciden en códec de vídeo"
-    else:
-        falta = "algún capítulo no tiene castellano"
-    return (f"La temporada no puede subirse como pack: {falta}. "
+    return ("La temporada no puede subirse como pack: algún capítulo no tiene castellano. "
             "Sus capítulos sí se pueden subir uno a uno.")
 
 
@@ -732,8 +726,8 @@ def clasificar_peticion(
         mi_usuario = mis_usuarios(conn)
     cls = classify_request_match(req, efectiva, id_match=id_match, title_match=title_match,
                                  base_confidence=base_confidence, mi_usuario=mi_usuario)
-    # Una petición de temporada o serie completa se cubre con un PACK. Si ese pack no puede armarse (los capítulos no
-    # coinciden en resolución o en códec de vídeo), "Compatible" prometería algo que la subida va a rechazar: baja
+    # Una petición de temporada o serie completa se cubre con un PACK. Si ese pack no puede armarse (algún capítulo
+    # sin castellano), "Compatible" prometería algo que la subida va a rechazar: baja
     # a Parcial y se dice por qué. Los capítulos sueltos sí se pueden subir, y el motivo lo dice.
     if cls["status"] == "Compatible":
         motivo = _pack_blocked_reason(conn, item, req)

@@ -469,8 +469,14 @@ const OTHER_CONDITION_ROWS: OtherRow[] = [
   {
     applies: 'Pack de temporada',
     condition: 'Los capítulos no coinciden en códec de vídeo',
+    verdict: 'warn', verdictLabel: 'No bloquea',
+    why: 'Lo recomendable es que coincidan, pero no está prohibido. El asistente avisa de qué capítulos tienen cada uno y el nombre del pack lleva el de más capítulos (si empatan, el del primero); tú decides si lo subes.',
+  },
+  {
+    applies: 'Pack de temporada',
+    condition: 'Unos capítulos son HDR o DV y otros no',
     verdict: 'blocked', verdictLabel: 'Bloquea',
-    why: 'Es lo único que tiene que coincidir: el nombre solo puede declarar un códec, y un pack con capítulos en x264 y en x265 no es un release, son dos.',
+    why: 'El nombre del pack lo dice una sola vez, y un pack no puede ser HDR y SDR a la vez. Sus capítulos sí se pueden subir uno a uno.',
   },
   {
     applies: 'Pack de temporada',
@@ -482,7 +488,7 @@ const OTHER_CONDITION_ROWS: OtherRow[] = [
     applies: 'Pack de temporada',
     condition: 'Los capítulos no coinciden en source, códec de audio, idiomas de audio o subtítulos',
     verdict: 'warn', verdictLabel: 'No bloquea',
-    why: 'Se resuelve en el nombre en vez de rechazar el pack: los audios se suman (ver «El audio de un pack: cuándo aparece CUSTOM») y el source que no coincida se deja fuera del nombre, porque declarar uno solo sería mentir sobre el resto de capítulos.',
+    why: 'Se resuelve en el nombre en vez de rechazar el pack: los audios se suman (ver «El audio de un pack: cuándo aparece CUSTOM») y con el source el asistente avisa y propone el de más capítulos, que puedes cambiar en Source.',
   },
   {
     applies: 'Cualquiera', condition: 'El contenido está Faltante',
@@ -607,8 +613,7 @@ function UploadConditionsContent() {
       <p className="guia-texto">
         Los canales cuentan como parte de la pista: 5.1 en unos capítulos y 2.0 en otros ya es
         CUSTOM, porque quien se baje el pack no recibe 5.1 en todos. Y <code>CUSTOM</code> es
-        <strong> solo por el audio</strong>: un source o un proveedor mezclados no lo activan, esos
-        simplemente se caen del nombre. Va justo antes del proveedor
+        <strong> solo por el audio</strong>: un source o un proveedor mezclados no lo activan. Va justo antes del proveedor
         (<code>… 1080p CUSTOM BluRay x264 …</code>), como en el resto del catálogo de eMuwarez.
       </p>
       <div className="guia-desborde-x">
@@ -651,7 +656,7 @@ function UploadConditionsContent() {
 
       <h3 className="guia-h4 guia-h4-sep">Una temporada con datos mezclados</h3>
       <p className="guia-texto guia-texto-inicio">
-        Como el source, el códec de audio y los idiomas ya no tienen que coincidir, una temporada
+        Como el source, los códecs y los idiomas ya no tienen que coincidir, una temporada
         puede tener <strong>varios valores</strong> en esos campos. La ficha te los enseña todos
         (<code>WEB-DL, BluRay</code>) en vez de dejarlos en blanco. Pero al cruzarla con una
         petición, un campo mezclado se comporta como <strong>«no lo sé»</strong>: no puede

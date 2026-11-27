@@ -22,10 +22,9 @@ def rollup_all_values(conn: sqlite3.Connection, item: dict) -> Optional[dict]:
     """TODOS los valores técnicos presentes bajo una serie o temporada.
 
     Las columnas de rollup de la fila guardan el valor SOLO cuando todos los
-    capítulos coinciden, y NULL cuando no (_update_season_rollup). Eso es lo
-    que hace de señal de acuerdo para la regla del pack, así que no se puede
-    tocar. Pero como dato para enseñar es pobre: una temporada con capítulos
-    en x264 y x265 salía con un guion, y ese guion no dice qué tienes.
+    capítulos coinciden, y NULL cuando no (_update_season_rollup). Como dato
+    para enseñar es pobre: una temporada con capítulos en x264 y x265 salía
+    con un guion, y ese guion no dice qué tienes.
 
     Esto lo calcula aparte, recorriendo los capítulos: "x264, x265". Es solo
     para la ficha; nada decide nada con esto.

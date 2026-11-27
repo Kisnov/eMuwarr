@@ -49,21 +49,6 @@ def test_los_estados_de_preparacion_de_peticiones_tienen_etiqueta_en_castellano(
     assert usadas <= acciones, f"acciones sin etiqueta: {sorted(usadas - acciones)}"
 
 
-def test_la_regla_del_pack_coincide():
-    """utils/libraryItem.ts predice lo que hará season_pack. Es la última copia
-    viva del hallazgo 2.1: el backend ya genera su SQL y su predicado desde una
-    definición, pero el frontend tiene la suya escrita a mano."""
-    from emuwarez_uploadrr.services.season_pack import _PACK_ROLLUP_FIELDS
-
-    fuente = _texto("utils/libraryItem.ts")
-    m = re.search(r"SEASON_CONSISTENCY_FIELDS[^=]*=\s*\[(.*?)\]", fuente, re.S)
-    assert m, "no se encontró SEASON_CONSISTENCY_FIELDS"
-    campos = tuple(re.findall(r"key:\s*'([^']+)'", m.group(1)))
-    assert campos == tuple(_PACK_ROLLUP_FIELDS), (
-        f"\nfrontend: {campos}\nbackend:  {tuple(_PACK_ROLLUP_FIELDS)}"
-    )
-
-
 def test_el_vocabulario_de_estados_coincide():
     """Los conjuntos del frontend son PREDICCIONES de lo que el backend
     aceptará: qué botón se habilita. Si se separan, la interfaz ofrece algo que

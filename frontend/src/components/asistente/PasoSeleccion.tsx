@@ -65,8 +65,8 @@ export function PasoSeleccion({ a }: { a: Asistente }) {
             key: 'whole' as const,
             title: 'Temporada entera',
             body: reglasPack
-              ? 'Un único release con todos los capítulos. Exige tenerlos todos, que coincidan en códec de vídeo, y que el tracker admita los idiomas de todos.'
-              : 'Un único release con todos los capítulos. Exige tenerlos todos, que coincidan en códec de vídeo, y que todos tengan audio en castellano o, si está en otro idioma, al menos subtítulos en castellano.',
+              ? 'Un único release con todos los capítulos. Exige tenerlos todos, que coincidan en HDR/DV y que el tracker admita los idiomas de todos.'
+              : 'Un único release con todos los capítulos. Exige tenerlos todos, que coincidan en HDR/DV y que todos tengan audio en castellano o, si está en otro idioma, al menos subtítulos en castellano.',
             reason: seasonPackReason,
             trackers: reglasPack ? resumenPorTracker(reglasPack) : null,
           },
@@ -168,13 +168,8 @@ export function PasoSeleccion({ a }: { a: Asistente }) {
   )
 
   // Step 0 de una serie: la lista de temporadas a marcar.
-  // Only a season with EVERY episode Disponible AND every episode agreeing
-  // on codec/audio/idiomas/subs/resolución/source can go as a season pack
-  // (build_season_pack_plan() blocks otherwise) — incomplete/inconsistent
-  // ones are shown greyed out and unselectable instead of letting the user
-  // pick one and fail later. isSeasonReady/seasonNotReadyReason (shared with
-  // LibraryActionButtons' own "Subir" button) only know about the
-  // consistency check; the "incomplete" message is layered on here.
+  // Solo una temporada entera y con castellano en todos los capítulos va como pack (build_season_pack_plan
+  // bloquea las demás): las que no, salen en gris con el motivo de seasonNotReadyReason.
   // Con más de un tracker, la que admite alguno (reglasDe); solo con eMuwarez, su regla.
   const selectableSeasons = seasons.filter(s => !seasonNotReadyReason(s, admitenEste(s)))
   // The series' own name is redundant here (already the wizard's title) —

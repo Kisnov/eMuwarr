@@ -57,34 +57,6 @@ export function tituloEnFicha(item: LibraryItemResponse): string {
   return listDisplayTitle(item)
 }
 
-// A season with EVERY episode Disponible can still fail
-// build_season_pack_plan()'s per-episode consistency check (codec/audio/
-// idiomas/resolución/source must all match) — the season row's own rollup
-// fields (services/library.py's _update_season_rollup, populated at sync
-// time) are None precisely when episodes disagree on one of them, so this is
-// the same signal wherever a "Subir" trigger needs it (the upload wizard's
-// multi-season picker, and the season's own action button), without
-// duplicating the check or running the heavier per-episode plan just to grey
-// out a button/card.
-//
-// Subtitles are NOT in this list: eMuwarez takes a pack whose episodes carry
-// different subtitle tracks, and doesn't need them at all when the audio is
-// already Castilian, so they get the looser has_spanish_ok check below instead
-// of being required to match. Mirrors season_pack.py's
-// _CONSISTENCY_FIELDS/_spanish_errors.
-// Lo único que un pack exige que coincida en todos sus capítulos. Copia de
-// season_pack._CONSISTENCY_FIELDS (el frontend no puede llamar a Python): si
-// allí cambia, aquí también. Antes eran cinco campos; el resto dejó de
-// bloquear y ahora se resume en el nombre del pack. La resolución mezclada
-// tampoco bloquea: el asistente avisa y el pack lleva la de más capítulos.
-const SEASON_CONSISTENCY_FIELDS: { key: keyof LibraryItemResponse; label: string }[] = [
-  { key: 'video_codec', label: 'el códec de vídeo' },
-]
-
-function seasonInconsistentField(item: LibraryItemResponse) {
-  return SEASON_CONSISTENCY_FIELDS.find(f => !item[f.key])
-}
-
 // 1 = every held episode carries Castilian, in its audio or its subtitles.
 // 0 or null both block the pack: null means we never read some episode's
 // tracks, and "we didn't look" is not evidence that the rule is met.
@@ -94,18 +66,13 @@ function seasonMissingSpanish(item: LibraryItemResponse): boolean {
 
 export function isSeasonReady(item: LibraryItemResponse): boolean {
   if (item.item_type !== 'season') return true
-  return item.local_status === 'Disponible'
-    && !seasonInconsistentField(item)
-    && !seasonMissingSpanish(item)
+  return item.local_status === 'Disponible' && !seasonMissingSpanish(item)
 }
 
 // An episode uploaded ON ITS OWN answers only for itself: you have to hold the
-// file, and it has to carry Castilian somewhere. The season pack's rules —
-// every episode agreeing on codec/audio/resolution/source, the whole season
-// present — deliberately do NOT apply here, and that is the entire point of
-// the per-episode mode: those rules exist because a pack ships ONE release
-// name for everything inside it, while each episode ships its own, which can
-// state its own codec and audio truthfully.
+// file, and it has to carry Castilian somewhere. The season pack's rule —
+// the whole season present — deliberately does NOT apply here, and that is
+// the entire point of the per-episode mode.
 //
 // `admiten`: con más de un tracker con clave, los que lo admiten por sus normas de idioma (el asistente,
 // /upload/elegibilidad). Entonces decide eso y no la regla de eMuwarez; sin él, la de siempre.
@@ -140,10 +107,6 @@ export function seasonNotReadyReason(item: LibraryItemResponse, admiten?: readon
   if (item.item_type !== 'season') return null
   if (item.local_status !== 'Disponible') {
     return 'Temporada incompleta: no todos los capítulos están Disponibles.'
-  }
-  const field = seasonInconsistentField(item)
-  if (field) {
-    return `Los capítulos de esta temporada no coinciden en ${field.label}. Revísalos antes de subir el pack.`
   }
   if (admiten) {
     return admiten.length ? null : 'Ningún tracker con clave admite los idiomas de todos los capítulos de esta temporada.'

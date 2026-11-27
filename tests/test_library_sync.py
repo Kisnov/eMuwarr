@@ -818,16 +818,11 @@ def test_faltante_group_orders_by_missing_since_not_arr_added(mem_conn):
     assert faltante_titles == ["Recently Missing", "Old Missing Recently Added"]
 
 
-def test_unique_content_excludes_season_with_inconsistent_episodes(mem_conn):
-    """Group 2 ("Contenido único") must not recommend a season whose own
-    rollup fields aren't all filled in — that only happens when every
-    episode agrees (_update_season_rollup) — since build_season_pack_plan
-    would block the actual upload anyway. Genuinely unique, but not
-    actually uploadable, so it shouldn't be recommended as if it were.
-
-    Subtitles are NOT one of those fields any more: they may differ between
-    episodes as long as all of them carry Castilian, so the disqualifying
-    signal for them is has_spanish_subs, not subtitle_languages being NULL."""
+def test_unique_content_excludes_season_without_castilian(mem_conn):
+    """Group 2 ("Contenido único") must not recommend a season that
+    build_season_pack_plan would block anyway: one with an episode without
+    Castilian. Episodes that differ in codec, resolution or subtitles (rollup
+    NULL) only warn, so those seasons are recommended."""
     from emuwarez_uploadrr.services.library import get_dashboard_recommendations
 
     mem_conn.execute(
@@ -844,8 +839,8 @@ def test_unique_content_excludes_season_with_inconsistent_episodes(mem_conn):
         "'1080p', 'WEB-DL', 'x264', 'AAC', 'jpn', 'spa', 1, 1)",
         (series_id,),
     )
-    # Episodios con CÓDECS DE VÍDEO distintos (rollup NULL): eso sí sigue
-    # bloqueando el pack, así que no debe recomendarse.
+    # Códec de vídeo distinto entre capítulos (rollup NULL): no bloquea, el
+    # pack avisa, así que la temporada se recomienda igual.
     mem_conn.execute(
         "INSERT INTO library_items (title, item_type, local_status, emu_in_catalog, parent_id, "
         "resolution, source, video_codec, audio_codec, audio_languages, subtitle_languages, "
@@ -888,7 +883,7 @@ def test_unique_content_excludes_season_with_inconsistent_episodes(mem_conn):
     recs = get_dashboard_recommendations(mem_conn)
     unique_titles = [r["title"] for r in recs if r["rec_group"] == 2]
     assert "Ready Show - Temporada 1" in unique_titles
-    assert "Ready Show - Temporada 2" not in unique_titles
+    assert "Ready Show - Temporada 2" in unique_titles
     assert "Ready Show - Temporada 3" in unique_titles
     assert "Ready Show - Temporada 4" not in unique_titles
     assert "Ready Show - Temporada 5" in unique_titles
@@ -1007,17 +1002,11 @@ def test_peticiones_compatibles_por_recompensa_y_sin_las_de_sin_castellano(mem_c
     assert [r["title"] for r in get_dashboard_recommendations(mem_conn, limit=3)] == orden[:3]
 
 
-def test_dashboard_summary_unique_seasons_excludes_inconsistent(mem_conn):
-    """Regression: the Panel's "Contenido único" stat card counted a season
-    as soon as it was local_status=Disponible and emu_in_catalog=0, with no
-    check that its episodes actually agree on resolution/source/codecs/
-    audio, and carry Castilian subtitles — the same requirement
-    Recomendaciones' Group 2 and build_season_pack_plan already enforce. A
-    season whose episodes disagree is genuinely unique but can't actually be
-    uploaded as a pack, so it shouldn't inflate this count.
-
-    Subtitles count by content, not by agreement: differing subtitle tracks
-    no longer disqualify a season, a missing Castilian one does."""
+def test_dashboard_summary_unique_seasons_excludes_those_without_castilian(mem_conn):
+    """The Panel's "Contenido único" stat card must not count a season that
+    build_season_pack_plan would block: one with an episode without Castilian.
+    Episodes that differ in codec or subtitles (rollup NULL) only warn, so
+    those seasons count."""
     from emuwarez_uploadrr.services.library import get_dashboard_summary
 
     mem_conn.execute(
@@ -1043,9 +1032,8 @@ def test_dashboard_summary_unique_seasons_excludes_inconsistent(mem_conn):
             f"VALUES ('Show S01E0{n}', 'episode', 'Disponible', 0, ?, {n})",
             (season1_id,),
         )
-    # Capítulos con CÓDECS DE VÍDEO distintos (rollup NULL): sigue sin poder
-    # subirse como pack, así que ni ella ni sus capítulos cuentan. La
-    # resolución, en cambio, ya no descalifica a nadie: solo avisa.
+    # Capítulos con códecs de vídeo distintos (rollup NULL): solo avisa, así
+    # que ella y su capítulo cuentan.
     mem_conn.execute(
         "INSERT INTO library_items (title, item_type, local_status, emu_in_catalog, parent_id, "
         "resolution, source, video_codec, audio_codec, audio_languages, subtitle_languages, "
@@ -1080,8 +1068,8 @@ def test_dashboard_summary_unique_seasons_excludes_inconsistent(mem_conn):
     mem_conn.commit()
 
     summary = get_dashboard_summary(mem_conn)
-    assert summary["unique_seasons"] == 1
-    assert summary["unique_episodes"] == 2
+    assert summary["unique_seasons"] == 2
+    assert summary["unique_episodes"] == 3
 
 
 def test_missing_since_backfilled_from_added_at_on_migration(mem_conn):
@@ -1408,8 +1396,8 @@ def test_mejoras_posibles_son_lo_que_ya_esta_en_emuwarez_y_tu_copia_mejora(mem_c
 
 
 def test_mejoras_posibles_de_temporada_exigen_lo_mismo_que_el_pack(mem_conn):
-    """Una temporada con aportes solo es una mejora subible si sus capítulos coinciden (rollup del pack) y llevan
-    castellano, igual que en el contenido único."""
+    """Una temporada con aportes solo es una mejora si sus capítulos llevan castellano y coinciden en códec de
+    vídeo: con códecs mezclados el aporte sale del mejor capítulo y el pack lleva el de más."""
     from emuwarez_uploadrr.services.library import get_dashboard_recommendations
 
     mem_conn.execute("INSERT INTO library_items (title, item_type, local_status, emu_in_catalog) "
