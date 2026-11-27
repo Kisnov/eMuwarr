@@ -1,7 +1,7 @@
 {
-  "commit": "3ae897e8cd72d9844bca4445782dca71846cd3fc",
-  "fecha": "2026-11-24 21:39 UTC",
-  "digest": "sha256:98fb6a65a41a879e4c414fce5f2384ba42b85ae3782a7c25b02d6ab2a1b7cafe",
-  "notas": "Correcciones y mejoras",
-  "version": "1.4.0"
+  "commit": "32e6d63fc698899b727ffb172d132a129b45eca1",
+  "fecha": "2026-11-27 15:36 UTC",
+  "digest": "sha256:00ade596f927b061abe3e5e530d6ef1275542634cc1d63cb588d93ba06112b74",
+  "notas": "eMuwarr 2.0: subidas a varios trackers (eMuwarez, N.O.B.S y Milnueve) con el mismo fichero, carpeta manual sin Radarr/Sonarr, subida por lotes por tracker, cuentas y logos de cada tracker en el Panel, y las correcciones de la auditoría de noviembre.",
+  "version": "2.0.0"
 }
