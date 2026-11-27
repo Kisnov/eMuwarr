@@ -221,10 +221,12 @@ def _insert_and_start_queued_job(
     motivo = trackers.motivo_para_no_subir(conn, tracker)
     if motivo:
         return {"status": "blocked", "errors": [motivo], "job": None}
-    if tracker != trackers.POR_DEFECTO or copia_de_job_id:
+    reintento_suelto = retry_of_job_id is not None and item.get("item_type") != "season"
+    if tracker != trackers.POR_DEFECTO or copia_de_job_id or reintento_suelto:
         # Las normas de idioma de otro tracker (services/reglas_tracker.py), antes de crear nada: lo que no admite no
         # llega a lanzarse. Las de eMuwarez siguen donde siempre (comprobaciones del asistente y plan del pack), salvo
-        # en una copia de otro tracker, que no pasa por el asistente.
+        # en una copia de otro tracker y en el reintento de un fichero suelto, que no pasan por el asistente (y el
+        # fichero pudo cambiar desde la subida original).
         from .reglas_tracker import reglas_para_subir
         reglas = reglas_para_subir(conn, item, tracker, overrides=remux_overrides,
                                    idiomas=(season_overrides or {}).get("idiomas"))

@@ -32,8 +32,9 @@ def db_conn(isolated_db):
 
 def _movie_with_path(conn, path: str, title: str = "X") -> int:
     conn.execute(
-        """INSERT INTO library_items (item_type, title, local_status, request_status, nomenclature_status, path, size_bytes, updated_at)
-           VALUES ('movie', ?, 'Disponible', 'Sin petición', 'N/A', ?, 100, CURRENT_TIMESTAMP)""",
+        """INSERT INTO library_items (item_type, title, local_status, request_status, nomenclature_status, path, size_bytes,
+                                      audio_languages, updated_at)
+           VALUES ('movie', ?, 'Disponible', 'Sin petición', 'N/A', ?, 100, 'spa', CURRENT_TIMESTAMP)""",
         (title, path),
     )
     conn.commit()
