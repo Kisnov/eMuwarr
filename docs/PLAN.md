@@ -8,6 +8,12 @@ fichero en el mismo PR que cierra un punto: bórralo.**
 
 - **Subida por lotes:** si guardar los `campos` de un elemento y crear su trabajo van en una sola transacción. Se
   decide al probarla en el NAS.
+- **Editar el original con un enlace simbólico sin registrar (#107):** `carpeta_subida.motivo_para_no_editar` veta la
+  edición si el original lo siembra un enlace simbólico de una subida registrada (`prepared_path` o
+  `enlaces_sembrados_sin_fila`). No ve uno que no tenga fila ni rastro (hecho a mano, o de una subida posterior a la
+  copia que se restauró), y solo importa con la carpeta ya en el disco del original: en otro disco no se edita nunca.
+  Recorrer la carpeta de subidas lo cubriría a medias (no ve una carpeta anterior) y haría que el enlace suelto de
+  una subida fallida vetara la edición. Hoy queda como límite conocido.
 - **Interfaz (auditoría con `impeccable`, #294):** quedaron sin arreglar dos detalles de tamaño:
   - las ayudas de frase entera a 11 px (Configuración, Tareas, la primera configuración y las comprobaciones del
     resumen del lote);
