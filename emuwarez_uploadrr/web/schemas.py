@@ -701,8 +701,7 @@ class LibraryItemResponse(BaseModel):
     peticiones_debajo: Optional[list[PeticionDeLaFichaResponse]] = None
     # Todos los valores técnicos presentes bajo una serie o temporada
     # ("x264, x265"), solo para enseñar en la ficha. Las columnas de siempre
-    # siguen siendo la señal de acuerdo que usa la regla del pack, así que no
-    # se tocan. None para películas y capítulos.
+    # siguen llevando el valor solo cuando coinciden. None para películas y capítulos.
     rollup_all: Optional[dict] = None
     # Los proveedores presentes bajo una serie o temporada, con su etiqueta
     # legible, para pintar uno por cada uno con su icono.
@@ -1078,8 +1077,7 @@ class SeasonPackPlanResponse(BaseModel):
     provider_conflict: list[str] = []
     # Field-by-field breakdown backing the same "these are the fields that
     # will confirm the nomenclature" grid a movie/episode shows — computed
-    # from the first episode's own proposal (every episode already has to
-    # agree, or build_season_pack_plan blocks first). Source/Proveedor/Tag
+    # from the first episode's own proposal. Source/Proveedor/Tag
     # are editable here too, same as a movie/episode (source_override/
     # provider_override/tag_override applied uniformly across every episode).
     series_title: Optional[str] = None

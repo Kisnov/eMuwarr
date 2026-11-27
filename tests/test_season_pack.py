@@ -597,6 +597,19 @@ def test_un_pack_con_fuentes_distintas_avisa_y_se_puede_subir(isolated_db, tmp_p
     conn.close()
 
 
+def test_los_capitulos_de_un_pack_bloqueado_se_pueden_subir_uno_a_uno(isolated_db, tmp_path):
+    from emuwarez_uploadrr.services.upload_checks import run_upload_checks
+    conn = _open(isolated_db)
+    season_id = _pack_de_dos(conn, tmp_path, dynamic_range=["HDR10", None], subtitle_languages=["spa", "spa"])
+    assert build_season_pack_plan(season_id, conn=conn)["status"] == "blocked"
+
+    for (episode_id,) in conn.execute("SELECT id FROM library_items WHERE parent_id = ?", (season_id,)).fetchall():
+        failed = [c for c in run_upload_checks(conn, episode_id)["checks"] if c["status"] == "fail"]
+        assert not any(c["id"] == "spanish" for c in failed), failed
+        assert not any("temporada" in (c.get("message") or "").lower() for c in failed), failed
+    conn.close()
+
+
 def test_la_fuente_del_pack_es_la_de_mas_capitulos():
     from emuwarez_uploadrr.services.season_pack import _fuente_del_pack
     caps = [{"episode": {"episode_number": n}, "proposal": {"source": s}}
@@ -697,7 +710,7 @@ def test_preview_season_pack_title_no_season_number_omits_sxx():
 def _seed_pack(conn, tmp_path, subs_per_episode, audio="spa / eng"):
     """A complete, otherwise-consistent 2-episode season in a shared folder,
     with the given subtitle_languages per episode. `audio` is shared by every
-    episode, as a real pack requires (it is in _CONSISTENCY_FIELDS)."""
+    episode."""
     _series_id, season_id = _seed_series_season(conn)
     folder = tmp_path / "One Piece" / "Season 1"
     folder.mkdir(parents=True)
@@ -895,40 +908,51 @@ def test_cancel_endpoint_is_safe_with_nothing_running(client, auth_headers):
     assert r.json()["status"] == "cancelling"
 
 
-def test_an_inconsistent_season_still_has_individually_uploadable_episodes(isolated_db, tmp_path):
-    """The premise the per-episode upload mode rests on: the pack's consistency
-    rules exist because a pack ships ONE release name for everything inside it.
-    Each episode ships its own, so episodes that can't go together as a pack are
-    still perfectly uploadable one by one."""
-    from emuwarez_uploadrr.services.upload_checks import run_upload_checks
-
+def test_un_pack_con_codecs_de_video_distintos_avisa_y_no_bloquea(isolated_db, tmp_path):
+    """Lo recomendable es que coincidan, pero no está prohibido: el pack se sube
+    y el nombre lleva el códec de más capítulos."""
     conn = _open(isolated_db)
     _series_id, season_id = _seed_series_season(conn)
     folder = tmp_path / "One Piece" / "Season 1"
     folder.mkdir(parents=True)
-    ids = []
-    # Dos capítulos con códecs de vídeo distintos: eso sí tumba el pack, que
-    # es lo único que sigue siendo obligatorio. Pero cada uno tiene castellano.
-    for i, codec in enumerate(["x264", "x265"], start=1):
+    for i, codec in enumerate(["x264", "x265", "x265"], start=1):
         f = folder / f"S01E0{i}.mkv"
         f.write_bytes(b"video")
-        ids.append(_seed_episode(
+        _seed_episode(
             conn, season_id, number=i, title=f"One Piece S01E0{i}", path=str(f),
             quality="WEBDL-1080p", video_codec=codec, audio_codec="AC3",
             audio_languages="spa", subtitle_languages="spa", source="WEB-DL",
-        ))
+        )
 
     plan = build_season_pack_plan(season_id, conn=conn)
-    assert plan["status"] == "blocked"
-    assert any("códec de vídeo" in e for e in plan["errors"]), plan["errors"]
 
-    # …yet neither episode fails on its own account: no check about the season's
-    # consistency, and the Castilian one passes for both.
-    for episode_id in ids:
-        checks = run_upload_checks(conn, episode_id)
-        failed = [c for c in checks["checks"] if c["status"] == "fail"]
-        assert not any(c["id"] == "spanish" for c in failed), failed
-        assert not any("temporada" in (c.get("message") or "").lower() for c in failed), failed
+    assert plan["status"] == "valid", plan["errors"]
+    assert plan["video_codec"] == "x265"
+    assert " x265 " in plan["season_pack_title"] and "x264" not in plan["season_pack_title"]
+    aviso = next(w for w in plan["warnings"] if "códec de vídeo" in w)
+    assert "x264 (1), x265 (2, 3)" in aviso and "lleva x265, el de más capítulos" in aviso
+    conn.close()
+
+
+def test_si_los_codecs_de_video_empatan_el_pack_lleva_el_del_primer_capitulo(isolated_db, tmp_path):
+    conn = _open(isolated_db)
+    _series_id, season_id = _seed_series_season(conn)
+    folder = tmp_path / "One Piece" / "Season 1"
+    folder.mkdir(parents=True)
+    for i, codec in enumerate(["x264", "x265"], start=1):
+        f = folder / f"S01E0{i}.mkv"
+        f.write_bytes(b"video")
+        _seed_episode(
+            conn, season_id, number=i, title=f"One Piece S01E0{i}", path=str(f),
+            quality="WEBDL-1080p", video_codec=codec, audio_codec="AC3",
+            audio_languages="spa", subtitle_languages="spa", source="WEB-DL",
+        )
+
+    plan = build_season_pack_plan(season_id, conn=conn)
+
+    assert plan["status"] == "valid", plan["errors"]
+    assert plan["video_codec"] == "x264"
+    assert any("lleva x264, el primero de los que empatan" in w for w in plan["warnings"]), plan["warnings"]
     conn.close()
 
 
@@ -944,8 +968,7 @@ def test_pack_fields_are_emptied_when_they_differ_and_audios_are_summed(isolated
     _series_id, season_id = _seed_series_season(conn, series_title="One Piece", year=1999)
     folder = tmp_path / "One Piece" / "Season 1"
     folder.mkdir(parents=True)
-    # El códec de vídeo y el source SÍ tienen que coincidir; lo que varía
-    # son los idiomas.
+    # Lo que varía son los idiomas.
     datos = [("x264", "WEB-DL", "spa"), ("x264", "WEB-DL", "spa / eng")]
     for i, (codec, source, audio) in enumerate(datos, start=1):
         f = folder / f"S01E0{i}.mkv"
@@ -971,9 +994,7 @@ def test_pack_fields_are_emptied_when_they_differ_and_audios_are_summed(isolated
 def test_rollup_all_sums_what_the_episodes_have(isolated_db, tmp_path):
     """La ficha de una temporada enseña TODO lo que hay debajo ("x264, x265"),
     no un guion. Las columnas de la fila siguen guardando el valor único o
-    NULL, que es la señal de acuerdo que usa la regla del pack: si se sumaran
-    ahí, `resolution IS NOT NULL` dejaría de significar "coinciden" y la regla
-    entera se rompería."""
+    NULL."""
     from emuwarez_uploadrr.services.library import rollup_all_values
     conn = _open(isolated_db)
     _series_id, season_id = _seed_series_season(conn)
@@ -1031,25 +1052,10 @@ def test_rollup_all_is_none_for_a_movie(isolated_db, tmp_path):
     conn.close()
 
 
-def test_the_sql_fragment_matches_the_python_rule():
-    """Los tres filtros de library.py (tarjeta Contenido único, cuenta de
-    episodios y Recomendaciones) tienen que aplicar la MISMA condición que
-    can_pack_from_rollup. Se generan desde _PACK_ROLLUP_FIELDS justo para eso;
-    este test comprueba que el generador no se queda corto."""
-    from emuwarez_uploadrr.services.season_pack import pack_rollup_sql, _PACK_ROLLUP_FIELDS
-    fragmento = pack_rollup_sql("li")
-    for campo in _PACK_ROLLUP_FIELDS:
-        assert f"li.{campo} IS NOT NULL" in fragmento, campo
-    # Y ni un campo de más: los que ya no bloquean no pueden colarse.
-    assert fragmento.count("IS NOT NULL") == len(_PACK_ROLLUP_FIELDS)
-    assert "source" not in fragmento and "audio" not in fragmento
-
-
 def test_the_dashboard_only_counts_seasons_that_could_really_be_packed(isolated_db, tmp_path):
     """La tarjeta Contenido único y Recomendaciones no pueden ofrecer una
     temporada que la subida va a rechazar."""
     from emuwarez_uploadrr.services.library import get_dashboard_summary
-    from emuwarez_uploadrr.services.season_pack import can_pack_from_rollup
     conn = _open(isolated_db)
     conn.execute("INSERT INTO library_items (title, item_type, local_status, emu_in_catalog) "
                  "VALUES ('Serie', 'series', 'Disponible', 1)")
@@ -1057,7 +1063,7 @@ def test_the_dashboard_only_counts_seasons_that_could_really_be_packed(isolated_
     casos = [
         ("Sube",              "1080p", "x264", 1),
         ("Resol. mezclada",   None,    "x264", 1),   # solo avisa: sí cuenta
-        ("Códec mezclado",    "1080p", None,   1),
+        ("Códec mezclado",    "1080p", None,   1),   # solo avisa: sí cuenta
         ("Sin castellano",    "1080p", "x264", 0),
     ]
     for titulo, res, codec, spanish in casos:
@@ -1067,11 +1073,7 @@ def test_the_dashboard_only_counts_seasons_that_could_really_be_packed(isolated_
             (titulo, series_id, res, codec, spanish))
     conn.commit()
 
-    # El SQL de la tarjeta y la regla de Python tienen que contar lo mismo.
-    esperado = sum(1 for _t, res, codec, sp in casos
-                   if can_pack_from_rollup({"resolution": res, "video_codec": codec, "has_spanish_ok": sp}))
-    assert esperado == 2
-    assert get_dashboard_summary(conn)["unique_seasons"] == esperado
+    assert get_dashboard_summary(conn)["unique_seasons"] == 3
     conn.close()
 
 

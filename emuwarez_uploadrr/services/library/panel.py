@@ -55,24 +55,12 @@ def get_dashboard_summary(conn: sqlite3.Connection) -> dict:
     # así que los capítulos se cuentan por su temporada única.
     #
     # Una temporada solo cuenta como "subible" si además de local_status =
-    # Disponible cumple lo mismo que exige build_season_pack_plan: sus 5 campos
-    # de rollup (services/library.py's _update_season_rollup, sync-time) NO son
-    # NULL — null en cualquiera de ellos significa justo que sus capítulos no
-    # coinciden entre sí (resolución/source/códecs/idiomas) — y todos sus
-    # capítulos llevan castellano de alguna forma (has_spanish_ok = 1).
-    #
-    # Los subtítulos NO se comprueban por igualdad, ni siquiera por presencia:
-    # eMuwarez acepta el pack aunque las pistas difieran mientras todas lleven
-    # castellano, y no los exige en absoluto si el audio ya está en castellano
-    # (una temporada doblada no necesita subtítulos). Exigir
-    # subtitle_languages IS NOT NULL dejaba fuera temporadas que sí son
-    # subibles. isSeasonReady/seasonNotReadyReason en el frontend usan la misma
-    # señal. Sin este filtro, esta tarjeta contaba temporadas completas pero
-    # técnicamente inconsistentes como si se pudieran subir.
+    # Disponible todos sus capítulos llevan castellano de alguna forma
+    # (has_spanish_ok = 1). Que difieran en códec, resolución o source no la
+    # quita: el pack se sube igual y el asistente avisa.
     avail = LocalStatus.AVAILABLE.value
-    from ..season_pack import pack_rollup_sql
     uniq = conn.execute(
-        f"""
+        """
         SELECT
             SUM(CASE WHEN item_type = 'movie'  THEN 1 ELSE 0 END) AS movies,
             SUM(CASE WHEN item_type = 'season' THEN 1 ELSE 0 END) AS seasons
@@ -83,22 +71,16 @@ def get_dashboard_summary(conn: sqlite3.Connection) -> dict:
           -- (services/upload_checks.py), so counting it here as ready to go
           -- would be a lie the moment you clicked Subir.
           AND has_spanish_ok = 1
-          -- Lo que un pack exige que coincida en todos sus capítulos. El
-          -- fragmento lo genera season_pack.pack_rollup_sql() desde la misma
-          -- definición que usa la regla de verdad, para que no haya que
-          -- acertar en tres consultas cada vez que cambia.
-          AND (item_type != 'season' OR ({pack_rollup_sql()}))
         """,
         [avail],
     ).fetchone()
     uniq_ep = conn.execute(
-        f"""
+        """
         SELECT COUNT(*) AS n
         FROM library_items e
         JOIN library_items s ON e.parent_id = s.id
         WHERE e.item_type = 'episode' AND e.local_status = ?
           AND s.item_type = 'season' AND s.emu_in_catalog = 0
-          AND {pack_rollup_sql("s")}
           AND s.has_spanish_ok = 1
         """,
         [avail],
@@ -353,7 +335,6 @@ def _repartir_cupo(listas: list[list], cupo: int) -> list[list]:
 
 
 def get_dashboard_recommendations(conn: sqlite3.Connection, *, limit: int = 100) -> list[dict]:
-    from ..season_pack import pack_rollup_sql
     now_iso = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
     g1_recs: list[dict] = []  # group 1, already in its final order (the SQL's)
@@ -472,14 +453,12 @@ def get_dashboard_recommendations(conn: sqlite3.Connection, *, limit: int = 100)
     # season pack (or episode), never "a series" as a single unit, and each
     # season can have its own readiness independent of its siblings, which a
     # single combined "series" row would hide.
-    # A season also needs every episode to actually agree on resolution/
-    # source/codecs/audio (services/library.py's _update_season_rollup only
-    # fills these in when they do) AND to carry Castilian in every one of
-    # them — otherwise it's genuinely unique but not actually uploadable as a
-    # pack (build_season_pack_plan blocks it), so it shouldn't be recommended
-    # as if it were ready to go. Castilian counts from the audio OR the
-    # subtitles: a dubbed season needs no subtitles at all, and when it isn't
-    # dubbed the subtitle tracks may still differ between episodes.
+    # A season also needs to carry Castilian in every episode — otherwise
+    # it's genuinely unique but not actually uploadable as a pack
+    # (build_season_pack_plan blocks it), so it shouldn't be recommended as if
+    # it were ready to go. Castilian counts from the audio OR the subtitles: a
+    # dubbed season needs no subtitles at all, and when it isn't dubbed the
+    # subtitle tracks may still differ between episodes.
     for row in conn.execute(
         f"""SELECT {cols},
               COALESCE(json_extract(li.raw_json, '$.added'),
@@ -490,15 +469,14 @@ def get_dashboard_recommendations(conn: sqlite3.Connection, *, limit: int = 100)
               AND li.item_type IN ('movie', 'season')
               -- Castilian applies to films too, not just seasons (see the
               -- same condition in get_dashboard_summary).
-              AND li.has_spanish_ok = 1
-              AND (li.item_type != 'season' OR ({pack_rollup_sql("li")}))"""
+              AND li.has_spanish_ok = 1"""
     ).fetchall():
         _push(dict(row), 2)
 
     # Group 4 — «Mejoras posibles»: lo que tienes disponible y YA está en eMuwarez, pero tu copia aporta algo que
     # no tiene ninguno de sus torrents (mayor resolución, mejor source, un códec más eficiente o el castellano que
     # les falta): emu_in_catalog = 1 con emu_aportes, como el filtro «Aportas» de Biblioteca. Mismas
-    # unidades subibles y mismas exigencias de castellano y de pack que el grupo 2. No es un permiso para subir:
+    # unidades subibles y misma exigencia de castellano que el grupo 2. No es un permiso para subir:
     # eMuwarez tiene reglas de trumps y el Resumen del asistente enseña el veredicto frente a cada torrent.
     for row in conn.execute(
         f"""SELECT {cols}, li.emu_aportes,
@@ -510,7 +488,8 @@ def get_dashboard_recommendations(conn: sqlite3.Connection, *, limit: int = 100)
               AND li.item_type IN ('movie', 'season')
               AND json_valid(li.emu_aportes) AND json_array_length(li.emu_aportes) > 0
               AND li.has_spanish_ok = 1
-              AND (li.item_type != 'season' OR ({pack_rollup_sql("li")}))"""
+              -- Con códecs mezclados el aporte sale del mejor de sus capítulos y el pack lleva el de más.
+              AND (li.item_type != 'season' OR li.video_codec IS NOT NULL)"""
     ).fetchall():
         row = dict(row)
         try:

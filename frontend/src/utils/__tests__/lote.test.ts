@@ -85,7 +85,7 @@ describe('razonNoSubible', () => {
     expect(razonNoSubible(temporada())).toBeNull()
     expect(razonNoSubible(temporada({ local_status: 'Parcial' })))
       .toBe('Temporada incompleta: no todos los capítulos están Disponibles.')
-    expect(razonNoSubible(temporada({ video_codec: null }))).toContain('no coinciden en el códec de vídeo')
+    expect(razonNoSubible(temporada({ video_codec: null }))).toBeNull()
     expect(razonNoSubible(temporada({ has_spanish_ok: 0 }))).toContain('no tiene castellano')
   })
 

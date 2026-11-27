@@ -15,11 +15,11 @@ directory (the common Sonarr/Radarr convention: one folder per season). Nada
 se renombra ahí: upload_queue enlaza cada capítulo, con su nombre de eMuwarez,
 en una carpeta con el título del pack dentro de la de subidas.
 
-The whole season is required to be consistent (same video codec and HDR
-across every available episode) and complete (every episode of the season
-must be Disponible) — both are hard blocks, not warnings, since a mismatched
-or partial pack would be a broken release. A mixed resolution or source only
-warns: the pack name takes the one most episodes have. Subtitles are the one exception: they may differ between episodes,
+The whole season is required to be consistent (same HDR across every
+available episode) and complete (every episode of the season must be
+Disponible) — both are hard blocks, not warnings, since a mismatched or
+partial pack would be a broken release. A mixed video codec, resolution or
+source only warns: the pack name takes the one most episodes have. Subtitles are the one exception: they may differ between episodes,
 and aren't required at all when the audio is already in Castilian (see
 _spanish_errors).
 
@@ -175,89 +175,15 @@ def preview_season_pack_title(fields: dict) -> dict:
     return {"torrent_name": title}
 
 
-# The 5 properties every available episode of a season pack must share.
-# Compared on the RAW library_items columns (not the nomenclature
-# proposal's already-combined display strings like audio_summary) for
-# video_codec/audio_codec/audio_languages, and on the proposal's own resolved
-# values for resolution/source (each episode's proposal already ran
-# _infer_resolution_from_item/_infer_source_from_item).
-#
-# subtitle_languages is deliberately NOT in this list: eMuwarez accepts a
-# season pack whose episodes carry different subtitle tracks as long as every
-# one of them has Castilian, so requiring them to be identical blocked packs
-# the tracker would have taken. That looser rule is _spanish_errors() below,
-# which also exempts subtitles entirely when the audio is already Castilian.
-#
-# audio_languages, by contrast, MUST stay here: the pack has a single release
-# name stating one audio for the whole thing, so episodes that disagree on it
-# would make that name lie about half the pack.
-# Lo ÚNICO que tiene que coincidir en todos los capítulos para que la
-# temporada pueda subirse como pack. Antes eran cinco campos: la resolución,
-# el códec de vídeo, el de audio, los idiomas y el source. Eso rechazaba packs
-# perfectamente válidos (una temporada donde un capítulo trae una pista de
-# audio extra, o viene de otra fuente, sigue siendo la misma temporada).
-#
-# La resolución tampoco bloquea ya: un DVD con capítulos a 480p y a 540p es la
-# misma temporada, y el usuario decide si la sube. Avisa y el nombre lleva la
-# de más capítulos, igual que el source (_resolucion_del_pack).
-#
-# Los demás campos ya no bloquean: se resumen en el nombre del pack, ver
-# _aggregate_pack_fields.
-_CONSISTENCY_FIELDS: list[tuple[str, str, Any]] = [
-    ("video_codec", "códec de vídeo", lambda ep, prop: prop.get("video_codec")),
-]
-
-# Campos que el NOMBRE del pack dice una sola vez y que por eso también tienen
-# que coincidir: un pack no es HDR y SDR a la vez. No van en la regla del
-# rollup porque la biblioteca no los guarda por temporada. El source y la
-# resolución no están: si difieren solo avisan (_fuente_del_pack,
-# _resolucion_del_pack).
+# Lo que el NOMBRE del pack dice una sola vez y tiene que coincidir en todos
+# los capítulos: un pack no es HDR y SDR a la vez. El códec de vídeo, la
+# resolución y el source no están: si difieren solo avisan (_codec_del_pack,
+# _resolucion_del_pack, _fuente_del_pack) y el nombre lleva el de más
+# capítulos. Los subtítulos y el audio tampoco: ver _aggregate_pack_fields y
+# _spanish_errors.
 _PACK_NAME_FIELDS: list[tuple[str, str, Any, str]] = [
     ("dynamic_range", "HDR/DV", lambda ep, prop: _hdr_de(prop), "sin HDR"),
 ]
-
-# Los mismos campos, para quien solo tiene la fila de rollup de la temporada y
-# no va a recorrer los capítulos.
-_PACK_ROLLUP_FIELDS = tuple(key for key, _label, _getter in _CONSISTENCY_FIELDS)
-
-
-def pack_rollup_sql(alias: str = "") -> str:
-    """El equivalente en SQL de la parte de can_pack_from_rollup que mira los
-    campos técnicos, para quien filtra en la base y no puede llamar a Python.
-
-    Se GENERA desde _PACK_ROLLUP_FIELDS en vez de escribirse a mano en cada
-    consulta: esa expresión estaba copiada en tres sitios de library.py (la
-    tarjeta Contenido único, la cuenta de episodios y Recomendaciones) con
-    alias distintos, y cuando la regla cambió hubo que acertar en las tres.
-    Ahora cambia sola con la definición.
-
-    No incluye el castellano (has_spanish_ok): las tres consultas lo aplican a
-    todos los tipos de contenido, no solo a las temporadas, así que cada una
-    lo pone en su sitio.
-    """
-    prefix = f"{alias}." if alias else ""
-    return " AND ".join(f"{prefix}{field} IS NOT NULL" for field in _PACK_ROLLUP_FIELDS)
-
-
-def can_pack_from_rollup(row: dict) -> bool:
-    """Si esta temporada podría subirse como pack, mirando solo su fila.
-
-    Es una versión barata de la regla de build_season_pack_plan, no la misma:
-    las columnas de rollup solo se rellenan cuando todos los capítulos
-    coinciden en ese campo (library._update_season_rollup), así que un NULL
-    significa "no coinciden"; pero el rollup no guarda el HDR/DV, y una
-    temporada con capítulos HDR y SDR pasa aquí y el plan la bloquea.
-
-    Existe para que Biblioteca, el Panel, Recomendaciones y Peticiones no
-    tengan que reimplementar cada uno la condición: esa expresión copiada en
-    cinco sitios ya se quedó desincronizada tres veces (ver docs/auditoria.md,
-    hallazgo 2.1). Sirve para PINTAR, CONTAR y FILTRAR; quien decide de verdad
-    si la subida sale sigue siendo build_season_pack_plan.
-    """
-    return (
-        all(row.get(field) for field in _PACK_ROLLUP_FIELDS)
-        and row.get("has_spanish_ok") == 1
-    )
 
 
 def _consistency_errors(episode_entries: list[dict]) -> list[str]:
@@ -268,8 +194,7 @@ def _consistency_errors(episode_entries: list[dict]) -> list[str]:
         return []
     baseline_ep, baseline_prop = episode_entries[0]["episode"], episode_entries[0]["proposal"]
     errors: list[str] = []
-    campos = [(*c, "desconocido") for c in _CONSISTENCY_FIELDS] + _PACK_NAME_FIELDS
-    for _key, label, getter, vacio in campos:
+    for _key, label, getter, vacio in _PACK_NAME_FIELDS:
         baseline = getter(baseline_ep, baseline_prop)
         for entry in episode_entries[1:]:
             ep, prop = entry["episode"], entry["proposal"]
@@ -297,10 +222,12 @@ def _mayoritario(episode_entries: list[dict], getter, sin: str) -> tuple[Optiona
     return max(conocidos, key=lambda v: len(conocidos[v])), por_valor
 
 
-def _detalle_y_motivo(elegido: str, por_valor: dict[str, list], sin: str) -> tuple[str, str]:
+def _detalle_y_motivo(elegido: str, por_valor: dict[str, list], sin: str, masculino: bool = False) -> tuple[str, str]:
     detalle = ", ".join(f"{v} ({', '.join(str(c) for c in caps)})" for v, caps in por_valor.items())
     conocidos = [caps for v, caps in por_valor.items() if v != sin]
     empate = sum(1 for caps in conocidos if len(caps) == len(por_valor[elegido])) > 1
+    if masculino:
+        return detalle, ("el primero de los que empatan" if empate else "el de más capítulos")
     return detalle, ("la primera de las que empatan" if empate else "la de más capítulos")
 
 
@@ -332,6 +259,19 @@ def _resolucion_del_pack(episode_entries: list[dict]) -> tuple[Optional[str], Op
                      f"pack lleva {elegida}, {motivo}.")
 
 
+def _codec_del_pack(episode_entries: list[dict]) -> tuple[Optional[str], Optional[str]]:
+    """(códec de vídeo del pack, aviso). Con capítulos en códecs distintos el
+    pack se sube igual y avisa: el título lleva el de más capítulos (si
+    empatan, el del primero)."""
+    sin = "desconocido"
+    elegido, por_codec = _mayoritario(episode_entries, lambda e: e["proposal"].get("video_codec"), sin)
+    if elegido is None or len(por_codec) == 1:
+        return elegido, None
+    detalle, motivo = _detalle_y_motivo(elegido, por_codec, sin, masculino=True)
+    return elegido, (f"Los capítulos no tienen todos el mismo códec de vídeo: {detalle}. El nombre del "
+                     f"pack lleva {elegido}, {motivo}.")
+
+
 def _hdr_de(proposal: dict) -> Optional[str]:
     """El token DV/HDR de un capítulo, sacado de su propuesta."""
     import json
@@ -347,16 +287,15 @@ def _aggregate_pack_fields(episode_entries: list[dict], conn=None,
                            idiomas_audio: dict[int, str] | None = None) -> dict:
     """Los valores que describen al PACK, sacados de sus capítulos.
 
-    Códec de vídeo y HDR/DV tienen que coincidir (lo garantiza
-    _consistency_errors). La resolución y el source pueden no hacerlo: se
-    toma el de más capítulos y el plan avisa. Con el resto:
+    El HDR/DV tiene que coincidir (lo garantiza _consistency_errors). El códec
+    de vídeo, la resolución y el source pueden no hacerlo: se toma el de más
+    capítulos y el plan avisa. Con el resto:
 
     - Los idiomas de audio se SUMAN. El pack CONTIENE todos, así que
       anunciarlos todos es exacto: un capítulo con "ESP" y otro con "ESP-ENG"
       dan un pack "ESP-ENG".
-    - Lo que aun así difiera se deja VACÍO. Un nombre que dijera "x264 x265"
-      anunciaría dos códecs para un solo release y no describiría nada; mejor
-      no decir nada que decir algo falso.
+    - Lo que aun así difiera se deja VACÍO: mejor no decir nada que decir
+      algo falso.
     - El audio conserva su códec y canales solo si TODOS los capítulos traen
       exactamente el mismo resumen; si no, se queda en los idiomas a secas.
 
@@ -376,7 +315,7 @@ def _aggregate_pack_fields(episode_entries: list[dict], conn=None,
     return {
         "resolution": _resolucion_del_pack(episode_entries)[0],
         "source": _fuente_del_pack(episode_entries)[0],
-        "video_codec": comun(lambda e: e["proposal"].get("video_codec")),
+        "video_codec": _codec_del_pack(episode_entries)[0],
         "dynamic_range": comun(lambda e: _hdr_de(e["proposal"])),
         "audio_summary": audio,
         "subtitle_summary": comun(lambda e: e["proposal"].get("subtitle_summary")),
@@ -624,11 +563,6 @@ def _spanish_errors(episode_entries: list[dict], tracker: str = "emu", *, anime:
     only the fallback for when the audio isn't in Castilian, and then they don't
     have to match across episodes, they just each have to include it.
 
-    The audio is the same across every episode of a pack anyway (audio_languages
-    is in _CONSISTENCY_FIELDS — it has to be, since the pack's single release
-    name states one audio for the whole thing), so in practice this either
-    exempts the entire season or none of it.
-
     An episode with no info at all fails: "we never read it" is not evidence
     that it meets the rule.
 
@@ -813,8 +747,8 @@ def build_season_pack_plan(
     """Build a dry-run plan for a season-pack upload. Never modifies the
     filesystem. Blocks (status="blocked") on: season not found, no episode
     available, episodes not all in the same folder, incomplete season, or
-    an episode-vs-episode consistency mismatch — a season pack has no
-    "warning, upload anyway" state, unlike a single file.
+    episodes that differ in HDR/DV. A mixed video codec, resolution or source
+    only warns.
 
     `source_override`/`provider_override`/`tag_override` (set either by the
     automated-upload source-disparity gate, or by hand in the manual
@@ -974,7 +908,8 @@ def build_season_pack_plan(
         con_idiomas = _con_idiomas(episode_entries, idiomas_audio)
         errors.extend(_spanish_errors(con_idiomas, tracker, anime=anime))
         # Se suman a los avisos de la decisión del proveedor, no los sustituyen.
-        for aviso in (_resolucion_del_pack(episode_entries)[1], _fuente_del_pack(episode_entries)[1]):
+        for aviso in (_codec_del_pack(episode_entries)[1], _resolucion_del_pack(episode_entries)[1],
+                      _fuente_del_pack(episode_entries)[1]):
             if aviso:
                 warnings.append(aviso)
         # Va aparte de `warnings`: el asistente lo enseña junto al selector de
