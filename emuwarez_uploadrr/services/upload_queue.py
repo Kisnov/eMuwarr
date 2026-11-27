@@ -1875,15 +1875,18 @@ def _run_queued_job(job_id: int) -> None:
 
 def dashboard_upload_counters(conn) -> dict:
     """Los contadores de subidas del Panel. Vivían dentro del endpoint."""
+    from .upload_execution.consultas import CONDICION_PUNTA
     try:
         cuentas = {r["status"]: int(r["cnt"] or 0) for r in conn.execute(
             "SELECT status, COUNT(*) AS cnt FROM upload_jobs GROUP BY status")}
+        # Como Subidas: una fallida ya reintentada no cuenta.
+        fallidas = conn.execute(f"SELECT COUNT(*) FROM upload_jobs WHERE status = 'failed' AND {CONDICION_PUNTA}").fetchone()[0]
         ultima = conn.execute("SELECT MAX(updated_at) AS last_at FROM upload_jobs").fetchone()
         return {
             "uploads_ready": cuentas.get("ready", 0),
             "uploads_running": cuentas.get("running", 0),
             "uploads_completed": cuentas.get("completed", 0),
-            "uploads_failed": cuentas.get("failed", 0),
+            "uploads_failed": int(fallidas or 0),
             "last_upload_at": ultima["last_at"] if ultima else None,
         }
     except Exception:
