@@ -382,7 +382,8 @@ export async function runUploadChecks(
   if (tracker && tracker !== 'emu') qs.set('tracker', tracker)
   if (provider !== undefined) qs.set('provider', provider)
   if (ajustes?.source) qs.set('source', ajustes.source)
-  if (ajustes?.tag) qs.set('tag', ajustes.tag)
+  // '' es «Sin Tag» elegido a mano: también se manda.
+  if (ajustes?.tag != null) qs.set('tag', ajustes.tag)
   if (ajustes?.title) qs.set('title', ajustes.title)
   if (ajustes?.idiomas && Object.keys(ajustes.idiomas).length) qs.set('idiomas', JSON.stringify(ajustes.idiomas))
   const query = qs.toString()

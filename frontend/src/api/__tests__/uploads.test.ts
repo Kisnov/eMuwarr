@@ -126,7 +126,12 @@ describe('las comprobaciones previas', () => {
   })
 
   it('lo vacío no viaja', async () => {
-    await runUploadChecks(31, 'content', undefined, { source: null, tag: '', idiomas: {} })
+    await runUploadChecks(31, 'content', undefined, { source: null, idiomas: {} })
     expect(post).toHaveBeenCalledWith('/library/31/upload/checks?scope=content', {})
+  })
+
+  it('el Tag vacío sí viaja: es «Sin Tag» elegido a mano', async () => {
+    await runUploadChecks(31, 'content', undefined, { tag: '' })
+    expect(post).toHaveBeenCalledWith('/library/31/upload/checks?scope=content&tag=', {})
   })
 })

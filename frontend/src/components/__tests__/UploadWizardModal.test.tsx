@@ -706,7 +706,7 @@ describe('pack de temporada', () => {
     await pulsar(boton('Ver nombre de todos los capítulos'))
     await esperar(() => texto().includes('Serie S01E01 [GRP]'))
     expect(temporada.getSeasonEpisodeNames).toHaveBeenCalledWith(
-      20, { source: 'WEB-DL', provider: 'AMZN', tag: 'OTRO', idiomas: undefined })
+      20, { provider: 'AMZN', idiomas: undefined })
     await elegir(dialogoDeArriba().querySelector('select') ?? undefined, '22')
     await esperar(() => texto().includes('Serie S01E02 [GRP]'))
   })
@@ -737,7 +737,7 @@ describe('pack de temporada', () => {
       await cambiarIdiomaYAbrir(async () => { await pulsar(boton('Ver nombre de todos los capítulos')) })
       await esperar(() => texto().includes('Serie S01E01 Castellano del capítulo nuevo'))
       expect(temporada.getSeasonEpisodeNames).toHaveBeenLastCalledWith(
-        20, { source: 'WEB-DL', provider: 'AMZN', tag: 'GRP', idiomas: { 1: 'spa' } })
+        20, { provider: 'AMZN', idiomas: { 1: 'spa' } })
     })
 
     it('«Ver Pistas» se recarga con el idioma confirmado', async () => {

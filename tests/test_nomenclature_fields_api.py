@@ -229,3 +229,20 @@ def test_get_fields_pasa_el_idioma_elegido_para_una_pista(client, auth_headers):
         assert r.status_code == 200 and visto["idiomas"] == {2: "spa"}
         client.get("/api/library/1/nomenclature/fields?idiomas=no-es-json", headers=auth_headers)
         assert visto["idiomas"] is None
+
+
+def test_guardar_sin_tag_deja_el_nombre_sin_grupo(client, auth_headers):
+    """«Sin Tag» en el asistente manda tag vacío: ni el nombre ni la propuesta guardada llevan grupo."""
+    with patch("emuwarez_uploadrr.services.source_assistant._get_tmdb_available_providers_raw", return_value=[]):
+        item_id = _seed_item(client, auth_headers, title="SinTag")
+        fields = {"title": "SinTag", "year": "2024", "resolution": "1080p", "source": "BluRay", "provider": None,
+                  "video_codec": "H.265", "audio_summary": "DTS-HD", "subs": "SUBS", "tag": ""}
+        data = client.post(f"/api/library/{item_id}/nomenclature/save-fields",
+                           json={"fields": fields}, headers=auth_headers).json()
+    assert data["torrent_name"].endswith(" SUBS")
+    from emuwarez_uploadrr.database import connect
+    from emuwarez_uploadrr.web.runtime import _db_path
+    with connect(_db_path()) as conn:
+        fila = conn.execute("SELECT release_tag, proposed_filename FROM nomenclature_proposals "
+                            "WHERE library_item_id = ? ORDER BY id DESC LIMIT 1", (item_id,)).fetchone()
+    assert not fila["release_tag"] and fila["proposed_filename"].endswith("SUBS")

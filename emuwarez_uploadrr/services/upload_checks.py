@@ -193,7 +193,7 @@ def run_upload_checks(conn: sqlite3.Connection, item_id: int, *, scope: str = "a
         aj = ajustes or {}
         plan = build_season_pack_plan(
             item_id, conn=conn, provider_override=provider_override,
-            source_override=aj.get("source") or None, tag_override=aj.get("tag") or None,
+            source_override=aj.get("source") or None, tag_override=aj.get("tag"),
             title_override=aj.get("title") or None, idiomas_audio=(aj.get("idiomas") if escribe else None) or None,
             **({} if tracker == POR_DEFECTO else {"tracker": tracker}))
         ok = plan["status"] == "valid"

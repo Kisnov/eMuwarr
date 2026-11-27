@@ -415,8 +415,8 @@ def queue_upload_for_item(
         # provider_override "" ("Sin proveedor" elegido a mano) también cuenta.
         from .mkv_remux import idiomas_por_posicion
         idiomas = idiomas_por_posicion(idiomas_audio) if is_season else {}
-        if is_season and (source_override or provider_override is not None or tag_override or title_override
-                          or idiomas):
+        if is_season and (source_override or provider_override is not None or tag_override is not None
+                          or title_override or idiomas):
             season_overrides = {
                 "source": source_override, "provider": provider_override,
                 "tag": tag_override, "title": title_override,

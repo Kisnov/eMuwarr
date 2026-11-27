@@ -322,9 +322,8 @@ def test_el_plan_no_renombra_nada(isolated_db, tmp_path):
     conn.close()
 
 
-def test_el_plan_lleva_los_ajustes_a_los_nombres(isolated_db, tmp_path):
-    """El source y el tag elegidos a mano llegan al título del pack y al nombre
-    de cada capítulo, que es lo que lleva su enlace."""
+def test_el_source_y_el_tag_elegidos_solo_cambian_el_nombre_del_pack(isolated_db, tmp_path):
+    """Cada capítulo conserva su source, y sin grupo de release va sin Tag."""
     conn = _open(isolated_db)
     _series_id, season_id = _seed_series_season(conn)
     season_dir = tmp_path / "Season 1"
@@ -339,31 +338,30 @@ def test_el_plan_lleva_los_ajustes_a_los_nombres(isolated_db, tmp_path):
     assert plan["status"] == "valid"
     assert plan["source"] == "BluRay"
     assert plan["season_pack_title"].endswith("-MYTAG")
-    assert all(ep["nombre"].endswith("-MYTAG.mkv") for ep in plan["episodes"])
+    assert " BluRay " in plan["season_pack_title"]
+    for ep in plan["episodes"]:
+        assert "WEB-DL" in ep["nombre"] and "BluRay" not in ep["nombre"]
+        assert "MYTAG" not in ep["nombre"] and "EMUWAREZ" not in ep["nombre"]
     conn.close()
 
 
 @pytest.mark.usefixtures("ficheros_de_mentira")
-def test_get_season_episode_names_applies_overrides_to_every_episode(isolated_db, tmp_path):
-    """Regression: editing Source/Proveedor/Tag in the season wizard changed
-    the season pack's own title but NOT each episode's individual name in
-    "Ver nombre de todos los capítulos" — every episode kept showing its
-    own auto-detected value, visibly disagreeing with the pack title."""
+def test_cada_capitulo_de_la_lista_de_nombres_lleva_su_source_y_su_grupo(isolated_db, tmp_path):
+    """«Ver nombre de todos los capítulos» dice lo mismo que el plan: el grupo de
+    cada capítulo, y sin grupo, sin Tag (no el de Ajustes)."""
     conn = _open(isolated_db)
     _series_id, season_id = _seed_series_season(conn)
-    for i in (1, 2):
+    for i, (calidad, grupo) in enumerate((("Bluray-1080p", "GRUPO"), ("WEBDL-1080p", None)), start=1):
         src = tmp_path / f"S01E0{i}.mkv"
         src.write_bytes(b"video")
-        _seed_episode(conn, season_id, number=i, title=f"One Piece S01E0{i}", path=str(src), quality="WEBDL-1080p")
+        ep = _seed_episode(conn, season_id, number=i, title=f"One Piece S01E0{i}", path=str(src), quality=calidad)
+        conn.execute("UPDATE library_items SET release_group = ? WHERE id = ?", (grupo, ep))
+    conn.commit()
 
-    result = get_season_episode_names(
-        season_id, conn=conn, source_override="BluRay", tag_override="MYTAG",
-    )
+    con_grupo, sin_grupo = (e["torrent_name"] for e in get_season_episode_names(season_id, conn=conn)["episodes"])
 
-    assert len(result["episodes"]) == 2
-    for ep in result["episodes"]:
-        assert "BluRay" in (ep["torrent_name"] or "")
-        assert (ep["torrent_name"] or "").endswith("-MYTAG")
+    assert "BluRay" in con_grupo and con_grupo.endswith("-GRUPO")
+    assert "WEB-DL" in sin_grupo and "-GRUPO" not in sin_grupo and "EMUWAREZ" not in sin_grupo
     conn.close()
 
 
@@ -592,8 +590,12 @@ def test_un_pack_con_fuentes_distintas_avisa_y_se_puede_subir(isolated_db, tmp_p
         "WEB-DL, la primera de las que empatan; si no es esa, cámbiala en Source."]
     assert " WEB-DL " in plan["season_pack_title"]
 
+    # Elegir otra en Source cambia el nombre del pack; los capítulos siguen con la suya y el aviso sigue.
     elegida = build_season_pack_plan(season_id, conn=conn, source_override="BluRay")
-    assert elegida["warnings"] == [] and " BluRay " in elegida["season_pack_title"]
+    assert elegida["warnings"] == ["Los capítulos no vienen todos de la misma fuente: WEB-DL (1), BluRay (2). "
+                                   "El nombre del pack lleva BluRay."]
+    assert " BluRay " in elegida["season_pack_title"]
+    assert ["WEB-DL" in e["nombre"] for e in elegida["episodes"]] == [True, False]
     conn.close()
 
 

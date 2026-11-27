@@ -41,7 +41,7 @@ export const FIELD_INFO = {
   video_codec: 'Se lee con MediaInfo del archivo real.',
   audio: 'Se lee con MediaInfo del archivo real (por pista).',
   subs: 'Se genera con MediaInfo del archivo real: «SUBS» si tiene pistas de subtítulos.',
-  tag: 'Por defecto, el grupo de release del archivo (columna Grupo de Biblioteca); si no lo tiene, el de Ajustes. Puedes elegir otro de los guardados.',
+  tag: 'Por defecto, el grupo de release del archivo (columna Grupo de Biblioteca); si no lo tiene, el de Ajustes. En un pack, el de más capítulos, y solo cambia el nombre del pack. Puedes elegir otro de los guardados o «Sin Tag».',
   idioma_pista_pack: 'Esta pista de audio no trae idioma, así que el nombre del pack no la incluye. El idioma que elijas vale para todos los capítulos: entra en el nombre del pack, en el de cada capítulo y se escribe en la pista al subir. Sin elegirlo no se puede subir; «Sin diálogo (zxx)» si la pista no tiene diálogo.',
 }
 

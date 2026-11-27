@@ -258,7 +258,10 @@ def upload_checks(
     from emuwarez_uploadrr.services.upload_checks import run_upload_checks
     tracker = _tracker_valido(tracker)
     elegidos = _idiomas(idiomas)
-    ajustes = {k: v.strip() for k, v in (("source", source), ("tag", tag), ("title", title)) if v and v.strip()}
+    ajustes = {k: v.strip() for k, v in (("source", source), ("title", title)) if v and v.strip()}
+    if tag is not None:
+        # "" es «Sin Tag» elegido a mano.
+        ajustes["tag"] = tag.strip()
     if elegidos:
         ajustes["idiomas"] = elegidos
     with _get_conn() as conn:

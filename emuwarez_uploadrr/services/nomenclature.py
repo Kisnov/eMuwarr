@@ -38,8 +38,9 @@ _CAMPOS_HUELLA = ("size_bytes", "resolution", "quality", "source", "release_grou
 # carpeta de la ruta, solo del nombre del archivo. 3: una pista sin idioma (UND)
 # avisa en vez de bloquear y el nombre sale sin ella. 4: un capítulo lleva el
 # año de estreno de su temporada, no el de la serie (anio_de_temporada). 5: una pista zxx (sin diálogo) tiene idioma:
-# no avisa y, si es todo el audio, su códec entra en el nombre sin idioma.
-_VERSION_REGLAS = 5
+# no avisa y, si es todo el audio, su códec entra en el nombre sin idioma. 6: un pack ya no guarda su Source y su
+# Tag en la propuesta de cada capítulo.
+_VERSION_REGLAS = 6
 
 
 def _huella(item: dict) -> list:
@@ -498,7 +499,9 @@ def build_nomenclature_proposal(
 
         resolution = _infer_resolution_from_item(item)
         source = source_override or _infer_source_from_item(item)
-        release_tag = tag_override or tag_por_defecto([item.get("release_group")], conn=conn)
+        # tag_override "" es «Sin Tag».
+        release_tag = (tag_override if tag_override is not None
+                       else tag_por_defecto([item.get("release_group")], conn=conn))
 
         stat_info = safe_stat(path) if path else {}
         current_name = stat_info.get("name") or (path.split("/")[-1] if path else None)

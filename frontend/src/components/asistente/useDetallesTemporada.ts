@@ -60,7 +60,7 @@ export function useDetallesTemporada({
     setSeasonNamesLoading(true)
     try {
       const overrides = {
-        source: fields.source, provider: proveedorParaServidor(proveedorElegido, id) ?? fields.provider, tag: fields.tag,
+        provider: proveedorParaServidor(proveedorElegido, id) ?? fields.provider,
         idiomas: idiomasParaServidor(idiomasPorTemporada.get(id)),
       }
       const r = await getSeasonEpisodeNames(id, overrides)
@@ -68,7 +68,7 @@ export function useDetallesTemporada({
     }
     catch { if (vigente()) setSeasonNames(null) }
     finally { if (vigente()) setSeasonNamesLoading(false) }
-  }, [targetId, fields.source, fields.provider, fields.tag, proveedorElegido, idiomasPorTemporada, objetivoActual, versionDatosPack])
+  }, [targetId, fields.provider, proveedorElegido, idiomasPorTemporada, objetivoActual, versionDatosPack])
 
   const loadSeasonMi = useCallback(async () => {
     const id = targetId
@@ -108,13 +108,12 @@ export function useDetallesTemporada({
   }, [targetId])
 
   // Season target: invalidate the cached per-episode names list whenever
-  // Source/Proveedor/Tag change, so a stale (pre-edit) list isn't shown next
-  // time "Ver nombre de todos los capítulos" is reopened — it must always
-  // reflect the same override the season pack's own title uses.
+  // Proveedor changes, so a stale (pre-edit) list isn't shown next time
+  // "Ver nombre de todos los capítulos" is reopened.
   useEffect(() => {
     if (!targetIsSeason) return
     setSeasonNames(null)
-  }, [targetIsSeason, fields.source, fields.provider, fields.tag])
+  }, [targetIsSeason, fields.provider])
 
   // Los nombres y las pistas por capítulo ya no valen tras cambiar el idioma
   // del pack: cerrados se piden al abrirlos; abiertos, en el efecto de abajo.

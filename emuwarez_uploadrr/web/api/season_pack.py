@@ -127,9 +127,7 @@ def preview_season_pack_progress(season_id: int, current_user: dict = Depends(re
 @router.get("/library/season/{season_id}/episode-names")
 def season_episode_names(
     season_id: int,
-    source: str | None = Query(default=None),
     provider: str | None = Query(default=None),
-    tag: str | None = Query(default=None),
     idiomas: str | None = Query(default=None),
     current_user: dict = Depends(require_auth),
 ) -> dict:
@@ -137,15 +135,11 @@ def season_episode_names(
     nombre de todos los capítulos" (a season pack has no single "título del
     archivo interno", each episode file has its own).
 
-    `source`/`provider`/`tag` — the season's own fields as currently edited
-    in the wizard, so every episode's individual name reflects the same
-    choice as the season pack's own title instead of its own auto-detected
-    values."""
+    `provider`: el Proveedor del pack, que vale para todos sus capítulos. El
+    Source y el Tag del pack no: cada capítulo lleva los suyos."""
     with _get_conn() as conn:
         return get_season_episode_names(
-            season_id, conn=conn,
-            source_override=source, provider_override=provider, tag_override=tag,
-            idiomas_audio=_idiomas(idiomas),
+            season_id, conn=conn, provider_override=provider, idiomas_audio=_idiomas(idiomas),
         )
 
 

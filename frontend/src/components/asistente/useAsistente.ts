@@ -402,7 +402,7 @@ export function useAsistente({ item, onClose: onCloseProp, onDone, onNavigate, p
     const title = sharedTitle ?? fields.title ?? propios?.title
     const idiomas = idiomasParaServidor(idiomasPorTemporada.get(id))
     const salida = { source: propios?.source, tag: propios?.tag, title, ...(idiomas ? { idiomas } : {}) }
-    return salida.source || salida.tag || salida.title || salida.idiomas ? salida : undefined
+    return salida.source || salida.tag != null || salida.title || salida.idiomas ? salida : undefined
   }
   // Los capítulos de una tanda: sus campos con lo editado y el Título común (lo mismo que guarda «Subir todos»).
   const nombresTanda = useNombresTanda({
@@ -417,7 +417,7 @@ export function useAsistente({ item, onClose: onCloseProp, onDone, onNavigate, p
         ...(generado.fields || {}),
         ...(propios?.source != null ? { source: propios.source } : {}),
         ...(propios?.provider != null ? { provider: propios.provider } : {}),
-        ...(propios?.tag ? { tag: propios.tag } : {}),
+        ...(propios?.tag != null ? { tag: propios.tag } : {}),
         ...(title ? { title } : {}),
       }
     },
@@ -506,7 +506,7 @@ export function useAsistente({ item, onClose: onCloseProp, onDone, onNavigate, p
       ...(resp.fields || {}),
       ...(saved?.source !== undefined && saved.source !== null ? { source: saved.source } : {}),
       ...(saved?.provider !== undefined && saved.provider !== null ? { provider: saved.provider } : {}),
-      ...(saved?.tag ? { tag: saved.tag } : {}),
+      ...(saved?.tag != null ? { tag: saved.tag } : {}),
       ...(sharedTitle ? { title: sharedTitle } : saved?.title ? { title: saved.title } : {}),
     })
     setInitialTag(saved?.tag || resp.fields?.tag || 'EMUWAREZ')
@@ -979,11 +979,11 @@ export function useAsistente({ item, onClose: onCloseProp, onDone, onNavigate, p
     if (key === 'title') setSharedTitle(value)
     if (targetIsSeason && targetId != null) {
       if (key === 'provider') elegirProveedor(targetId, value)
-      if (key === 'source' && !PROVIDER_SOURCES.has(value || '')) elegirProveedor(targetId, null)
     }
     setFields(prev => {
       const updated = { ...prev, [key]: value }
-      if (key === 'source' && !PROVIDER_SOURCES.has(value || '')) updated.provider = null
+      // En un pack el Source solo cambia su nombre: el proveedor de los capítulos se queda.
+      if (key === 'source' && !targetIsSeason && !PROVIDER_SOURCES.has(value || '')) updated.provider = null
       return updated
     })
   }
@@ -1262,7 +1262,7 @@ export function useAsistente({ item, onClose: onCloseProp, onDone, onNavigate, p
             ...(current.fields || {}),
             ...(ov.source !== undefined && ov.source !== null ? { source: ov.source } : {}),
             ...(ov.provider !== undefined && ov.provider !== null ? { provider: ov.provider } : {}),
-            ...(ov.tag ? { tag: ov.tag } : {}),
+            ...(ov.tag != null ? { tag: ov.tag } : {}),
             ...(ov.title ? { title: ov.title } : {}),
           })
         }
