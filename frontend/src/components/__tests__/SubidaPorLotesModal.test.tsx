@@ -778,6 +778,39 @@ describe('a varios trackers', () => {
     expect(llamadas('environment')).toHaveLength(2)
   })
 
+  it('lo que llega por una petición de otro tracker va de entrada a ese tracker', async () => {
+    await abrirEntradas([{ item: DUNE, requestId: 77, alcance: { season: null, episode: null }, tracker: 'nobs' }])
+    await alResumen(1)
+    expect(casillaTracker('N.O.B.S').checked).toBe(true)
+    expect(casillaTracker('eMuwarez').checked).toBe(false)
+    expect(boton('Subir (1) a N.O.B.S')).toBeDefined()
+  })
+
+  it('una petición de un tracker que ya no tiene clave no deja el lote sin destino', async () => {
+    m(subidas.fetchTrackersParaSubir).mockResolvedValue([{ id: 'emu', nombre: 'eMuwarez' }])
+    await abrirEntradas([{ item: DUNE, requestId: 77, alcance: { season: null, episode: null }, tracker: 'nobs' }])
+    await alResumen(1)
+    await pulsar(boton('Subir (1)'))
+    await esperar(() => texto().includes('1 de 1 encolada'))
+  })
+
+  it('con peticiones de dos trackers, cada una marca el suyo; la que el suyo no admite, eMuwarez', async () => {
+    await abrirEntradas([
+      { item: DUNE, requestId: 77, alcance: { season: null, episode: null }, tracker: 'nobs' },
+      { item: HEAT, requestId: 78, alcance: { season: null, episode: null }, tracker: 'emu' },
+    ])
+    await alResumen(2)
+    expect(casillaTracker('N.O.B.S').checked).toBe(true)
+    expect(casillaTracker('eMuwarez').checked).toBe(true)
+    await desmontar()
+
+    // N.O.B.S no admite Alien: su petición de allí no la manda allí.
+    await abrirEntradas([{ item: ALIEN, requestId: 79, alcance: { season: null, episode: null }, tracker: 'nobs' }])
+    await alResumen(1)
+    expect(casillaTracker('eMuwarez').checked).toBe(true)
+    expect(casillaTracker('N.O.B.S').checked).toBe(false)
+  })
+
   describe('lo que eMuwarez no admite y Milnueve sí', () => {
     const CATALAN = peli(15, 'Catalana', { has_spanish_ok: 0 })
     const JAPONESA = peli(16, 'Japonesa', { has_spanish_ok: 0 })

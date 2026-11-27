@@ -130,12 +130,13 @@ export function razonNoMarcable(item: LibraryItemResponse, variosTrackers = fals
 
 /**
  * Lo que entra en «Subir por lotes»: el elemento de Biblioteca y, desde el Panel, la petición que cubre y su alcance
- * (como la preselección del asistente: `season` y, si la petición es de un capítulo, `episode`). Desde Biblioteca
- * solo va `item`.
+ * (como la preselección del asistente: `season` y, si la petición es de un capítulo, `episode`) y su tracker, al que
+ * el lote propone subirlo. Desde Biblioteca solo va `item`.
  */
 export interface EntradaLote {
   item: LibraryItemResponse
   requestId?: number
+  tracker?: string
   alcance?: { season?: number | null; episode?: number | null }
 }
 
@@ -225,7 +226,8 @@ export function claveDelPanel(fila: DashboardRecommendationItem): string {
  */
 export function entradaDelPanel(fila: DashboardRecommendationItem, item: LibraryItemResponse): EntradaLote {
   return entradaConPeticion(
-    item, fila.rec_request_id, fila.season_number, fila.item_type === 'episode' ? fila.episode_number : null)
+    item, fila.rec_request_id, fila.season_number, fila.item_type === 'episode' ? fila.episode_number : null,
+    fila.rec_request_tracker)
 }
 
 /**
@@ -234,10 +236,10 @@ export function entradaDelPanel(fila: DashboardRecommendationItem, item: Library
  */
 function entradaConPeticion(
   item: LibraryItemResponse, requestId: number | null | undefined,
-  season: number | null | undefined, episode: number | null | undefined,
+  season: number | null | undefined, episode: number | null | undefined, tracker: string | null | undefined,
 ): EntradaLote {
   if (requestId == null) return { item }
-  return { item, requestId, alcance: { season: season ?? null, episode: episode ?? null } }
+  return { item, requestId, alcance: { season: season ?? null, episode: episode ?? null }, ...(tracker ? { tracker } : {}) }
 }
 
 // ── «Subir seleccionadas» desde Peticiones ──────────────────────────────────────────────────────────────────────
@@ -261,8 +263,10 @@ export function peticionSeleccionableEnLote(
  * la petición y su alcance (la temporada y, si la petición es de un capítulo, el capítulo).
  */
 export function entradaDePeticion(
-  peticion: Pick<RequestItemResponse, 'id' | 'req_scope' | 'req_season' | 'req_episode'>, item: LibraryItemResponse,
+  peticion: Pick<RequestItemResponse, 'id' | 'req_scope' | 'req_season' | 'req_episode' | 'tracker'>,
+  item: LibraryItemResponse,
 ): EntradaLote {
   return entradaConPeticion(
-    item, peticion.id, peticion.req_season, peticion.req_scope === 'episode' ? peticion.req_episode : null)
+    item, peticion.id, peticion.req_season, peticion.req_scope === 'episode' ? peticion.req_episode : null,
+    peticion.tracker)
 }

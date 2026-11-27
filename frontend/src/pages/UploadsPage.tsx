@@ -871,10 +871,12 @@ export function UploadsPage({ onNavigate }: { onNavigate?: (page: string) => voi
   // parent-walk query per list row — so fetch it once per selection and
   // merge just that field into the (still live-polled) list-derived job,
   // instead of replacing it outright and losing further progress updates.
-  // Lo mismo con `subir_tambien_a` (los trackers a los que se puede subir también): solo lo trae el GET de una.
+  // Lo mismo con `subir_tambien_a` (los trackers a los que se puede subir también) y sus avisos: solo los trae el
+  // GET de una.
   // Se vuelve a pedir cuando la subida se completa (solo entonces lo trae) y tras encolar una copia.
   const [selectedTitle, setSelectedTitle] = useState<{
-    id: number; display_title: string | null; subir_tambien_a: UploadJob['subir_tambien_a']
+    id: number; display_title: string | null
+    subir_tambien_a: UploadJob['subir_tambien_a']; subir_tambien_avisos: UploadJob['subir_tambien_avisos']
   } | null>(null)
   const [vezSubirTambien, setVezSubirTambien] = useState(0)
   const completadaLaElegida = selectedJob?.status === 'completed'
@@ -882,12 +884,20 @@ export function UploadsPage({ onNavigate }: { onNavigate?: (page: string) => voi
     if (selectedJobId == null) { setSelectedTitle(null); return }
     let alive = true
     getUploadJob(selectedJobId).then(j => {
-      if (alive) setSelectedTitle({ id: selectedJobId, display_title: j.display_title ?? null, subir_tambien_a: j.subir_tambien_a })
+      if (alive) {
+        setSelectedTitle({
+          id: selectedJobId, display_title: j.display_title ?? null,
+          subir_tambien_a: j.subir_tambien_a, subir_tambien_avisos: j.subir_tambien_avisos,
+        })
+      }
     }).catch(() => {})
     return () => { alive = false }
   }, [selectedJobId, completadaLaElegida, vezSubirTambien])
   const selectedJobWithTitle = selectedJob && selectedTitle && selectedTitle.id === selectedJob.id
-    ? { ...selectedJob, display_title: selectedTitle.display_title, subir_tambien_a: selectedTitle.subir_tambien_a }
+    ? {
+      ...selectedJob, display_title: selectedTitle.display_title,
+      subir_tambien_a: selectedTitle.subir_tambien_a, subir_tambien_avisos: selectedTitle.subir_tambien_avisos,
+    }
     : selectedJob
 
   // La fila del último intento de una cadena y, si está desplegada, sus intentos anteriores.
