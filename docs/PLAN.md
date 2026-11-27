@@ -197,6 +197,25 @@ la subida va sin él y el aviso «Falta el trailer» manda a editarla a mano en 
   (gratuita, con un cupo diario que da para unas cien búsquedas) y el primer resultado puede ser un vídeo de un fan o
   de otra versión: serían sugerencias que se confirman, nunca automático.
 
+## Por hacer: el asistente de subida como pantalla (pedido el 27/11)
+
+Con muchas temporadas el Resumen se queda corto (la lista «Lo que se sube» enseña tres) y mientras se calculan los
+nombres no se puede hacer otra cosa: el asistente es una ventana emergente montada en la página desde la que se abre
+(Biblioteca, Panel, Peticiones) y todo su estado vive ahí, así que salir de la página lo pierde.
+
+- Que sea una pantalla propia (o parte de Subidas), a todo el ancho.
+- Que su estado sobreviva a la navegación y los cálculos (nombre de cada temporada, comprobaciones) sigan en segundo
+  plano, con aviso al terminar.
+- Medir antes dónde se va el tiempo con 30 temporadas: cada una pide su plan y cada plan repasa sus capítulos.
+- Empieza por un análisis y un diseño, no por código: es la pieza más delicada del frontend.
+
+## Por hacer: Tag y título por tracker (decidido el 27/11)
+
+- El título depende del tracker: en eMuwarez, si el archivo no tiene grupo de release, lleva el Tag de Ajustes; en
+  los demás trackers va sin Tag. Los ficheros, que se comparten entre trackers, sin Tag (no rompe el cross-seed).
+- «Anónimo» y «Personal release» en la ventana de «Subir por lotes», como en el Resumen del asistente: sin Tag una
+  subida no hereda las marcas de ningún grupo y en un lote hoy no se ve.
+
 ## Por probar en el NAS (`:multitracker`)
 
 - La carpeta manual: escanear una carpeta real con WEB-DL de películas y de series, identificar en TMDb (una a
