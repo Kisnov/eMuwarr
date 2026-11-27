@@ -927,10 +927,15 @@ export function useAsistente({ item, onClose: onCloseProp, onDone, onNavigate, p
   useEffect(() => {
     if (targetIsSeason) return
     if (targetId == null || !Object.keys(fields).length) return
+    // Una respuesta lenta de lo editado antes no pisa la de ahora.
+    let vigente = true
     const t = setTimeout(async () => {
-      try { setPreview(await previewNomenclatureFields(targetId, fields, false)) } catch { /* non-blocking */ }
+      try {
+        const r = await previewNomenclatureFields(targetId, fields, false)
+        if (vigente) setPreview(r)
+      } catch { /* non-blocking */ }
     }, 400)
-    return () => clearTimeout(t)
+    return () => { vigente = false; clearTimeout(t) }
   }, [targetId, targetIsSeason, fields])
 
   // Season target: same debounced live recompute, but cheap (no disk/DB

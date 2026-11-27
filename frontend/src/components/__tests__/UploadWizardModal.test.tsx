@@ -531,6 +531,21 @@ describe('película', () => {
       [undefined, 'Común'], ['nobs', 'Solo N.O.B.S'], ['nobs', 'Solo N.O.B.S']])
   })
 
+  it('la vista previa del nombre que responde tarde no pisa la de lo último editado', async () => {
+    await abrir(PELICULA)
+    await esperar(() => texto().includes('Dune WEB-DL AMZN [GRP]'))
+    const lenta = diferida<Awaited<ReturnType<typeof nom.previewNomenclatureFields>>>()
+    m(nom.previewNomenclatureFields).mockImplementationOnce(() => lenta.promesa)
+    await elegir(campo('Tag'), 'OTRO')
+    await esperar(() => m(nom.previewNomenclatureFields).mock.calls.some(c => c[1].tag === 'OTRO'))
+    await elegir(campo('Tag'), 'GRP')
+    await esperar(() => m(nom.previewNomenclatureFields).mock.calls.filter(c => c[1].tag === 'GRP').length === 2)
+    await act(async () => { lenta.resolver({ torrent_name: 'Dune WEB-DL AMZN [OTRO]', internal_mkv_title: 'Dune.mkv' } as never) })
+    await act(async () => { await new Promise(r => setTimeout(r, 20)) })
+    expect(texto()).toContain('Dune WEB-DL AMZN [GRP]')
+    expect(texto()).not.toContain('AMZN [OTRO]')
+  })
+
   it('un source que no es WEB-DL quita el proveedor', async () => {
     await abrir(PELICULA)
     await esperar(() => campo('Proveedor'))
