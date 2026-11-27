@@ -315,7 +315,6 @@ class Flujo:
         mp.setattr(ffmpeg, "probe", lambda *_a, **_k: {"format": {"duration": "5400.0"}})
         mp.setattr(clients.qbittorrentapi, "Client", Qbit)
         mp.setattr(imdb, "get_movie", _imdb_get_movie)
-        mp.setattr(imdb, "get_akas", lambda _id: SimpleNamespace(akas=[]))
         mp.setattr(Qbit, "anadidos", [])
 
         original = httpx.AsyncHTTPTransport.handle_async_request

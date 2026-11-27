@@ -159,6 +159,10 @@ descripción y el cliente.
 - **Por resolver en la fase A:** de dónde salen los ids de cada tracker (su formulario de subida o el staff; los de
   NOBS y Milnueve están en `docs/trackers-ids.md`), una nomenclatura por tracker (para NOBS y Milnueve vale la de
   eMuwarez; el fichero es el mismo para todos, ver la fase B), y si la app cambia de nombre (hoy «eMuwarr» es de eMuwarez).
+- **Después de la 2.0 (aprobado):** al subir a otro tracker algo ya subido, reutilizar las capturas del host de imágenes en
+  vez de generarlas y subirlas otra vez; hoy se pierden con `tmp/<nombre>`, que el mantenimiento borra a los 7 días, y con él
+  su `meta.json` (`image_list`). Vías: que el mantenimiento conserve `meta.json`, o que la app guarde las URL con la subida.
+  Antes, ver si Uploadrr-EMU usa las URL sin las imágenes locales (`src/screenshots/generator.py`, `manager.py`).
 
 ## Por hacer: subir imágenes de disco (ISO)
 
