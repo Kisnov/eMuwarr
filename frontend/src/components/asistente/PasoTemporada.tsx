@@ -1,7 +1,7 @@
 // Paso 1 de un pack de temporada (una o varias): el plan del pack, sus campos
 // con el nombre del torrent, el idioma de las pistas sin idioma, y MediaInfo,
 // pistas y nombres de cada capítulo.
-import { useId } from 'react'
+import { useId, useState } from 'react'
 import { textoOrigenProveedor } from '../../utils/origenProveedor'
 import { etiquetaPistaSinIdioma, SIN_IDIOMAS, type IdiomasPorPosicion } from '../../utils/idiomasPack'
 import { FitText, FitTextPair } from '../FitText'
@@ -9,6 +9,7 @@ import { IconoAviso } from '../Iconos'
 import { Modal } from '../Modal'
 import { SourceComparisonModal } from '../SourceComparisonModal'
 import { EpisodePicker } from './Capitulos'
+import { ListaTanda } from './ListaTanda'
 import { FIELD_INFO, INTERNAL_TITLE_LABEL, labelStyle } from './constantes'
 import { MediaInfoTable } from './MediaInfoTable'
 import { AvisoSubidaExistente, BotonComparacionSource, CampoTag, DatosDerivados, FieldLabel, GeneratingHint, MarcoPaso, TableLoadingSpinner } from './piezas'
@@ -19,14 +20,17 @@ import type { Asistente, PestanaArchivo } from './useAsistente'
 export function PasoTemporada({ a }: { a: Asistente }) {
   const idCampo = useId()
   const {
-    targetId, seasonQueue, seasons, needsSelection, existingJob, existingJobBlocking,
+    targetId, seasonQueue, needsSelection, existingJob, existingJobBlocking,
     seasonPlan, seasonPlanLoading, seasonPlanError, seasonProgress, loadSeasonPlan, seasonDisplayTitle,
     fields, setField, sources, providers, opcionesTag, sourceRequiresProvider, avisoSource, audioWarning,
     sourceComparison, setSourceComparison, showSourceCompare, setShowSourceCompare, showEngineDetail, setShowEngineDetail,
     idiomasPackEnVuelo, idiomasPorTemporada, elegirIdiomaPack, recalculandoIdioma,
     pestana, elegirPestana, detalles,
-    cambiarElemento, setStep, goToUpload, preparing,
+    cambiarElemento, setStep, goToUpload, preparing, aplicarATodas, batchItemTitle,
   } = a
+  // Hasta que se toque otra vez el Source o el Tag: que el botón ya hizo lo suyo.
+  const [aplicadoCon, setAplicadoCon] = useState<string | null>(null)
+  const claveAplicar = `${fields.source ?? ''}|${fields.tag ?? ''}`
   const {
     seasonNames, seasonNamesLoading, showSeasonNamesCard, setShowSeasonNamesCard,
     seasonNamesEpisodeId, setSeasonNamesEpisodeId, loadSeasonNames,
@@ -164,21 +168,29 @@ export function PasoTemporada({ a }: { a: Asistente }) {
         </button>
       </>}
     >
+      <div className={seasonQueue.length > 1 ? 'asist-tanda' : undefined}>
       {seasonQueue.length > 1 && (
-        <div className="asist-selector-fila">
-          <select
-            className="form-input form-select asist-select-auto"
-            aria-label="Temporada"
-            value={targetId ?? ''} onChange={e => cambiarElemento(Number(e.target.value))}
-            disabled={seasonPlanLoading}
+        <aside className="detail-card asist-panel asist-tanda-lista">
+          <h3 className="asist-panel-titulo">{seasonQueue.length} temporadas</h3>
+          <ListaTanda
+            etiqueta="Temporadas de la tanda" ids={seasonQueue} actual={targetId} titulo={batchItemTitle}
+            onElegir={cambiarElemento} deshabilitada={seasonPlanLoading}
+          />
+          <button
+            className="btn btn-secondary btn-sm asist-tanda-aplicar" type="button"
+            disabled={!seasonPlan || seasonPlanLoading || aplicadoCon === claveAplicar}
+            onClick={() => { aplicarATodas(); setAplicadoCon(claveAplicar) }}
           >
-            {seasonQueue.map(id => {
-              const s = seasons.find(x => x.id === id)
-              return <option key={id} value={id}>{s?.title || `Temporada ${s?.season_number ?? id}`}</option>
-            })}
-          </select>
-        </div>
+            Usar este Source y Tag en todas
+          </button>
+          <p className="asist-dato-nota" role="status">
+            {aplicadoCon === claveAplicar
+              ? `Aplicado a las ${seasonQueue.length} temporadas.`
+              : 'El Source y el Tag de la temporada elegida pasan a las demás; cada una conserva su Proveedor.'}
+          </p>
+        </aside>
       )}
+      <div className="asist-tanda-detalle">
       <AvisoSubidaExistente job={existingJob} bloquea={existingJobBlocking} />
       {seasonPlanLoading && (
         <div className="asist-espera">
@@ -288,6 +300,9 @@ export function PasoTemporada({ a }: { a: Asistente }) {
           </Pestanas>
         </>
       )}
+
+      </div>
+      </div>
 
       {/* Fuera de las pestañas: se abre igual desde el botón de Source (Nomenclatura) que desde MediaInfo. */}
       {showSourceCompare && sourceComparison && (

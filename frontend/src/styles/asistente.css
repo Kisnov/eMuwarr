@@ -441,6 +441,35 @@
   overflow-wrap: anywhere;
 }
 .asist-lista-espera { color: var(--text-muted); font-family: inherit; }
+/* La lista de una tanda como selector: cada fila es un botón y la elegida lleva el tinte del paso actual. */
+.asist-lista-elegible > li { display: flex; align-items: flex-start; gap: 8px; padding: 2px 0; }
+.asist-lista-elegible > li:first-child { padding-top: 2px; }
+.asist-lista-boton {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 5px 8px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-small);
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.asist-lista-boton:hover:not(:disabled) { background: color-mix(in srgb, var(--text-accent) 8%, transparent); }
+.asist-lista-boton[aria-current] {
+  border-color: color-mix(in srgb, var(--text-accent) 45%, var(--border));
+  background: color-mix(in srgb, var(--text-accent) 12%, transparent);
+}
+.asist-lista-boton:focus-visible { outline: 2px solid var(--text-accent); outline-offset: -2px; }
+.asist-lista-boton:disabled { cursor: default; }
+.asist-lista-editar { flex: none; margin-top: 4px; }
+/* Paso «Nombre y pistas» de una tanda: todas las temporadas a un lado y la elegida al otro. La lista se queda a la
+   vista mientras se baja por el detalle; con muchas, se desplaza ella. */
+.asist-tanda { display: grid; grid-template-columns: minmax(220px, 300px) minmax(0, 1fr); gap: 16px; align-items: start; }
+.asist-tanda-lista { position: sticky; top: 0; max-height: calc(var(--vh100) * 0.72); overflow-y: auto; }
+.asist-tanda-aplicar { margin-top: 4px; }
+.asist-tanda-detalle { min-width: 0; }
 .asist-lista-bloqueo { font-family: inherit; color: var(--color-error); }
 .asist-datos { display: grid; grid-template-columns: max-content 1fr; gap: 6px 14px; margin: 0; font-size: 12.5px; }
 .asist-datos dt { color: var(--text-muted); }
@@ -526,6 +555,10 @@
 /* El mismo corte en el que `.page-container` pasa a 16 px de relleno (layout.css). */
 @media (max-width: 768px), (max-height: 500px) and (pointer: coarse) {
   .asist-pantalla { --asist-margen: 16px; }
+}
+@media (max-width: 900px) {
+  .asist-tanda { grid-template-columns: 1fr; }
+  .asist-tanda-lista { position: static; max-height: 260px; }
 }
 @media (max-width: 640px) {
   .asist-pie-estado { order: -1; flex-basis: 100%; text-align: left; }

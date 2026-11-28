@@ -474,6 +474,20 @@ export function useAsistente({ item, onClose: onCloseProp, onDone, onNavigate, p
     setSeleccion(prev => conObjetivo(prev, id))
   }
 
+  // El Source y el Tag de la temporada que se está viendo, para todas las de la tanda: con 30 temporadas del mismo
+  // origen no hay que entrar en cada una. Cada cual conserva su Proveedor, que sale de su nombre de fichero.
+  const aplicarATodas = () => {
+    editado.current = true
+    const { source, tag } = fields
+    setAjustesPorId(prev => {
+      const copia = new Map(prev)
+      for (const id of seasonQueue) copia.set(id, { ...copia.get(id), source, tag })
+      return copia
+    })
+  }
+  // «Editar» en una fila del Resumen: al paso «Nombre y pistas» con ese elemento.
+  const editarElemento = (id: number) => { cambiarElemento(id); setStep(1) }
+
   // "Ya existe una subida" precheck (ACTIVE_JOB_STATUSES /
   // _find_latest_job_for_item en upload_queue.py).
   const [existingJob, setExistingJob] = useState<UploadJob | null>(null)
@@ -1316,7 +1330,7 @@ export function useAsistente({ item, onClose: onCloseProp, onDone, onNavigate, p
     batchViewId, setBatchViewId, batchEnvChecks, batchContentChecks, batchChecksLoading, batchChecksIndex, batchProgreso,
     batchChecksError, repetirComprobacionesTanda, uploadAllSeasons, uploadAllEpisodes, nombresTanda,
     // Cerrar
-    cerrarModal, hayCambios, confirmandoCierre, setConfirmandoCierre,
+    cerrarModal, hayCambios, confirmandoCierre, setConfirmandoCierre, aplicarATodas, editarElemento,
   }
 }
 

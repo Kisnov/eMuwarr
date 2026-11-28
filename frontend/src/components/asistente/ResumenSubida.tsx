@@ -8,6 +8,7 @@ import { peticionCubre } from '../../utils/seleccionSubida'
 import {
   textoCategoria, textoCopia, textoFicheros, textoPistas, tipoDeEnlace, type FilaYaHay, type YaHay,
 } from '../../utils/resumenSubida'
+import { ListaTanda } from './ListaTanda'
 import { CasillasTrackers } from './piezas'
 import { mergeRemuxTracks } from './RemuxTable'
 import type { Asistente } from './useAsistente'
@@ -15,13 +16,15 @@ import { useResumen } from './useResumen'
 
 const ALCANCE: Record<string, string> = { movie: 'esta película', season: 'esta temporada', episode: 'este capítulo' }
 
-export function ResumenSubida({ a }: { a: Asistente }) {
+// `junto`: lo que va al lado de «Lo que se sube» en una tanda (las comprobaciones del elemento elegido en la lista).
+export function ResumenSubida({ a, junto }: { a: Asistente; junto?: React.ReactNode }) {
   const {
     item, seasons, episodes, targetId, targetIsSeason, batchQueue, batchIsEpisodes, batchItemTitle,
     preview, seasonDisplayTitle, seasonPlan, fields, remuxPreview, remuxEdits, modoPistasAjuste,
     checks, batchContentChecks, nombresTanda, requestId, preselect,
     anonimoMarcado, personalReleaseMarcado, marcasMixtas, elegirAnonimo, elegirPersonalRelease, opcionesTracker, uploading,
     sources, elegirTipo, trackersParaSubir, trackersElegidos, elegirTracker, destinos, reglas, reglasDe, batchChecksLoading, batchChecksIndex, batchProgreso, batchChecksError,
+    batchViewId, setBatchViewId, editarElemento,
     descripcion, escribirDescripcion, descripcionPorTracker, descripcionPropia, editarDescripcionDe,
   } = a
   const esTanda = batchQueue.length > 1
@@ -85,23 +88,33 @@ export function ResumenSubida({ a }: { a: Asistente }) {
       <section className="detail-card asist-panel" aria-labelledby={idTitulo}>
         <h3 className="asist-panel-titulo" id={idTitulo}>Lo que se sube</h3>
         {esTanda ? (
-          <ul className="asist-lista-subida">
-            {batchQueue.map(id => {
+          // La fila elegida es de la que se enseñan las comprobaciones, al lado.
+          <ListaTanda
+            etiqueta={batchIsEpisodes ? 'Capítulos de la tanda' : 'Temporadas de la tanda'}
+            ids={batchQueue} actual={batchViewId ?? batchQueue[0]} titulo={batchItemTitle} onElegir={setBatchViewId}
+            detalle={id => {
               // A cuáles de los elegidos va, si alguno no lo admite.
               const solo = soloA(destinos, reglasDe(id))
               return (
-                <li key={id}>
-                  <span className="asist-lista-titulo">{batchItemTitle(id)}</span>
+                <>
                   <NombreDeLaTanda nombre={nombreDeLaTanda(id)} espera={esperaDeLaTanda(id)} />
                   {/* Con nombre pero sin pasar sus comprobaciones: se salta, y aquí se ve cuál es. */}
                   {!batchChecksLoading && nombreDeLaTanda(id) && batchContentChecks.get(id)?.ready === false && (
                     <span className="asist-lista-nombre asist-lista-bloqueo">✗ No se subirá</span>
                   )}
                   {solo && <span className="asist-dato-nota asist-aviso-dato">Solo a {solo}</span>}
-                </li>
+                </>
               )
-            })}
-          </ul>
+            }}
+            accion={id => (
+              <button
+                type="button" className="btn btn-secondary btn-sm asist-lista-editar" disabled={uploading || batchChecksLoading}
+                aria-label={`Editar ${batchItemTitle(id)}`} onClick={() => editarElemento(id)}
+              >
+                Editar
+              </button>
+            )}
+          />
         ) : (
           <p className="asist-nombre-torrent" translate="no">{nombre || '—'}</p>
         )}
@@ -223,6 +236,8 @@ export function ResumenSubida({ a }: { a: Asistente }) {
           </dd>
         </dl>
       </section>
+
+      {junto}
 
       {/* Uno por tracker elegido, uno debajo de otro. */}
       <div className="asist-resumen-yahay">

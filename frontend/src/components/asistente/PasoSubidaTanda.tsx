@@ -1,7 +1,7 @@
 // Paso Resumen con varios elementos (temporadas o capítulos): el resumen de la
 // tanda, las comprobaciones de cada uno, las comunes a todos, y «Subir todas/todos»
-// con su resultado. Mismo aspecto que el de uno solo, con un desplegable arriba a
-// la derecha para recorrer las comprobaciones de los elementos.
+// con su resultado. La lista de «Lo que se sube» los enseña todos y elige de cuál
+// se ven las comprobaciones, que van a su lado.
 import { motivoDelBloqueo } from '../../utils/comprobaciones'
 import { CheckRow, MarcoPaso } from './piezas'
 import { ResumenSubida } from './ResumenSubida'
@@ -10,7 +10,7 @@ import type { Asistente } from './useAsistente'
 export function PasoSubidaTanda({ a }: { a: Asistente }) {
   const {
     batchQueue, batchIsEpisodes, batchItemTitle, batchPhase, batchIndex, batchResults,
-    batchViewId, setBatchViewId, batchEnvChecks, batchContentChecks, batchChecksLoading, batchChecksIndex,
+    batchViewId, batchEnvChecks, batchContentChecks, batchChecksLoading, batchChecksIndex,
     batchChecksError, repetirComprobacionesTanda,
     recalculandoIdioma, setStep, uploadAllEpisodes, uploadAllSeasons, onDone, onNavigate, onClose,
     trackersParaSubir, trackersElegidos, destinoSubida,
@@ -52,25 +52,10 @@ export function PasoSubidaTanda({ a }: { a: Asistente }) {
         const contentChecks = batchContentChecks.get(viewId)
         return (
           <>
-            <ResumenSubida a={a} />
-
-            <div className="asist-selector-fila asist-mt-14">
-              <span className="asist-etiqueta-selector" id="asist-comprobaciones-de">Comprobaciones de</span>
-              <select
-                className="form-input form-select asist-select-auto"
-                aria-labelledby="asist-comprobaciones-de"
-                value={viewId} onChange={e => setBatchViewId(Number(e.target.value))}
-              >
-                {batchQueue.map(id => {
-                  const failed = batchContentChecks.get(id)?.ready === false
-                  return <option key={id} value={id}>{failed ? '✗ ' : ''}{batchItemTitle(id)}</option>
-                })}
-              </select>
-            </div>
-
-            <div className="detail-card asist-tarjeta">
+            <ResumenSubida a={a} junto={
+            <section className="detail-card asist-panel" aria-labelledby="asist-comprobaciones-de">
               <div className="asist-fila-titulo">
-                <div className="asist-etiqueta">Comprobaciones previas</div>
+                <h3 className="asist-panel-titulo" id="asist-comprobaciones-de">Comprobaciones de {batchItemTitle(viewId)}</h3>
                 {batchChecksLoading && <span className="spinner asist-spinner-14" />}
               </div>
 
@@ -97,7 +82,8 @@ export function PasoSubidaTanda({ a }: { a: Asistente }) {
                   ↻ Volver a comprobar
                 </button>
               )}
-            </div>
+            </section>
+            } />
 
             {/* Qué se va a saltar y por qué, antes de pulsar nada. */}
             {!batchChecksLoading && blocked.length > 0 && (

@@ -49,6 +49,9 @@ const DUPLICADO: biblioteca.ConclusionDuplicados = {
 }
 
 /** El modal abierto encima de los demás (los de MediaInfo, pistas y nombres se abren sobre el asistente). */
+// La fila de una tanda (temporada o capítulo) en la lista que hace de selector.
+const filaDeLaTanda = (titulo: string) =>
+  [...document.querySelectorAll<HTMLButtonElement>('.asist-lista-boton')].find(b => b.textContent?.includes(titulo))
 const dialogoDeArriba = () => [...document.querySelectorAll<HTMLElement>('[role="dialog"]')].pop()!
 
 /** Las pestañas del paso «Nombre y pistas» (Nomenclatura, Pistas, MediaInfo). */
@@ -889,7 +892,7 @@ describe('varias temporadas de una serie', () => {
     await esperar(() => texto().includes('✓ 2 capítulo(s) listos'))
     expect(temporada.previewSeasonPack).toHaveBeenCalledWith(31, undefined, undefined)
 
-    await elegir(document.querySelector<HTMLSelectElement>('.modal-body > div > select') ?? undefined, '32')
+    await pulsar(filaDeLaTanda('Temporada 2'))
     await esperar(() => m(temporada.previewSeasonPack).mock.calls.some(c => c[0] === 32))
     await esperar(() => texto().includes('✓ 2 capítulo(s) listos'))
 
@@ -1850,6 +1853,63 @@ describe('el Resumen de una tanda lista el nombre de cada torrent', () => {
         'Serie (2021) - Temporada 1 | Serie (2020) S01 1080p WEB-DL-GRP',
         'Serie (2021) - Temporada 2 | Serie (2020) S02 1080p WEB-DL-GRP | ✗ No se subirá',
       ])
+    })
+
+    const filas = () => [...document.querySelectorAll<HTMLButtonElement>('.asist-lista-boton')]
+    const elegida = () => filas().find(b => b.getAttribute('aria-current') === 'true')?.textContent
+
+    it('en «Nombre y pistas» todas las temporadas están a la vista y la elegida va marcada, sin desplegable', async () => {
+      await abrir(SERIE, { preselect: { season: 1 } })
+      await pulsar(await esperar(() => boton('Temporada 2')))
+      await pulsar(boton('Continuar'))
+      await esperar(() => texto().includes('✓ 2 capítulo(s) listos'))
+      expect(filas().map(b => b.textContent)).toEqual(['Serie (2021) - Temporada 1', 'Serie (2021) - Temporada 2'])
+      expect(elegida()).toBe('Serie (2021) - Temporada 1')
+      expect(document.querySelector('select[aria-label="Temporada"]')).toBeNull()
+      await pulsar(filaDeLaTanda('Temporada 2'))
+      await esperar(() => m(temporada.previewSeasonPack).mock.calls.some(c => c[0] === 32))
+      expect(elegida()).toBe('Serie (2021) - Temporada 2')
+    })
+
+    it('«Usar este Source y Tag en todas» lleva lo editado en una a las demás, sin entrar en cada una', async () => {
+      await abrir(SERIE, { preselect: { season: 1 } })
+      await pulsar(await esperar(() => boton('Temporada 2')))
+      await pulsar(boton('Continuar'))
+      await esperar(() => texto().includes('✓ 2 capítulo(s) listos'))
+      await elegir(campo('Tag'), 'OTRO')
+      await pulsar(boton('Usar este Source y Tag en todas'))
+      expect(texto()).toContain('Aplicado a las 2 temporadas.')
+      expect(boton('Usar este Source y Tag en todas')!.disabled).toBe(true)
+      await pulsar(boton('Continuar'))
+      await esperar(() => texto().includes('✓ Todo listo: 2 temporadas'))
+      const deLaSegunda = m(subidas.runUploadChecks).mock.calls.find(c => c[0] === 32 && c[1] === 'content')!
+      expect(deLaSegunda[3]).toEqual({ source: 'WEB-DL', tag: 'OTRO', title: 'Serie' })
+    })
+
+    it('en el Resumen, la fila elegida decide de quién se ven las comprobaciones', async () => {
+      m(subidas.runUploadChecks).mockImplementation(async (id, alcance) => (alcance === 'environment' ? ENTORNO : {
+        ready: true, nombre: `Pack ${id}`,
+        checks: [{ id: 'renameable', label: `Se puede renombrar la ${id}`, status: 'pass', message: '' }],
+      }) as never)
+      await alResumen()
+      await esperar(() => texto().includes('✓ Todo listo: 2 temporadas'))
+      expect(texto()).toContain('Comprobaciones de Serie (2021) - Temporada 1')
+      expect(texto()).toContain('Se puede renombrar la 31')
+      expect(texto()).not.toContain('Se puede renombrar la 32')
+      await pulsar(filaDeLaTanda('Temporada 2'))
+      expect(texto()).toContain('Comprobaciones de Serie (2021) - Temporada 2')
+      expect(texto()).toContain('Se puede renombrar la 32')
+      expect(elegida()).toContain('Temporada 2')
+    })
+
+    it('«Editar» en una fila del Resumen lleva a «Nombre y pistas» con esa temporada', async () => {
+      m(subidas.runUploadChecks).mockImplementation(async (_id, alcance) => (alcance === 'environment' ? ENTORNO : LISTO) as never)
+      await alResumen()
+      await esperar(() => texto().includes('✓ Todo listo: 2 temporadas'))
+      await pulsar(document.querySelector('[aria-label="Editar Serie (2021) - Temporada 2"]') ?? undefined)
+      await esperar(() => m(temporada.previewSeasonPack).mock.calls.some(c => c[0] === 32))
+      await esperar(() => boton('Usar este Source y Tag en todas'))
+      expect(elegida()).toBe('Serie (2021) - Temporada 2')
     })
 
     it('el pack se comprueba con lo editado a mano, para que su nombre sea el que saldrá', async () => {
