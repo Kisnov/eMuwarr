@@ -106,15 +106,11 @@ def test_emuwarez_no_lleva_variante_aunque_el_comando_guardado_la_tenga(db_conn,
     assert "--variante" not in build_uploadrr_execution_command(job, conn=db_conn)["args"]
 
 
-def test_un_anime_solo_en_catalan_a_milnueve_va_a_anime_en_catalan(db_conn, tmp_path, monkeypatch):
+def test_una_peli_de_anime_solo_en_catalan_no_se_encola_a_milnueve(db_conn, tmp_path):
+    """«Anime en Catalan» es de series: el tracker rechazaba la película por no llevar temporada ni capítulo."""
     iid = _peli(db_conn, tmp_path, "cat / jpn", mal_id="5114")
     r = uq.queue_upload_for_item(iid, tracker="mnv", conn=db_conn)
-    assert r["status"] == "queued", r
-    db_conn.execute("DELETE FROM upload_jobs")
-    ok, job_id = _listo(db_conn, iid, "mnv", monkeypatch)
-    assert ok
-    _, argv = _argv_del_trabajo(db_conn, job_id)
-    assert argv[argv.index("-tk") + 1] == "MNV" and argv[argv.index("--variante") + 1] == "anime_catalan"
+    assert r["status"] == "blocked" and "películas solo en catalán" in r["errors"][0]
 
 
 def test_una_peli_solo_en_latino_a_milnueve_va_a_latino(db_conn, tmp_path, monkeypatch):
@@ -166,8 +162,7 @@ def test_la_api_de_reglas_dice_la_norma_de_cada_tracker(db_conn, tmp_path, clien
     iid = _peli(db_conn, tmp_path, "cat / jpn", mal_id="5114")
     mnv = client.get(f"/api/library/{iid}/upload/reglas", params={"tracker": "mnv"}, headers=auth_headers).json()
     nobs = client.get(f"/api/library/{iid}/upload/reglas", params={"tracker": "nobs"}, headers=auth_headers).json()
-    assert mnv == {"tracker": "mnv", "permitido": True, "motivo": "Audio en catalán, sin castellano.",
-                   "variante": "anime_catalan"}
+    assert mnv == {"tracker": "mnv", "permitido": False, "motivo": "Milnueve no admite por ahora películas solo en catalán: su categoría «Anime en Catalan» es de series.", "variante": None}
     assert nobs["permitido"] is False and nobs["variante"] is None
     assert client.get(f"/api/library/{iid}/upload/reglas", params={"tracker": "xyz"}, headers=auth_headers).status_code == 422
     assert client.post(f"/api/library/{iid}/upload/checks", params={"tracker": "xyz"}, headers=auth_headers).status_code == 422

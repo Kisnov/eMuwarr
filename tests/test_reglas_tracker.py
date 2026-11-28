@@ -37,6 +37,24 @@ MATRIZ = [
 ]
 
 
+@pytest.mark.parametrize("audio, subs, anime, variante", [
+    ("cat / jpn", None, True, None),         # solo catalán: no se sube
+    ("cat", None, False, None),
+    ("cat / es-419", None, True, "latino"),  # con latino va a su categoría, no a «Anime en Catalan»
+    ("cat / jpn", "spa", True, "anime"),     # VOSE: como cualquier anime
+    ("spa / cat", None, True, "anime"),
+])
+def test_en_milnueve_el_catalan_no_cuenta_para_una_pelicula(audio, subs, anime, variante):
+    """«Anime en Catalan» es una categoría de series: una película enviada allí la rechaza el tracker."""
+    reglas = reglas_de("mnv", {**_item(audio, subs), "item_type": "movie"}, anime=anime)
+    if variante is None:
+        assert reglas.permitido is False and "películas solo en catalán" in reglas.motivo
+    else:
+        assert reglas.permitido is True and reglas.variante == variante
+    # Una temporada con el mismo audio sigue como antes.
+    assert reglas_de("mnv", {**_item("cat / jpn"), "item_type": "season"}, anime=True).variante == "anime_catalan"
+
+
 @pytest.mark.parametrize("audio, subs, anime, esperado", MATRIZ)
 @pytest.mark.parametrize("tracker", ["emu", "nobs", "mnv"])
 def test_matriz_de_idiomas_por_tracker(tracker, audio, subs, anime, esperado):
@@ -178,5 +196,5 @@ def test_la_comprobacion_de_idiomas_es_la_del_tracker(db_conn, tmp_path):
     assert _comprobacion(db_conn, iid, tracker="nobs") | {"message": ""} == {
         "id": "spanish", "label": "Idiomas no admitidos en N.O.B.S", "status": "fail", "message": ""}
     assert _comprobacion(db_conn, iid, tracker="mnv") == {
-        "id": "spanish", "label": "Idiomas admitidos en Milnueve", "status": "ok",
-        "message": "Audio en catalán, sin castellano."}
+        "id": "spanish", "label": "Idiomas no admitidos en Milnueve", "status": "fail",
+        "message": "Milnueve no admite por ahora películas solo en catalán: su categoría «Anime en Catalan» es de series."}

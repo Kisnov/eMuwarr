@@ -890,8 +890,8 @@ def test_el_contenido_se_comprueba_con_las_normas_del_primer_tracker(db_conn, tm
 
 
 @pytest.mark.parametrize("audio, mirado, estados", [
-    # Sin castellano pero con catalán: las comprobaciones con las de Milnueve, y a eMuwarez no va.
-    ("cat", "mnv", [("emu", "blocked"), ("mnv", "queued")]),
+    # Sin castellano pero con latino: las comprobaciones con las de Milnueve, y a eMuwarez no va.
+    ("es-419", "mnv", [("emu", "blocked"), ("mnv", "queued")]),
     # No lo admite ninguno: con las del primero, que dicen por qué.
     ("jpn", "emu", [("emu", "queued"), ("mnv", "blocked")]),
 ])
