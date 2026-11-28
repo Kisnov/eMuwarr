@@ -281,6 +281,20 @@ def test_plan_includes_source_comparison_from_first_episode(isolated_db, tmp_pat
     conn.close()
 
 
+def test_un_plan_nuevo_olvida_el_avance_del_anterior(isolated_db):
+    """Un plan cancelado deja su avance a medias; el siguiente no lo arrastra mientras aún no ha publicado el suyo."""
+    import emuwarez_uploadrr.services.season_pack as sp
+    conn = _open(isolated_db)
+    _series_id, season_id = _seed_series_season(conn)
+    sp._set_season_plan_progress(season_id, done=12, total=38, current_title="Cap 12")
+
+    # Sin capítulos el plan se bloquea antes de publicar ningún avance.
+    build_season_pack_plan(season_id, conn=conn)
+
+    assert get_season_plan_progress(season_id) == {"done": 0, "total": 0, "current_title": None}
+    conn.close()
+
+
 def test_plan_progress_reaches_total(isolated_db, tmp_path):
     conn = _open(isolated_db)
     _series_id, season_id = _seed_series_season(conn)
