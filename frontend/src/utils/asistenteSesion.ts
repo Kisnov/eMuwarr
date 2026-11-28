@@ -2,9 +2,11 @@
 // cualquiera pueda abrirla, para que el menú sepa que hay una a medias y para que sobreviva a cambiar de sección: la
 // pantalla se queda montada, como las demás, y aquí está lo que hace falta para volver a ella.
 import { useEffect, useRef, useSyncExternalStore } from 'react'
+import { ApiClientError } from '../api/client'
 import { getLibraryItem } from '../api/library'
 import type { LibraryItemResponse } from '../types/api'
 import type { PreseleccionDePeticion } from '../components/asistente/useAsistente'
+import { esDeLaSeccion } from './detailUrl'
 
 export interface AperturaAsistente {
   item: LibraryItemResponse
@@ -60,6 +62,8 @@ const mismaApertura = (s: AperturaAsistente, a: AperturaAsistente) =>
 
 /** Abre el asistente con ese elemento. Si ya hay otra subida en preparación, pregunta antes de dejarla. */
 export function abrirAsistente(a: AperturaAsistente): void {
+  // Quien abre suele pedir antes el elemento: si mientras llegaba se cambió de sección, ya no se le saca de la nueva.
+  if (!esDeLaSeccion(window.location.pathname, a.origen)) return
   const { sesion } = estado
   if (!sesion) { empezar(a); return }
   const suyo = suEstado()
@@ -110,9 +114,12 @@ export function recuperarAsistente(): Promise<boolean> {
     // Si entretanto se abrió otra, manda esa.
     if (!estado.sesion) poner({ sesion: { item, preselect: g.preselect, requestId: g.requestId, origen: g.origen, n: ++n } })
     return true
-  }, () => {
-    // El contenido ya no está en la biblioteca: no hay nada que rehacer.
-    try { sessionStorage.removeItem(CLAVE) } catch { /* nada que quitar */ }
+  }, (e: unknown) => {
+    // Solo si el contenido ya no está en la biblioteca no queda nada que rehacer. Un corte de red o un 503 no borra
+    // lo apuntado: la siguiente carga de la aplicación lo vuelve a intentar.
+    if (e instanceof ApiClientError && e.status === 404) {
+      try { sessionStorage.removeItem(CLAVE) } catch { /* nada que quitar */ }
+    }
     return false
   }).finally(() => { recuperacion = null })
   return recuperacion

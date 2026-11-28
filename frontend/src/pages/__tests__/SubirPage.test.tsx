@@ -31,6 +31,7 @@ vi.mock('../../components/asistente/PantallaAsistente', () => ({
   },
 }))
 
+import { ApiClientError } from '../../api/client'
 import { getLibraryItem } from '../../api/library'
 import { ConfirmarOtraSubida } from '../../components/ConfirmarOtraSubida'
 import { Sidebar } from '../../components/Sidebar'
@@ -186,10 +187,21 @@ describe('recargar la pestaña', () => {
     await pulsarAbrir({ item: DUNE, origen: 'requests' })
     await desmontar()
     reiniciarAsistente()
-    vi.mocked(getLibraryItem).mockRejectedValue(new Error('404'))
+    vi.mocked(getLibraryItem).mockRejectedValue(new ApiClientError('No encontrado', 404, null))
     await montar(<Arnes />)
     await esperar(() => ruta() === '/requests')
     expect(sesionGuardada()).toBeNull()
+  })
+
+  it('si no se pudo pedir (sin red, 503), lo apuntado se conserva para la siguiente carga', async () => {
+    await montar(<Arnes />)
+    await pulsarAbrir({ item: DUNE, origen: 'requests', requestId: 77 })
+    await desmontar()
+    reiniciarAsistente()
+    vi.mocked(getLibraryItem).mockRejectedValue(new ApiClientError('Servicio no disponible', 503, null))
+    await montar(<Arnes />)
+    await esperar(() => ruta() === '/requests')
+    expect(sesionGuardada()).toEqual({ id: 5, requestId: 77, origen: 'requests' })
   })
 })
 
@@ -255,6 +267,18 @@ describe('pulsar «Subir» con una subida ya en el asistente', () => {
   })
 })
 
+describe('una apertura que llega tarde', () => {
+  it('si mientras se pedía el elemento se cambió de sección, no saca de la nueva', async () => {
+    await montar(<Arnes />)
+    window.history.replaceState({}, '', '/settings')
+    const { act } = await import('react')
+    await act(async () => { abrirAsistente({ item: DUNE, origen: 'requests' }) })
+    expect(ruta()).toBe('/settings')
+    expect(document.querySelector('[data-testid="asistente"]')).toBeNull()
+    expect(sesionGuardada()).toBeNull()
+  })
+})
+
 describe('al arrancar la aplicación', () => {
   it('recargar en otra sección también rehace la subida: el menú vuelve a ofrecerla', async () => {
     await montar(<Arnes />)
@@ -272,8 +296,9 @@ describe('al arrancar la aplicación', () => {
   })
 })
 
-// «Subir» se pulsa en otra sección: aquí, la llamada directa que hacen Biblioteca, el Panel y Peticiones.
+// «Subir» se pulsa en otra sección: aquí, la llamada directa que hacen Biblioteca, el Panel y Peticiones, estando en ella.
 async function pulsarAbrir(a: Parameters<typeof abrirAsistente>[0]) {
   const { act } = await import('react')
+  window.history.replaceState({}, '', `/${a.origen}`)
   await act(async () => { abrirAsistente(a) })
 }
