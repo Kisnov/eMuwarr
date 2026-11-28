@@ -120,6 +120,11 @@
   flex-wrap: wrap;
   margin: 0 calc(-1 * var(--asist-margen)) calc(-1 * var(--asist-margen));
   padding: 12px var(--asist-margen);
+  /* Se pega al borde del relleno de `.page-container`, no al de la ventana: se baja ese relleno para no dejar ver
+     el contenido por debajo. Opaco, que con una lista larga siempre pasa algo por detrás. */
+  bottom: calc(-1 * var(--asist-margen));
+  background: var(--bg-surface);
+  backdrop-filter: none;
   z-index: 2;
 }
 .asist-pie-fin { justify-content: flex-end; }
@@ -468,7 +473,12 @@
    vista mientras se baja por el detalle; con muchas, se desplaza ella. */
 .asist-tanda { display: grid; grid-template-columns: minmax(220px, 300px) minmax(0, 1fr); gap: 16px; align-items: start; }
 .asist-tanda-lista { position: sticky; top: 0; max-height: calc(var(--vh100) * 0.72); overflow-y: auto; }
-.asist-tanda-aplicar { margin-top: 4px; }
+.asist-tanda-aplicar { margin-bottom: 4px; }
+.asist-tanda-lista > .asist-dato-nota { margin-bottom: 10px; }
+/* Resumen de una tanda: la lista de lo que se sube lleva los nombres de los torrents, así que es la columna ancha. */
+@media (min-width: 1100px) {
+  .asist-resumen-tanda { grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr) minmax(0, 1fr); }
+}
 .asist-tanda-detalle { min-width: 0; }
 .asist-lista-bloqueo { font-family: inherit; color: var(--color-error); }
 .asist-datos { display: grid; grid-template-columns: max-content 1fr; gap: 6px 14px; margin: 0; font-size: 12.5px; }

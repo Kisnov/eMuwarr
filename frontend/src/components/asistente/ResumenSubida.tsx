@@ -84,7 +84,7 @@ export function ResumenSubida({ a, junto }: { a: Asistente; junto?: React.ReactN
   const tipoDesconocido = !esTanda && checks?.checks.some(c => c.id === 'tipo' && c.status === 'fail')
   const idTitulo = useId()
   return (
-    <div className="asist-resumen">
+    <div className={esTanda ? 'asist-resumen asist-resumen-tanda' : 'asist-resumen'}>
       <section className="detail-card asist-panel" aria-labelledby={idTitulo}>
         <h3 className="asist-panel-titulo" id={idTitulo}>Lo que se sube</h3>
         {esTanda ? (

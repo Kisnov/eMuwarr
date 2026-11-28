@@ -172,10 +172,6 @@ export function PasoTemporada({ a }: { a: Asistente }) {
       {seasonQueue.length > 1 && (
         <aside className="detail-card asist-panel asist-tanda-lista">
           <h3 className="asist-panel-titulo">{seasonQueue.length} temporadas</h3>
-          <ListaTanda
-            etiqueta="Temporadas de la tanda" ids={seasonQueue} actual={targetId} titulo={batchItemTitle}
-            onElegir={cambiarElemento} deshabilitada={seasonPlanLoading}
-          />
           <button
             className="btn btn-secondary btn-sm asist-tanda-aplicar" type="button"
             disabled={!seasonPlan || seasonPlanLoading || aplicadoCon === claveAplicar}
@@ -188,6 +184,10 @@ export function PasoTemporada({ a }: { a: Asistente }) {
               ? `Aplicado a las ${seasonQueue.length} temporadas.`
               : 'El Source y el Tag de la temporada elegida pasan a las demás; cada una conserva su Proveedor.'}
           </p>
+          <ListaTanda
+            etiqueta="Temporadas de la tanda" ids={seasonQueue} actual={targetId} titulo={batchItemTitle}
+            onElegir={cambiarElemento} deshabilitada={seasonPlanLoading}
+          />
         </aside>
       )}
       <div className="asist-tanda-detalle">
