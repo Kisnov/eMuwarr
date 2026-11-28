@@ -6,6 +6,8 @@ import { SystemStatusPanel } from './SystemStatusPanel'
 import { CuentaDelCajon } from './CuentaDelCajon'
 import { IconoAyuda, IconoCerrar, IconoDesplegar } from './Iconos'
 import type { CurrentUserResponse } from '../types/api'
+import { irAlAsistente, SECCION_ASISTENTE, useSesionAsistente } from '../utils/asistenteSesion'
+import { guardedLeave } from '../utils/unsavedGuard'
 
 interface SidebarProps {
   active: string
@@ -75,6 +77,12 @@ function NavIcon({ id }: { id: string }) {
     uploads: (
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" aria-hidden="true">
         <path d="M12 19V5M5 12l7-7 7 7" /><path d="M5 19h14" />
+      </svg>
+    ),
+    // La subida a medias en el asistente: la flecha de Subidas, aún dentro de su círculo.
+    subir: (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" aria-hidden="true">
+        <circle cx="12" cy="12" r="9" /><path d="M12 16V8M8.5 11.5 12 8l3.5 3.5" />
       </svg>
     ),
     stats: (
@@ -148,6 +156,7 @@ export function Sidebar({ active, onNavigate, movil = false, abierta = false, on
   const [collapsedGuardado, setCollapsed] = useState(loadCollapsed)
   const ventanaPlegada = useVentanaPlegada()
   const collapsed = (collapsedGuardado ?? ventanaPlegada) && !movil
+  const { sesion } = useSesionAsistente()
   const nav = useRef<HTMLElement>(null)
   const { triggerProps: logoTip, tooltipNode: logoTooltip } =
     useTooltip(movil ? null : collapsed ? 'Expandir menú' : 'Contraer menú')
@@ -190,6 +199,15 @@ export function Sidebar({ active, onNavigate, movil = false, abierta = false, on
             onNavigate={id => { onNavigate(id); if (movil) onCerrar?.() }}
           />
         ))}
+        {/* Solo mientras hay una subida a medias en el asistente: es el camino de vuelta a ella. */}
+        {sesion && (
+          <NavItemRow
+            item={{ id: SECCION_ASISTENTE, label: 'Subida en preparación', icon: SECCION_ASISTENTE }}
+            active={active === SECCION_ASISTENTE}
+            collapsed={collapsed}
+            onNavigate={() => { guardedLeave(irAlAsistente); if (movil) onCerrar?.() }}
+          />
+        )}
         {movil && onTour && (
           <button type="button" className="nav-item" onClick={onTour}>
             <span className="nav-item-icon"><IconoAyuda size={18} /></span>Ver el tour guiado

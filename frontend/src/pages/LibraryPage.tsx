@@ -11,7 +11,7 @@ import type { LibraryItemResponse, LibraryListResponse } from '../types/api'
 import { PosterStatusIcon } from '../components/PosterStatusIcon'
 import { ErrorState } from '../components/ErrorState'
 import { EmptyState, FilaVacia } from '../components/EmptyState'
-import { UploadWizardModal } from '../components/UploadWizardModal'
+import { abrirAsistente, useAlEncolarSubida } from '../utils/asistenteSesion'
 import { RequestFormModal } from '../components/RequestFormModal'
 import { IdentificarTmdbModal } from '../components/IdentificarTmdbModal'
 import { ChipPorIdentificar } from '../components/ChipPorIdentificar'
@@ -239,7 +239,6 @@ export function LibraryPage({ onNavigate }: { onNavigate?: (page: string) => voi
     try { sessionStorage.setItem('emuwarez_open_request', String(requestId)) } catch { /* ignore */ }
     onNavigate?.('requests')
   }, [onNavigate])
-  const [wizardItem, setWizardItem] = useState<LibraryItemResponse | null>(null)
   const [requestItem, setRequestItem] = useState<LibraryItemResponse | null>(null)
   // Carpeta manual: la fila cuya ficha de TMDb se está confirmando.
   const [identificarItem, setIdentificarItem] = useState<LibraryItemResponse | null>(null)
@@ -266,13 +265,16 @@ export function LibraryPage({ onNavigate }: { onNavigate?: (page: string) => voi
   // itself guarantees are stable) — LibraryTreeRow is memoized, and a new
   // function identity on every render here would defeat that memoization
   // for every row's onAction prop.
+  // Lo encolado desde el asistente cambia el estado de sus filas.
+  useAlEncolarSubida(() => { load() })
+
   const handleTreeAction = useCallback((kind: LibraryActionKind, item: LibraryItemResponse) => {
     if (kind === 'request') { setRequestItem(item); return }
     if (kind === 'identificar') { setIdentificarItem(item); return }
     // 'upload' abre el asistente. Él decide qué preguntar según el tipo: una
     // serie elige temporadas, una temporada elige entre pack y capítulos
     // sueltos, y una película o un capítulo entran directos.
-    setWizardItem(item)
+    abrirAsistente({ item, origen: 'library' })
   }, [])
 
   useEffect(() => { localStorage.setItem(VIEW_MODE_STORAGE_KEY, viewMode) }, [viewMode])
@@ -694,14 +696,6 @@ export function LibraryPage({ onNavigate }: { onNavigate?: (page: string) => voi
   // having to go back to the library first.
   const modals = (
     <>
-      {wizardItem && (
-        <UploadWizardModal
-          item={wizardItem}
-          onClose={() => setWizardItem(null)}
-          onDone={() => { load() }}
-          onNavigate={onNavigate}
-        />
-      )}
       {requestItem && (
         <RequestFormModal item={requestItem} onClose={() => setRequestItem(null)} />
       )}

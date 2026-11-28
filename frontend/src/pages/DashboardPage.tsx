@@ -17,7 +17,6 @@ import { ErrorState } from '../components/ErrorState'
 import { RequestFormModal } from '../components/RequestFormModal'
 // El asistente y «Subir por lotes» solo se abren al pulsar: en su chunk, fuera del arranque. Biblioteca y Peticiones,
 // que también los usan, se premontan a los 2 s, así que al abrirlos desde el Panel ya suelen estar descargados.
-const UploadWizardModal = lazyConReintento(() => import('../components/UploadWizardModal').then(m => ({ default: m.UploadWizardModal })))
 const SubidaPorLotesModal = lazyConReintento(() => import('../components/lote/SubidaPorLotesModal').then(m => ({ default: m.SubidaPorLotesModal })))
 import { CarrilListo, type SeleccionCarril } from '../components/hoy/CarrilListo'
 import { useSeleccionLote } from '../hooks/useSeleccionLote'
@@ -31,7 +30,7 @@ import {
   avisosDeAtencion, fallidasRecientes, lineaSincronizacion, ordenarEnCurso, repartirRecomendaciones,
 } from '../utils/hoy'
 import { useAlSalir, useSeccionVisible } from '../context/SeccionVisible'
-import type { PreseleccionDePeticion } from '../components/asistente/useAsistente'
+import { abrirAsistente, useAlEncolarSubida } from '../utils/asistenteSesion'
 
 // La versión publicada se mira como mucho una vez por hora (el servidor tampoco pregunta más a menudo).
 const VERSION_CADA_MS = 3_600_000
@@ -67,9 +66,6 @@ export function DashboardPage({ onNavigate }: DashboardPageProps = {}) {
   const [recsError, setRecsError] = useState<string | null>(null)
   const [loadingData, setLoadingData] = useState(true)
   const [dataError, setDataError] = useState<string | null>(null)
-  const [wizardItem, setWizardItem] = useState<LibraryItemResponse | null>(null)
-  const [wizardPreselect, setWizardPreselect] = useState<PreseleccionDePeticion | undefined>(undefined)
-  const [wizardRequestId, setWizardRequestId] = useState<number | undefined>(undefined)
   const [requestItem, setRequestItem] = useState<LibraryItemResponse | null>(null)
   // Si ya se está pidiendo un contenido para abrir el asistente o el formulario (no se desactivan los botones: el que
   // se pulsó perdería el foco y el cierre del modal no sabría a dónde devolverlo), y por qué falló la última vez.
@@ -233,6 +229,8 @@ export function DashboardPage({ onNavigate }: DashboardPageProps = {}) {
   }, [loadActiveUploads])
 
   useEffect(() => { loadData() }, [loadData])
+  // Lo encolado desde el asistente cambia las recomendaciones y las subidas en curso.
+  useAlEncolarSubida(() => { loadData(); loadActiveUploads() })
 
   // Reload the dashboard data whenever any global sync finishes.
   // Recarga en cuanto algo cambia, se esté viendo esta sección o no: los avisos
@@ -297,12 +295,14 @@ export function DashboardPage({ onNavigate }: DashboardPageProps = {}) {
       const libItem = await getLibraryItem(como === 'peticion' ? (item.library_target_id ?? item.id) : item.id)
       if (como === 'pedir') setRequestItem(libItem)
       else {
-        setWizardPreselect(como === 'peticion'
-          ? { season: item.season_number, episode: item.item_type === 'episode' ? item.episode_number : null,
-              tracker: item.rec_request_tracker }
-          : undefined)
-        setWizardRequestId(como === 'peticion' ? (item.rec_request_id ?? undefined) : undefined)
-        setWizardItem(libItem)
+        abrirAsistente({
+          item: libItem, origen: 'dashboard',
+          preselect: como === 'peticion'
+            ? { season: item.season_number, episode: item.item_type === 'episode' ? item.episode_number : null,
+                tracker: item.rec_request_tracker }
+            : undefined,
+          requestId: como === 'peticion' ? (item.rec_request_id ?? undefined) : undefined,
+        })
       }
     } catch {
       setErrorAccion('No se pudo abrir ese contenido: puede que ya no esté en la biblioteca tras la última sincronización.')
@@ -367,12 +367,6 @@ export function DashboardPage({ onNavigate }: DashboardPageProps = {}) {
   // su `position: fixed` (se pintarían dentro del Panel y no sobre la ventana).
   return (
     <>
-      {wizardItem && (
-        <Suspense fallback={null}>
-          <UploadWizardModal item={wizardItem} preselect={wizardPreselect} requestId={wizardRequestId}
-            onClose={() => setWizardItem(null)} onDone={() => { loadData(); loadActiveUploads() }} onNavigate={onNavigate} />
-        </Suspense>
-      )}
       {requestItem && (
         <RequestFormModal item={requestItem} onClose={() => setRequestItem(null)} />
       )}

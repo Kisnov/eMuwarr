@@ -37,7 +37,7 @@ import { fetchSettings } from '../../api/settings'
 import { seguirProgreso } from '../../api/eventos'
 import type { TrackRemuxPreview } from '../../api/nomenclature'
 import type { LibraryItemResponse, SeasonPackPlanResponse, UploadJob } from '../../types/api'
-import { UploadWizardModal } from '../UploadWizardModal'
+import { PantallaAsistente } from '../asistente/PantallaAsistente'
 import { boton, campo, tarjeta, desmontar, diferida, elegir, escribir, esperar, montar, pulsar, texto } from './dom'
 
 const m = vi.mocked
@@ -49,6 +49,9 @@ const DUPLICADO: biblioteca.ConclusionDuplicados = {
 }
 
 /** El modal abierto encima de los demás (los de MediaInfo, pistas y nombres se abren sobre el asistente). */
+// La fila de una tanda (temporada o capítulo) en la lista que hace de selector.
+const filaDeLaTanda = (titulo: string) =>
+  [...document.querySelectorAll<HTMLButtonElement>('.asist-lista-boton')].find(b => b.textContent?.includes(titulo))
 const dialogoDeArriba = () => [...document.querySelectorAll<HTMLElement>('[role="dialog"]')].pop()!
 
 /** Las pestañas del paso «Nombre y pistas» (Nomenclatura, Pistas, MediaInfo). */
@@ -137,8 +140,8 @@ const onClose = vi.fn()
 const onDone = vi.fn()
 const onNavigate = vi.fn()
 
-function abrir(item: LibraryItemResponse, extra: Partial<Parameters<typeof UploadWizardModal>[0]> = {}) {
-  return montar(<UploadWizardModal item={item} onClose={onClose} onDone={onDone} onNavigate={onNavigate} {...extra} />)
+function abrir(item: LibraryItemResponse, extra: Partial<Parameters<typeof PantallaAsistente>[0]> = {}) {
+  return montar(<PantallaAsistente item={item} onClose={onClose} onDone={onDone} onNavigate={onNavigate} {...extra} />)
 }
 
 beforeEach(() => {
@@ -177,16 +180,14 @@ beforeEach(() => {
 afterEach(desmontar)
 
 describe('película', () => {
-  it('si el archivo no es accesible, el error se anuncia, dice qué comprobar y el modal no se queda con su alto fijo', async () => {
+  it('si el archivo no es accesible, el error se anuncia y dice qué comprobar', async () => {
     m(nom.getNomenclatureFields).mockRejectedValueOnce(new Error('Archivo no accesible desde la app: /data/peli.mkv'))
     await abrir(PELICULA)
-    const alerta = await esperar(() => document.querySelector('.modal-panel [role="alert"]'))
+    const alerta = await esperar(() => document.querySelector('.asist-pantalla [role="alert"]'))
     expect(alerta!.textContent).toContain('/data/peli.mkv')
     expect(alerta!.textContent).toContain('misma ruta que en Radarr/Sonarr')
-    expect(document.querySelector('.modal-panel.asist-marco')!.classList.contains('asist-alto-fijo')).toBe(false)
     await pulsar(boton('↻ Reintentar'))
     await esperar(() => texto().includes('Dune WEB-DL AMZN [GRP]'))
-    expect(document.querySelector('.modal-panel.asist-marco')!.classList.contains('asist-alto-fijo')).toBe(true)
   })
 
   it('lo que sale del archivo se lee en filas, no en campos apagados, y los editables van arriba', async () => {
@@ -614,7 +615,7 @@ describe('cerrar', () => {
   it('sin tocar nada cierra a la primera', async () => {
     await abrir(PELICULA)
     await esperar(() => texto().includes('Dune WEB-DL AMZN [GRP]'))
-    await pulsar(document.querySelector('[aria-label="Cerrar"]') ?? undefined)
+    await pulsar(boton('Cerrar el asistente'))
     expect(onClose).toHaveBeenCalledTimes(1)
   })
 
@@ -622,7 +623,7 @@ describe('cerrar', () => {
     await abrir(PELICULA)
     await esperar(() => texto().includes('Dune WEB-DL AMZN [GRP]'))
     await elegir(campo('Tag'), 'OTRO')
-    await pulsar(document.querySelector('[aria-label="Cerrar"]') ?? undefined)
+    await pulsar(boton('Cerrar el asistente'))
     expect(onClose).not.toHaveBeenCalled()
     expect(texto()).toContain('¿Descartar los cambios?')
     await pulsar(boton('Cerrar y descartar'))
@@ -639,7 +640,7 @@ describe('cerrar', () => {
       Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(area, 'Notas')
       area.dispatchEvent(new Event('input', { bubbles: true }))
     })
-    await pulsar(document.querySelector('[aria-label="Cerrar"]') ?? undefined)
+    await pulsar(boton('Cerrar el asistente'))
     expect(onClose).not.toHaveBeenCalled()
     expect(texto()).toContain('¿Descartar los cambios?')
   })
@@ -651,7 +652,7 @@ describe('cerrar', () => {
     await pulsar(await esperar(() => tarjeta('Temporada entera')))
     await pulsar(boton('Continuar'))
     await esperar(() => texto().includes('Generando Nomenclatura para eMuwarez…'))
-    await pulsar(document.querySelector('[aria-label="Cerrar"]') ?? undefined)
+    await pulsar(boton('Cerrar el asistente'))
     expect(temporada.cancelSeasonPackPreview).toHaveBeenCalledWith(20)
     expect(onClose).toHaveBeenCalledTimes(1)
   })
@@ -891,7 +892,7 @@ describe('varias temporadas de una serie', () => {
     await esperar(() => texto().includes('✓ 2 capítulo(s) listos'))
     expect(temporada.previewSeasonPack).toHaveBeenCalledWith(31, undefined, undefined)
 
-    await elegir(document.querySelector<HTMLSelectElement>('.modal-body > div > select') ?? undefined, '32')
+    await pulsar(filaDeLaTanda('Temporada 2'))
     await esperar(() => m(temporada.previewSeasonPack).mock.calls.some(c => c[0] === 32))
     await esperar(() => texto().includes('✓ 2 capítulo(s) listos'))
 
@@ -1506,7 +1507,7 @@ describe('las pestañas del paso «Nombre y pistas»', () => {
     await esperar(() => texto().includes('Dune WEB-DL AMZN [GRP]'))
   }
 
-  it('son tres pestañas del paso y no abren ningún modal', async () => {
+  it('son tres pestañas del paso y no abren ningún diálogo', async () => {
     await alPaso1()
     expect(document.querySelector('[role="tablist"]')?.getAttribute('aria-label')).toBe('Detalle del archivo')
     await esperar(() => pestanas()[1]?.textContent?.includes('1 sin idioma'))
@@ -1516,7 +1517,7 @@ describe('las pestañas del paso «Nombre y pistas»', () => {
     await esperar(() => document.querySelector('table'))
     await abrirPestana('MediaInfo')
     await esperar(() => texto().includes('Matroska'))
-    expect(dialogos()).toBe(1)
+    expect(dialogos()).toBe(0)
     expect(boton('Ver Pistas')).toBeUndefined()
     expect(boton('Ver MediaInfo')).toBeUndefined()
   })
@@ -1621,7 +1622,7 @@ describe('las pestañas del paso «Nombre y pistas»', () => {
     expect(texto()).toContain('✓ 2 capítulo(s) listos')
     expect(temporada.getSeasonEpisodeMediaInfo).toHaveBeenCalledTimes(1)
     expect(temporada.getSeasonEpisodeRemuxPreview).toHaveBeenCalledTimes(1)
-    expect(dialogos()).toBe(1)
+    expect(dialogos()).toBe(0)
   })
 
   it('en una tanda de capítulos las pistas se ven pero no se editan', async () => {
@@ -1660,19 +1661,21 @@ describe('los controles de la tabla de pistas tienen nombre para el lector', () 
   })
 })
 
-// El pie del asistente queda fuera del cuerpo que hace scroll: se ve siempre, a cualquier alto de ventana.
-describe('el marco: cuerpo con scroll y pie siempre a la vista', () => {
-  const marco = () => document.querySelector<HTMLElement>('.asist-marco')!
+// El asistente es una pantalla, no un diálogo; el pie de cada paso va aparte del cuerpo para pegarse abajo.
+describe('el marco: una pantalla con el pie de cada paso aparte', () => {
+  const marco = () => document.querySelector<HTMLElement>('.asist-pantalla')!
   const pieFueraDelCuerpo = () => {
     const pie = marco().querySelector('.asist-pie')
     const cuerpo = marco().querySelector('.asist-cuerpo')
     return !!pie && !!cuerpo && !cuerpo.contains(pie) && pie.parentElement === cuerpo.parentElement
   }
 
-  it('el panel es el marco, el cuerpo del paso es lo que se desplaza y el pie va aparte', async () => {
+  it('no es un diálogo: lleva su título de página, y el pie va aparte del cuerpo del paso', async () => {
     await abrir(PELICULA)
     await esperar(() => texto().includes('Dune WEB-DL AMZN [GRP]'))
-    expect(marco().classList.contains('modal-panel')).toBe(true)
+    expect(document.querySelector('[role="dialog"]')).toBeNull()
+    expect(marco().getAttribute('aria-labelledby')).toBe(marco().querySelector('h1')!.id)
+    expect(marco().querySelector('h1')!.textContent).toBe(PELICULA.title)
     expect(marco().querySelectorAll('.asist-cuerpo').length).toBe(1)
     expect(pieFueraDelCuerpo()).toBe(true)
   })
@@ -1732,22 +1735,13 @@ describe('el marco: cuerpo con scroll y pie siempre a la vista', () => {
     await esperar(() => marco().querySelector('.asist-pie [role="status"]')?.textContent === '✓ Todo listo: 2 temporadas')
   })
 
-  it('con pestañas el panel mantiene su alto; en los demás pasos se ajusta al contenido', async () => {
-    await abrir(PELICULA)
-    await esperar(() => texto().includes('Dune WEB-DL AMZN [GRP]'))
-    expect(marco().classList.contains('asist-alto-fijo')).toBe(true)
-    await pulsar(boton('Continuar'))
-    await esperar(() => texto().includes('✓ Todo listo para subir'))
-    expect(marco().classList.contains('asist-alto-fijo')).toBe(false)
-  })
-
-  it('los modales que se abren encima no son el marco: siguen haciendo scroll como siempre', async () => {
+  it('lo que se abre encima sí es un diálogo', async () => {
     m(temporada.getSeasonEpisodeNames).mockResolvedValue({ episodes: [{ episode_id: 21, display_title: 'E01', torrent_name: 'A', internal_mkv_title: 'B' }] } as never)
     await abrir(TEMPORADA, { preselect: { season: 1 } })
     await pulsar(await esperar(() => boton('Continuar')))
     await pulsar(await esperar(() => boton('Ver nombre de todos los capítulos')))
-    await esperar(() => document.querySelectorAll('[role="dialog"]').length === 2)
-    expect(dialogoDeArriba().classList.contains('asist-marco')).toBe(false)
+    await esperar(() => document.querySelectorAll('[role="dialog"]').length === 1)
+    expect(dialogoDeArriba().textContent).toContain('Nombre de todos los capítulos')
   })
 })
 
@@ -1859,6 +1853,76 @@ describe('el Resumen de una tanda lista el nombre de cada torrent', () => {
         'Serie (2021) - Temporada 1 | Serie (2020) S01 1080p WEB-DL-GRP',
         'Serie (2021) - Temporada 2 | Serie (2020) S02 1080p WEB-DL-GRP | ✗ No se subirá',
       ])
+    })
+
+    const filas = () => [...document.querySelectorAll<HTMLButtonElement>('.asist-lista-boton')]
+    const elegida = () => filas().find(b => b.getAttribute('aria-current') === 'true')?.textContent
+
+    it('en «Nombre y pistas» todas las temporadas están a la vista y la elegida va marcada, sin desplegable', async () => {
+      await abrir(SERIE, { preselect: { season: 1 } })
+      await pulsar(await esperar(() => boton('Temporada 2')))
+      await pulsar(boton('Continuar'))
+      await esperar(() => texto().includes('✓ 2 capítulo(s) listos'))
+      expect(filas().map(b => b.textContent)).toEqual(['Serie (2021) - Temporada 1', 'Serie (2021) - Temporada 2'])
+      expect(elegida()).toBe('Serie (2021) - Temporada 1')
+      expect(document.querySelector('select[aria-label="Temporada"]')).toBeNull()
+      await pulsar(filaDeLaTanda('Temporada 2'))
+      await esperar(() => m(temporada.previewSeasonPack).mock.calls.some(c => c[0] === 32))
+      expect(elegida()).toBe('Serie (2021) - Temporada 2')
+    })
+
+    it('«Usar este Source y Tag en todas» lleva lo editado en una a las demás, sin entrar en cada una', async () => {
+      await abrir(SERIE, { preselect: { season: 1 } })
+      await pulsar(await esperar(() => boton('Temporada 2')))
+      await pulsar(boton('Continuar'))
+      await esperar(() => texto().includes('✓ 2 capítulo(s) listos'))
+      await elegir(campo('Tag'), 'OTRO')
+      await pulsar(boton('Usar este Source y Tag en todas'))
+      expect(texto()).toContain('Aplicado a las 2 temporadas.')
+      expect(boton('Usar este Source y Tag en todas')!.disabled).toBe(true)
+      await pulsar(boton('Continuar'))
+      await esperar(() => texto().includes('✓ Todo listo: 2 temporadas'))
+      const deLaSegunda = m(subidas.runUploadChecks).mock.calls.find(c => c[0] === 32 && c[1] === 'content')!
+      expect(deLaSegunda[3]).toEqual({ source: 'WEB-DL', tag: 'OTRO', title: 'Serie' })
+    })
+
+    it('«en todas» también lleva el «sin Tag»: otra temporada no recupera el de su plan', async () => {
+      m(temporada.previewSeasonPack).mockImplementation(async id => plan({ release_tag: id === 31 ? null : 'GRP' }) as never)
+      await abrir(SERIE, { preselect: { season: 1 } })
+      await pulsar(await esperar(() => boton('Temporada 2')))
+      await pulsar(boton('Continuar'))
+      await esperar(() => texto().includes('✓ 2 capítulo(s) listos'))
+      await pulsar(boton('Usar este Source y Tag en todas'))
+      await pulsar(boton('Continuar'))
+      await esperar(() => texto().includes('✓ Todo listo: 2 temporadas'))
+      const deLaSegunda = m(subidas.runUploadChecks).mock.calls.find(c => c[0] === 32 && c[1] === 'content')!
+      expect(deLaSegunda[3]).toMatchObject({ tag: '' })
+    })
+
+    it('en el Resumen, la fila elegida decide de quién se ven las comprobaciones', async () => {
+      m(subidas.runUploadChecks).mockImplementation(async (id, alcance) => (alcance === 'environment' ? ENTORNO : {
+        ready: true, nombre: `Pack ${id}`,
+        checks: [{ id: 'renameable', label: `Se puede renombrar la ${id}`, status: 'pass', message: '' }],
+      }) as never)
+      await alResumen()
+      await esperar(() => texto().includes('✓ Todo listo: 2 temporadas'))
+      expect(texto()).toContain('Comprobaciones de Serie (2021) - Temporada 1')
+      expect(texto()).toContain('Se puede renombrar la 31')
+      expect(texto()).not.toContain('Se puede renombrar la 32')
+      await pulsar(filaDeLaTanda('Temporada 2'))
+      expect(texto()).toContain('Comprobaciones de Serie (2021) - Temporada 2')
+      expect(texto()).toContain('Se puede renombrar la 32')
+      expect(elegida()).toContain('Temporada 2')
+    })
+
+    it('«Editar» en una fila del Resumen lleva a «Nombre y pistas» con esa temporada', async () => {
+      m(subidas.runUploadChecks).mockImplementation(async (_id, alcance) => (alcance === 'environment' ? ENTORNO : LISTO) as never)
+      await alResumen()
+      await esperar(() => texto().includes('✓ Todo listo: 2 temporadas'))
+      await pulsar(document.querySelector('[aria-label="Editar Serie (2021) - Temporada 2"]') ?? undefined)
+      await esperar(() => m(temporada.previewSeasonPack).mock.calls.some(c => c[0] === 32))
+      await esperar(() => boton('Usar este Source y Tag en todas'))
+      expect(elegida()).toBe('Serie (2021) - Temporada 2')
     })
 
     it('el pack se comprueba con lo editado a mano, para que su nombre sea el que saldrá', async () => {

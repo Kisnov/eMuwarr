@@ -1,11 +1,12 @@
-import { useEffect, useRef } from 'react'
-import { Modal } from './Modal'
-import { PasoArchivo } from './asistente/PasoArchivo'
-import { PasoSeleccion } from './asistente/PasoSeleccion'
-import { PasoSubida } from './asistente/PasoSubida'
-import { PasoSubidaTanda } from './asistente/PasoSubidaTanda'
-import { PasoTemporada } from './asistente/PasoTemporada'
-import { useAsistente, type PropsAsistente } from './asistente/useAsistente'
+import { useEffect, useId, useRef } from 'react'
+import { registrarEstado } from '../../utils/asistenteSesion'
+import { Modal } from '../Modal'
+import { PasoArchivo } from './PasoArchivo'
+import { PasoSeleccion } from './PasoSeleccion'
+import { PasoSubida } from './PasoSubida'
+import { PasoSubidaTanda } from './PasoSubidaTanda'
+import { PasoTemporada } from './PasoTemporada'
+import { useAsistente, type PropsAsistente } from './useAsistente'
 
 // Los pasos que de verdad tiene cada camino: «Contenido» solo existe al abrir una serie o una temporada.
 function pasosDelAsistente(needsSelection: boolean): { paso: 0 | 1 | 2; nombre: string }[] {
@@ -16,25 +17,23 @@ function pasosDelAsistente(needsSelection: boolean): { paso: 0 | 1 | 2; nombre: 
   ]
 }
 
-// Unified "Subir" wizard (replaces the separate Nomenclatura + Campos + Subir
-// buttons). For a Series/Season it first asks which season (and episode, or the
-// whole season) to target; then Step 1 generates the eMuwarez nomenclature —
-// Spanish title + year from Radarr/Sonarr, Source/Provider from the filename,
-// the rest from mediainfo — as editable boxes with a live preview of the final
-// torrent name; Step 2 runs the pre-upload checks and, once confirmed, QUEUES
-// the upload (services/upload_queue.py hace integridad/nomenclatura/remux/arranque
-// en el servidor, en el momento o cuando queda libre una plaza de «Subidas en paralelo») y pasa a
-// Subidas: aquí ya no se aplica la nomenclatura ni se arranca Uploadrr.
+// El asistente de «Subir», a pantalla completa (pages/SubirPage.tsx lo monta en /subir/<id>). Con una serie o una
+// temporada pregunta primero qué subir; el paso 1 genera la nomenclatura —título y año de Radarr/Sonarr, Source y
+// Proveedor del nombre del fichero, el resto de MediaInfo— en casillas editables con el nombre final a la vista; el
+// paso 2 hace las comprobaciones previas y, confirmado, ENCOLA la subida (services/upload_queue.py hace integridad,
+// nomenclatura, remux y arranque en el servidor, en el momento o cuando queda libre una plaza de «Subidas en
+// paralelo») y pasa a Subidas: aquí no se aplica la nomenclatura ni se arranca Uploadrr.
 //
-// El estado y la lógica están en asistente/useAsistente.ts; cada paso se pinta
-// en su propio componente de asistente/.
-export function UploadWizardModal(props: PropsAsistente) {
+// Era una ventana emergente: con una tanda de 30 temporadas no cabía, y mientras calculaba no dejaba usar el resto.
+// Como pantalla se queda montada al cambiar de sección, igual que las demás, y se vuelve a ella desde el menú.
+//
+// El estado y la lógica están en useAsistente.ts; cada paso se pinta en su propio componente.
+export function PantallaAsistente(props: PropsAsistente) {
   const a = useAsistente(props)
   const { item, step, needsSelection, targetIsSeason, batchQueue, seasonQueue, episodeQueue } = a
-  const { cerrarModal, confirmandoCierre, setConfirmandoCierre, onClose } = a
+  const { cerrarModal, confirmandoCierre, setConfirmandoCierre, onClose, estadoParaLaSesion } = a
   const pasos = pasosDelAsistente(needsSelection)
-  // El alto fijo del paso 1 es para que no salte al cambiar de pestaña; con solo un error dejaba ~430 px de vacío.
-  const altoFijo = step === 1 && !(a.error && !a.loading)
+  const idTitulo = useId()
   // Al cambiar de paso el foco pasa al paso nuevo, para que el lector lo anuncie y Tab siga desde arriba.
   const pasoActual = useRef<HTMLLIElement>(null)
   const primerPintado = useRef(true)
@@ -42,8 +41,16 @@ export function UploadWizardModal(props: PropsAsistente) {
     if (primerPintado.current) { primerPintado.current = false; return }
     pasoActual.current?.focus()
   }, [step])
+  // La sesión pregunta por este asistente al recargar la pestaña y al pulsar «Subir» en otro contenido.
+  const suEstado = useRef(estadoParaLaSesion)
+  suEstado.current = estadoParaLaSesion
+  useEffect(() => registrarEstado(() => suEstado.current()), [])
   return (
-    <Modal titulo={item.title} onClose={cerrarModal} className={`modal-wide asist-modal-ancho asist-marco${altoFijo ? ' asist-alto-fijo' : ''}`}>
+    <section className="asist-pantalla" aria-labelledby={idTitulo}>
+      <div className="page-header asist-cabecera">
+        <h1 className="page-title asist-titulo" id={idTitulo}>{item.title}</h1>
+        <button type="button" className="btn btn-secondary btn-sm" onClick={cerrarModal}>Cerrar el asistente</button>
+      </div>
 
       <nav aria-label="Pasos de la subida" className="asist-pasos">
         <ol>
@@ -82,6 +89,6 @@ export function UploadWizardModal(props: PropsAsistente) {
           </div>
         </Modal>
       )}
-    </Modal>
+    </section>
   )
 }

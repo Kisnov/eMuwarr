@@ -199,15 +199,21 @@ la subida va sin él y el aviso «Falta el trailer» manda a editarla a mano en 
 
 ## Por hacer: el asistente de subida como pantalla (pedido el 27/11)
 
-Con muchas temporadas el Resumen se queda corto (la lista «Lo que se sube» enseña tres) y mientras se calculan los
-nombres no se puede hacer otra cosa: el asistente es una ventana emergente montada en la página desde la que se abre
-(Biblioteca, Panel, Peticiones) y todo su estado vive ahí, así que salir de la página lo pierde.
+El asistente ya es una pantalla (`/subir/<id>`): sigue montada al cambiar de sección, el menú ofrece volver a la
+«Subida en preparación» y una tanda enseña todas sus temporadas en una lista que elige cuál se edita o de cuál se ven
+las comprobaciones. Solo hay una subida en preparación a la vez; recargar la pestaña conserva el contenido y la
+petición, no lo editado. Queda:
 
-- Que sea una pantalla propia (o parte de Subidas), a todo el ancho.
-- Que su estado sobreviva a la navegación y los cálculos (nombre de cada temporada, comprobaciones) sigan en segundo
-  plano, con aviso al terminar.
-- Medir antes dónde se va el tiempo con 30 temporadas: cada una pide su plan y cada plan repasa sus capítulos.
-- Empieza por un análisis y un diseño, no por código: es la pieza más delicada del frontend.
+- Que calcular una tanda tarde menos y no se repita. Medido con 31 temporadas sintéticas: la caché de MediaInfo es de
+  256 entradas y se vacía entera (una tanda tiene más de mil ficheros), el plan de cada temporada se calcula en la
+  vista previa, en su comprobación y dos veces en la cola, y las comprobaciones van en serie. Una caché de plan por
+  temporada y ajustes quita también que dos planes de la misma temporada escriban el mismo avance (`_PLAN_PROGRESS`
+  es por temporada, no por ejecución).
+- Aviso al terminar los cálculos mientras se está en otra sección (la campana), y que «Subir todas» no dependa de que
+  la pantalla siga abierta.
+- En una tanda de capítulos el paso «Nombre y pistas» aún los recorre con un desplegable.
+- La tabla de una tanda con el Source y el Tag editables en cada fila, si hace falta: hoy se edita la temporada
+  elegida y «Usar este Source y Tag en todas» lleva lo suyo a las demás.
 
 ## Por hacer: Tag y título por tracker (decidido el 27/11)
 

@@ -14,7 +14,7 @@ import { getReadinessActionLabel, getReadinessLabel, getReclamadaInfo, getReques
 import { HoverTitle, Tooltip, useTooltip } from '../components/Tooltip'
 import { ChipTracker } from '../components/ChipTracker'
 import { useSync } from '../context/SyncContext'
-import { UploadWizardModal } from '../components/UploadWizardModal'
+import { abrirAsistente, useAlEncolarSubida } from '../utils/asistenteSesion'
 import { getLibraryItem } from '../api/library'
 import { useInstancias } from '../hooks/useInstancias'
 import type { LibraryItemResponse, InstanceSafeResponse } from '../types/api'
@@ -705,9 +705,6 @@ export function RequestsPage({ onNavigate }: { onNavigate?: (page: string) => vo
   const [readiness, setReadiness] = useState<RequestReadinessResponse | null>(null)
   const [detailLoading, setDetailLoading] = useState(false)
   const [showCandidates, setShowCandidates] = useState(false)
-  const [wizardItem, setWizardItem] = useState<LibraryItemResponse | null>(null)
-  const [wizardPreselect, setWizardPreselect] = useState<PreseleccionDePeticion | undefined>(undefined)
-  const [wizardRequestId, setWizardRequestId] = useState<number | undefined>(undefined)
   // «Subir seleccionadas»: el botón «Seleccionar» pone casillas en las peticiones que se pueden subir (las mismas que
   // «Listo para subir» del Panel). Lo marcado sobrevive a filtrar y ordenar, y se limpia al salir de Peticiones y al
   // encolar el lote.
@@ -755,15 +752,12 @@ export function RequestsPage({ onNavigate }: { onNavigate?: (page: string) => vo
   const votesHeaderTip = useTooltip('Votos (otros usuarios que la quieren)')
   const commentsHeaderTip = useTooltip('Comentarios')
 
-  // "Subir a eMuwarez" — reuse the exact same upload wizard as Biblioteca by
-  // loading the matched library item and handing it to UploadWizardModal, with
-  // the request's scope (season / episode) so the selection is pre-filled.
+  // «Subir»: el mismo asistente que en Biblioteca, sobre el elemento de la biblioteca que casa con la petición y con
+  // su alcance (temporada / capítulo) ya elegido.
   const openUpload = useCallback(async (libraryItemId: number, preselect?: PreseleccionDePeticion, requestId?: number) => {
     try {
       const libItem = await getLibraryItem(libraryItemId)
-      setWizardPreselect(preselect)
-      setWizardRequestId(requestId)
-      setWizardItem(libItem)
+      abrirAsistente({ item: libItem, preselect, requestId, origen: 'requests' })
     } catch { /* ignore — button only enabled when a match exists */ }
   }, [])
 
@@ -918,6 +912,9 @@ export function RequestsPage({ onNavigate }: { onNavigate?: (page: string) => vo
     if (selectedId === id) { closeRequestDetail(); return }
     await openRequestDetail(id)
   }
+
+  // Lo encolado desde el asistente cambia el estado de la petición.
+  useAlEncolarSubida(() => { loadItems(offset) })
 
   // Deep link from the Dashboard "Recomendaciones" panel: open a specific
   // request's detail when its id se apuntó antes de venir aquí. Al ENTRAR y
@@ -1322,17 +1319,6 @@ export function RequestsPage({ onNavigate }: { onNavigate?: (page: string) => vo
         <Modal titulo="Candidatos locales" onClose={() => setShowCandidates(false)} className="pet-modal-candidatos">
           <CandidatesPanel requestId={selectedId} />
         </Modal>
-      )}
-
-      {wizardItem && (
-        <UploadWizardModal
-          item={wizardItem}
-          preselect={wizardPreselect}
-          requestId={wizardRequestId}
-          onClose={() => setWizardItem(null)}
-          onDone={() => { setWizardItem(null); loadItems(offset) }}
-          onNavigate={onNavigate}
-        />
       )}
 
       {loteAbierto && (

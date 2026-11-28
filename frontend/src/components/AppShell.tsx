@@ -12,6 +12,8 @@ import { useTour } from '../context/TourContext'
 import { pasosDelTour } from '../tour/steps'
 import { CommandPalette } from './CommandPalette'
 import { esAtajoDePaleta } from '../utils/paleta'
+import { asistenteConCambios, recuperarAsistente, SECCION_ASISTENTE } from '../utils/asistenteSesion'
+import { ConfirmarOtraSubida } from './ConfirmarOtraSubida'
 
 // The very first time the app is ready to use (right after finishing setup,
 // or on any later reload before it's been seen), the guided tour launches on
@@ -39,6 +41,7 @@ const CARGAR_PAGINA = {
   instances: () => import('../pages/InstancesPage').then(m => ({ default: m.InstancesPage })),
   logs:      () => import('../pages/LogsPage').then(m => ({ default: m.LogsPage })),
   settings:  () => import('../pages/SettingsPage').then(m => ({ default: m.SettingsPage })),
+  subir:     () => import('../pages/SubirPage').then(m => ({ default: m.SubirPage })),
 }
 const LibraryPage = lazyConReintento(CARGAR_PAGINA.library)
 const RequestsPage = lazyConReintento(CARGAR_PAGINA.requests)
@@ -49,6 +52,7 @@ const TasksPage = lazyConReintento(CARGAR_PAGINA.tasks)
 const InstancesPage = lazyConReintento(CARGAR_PAGINA.instances)
 const LogsPage = lazyConReintento(CARGAR_PAGINA.logs)
 const SettingsPage = lazyConReintento(CARGAR_PAGINA.settings)
+const SubirPage = lazyConReintento(CARGAR_PAGINA.subir)
 
 interface AppShellProps {
   user: CurrentUserResponse | null
@@ -66,6 +70,8 @@ const PAGE_TITLE: Record<string, string> = {
   instances:  'Instancias',
   logs:       'Logs',
   settings:   'Configuración',
+  // El asistente de subida: sin entrada fija en el menú, se llega con «Subir».
+  [SECCION_ASISTENTE]: 'Subir',
 }
 
 function unaPagina(page: string, onNavigate: (p: string) => void) {
@@ -80,6 +86,7 @@ function unaPagina(page: string, onNavigate: (p: string) => void) {
     case 'instances':  return <InstancesPage />
     case 'logs':       return <LogsPage />
     case 'settings':   return <SettingsPage />
+    case SECCION_ASISTENTE: return <SubirPage onNavigate={onNavigate} />
     default:           return <DashboardPage />
   }
 }
@@ -171,7 +178,7 @@ function PageContent({ page, onNavigate }: { page: string; onNavigate: (p: strin
 // Tabs that map to a URL path, so the address bar reflects the current tab
 // (bookmarkable / reloadable). The backend already serves index.html for any
 // non-/api path (SPA fallback), so a deep link like /library works on reload.
-const VALID_PAGES = ['dashboard', 'library', 'uploads', 'stats', 'requests', 'guide', 'tasks', 'instances', 'logs', 'settings']
+const VALID_PAGES = ['dashboard', 'library', 'uploads', 'stats', 'requests', 'guide', 'tasks', 'instances', 'logs', 'settings', SECCION_ASISTENTE]
 
 function pageFromPath(): string {
   const seg = window.location.pathname.replace(/^\/+/, '').split('/')[0]
@@ -267,10 +274,13 @@ export function AppShell({ user, onLogout }: AppShellProps) {
     return () => window.removeEventListener('popstate', onPop)
   }, [])
 
+  // Tras recargar la pestaña con una subida en preparación, el menú vuelve a ofrecerla.
+  useEffect(() => { void recuperarAsistente() }, [])
+
   // Warn before a full reload / closing the tab while there are unsaved changes.
   useEffect(() => {
     const onBeforeUnload = (e: BeforeUnloadEvent) => {
-      if (hasUnsavedChanges()) {
+      if (hasUnsavedChanges() || asistenteConCambios()) {
         e.preventDefault()
         e.returnValue = ''
       }
@@ -314,6 +324,7 @@ export function AppShell({ user, onLogout }: AppShellProps) {
         Saltar al contenido
       </button>
       <UnsavedChangesModal />
+      <ConfirmarOtraSubida />
       {menu.abierto && <div className="sidebar-velo" onClick={menu.cerrar} aria-hidden="true" />}
       <Sidebar
         active={activePage} onNavigate={navigate} movil={menu.movil} abierta={menu.abierto} onCerrar={menu.cerrar}
@@ -336,7 +347,7 @@ export function AppShell({ user, onLogout }: AppShellProps) {
       <TourOverlay activePage={activePage} navigate={navigate} />
       {paletaAbierta && (
         <CommandPalette
-          secciones={Object.entries(PAGE_TITLE).map(([id, titulo]) => ({ id, titulo }))}
+          secciones={Object.entries(PAGE_TITLE).filter(([id]) => id !== SECCION_ASISTENTE).map(([id, titulo]) => ({ id, titulo }))}
           onSeccion={abrirSeccion}
           onElemento={abrirElemento}
           onClose={() => setPaletaAbierta(false)}
