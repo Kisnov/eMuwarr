@@ -35,7 +35,7 @@ import { ApiClientError } from '../../api/client'
 import { getLibraryItem } from '../../api/library'
 import { ConfirmarOtraSubida } from '../../components/ConfirmarOtraSubida'
 import { Sidebar } from '../../components/Sidebar'
-import { boton, desmontar, esperar, montar, pulsar, texto } from '../../components/__tests__/dom'
+import { boton, desmontar, diferida, esperar, montar, pulsar, texto } from '../../components/__tests__/dom'
 import type { LibraryItemResponse } from '../../types/api'
 import {
   abrirAsistente, asistenteConCambios, recuperarAsistente, registrarEstado, reiniciarAsistente, sesionGuardada,
@@ -262,6 +262,39 @@ describe('pulsar «Subir» con una subida ya en el asistente', () => {
     const { act } = await import('react')
     await act(async () => { alPulsar.onClick() })
     expect(onNavigate).not.toHaveBeenCalled()
+    expect(props().id).toBe(9)
+    expect(sesionGuardada()?.id).toBe(9)
+  })
+})
+
+describe('una recuperación que tarda', () => {
+  async function conDuneApuntada() {
+    await montar(<Arnes />)
+    await pulsarAbrir({ item: DUNE, origen: 'requests' })
+    await desmontar()
+    reiniciarAsistente()
+    window.history.replaceState({}, '', '/subir/5')
+    const pedida = diferida<LibraryItemResponse>()
+    vi.mocked(getLibraryItem).mockReturnValue(pedida.promesa)
+    await montar(<Arnes />)
+    return pedida
+  }
+  const fallar = async (pedida: { rechazar: (e: unknown) => void }, estado: number) => {
+    const { act } = await import('react')
+    await act(async () => { pedida.rechazar(new ApiClientError('fallo', estado, null)) })
+  }
+
+  it('si falla cuando ya se está en otra sección, no saca de ella', async () => {
+    const pedida = await conDuneApuntada()
+    window.history.pushState({}, '', '/uploads')
+    await fallar(pedida, 503)
+    expect(ruta()).toBe('/uploads')
+  })
+
+  it('si falla con otra subida ya abierta, no borra lo apuntado de la nueva', async () => {
+    const pedida = await conDuneApuntada()
+    await pulsarAbrir({ item: CONAN, origen: 'library' })
+    await fallar(pedida, 404)
     expect(props().id).toBe(9)
     expect(sesionGuardada()?.id).toBe(9)
   })

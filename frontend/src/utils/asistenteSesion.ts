@@ -117,7 +117,8 @@ export function recuperarAsistente(): Promise<boolean> {
   }, (e: unknown) => {
     // Solo si el contenido ya no está en la biblioteca no queda nada que rehacer. Un corte de red o un 503 no borra
     // lo apuntado: la siguiente carga de la aplicación lo vuelve a intentar.
-    if (e instanceof ApiClientError && e.status === 404) {
+    // Y solo si lo apuntado sigue siendo eso: si entretanto se abrió otra subida, lo apuntado ya es lo suyo.
+    if (e instanceof ApiClientError && e.status === 404 && !estado.sesion && sesionGuardada()?.id === g.id) {
       try { sessionStorage.removeItem(CLAVE) } catch { /* nada que quitar */ }
     }
     return false

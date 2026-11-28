@@ -478,7 +478,9 @@ export function useAsistente({ item, onClose: onCloseProp, onDone, onNavigate, p
   // origen no hay que entrar en cada una. Cada cual conserva su Proveedor, que sale de su nombre de fichero.
   const aplicarATodas = () => {
     editado.current = true
-    const { source, tag } = fields
+    const { source } = fields
+    // Sin Tag se apunta como «Sin Tag» elegido a mano (""): sin apuntar, otra temporada recuperaría el de su plan.
+    const tag = fields.tag ?? ''
     setAjustesPorId(prev => {
       const copia = new Map(prev)
       for (const id of seasonQueue) copia.set(id, { ...copia.get(id), source, tag })

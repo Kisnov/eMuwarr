@@ -1886,6 +1886,19 @@ describe('el Resumen de una tanda lista el nombre de cada torrent', () => {
       expect(deLaSegunda[3]).toEqual({ source: 'WEB-DL', tag: 'OTRO', title: 'Serie' })
     })
 
+    it('«en todas» también lleva el «sin Tag»: otra temporada no recupera el de su plan', async () => {
+      m(temporada.previewSeasonPack).mockImplementation(async id => plan({ release_tag: id === 31 ? null : 'GRP' }) as never)
+      await abrir(SERIE, { preselect: { season: 1 } })
+      await pulsar(await esperar(() => boton('Temporada 2')))
+      await pulsar(boton('Continuar'))
+      await esperar(() => texto().includes('✓ 2 capítulo(s) listos'))
+      await pulsar(boton('Usar este Source y Tag en todas'))
+      await pulsar(boton('Continuar'))
+      await esperar(() => texto().includes('✓ Todo listo: 2 temporadas'))
+      const deLaSegunda = m(subidas.runUploadChecks).mock.calls.find(c => c[0] === 32 && c[1] === 'content')!
+      expect(deLaSegunda[3]).toMatchObject({ tag: '' })
+    })
+
     it('en el Resumen, la fila elegida decide de quién se ven las comprobaciones', async () => {
       m(subidas.runUploadChecks).mockImplementation(async (id, alcance) => (alcance === 'environment' ? ENTORNO : {
         ready: true, nombre: `Pack ${id}`,

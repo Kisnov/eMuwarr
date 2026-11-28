@@ -23,7 +23,8 @@ export function SubirPage({ onNavigate }: { onNavigate: (page: string) => void }
     setRecuperando(true)
     void recuperarAsistente().then(hay => {
       setRecuperando(false)
-      if (!hay) salirDelAsistente(origen)
+      // Si mientras tanto se fue a otra sección, ya no hay de dónde sacarle.
+      if (!hay && esDeLaSeccion(window.location.pathname, SECCION_ASISTENTE)) salirDelAsistente(origen)
     })
   })
 
