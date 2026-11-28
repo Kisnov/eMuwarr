@@ -1,7 +1,7 @@
 {
-  "commit": "a4da5fd0fa3edb24f11c969e99ecaea0f3f4314b",
-  "fecha": "2026-11-27 20:40 UTC",
-  "digest": "sha256:ae1cd459dd67117a8d60776031fbfa68599f018be1663c645ab2bdd8c06e422e",
-  "notas": "Un pack de temporada con capítulos en códecs de vídeo distintos ya no se bloquea: avisa y se puede subir.",
-  "version": "2.0.1"
+  "commit": "ee6233f7534db506a80a25bab8903d238c9ccc54",
+  "fecha": "2026-11-28 11:04 UTC",
+  "digest": "sha256:7eca116a3ef1df9b4853f4e02d0f90895f0a8d25c6102c0d8bdfc6d494a9592c",
+  "notas": "En un pack de temporada cada capítulo lleva su fuente y su grupo, se puede subir sin Tag, y en Subidas las temporadas de una serie van plegadas bajo ella.",
+  "version": "2.1.0"
 }
