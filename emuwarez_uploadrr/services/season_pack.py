@@ -775,10 +775,6 @@ def build_season_pack_plan(
     `tracker`: el de la subida (services/trackers.py). Su regla de idioma se aplica a cada capítulo y el plan lleva
     la `variante` de categoría que le toca al pack allí (None en eMuwarez, que es la de por defecto)."""
     idiomas_audio = _idiomas_del_pack(idiomas_audio)
-    # El avance de un plan anterior de esta temporada (uno cancelado a medias se queda en 12/38) no es de este:
-    # quien pregunte antes de que este publique el suyo no debe leerlo.
-    with _PLAN_LOCK:
-        _PLAN_PROGRESS.pop(season_id, None)
     own = conn is None
     conn = conn or connect()
     try:
@@ -1058,6 +1054,12 @@ def build_season_pack_plan(
         }
     finally:
         _clear_season_plan_cancel(season_id)
+        # Un plan que no llegó al final (cancelado, o con un error) no deja su avance a medias: el asistente sigue
+        # el del siguiente desde antes de pedirlo, y leería ese 12/38 como suyo.
+        with _PLAN_LOCK:
+            avance = _PLAN_PROGRESS.get(season_id)
+            if avance and avance["done"] < avance["total"]:
+                del _PLAN_PROGRESS[season_id]
         if own:
             conn.close()
 
