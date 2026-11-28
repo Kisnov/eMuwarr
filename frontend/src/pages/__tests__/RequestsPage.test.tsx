@@ -17,7 +17,6 @@ vi.mock('../../api/uploads', () => ({
 vi.mock('../../api/nomenclature', () => ({ getNomenclatureFields: vi.fn(), previewNomenclatureFields: vi.fn() }))
 vi.mock('../../api/settings', () => ({ fetchSettings: vi.fn() }))
 vi.mock('../../api/eventos', () => ({ seguirProgreso: vi.fn(() => () => {}) }))
-vi.mock('../../components/UploadWizardModal', () => ({ UploadWizardModal: () => null }))
 
 import { getRequestDetail, getRequests } from '../../api/requests'
 import { getReadiness } from '../../api/requestReadiness'

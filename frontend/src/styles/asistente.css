@@ -1,23 +1,23 @@
-/* Asistente de subida (UploadWizardModal y components/asistente/). Prefijo
+/* Asistente de subida (pages/SubirPage y components/asistente/). Prefijo
    `asist-` para no chocar con el resto. Va el último en main.tsx: las clases
    que retocan un `.btn` o un `.form-input` se apoyan en ir después. */
 
-/* Marco: pasos y ancho del modal. El paso actual es el único con relleno; los hechos llevan su ✓. */
+/* El ancho de los modales que salen del asistente («Nombre de todos los capítulos») y de «Subir por lotes». */
 .modal-wide.asist-modal-ancho { max-width: 1100px; }
-/* El asistente no hace scroll entero: el panel es una columna (cabecera, pasos, paso) y solo el cuerpo del paso
-   se desplaza, así el pie (Volver, Continuar, Subir) se ve a cualquier alto de ventana. Va solo en el asistente:
-   los modales que se abren encima (nombres, comparación) siguen haciendo scroll como siempre. */
-.modal-panel.asist-marco {
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
+/* Marco: el asistente es una pantalla. Desplaza la página entera (`.page-container`) y el pie del paso (Volver,
+   Continuar, Subir) se queda pegado abajo, así se ve a cualquier alto de ventana y con cualquier largo de lista.
+   `--asist-margen` es el relleno de `.page-container`: el pie lo deshace para ir de lado a lado. */
+.asist-pantalla {
+  --asist-margen: 24px;
+  max-width: 1400px;
   /* Se hereda: ningún párrafo del asistente acaba con una palabra sola en su última línea. */
   text-wrap: pretty;
 }
-.asist-marco > .modal-header { flex: none; }
-.asist-seccion { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; }
-.asist-cuerpo { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
-.asist-pasos { flex: none; padding: 0 20px; margin-top: 12px; }
+.page-header.asist-cabecera { gap: 12px; margin-bottom: 12px; }
+.asist-titulo { min-width: 0; overflow-wrap: anywhere; }
+.asist-cuerpo.modal-body { padding: 16px 0 20px; }
+/* Pasos: el actual es el único con relleno; los hechos llevan su ✓. */
+.asist-pasos { margin: 0; }
 .asist-pasos ol { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; padding: 0; list-style: none; }
 .asist-paso {
   /* Sin borde: con él parecían botones y no se pueden pulsar. El tinte del actual dice dónde estás. */
@@ -112,18 +112,15 @@
   backdrop-filter: blur(6px);
   border-top: 1px solid var(--border);
 }
-/* El pie de un paso del asistente va fuera del cuerpo que hace scroll, así que no necesita pegarse. (El de «Subir por
-   lotes», que sigue en un modal que hace scroll entero, conserva el de arriba.) */
+/* El pie de un paso del asistente: pegado al borde de abajo de la página y de lado a lado. (El de «Subir por lotes»,
+   en su modal, conserva el de arriba.) */
 .asist-seccion > .asist-pie {
-  flex: none;
   align-items: center;
   gap: 10px;
   flex-wrap: wrap;
-  margin-top: 0;
-  position: static;
-  padding: 12px 20px;
-  backdrop-filter: none;
-  background: color-mix(in srgb, var(--overlay-dark) 18%, transparent);
+  margin: 0 calc(-1 * var(--asist-margen)) calc(-1 * var(--asist-margen));
+  padding: 12px var(--asist-margen);
+  z-index: 2;
 }
 .asist-pie-fin { justify-content: flex-end; }
 .asist-bloque-error { padding: 20px 0; }
@@ -479,9 +476,6 @@
 /* El veredicto de las comprobaciones, en el pie entre Volver y Subir. */
 .asist-pie-estado { flex: 1 1 200px; min-width: 0; font-size: 13px; font-weight: 600; line-height: 1.35; text-align: right; overflow-wrap: anywhere; }
 
-/* Con pestañas el panel no cambia de alto al pasar de una a otra (Pistas es mucho más corta que Nomenclatura). */
-.modal-panel.asist-marco.asist-alto-fijo { height: min(760px, calc(var(--vh100) * 0.9)); }
-
 /* Pestañas del paso «Nombre y pistas»: Nomenclatura, Pistas y MediaInfo. Subrayado en el acento del HUD. */
 .asist-pestanas { margin-top: 14px; }
 .asist-pestanas-lista {
@@ -529,9 +523,11 @@
   .asist-pestana { transition: none; }
 }
 
+/* El mismo corte en el que `.page-container` pasa a 16 px de relleno (layout.css). */
+@media (max-width: 768px), (max-height: 500px) and (pointer: coarse) {
+  .asist-pantalla { --asist-margen: 16px; }
+}
 @media (max-width: 640px) {
-  .modal-panel.asist-marco { width: 96%; max-height: calc(var(--vh100) * 0.96); }
-  .modal-panel.asist-marco.asist-alto-fijo { height: calc(var(--vh100) * 0.96); }
   .asist-pie-estado { order: -1; flex-basis: 100%; text-align: left; }
   .asist-rejilla-campos, .asist-rejilla-modos { grid-template-columns: 1fr; }
   .asist-derivados { grid-template-columns: max-content 1fr; }
@@ -541,9 +537,7 @@
   .asist-tabla-pistas { min-width: 520px; }
   .asist-tabla-pistas select.form-input { min-width: 96px; }
   .asist-tabla-mediainfo { min-width: 440px; }
-  .asist-pie { padding: 10px 16px; }
-  .asist-cuerpo.modal-body { padding: 14px 16px; }
-  .asist-pasos { padding: 0 16px; }
+  .asist-cuerpo.modal-body { padding: 14px 0 16px; }
 }
 /* A 390 px los tres pasos no cabían en una línea y «3 · Resumen» caía sola debajo. */
 @media (max-width: 480px) {

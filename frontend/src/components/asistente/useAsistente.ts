@@ -722,6 +722,8 @@ export function useAsistente({ item, onClose: onCloseProp, onDone, onNavigate, p
     if (editado.current && batchPhase !== 'done') setConfirmandoCierre(true)
     else onClose()
   }
+  // Lo mismo, para quien avisa antes de recargar o cerrar la pestaña.
+  const hayCambios = () => editado.current && batchPhase !== 'done'
 
   useEffect(() => {
     if (step === 1 && cargadoPara.current !== objetivo && targetIsSeason) loadSeasonPlan()
@@ -1314,7 +1316,7 @@ export function useAsistente({ item, onClose: onCloseProp, onDone, onNavigate, p
     batchViewId, setBatchViewId, batchEnvChecks, batchContentChecks, batchChecksLoading, batchChecksIndex, batchProgreso,
     batchChecksError, repetirComprobacionesTanda, uploadAllSeasons, uploadAllEpisodes, nombresTanda,
     // Cerrar
-    cerrarModal, confirmandoCierre, setConfirmandoCierre,
+    cerrarModal, hayCambios, confirmandoCierre, setConfirmandoCierre,
   }
 }
 

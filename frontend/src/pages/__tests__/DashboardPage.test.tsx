@@ -30,10 +30,16 @@ vi.mock('../../components/CuentaEmu', () => ({
 }))
 vi.mock('../../context/PerfilEmuContext', () => ({ usePerfilEmu: () => ({ perfil: { error: cuenta.error } }) }))
 vi.mock('../../components/SyncCard', () => ({ SyncCard: () => <button>↻ Sincronizar todo</button> }))
-vi.mock('../../components/UploadWizardModal', () => ({
-  UploadWizardModal: (p: { item: { id: number }; preselect?: unknown; requestId?: number }) => (
-    <div data-testid="asistente">{JSON.stringify({ id: p.item.id, preselect: p.preselect ?? null, requestId: p.requestId ?? null })}</div>
-  ),
+// El asistente es otra pantalla: aquí solo importa con qué se abre. Lo pedido se deja escrito en el documento.
+vi.mock('../../utils/asistenteSesion', () => ({
+  useAlEncolarSubida: () => {},
+  abrirAsistente: (a: { item: { id: number }; preselect?: unknown; requestId?: number; origen: string }) => {
+    const nodo = document.createElement('div')
+    nodo.dataset.testid = 'asistente'
+    nodo.dataset.origen = a.origen
+    nodo.textContent = JSON.stringify({ id: a.item.id, preselect: a.preselect ?? null, requestId: a.requestId ?? null })
+    document.body.appendChild(nodo)
+  },
 }))
 vi.mock('../../components/RequestFormModal', () => ({
   RequestFormModal: (p: { item: { id: number } }) => <div data-testid="formulario">{p.item.id}</div>,
@@ -105,7 +111,10 @@ beforeEach(() => {
   navegar.mockReset()
   sessionStorage.clear()
 })
-afterEach(desmontar)
+afterEach(async () => {
+  await desmontar()
+  document.querySelectorAll('[data-testid="asistente"]').forEach(n => n.remove())
+})
 
 describe('Panel', () => {
   it('con más de 100 subidas, la que sube sigue en «En curso» aunque no esté entre las 100 más nuevas', async () => {
