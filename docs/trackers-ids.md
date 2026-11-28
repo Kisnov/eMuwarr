@@ -34,8 +34,8 @@ Diferencias que importan:
 
 - 1 y 2 coinciden en los tres. eMuwarez no tiene categoría de anime; NOBS (4, 5) y Milnueve (3, 4) sí: hará falta
   decidir el anime por ítem (Sonarr/Radarr ya saben si una biblioteca es de anime: `instances.is_anime`).
-- Milnueve tiene categorías por idioma u origen: «Anime en Catalan» (8, clase tv: ¿también para las películas de anime
-  en catalán?), «Peliculas Latino» (10), «Series latino» (14), «VHS / Retro» (7) y «Zona Documentales» (9). Cuál toca
+- Milnueve tiene categorías por idioma u origen: «Anime en Catalan» (8, clase tv: una película enviada allí se
+  rechaza por no llevar temporada ni capítulo, así que las películas solo en catalán no se suben por ahora), «Peliculas Latino» (10), «Series latino» (14), «VHS / Retro» (7) y «Zona Documentales» (9). Cuál toca
   depende del audio y del origen, no solo de película/serie: preguntar al staff cuándo se usa cada una.
 - El 3 de la tabla genérica (`music`) en NOBS es Arcade y en Milnueve Películas Anime: el adaptador no puede heredar
   ese token.

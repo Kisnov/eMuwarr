@@ -9,7 +9,8 @@ siempre, Películas o Series.
 - N.O.B.S: castellano o latino en el audio, o subtítulos en español (VOSE). El anime va a sus categorías de anime.
 - Milnueve: lo mismo y además el catalán (o valenciano) en el audio, sin exigir el castellano. Sin audio en castellano,
   el anime con catalán va a «Anime en Catalan» y lo que tiene latino a sus categorías Latino. VHS/Retro y Documentales
-  no se eligen solas.
+  no se eligen solas. En una película el catalán no cuenta: «Anime en Catalan» es una categoría de series (pide
+  temporada y capítulo) y por ahora las películas solo en catalán no se suben.
 
 El castellano se pide en las dos guías cuando existe el doblaje, pero la app no puede saber si existe: no bloquea por
 eso. Lo que no tiene diálogo (todo el audio en `zxx`, como Flow) no tiene nada que doblar y pasa en todos. Pura: no lee
@@ -89,9 +90,15 @@ def _reglas_otro(tracker, item: dict, anime: bool) -> Reglas:
     acepta_catalan = tracker.id == MNV.id
     castellano = "ESP" in audio
     latino = "LAT" in audio
-    catalan = acepta_catalan and ("CAT" in audio or "VAL" in audio)
+    en_catalan = acepta_catalan and ("CAT" in audio or "VAL" in audio)
+    # En una película el catalán no cuenta (ver arriba).
+    catalan = en_catalan and item.get("item_type") != "movie"
     vose = "ESP" in subs or "LAT" in subs
 
+    if en_catalan and not (castellano or latino or catalan or vose):
+        return Reglas(False, (
+            f"{tracker.nombre} no admite por ahora películas solo en catalán: su categoría «Anime en Catalan» "
+            "es de series."), None)
     if not (castellano or latino or catalan or vose):
         idiomas = "castellano, latino ni catalán" if acepta_catalan else "castellano ni latino"
         return Reglas(False, (
