@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef } from 'react'
-import { registrarCambios } from '../../utils/asistenteSesion'
+import { registrarEstado } from '../../utils/asistenteSesion'
 import { Modal } from '../Modal'
 import { PasoArchivo } from './PasoArchivo'
 import { PasoSeleccion } from './PasoSeleccion'
@@ -31,7 +31,7 @@ function pasosDelAsistente(needsSelection: boolean): { paso: 0 | 1 | 2; nombre: 
 export function PantallaAsistente(props: PropsAsistente) {
   const a = useAsistente(props)
   const { item, step, needsSelection, targetIsSeason, batchQueue, seasonQueue, episodeQueue } = a
-  const { cerrarModal, confirmandoCierre, setConfirmandoCierre, onClose, hayCambios } = a
+  const { cerrarModal, confirmandoCierre, setConfirmandoCierre, onClose, estadoParaLaSesion } = a
   const pasos = pasosDelAsistente(needsSelection)
   const idTitulo = useId()
   // Al cambiar de paso el foco pasa al paso nuevo, para que el lector lo anuncie y Tab siga desde arriba.
@@ -41,10 +41,10 @@ export function PantallaAsistente(props: PropsAsistente) {
     if (primerPintado.current) { primerPintado.current = false; return }
     pasoActual.current?.focus()
   }, [step])
-  // Recargar o cerrar la pestaña con cambios hechos a mano avisa (AppShell lo pregunta).
-  const cambios = useRef(hayCambios)
-  cambios.current = hayCambios
-  useEffect(() => registrarCambios(() => cambios.current()), [])
+  // La sesión pregunta por este asistente al recargar la pestaña y al pulsar «Subir» en otro contenido.
+  const suEstado = useRef(estadoParaLaSesion)
+  suEstado.current = estadoParaLaSesion
+  useEffect(() => registrarEstado(() => suEstado.current()), [])
   return (
     <section className="asist-pantalla" aria-labelledby={idTitulo}>
       <div className="page-header asist-cabecera">

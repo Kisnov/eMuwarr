@@ -186,7 +186,7 @@ export function PasoTemporada({ a }: { a: Asistente }) {
           </p>
           <ListaTanda
             etiqueta="Temporadas de la tanda" ids={seasonQueue} actual={targetId} titulo={batchItemTitle}
-            onElegir={cambiarElemento} deshabilitada={seasonPlanLoading}
+            onElegir={id => { setAplicadoCon(null); cambiarElemento(id) }} deshabilitada={seasonPlanLoading}
           />
         </aside>
       )}

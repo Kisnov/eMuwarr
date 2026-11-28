@@ -10,6 +10,7 @@ vi.mock('../../api/library', () => ({ getLibraryItem: vi.fn() }))
 vi.mock('../../api/system', () => ({ getSystemStats: vi.fn(() => new Promise(() => { /* sin datos */ })) }))
 // Sin AppShell alrededor: «entrar» en la sección es montarla.
 vi.mock('../../context/SeccionVisible', () => ({
+  useSeccionVisible: () => true,
   useAlEntrar: (hacer: () => void) => { useEffect(() => { hacer() }, []) }, // eslint-disable-line react-hooks/exhaustive-deps -- una vez, al montar
 }))
 // El asistente de verdad tiene su propio test: aquí basta con ver con qué se monta y que guarda su estado.
@@ -36,12 +37,14 @@ import { Sidebar } from '../../components/Sidebar'
 import { boton, desmontar, esperar, montar, pulsar, texto } from '../../components/__tests__/dom'
 import type { LibraryItemResponse } from '../../types/api'
 import {
-  abrirAsistente, asistenteConCambios, registrarCambios, reiniciarAsistente, sesionGuardada, useAlEncolarSubida,
+  abrirAsistente, asistenteConCambios, recuperarAsistente, registrarEstado, reiniciarAsistente, sesionGuardada,
+  useAlEncolarSubida,
 } from '../../utils/asistenteSesion'
 import { SubirPage } from '../SubirPage'
 
 const DUNE = { id: 5, item_type: 'movie', title: 'Dune' } as LibraryItemResponse
 const CONAN = { id: 9, item_type: 'series', title: 'Detective Conan' } as LibraryItemResponse
+const SIN_NADA = { cambios: false, ocupado: false, terminado: false }
 
 // Lo que hace AppShell.navigate: cambia la URL.
 const onNavigate = vi.fn((seccion: string) => { window.history.pushState({}, '', `/${seccion}`) })
@@ -173,7 +176,7 @@ describe('recargar la pestaña', () => {
     window.history.replaceState({}, '', '/subir/5')
     const entradas = window.history.length
     await montar(<Arnes />)
-    expect(ruta()).toBe('/library')
+    await esperar(() => ruta() === '/library')
     expect(window.history.length).toBe(entradas)
     expect(getLibraryItem).not.toHaveBeenCalled()
   })
@@ -195,13 +198,77 @@ describe('cambios sin guardar', () => {
     expect(asistenteConCambios()).toBe(false)
     await montar(<Arnes />)
     await pulsarAbrir({ item: DUNE, origen: 'library' })
-    const quitar = registrarCambios(() => true)
+    const quitar = registrarEstado(() => ({ ...SIN_NADA, cambios: true }))
     expect(asistenteConCambios()).toBe(true)
     quitar()
     expect(asistenteConCambios()).toBe(false)
-    registrarCambios(() => true)
+    registrarEstado(() => ({ ...SIN_NADA, cambios: true }))
     await pulsar(boton('Cerrar'))
     expect(asistenteConCambios()).toBe(false)
+  })
+})
+
+describe('pulsar «Subir» con una subida ya en el asistente', () => {
+  it('el mismo contenido desde otra petición es otra subida: pregunta', async () => {
+    await montar(<Arnes />)
+    await pulsarAbrir({ item: CONAN, origen: 'library' })
+    await pulsarAbrir({ item: CONAN, origen: 'requests', preselect: { season: 2 }, requestId: 77 })
+    expect(texto()).toContain('Ya hay una subida en preparación')
+    await pulsar(boton('Dejarla y empezar esta'))
+    expect(props()).toEqual({ id: 9, preselect: { season: 2 }, requestId: 77 })
+  })
+
+  it('mientras encola no se puede dejar: vuelve a ella sin preguntar', async () => {
+    await montar(<Arnes />)
+    await pulsarAbrir({ item: DUNE, origen: 'library' })
+    registrarEstado(() => ({ ...SIN_NADA, ocupado: true }))
+    window.history.pushState({}, '', '/library')
+    await pulsarAbrir({ item: CONAN, origen: 'library' })
+    expect(document.querySelector('[role="dialog"]')).toBeNull()
+    expect(ruta()).toBe('/subir/5')
+    expect(props().id).toBe(5)
+  })
+
+  it('ya encolada y con el resultado a la vista, la nueva la sustituye sin preguntar', async () => {
+    await montar(<Arnes />)
+    await pulsarAbrir({ item: DUNE, origen: 'library' })
+    registrarEstado(() => ({ ...SIN_NADA, terminado: true }))
+    await pulsarAbrir({ item: CONAN, origen: 'library' })
+    expect(document.querySelector('[role="dialog"]')).toBeNull()
+    expect(props().id).toBe(9)
+  })
+
+  it('un asistente dejado por otra subida ya no cierra ni lleva a ningún sitio aunque responda tarde', async () => {
+    await montar(<Arnes />)
+    await pulsarAbrir({ item: DUNE, origen: 'library' })
+    // Lo que el asistente de Dune recibió para cerrar y navegar, como lo usaría una petición suya que llega tarde.
+    const encolarDeDune = boton('Encolar')!
+    const alPulsar = Object.entries(encolarDeDune).find(([k]) => k.startsWith('__reactProps'))![1] as { onClick: () => void }
+    await pulsarAbrir({ item: CONAN, origen: 'library' })
+    await pulsar(boton('Dejarla y empezar esta'))
+    onNavigate.mockClear()
+    const { act } = await import('react')
+    await act(async () => { alPulsar.onClick() })
+    expect(onNavigate).not.toHaveBeenCalled()
+    expect(props().id).toBe(9)
+    expect(sesionGuardada()?.id).toBe(9)
+  })
+})
+
+describe('al arrancar la aplicación', () => {
+  it('recargar en otra sección también rehace la subida: el menú vuelve a ofrecerla', async () => {
+    await montar(<Arnes />)
+    await pulsarAbrir({ item: DUNE, origen: 'library' })
+    await desmontar()
+    reiniciarAsistente()
+    window.history.replaceState({}, '', '/uploads')
+    vi.mocked(getLibraryItem).mockResolvedValue(DUNE)
+    await montar(<Sidebar active="uploads" onNavigate={onNavigate} />)
+    expect(boton('Subida en preparación')).toBeUndefined()
+    const { act } = await import('react')
+    await act(async () => { await recuperarAsistente() })   // lo que hace AppShell al montarse
+    expect(boton('Subida en preparación')).toBeDefined()
+    expect(ruta()).toBe('/uploads')
   })
 })
 

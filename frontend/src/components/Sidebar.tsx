@@ -7,6 +7,7 @@ import { CuentaDelCajon } from './CuentaDelCajon'
 import { IconoAyuda, IconoCerrar, IconoDesplegar } from './Iconos'
 import type { CurrentUserResponse } from '../types/api'
 import { irAlAsistente, SECCION_ASISTENTE, useSesionAsistente } from '../utils/asistenteSesion'
+import { guardedLeave } from '../utils/unsavedGuard'
 
 interface SidebarProps {
   active: string
@@ -201,10 +202,10 @@ export function Sidebar({ active, onNavigate, movil = false, abierta = false, on
         {/* Solo mientras hay una subida a medias en el asistente: es el camino de vuelta a ella. */}
         {sesion && (
           <NavItemRow
-            item={{ id: SECCION_ASISTENTE, label: 'Subida en preparación', icon: 'uploads' }}
+            item={{ id: SECCION_ASISTENTE, label: 'Subida en preparación', icon: SECCION_ASISTENTE }}
             active={active === SECCION_ASISTENTE}
             collapsed={collapsed}
-            onNavigate={() => { irAlAsistente(); if (movil) onCerrar?.() }}
+            onNavigate={() => { guardedLeave(irAlAsistente); if (movil) onCerrar?.() }}
           />
         )}
         {movil && onTour && (

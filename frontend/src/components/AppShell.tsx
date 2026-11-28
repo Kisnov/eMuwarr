@@ -12,7 +12,7 @@ import { useTour } from '../context/TourContext'
 import { pasosDelTour } from '../tour/steps'
 import { CommandPalette } from './CommandPalette'
 import { esAtajoDePaleta } from '../utils/paleta'
-import { asistenteConCambios, SECCION_ASISTENTE } from '../utils/asistenteSesion'
+import { asistenteConCambios, recuperarAsistente, SECCION_ASISTENTE } from '../utils/asistenteSesion'
 import { ConfirmarOtraSubida } from './ConfirmarOtraSubida'
 
 // The very first time the app is ready to use (right after finishing setup,
@@ -273,6 +273,9 @@ export function AppShell({ user, onLogout }: AppShellProps) {
     window.addEventListener('popstate', onPop)
     return () => window.removeEventListener('popstate', onPop)
   }, [])
+
+  // Tras recargar la pestaña con una subida en preparación, el menú vuelve a ofrecerla.
+  useEffect(() => { void recuperarAsistente() }, [])
 
   // Warn before a full reload / closing the tab while there are unsaved changes.
   useEffect(() => {

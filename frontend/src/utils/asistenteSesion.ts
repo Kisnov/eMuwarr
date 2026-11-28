@@ -2,6 +2,7 @@
 // cualquiera pueda abrirla, para que el menú sepa que hay una a medias y para que sobreviva a cambiar de sección: la
 // pantalla se queda montada, como las demás, y aquí está lo que hace falta para volver a ella.
 import { useEffect, useRef, useSyncExternalStore } from 'react'
+import { getLibraryItem } from '../api/library'
 import type { LibraryItemResponse } from '../types/api'
 import type { PreseleccionDePeticion } from '../components/asistente/useAsistente'
 
@@ -23,7 +24,11 @@ export const SECCION_ASISTENTE = 'subir'
 interface Estado { sesion: SesionAsistente | null; pendiente: AperturaAsistente | null }
 let estado: Estado = { sesion: null, pendiente: null }
 let n = 0
-let conCambios: () => boolean = () => false
+// Lo que el asistente montado dice de sí mismo: si tiene cambios hechos a mano, si está encolando y si ya terminó.
+export interface EstadoDelAsistente { cambios: boolean; ocupado: boolean; terminado: boolean }
+const SIN_ESTADO = (): EstadoDelAsistente => ({ cambios: false, ocupado: false, terminado: false })
+let suEstado: () => EstadoDelAsistente = SIN_ESTADO
+let recuperacion: Promise<boolean> | null = null
 const oyentes = new Set<() => void>()
 const alEncolar = new Set<() => void>()
 
@@ -42,18 +47,28 @@ function irA(ruta: string, reemplazar = false) {
 }
 
 function empezar(a: AperturaAsistente) {
-  conCambios = () => false
+  suEstado = SIN_ESTADO
   poner({ sesion: { ...a, n: ++n }, pendiente: null })
   const guardada: SesionGuardada = { id: a.item.id, preselect: a.preselect, requestId: a.requestId, origen: a.origen }
   try { sessionStorage.setItem(CLAVE, JSON.stringify(guardada)) } catch { /* sin almacenamiento no se rehace al recargar */ }
   irAlAsistente()
 }
 
-/** Abre el asistente con ese elemento. Si ya hay una subida en preparación de otro, pregunta antes de dejarla. */
+const mismaApertura = (s: AperturaAsistente, a: AperturaAsistente) =>
+  s.item.id === a.item.id && s.requestId === a.requestId
+  && JSON.stringify(s.preselect ?? null) === JSON.stringify(a.preselect ?? null)
+
+/** Abre el asistente con ese elemento. Si ya hay otra subida en preparación, pregunta antes de dejarla. */
 export function abrirAsistente(a: AperturaAsistente): void {
   const { sesion } = estado
   if (!sesion) { empezar(a); return }
-  if (sesion.item.id === a.item.id) { irAlAsistente(); return }
+  const suyo = suEstado()
+  // Mientras encola no se puede dejar: el bucle seguiría encolando lo que se dijo que se dejaba.
+  if (suyo.ocupado) { irAlAsistente(); return }
+  // Ya encolada y con el resultado a la vista: no queda nada que perder.
+  if (suyo.terminado) { empezar(a); return }
+  // El mismo contenido con la misma petición es volver a ella; con otra temporada u otra petición, es otra subida.
+  if (mismaApertura(sesion, a)) { irAlAsistente(); return }
   poner({ pendiente: a })
 }
 
@@ -65,9 +80,12 @@ export function irAlAsistente(): void {
   if (estado.sesion) irA(`/${SECCION_ASISTENTE}/${estado.sesion.item.id}`)
 }
 
+/** ¿Sigue siendo esa la subida en preparación? Una sustituida que aún responde ya no manda. */
+export function esLaSesion(n: number): boolean { return estado.sesion?.n === n }
+
 /** Se acabó (encolada, o cerrada a mano): ya no hay nada a lo que volver. */
 export function cerrarAsistente(): void {
-  conCambios = () => false
+  suEstado = SIN_ESTADO
   try { sessionStorage.removeItem(CLAVE) } catch { /* nada que quitar */ }
   poner({ sesion: null })
 }
@@ -82,17 +100,31 @@ export function sesionGuardada(): SesionGuardada | null {
   } catch { return null }
 }
 
-/** Tras recargar la pestaña: la misma subida, con el elemento recién pedido. */
-export function restaurarAsistente(item: LibraryItemResponse, g: SesionGuardada): void {
-  if (!estado.sesion) poner({ sesion: { item, preselect: g.preselect, requestId: g.requestId, origen: g.origen, n: ++n } })
+/** Tras recargar la pestaña: la misma subida, con el elemento recién pedido (lo editado no se guarda). Se llama al
+ *  arrancar la aplicación, para que el menú vuelva a ofrecerla estés en la sección que estés. Dice si hay subida. */
+export function recuperarAsistente(): Promise<boolean> {
+  if (estado.sesion) return Promise.resolve(true)
+  const g = sesionGuardada()
+  if (!g) return Promise.resolve(false)
+  recuperacion ??= getLibraryItem(g.id).then(item => {
+    // Si entretanto se abrió otra, manda esa.
+    if (!estado.sesion) poner({ sesion: { item, preselect: g.preselect, requestId: g.requestId, origen: g.origen, n: ++n } })
+    return true
+  }, () => {
+    // El contenido ya no está en la biblioteca: no hay nada que rehacer.
+    try { sessionStorage.removeItem(CLAVE) } catch { /* nada que quitar */ }
+    return false
+  }).finally(() => { recuperacion = null })
+  return recuperacion
 }
 
-/** El asistente dice si tiene cambios hechos a mano: cerrar la pestaña con ellos avisa. */
-export function registrarCambios(fn: () => boolean): () => void {
-  conCambios = fn
-  return () => { if (conCambios === fn) conCambios = () => false }
+/** El asistente montado se describe: con cambios a mano, cerrar la pestaña avisa; ocupado o terminado decide qué
+ *  pasa al pulsar «Subir» en otro contenido. */
+export function registrarEstado(fn: () => EstadoDelAsistente): () => void {
+  suEstado = fn
+  return () => { if (suEstado === fn) suEstado = SIN_ESTADO }
 }
-export function asistenteConCambios(): boolean { return !!estado.sesion && conCambios() }
+export function asistenteConCambios(): boolean { return !!estado.sesion && suEstado().cambios }
 
 /** Algo se ha encolado: las secciones que lo enseñan recargan. */
 export function avisarSubidaEncolada(): void { alEncolar.forEach(f => f()) }
@@ -115,6 +147,7 @@ export function useSesionAsistente(): Estado {
 /** Solo para los tests: como recién cargada la aplicación. */
 export function reiniciarAsistente(): void {
   estado = { sesion: null, pendiente: null }
-  conCambios = () => false
+  suEstado = SIN_ESTADO
+  recuperacion = null
   oyentes.forEach(f => f())
 }
