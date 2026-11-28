@@ -34,6 +34,7 @@ import * as biblioteca from '../../api/library'
 import * as temporada from '../../api/seasonPack'
 import { getRequestDetail } from '../../api/requests'
 import { fetchSettings } from '../../api/settings'
+import { seguirProgreso } from '../../api/eventos'
 import type { TrackRemuxPreview } from '../../api/nomenclature'
 import type { LibraryItemResponse, SeasonPackPlanResponse, UploadJob } from '../../types/api'
 import { UploadWizardModal } from '../UploadWizardModal'
@@ -1757,6 +1758,7 @@ describe('el Resumen de una tanda lista el nombre de cada torrent', () => {
 
   describe('temporadas', () => {
     beforeEach(() => { m(biblioteca.getLibrary).mockResolvedValue({ items: [T1, T2], total: 2 } as never) })
+    afterEach(() => { m(seguirProgreso).mockImplementation(() => () => {}) })
 
     async function alResumen() {
       await abrir(SERIE, { preselect: { season: 1 } })
@@ -1789,6 +1791,73 @@ describe('el Resumen de una tanda lista el nombre de cada torrent', () => {
       expect(lista()).toEqual([
         'Serie (2021) - Temporada 1 | Serie (2020) S01 1080p WEB-DL-GRP',
         'Serie (2021) - Temporada 2 | Sin nombre: este elemento no se podrá subir',
+      ])
+    })
+
+    it('mientras se comprueban, el pack en curso dice por qué capítulo va y los demás esperan en cola', async () => {
+      m(seguirProgreso).mockImplementation((_tipo, _coincide, pedir) => { pedir(); return () => {} })
+      m(temporada.getSeasonPlanProgress).mockResolvedValue({ done: 12, total: 38 } as never)
+      const primera = diferida<unknown>()
+      m(subidas.runUploadChecks).mockImplementation(async (id, alcance) => (alcance === 'environment'
+        ? ENTORNO : id === 31 ? primera.promesa : { ...LISTO, nombre: 'Serie (2020) S02 1080p WEB-DL-GRP' }) as never)
+      await alResumen()
+      await esperar(() => texto().includes('capítulo 13 de 38'))
+      expect(lista()).toEqual([
+        'Serie (2021) - Temporada 1 | Calculando el nombre… capítulo 13 de 38',
+        'Serie (2021) - Temporada 2 | En cola',
+      ])
+      await act(async () => { primera.resolver({ ...LISTO, nombre: 'Serie (2020) S01 1080p WEB-DL-GRP' }) })
+      await esperar(() => texto().includes('✓ Todo listo: 2 temporadas'))
+      expect(lista()[1]).toBe('Serie (2021) - Temporada 2 | Serie (2020) S02 1080p WEB-DL-GRP')
+    })
+
+    it('un progreso ya completo es del plan anterior de esa temporada: no se enseña', async () => {
+      m(seguirProgreso).mockImplementation((_tipo, _coincide, pedir) => { pedir(); return () => {} })
+      m(temporada.getSeasonPlanProgress).mockResolvedValue({ done: 38, total: 38 } as never)
+      const primera = diferida<unknown>()
+      m(subidas.runUploadChecks).mockImplementation(async (id, alcance) => (alcance === 'environment'
+        ? ENTORNO : id === 31 ? primera.promesa : LISTO) as never)
+      await alResumen()
+      await esperar(() => lista()[1]?.endsWith('En cola'))
+      expect(lista()[0]).toBe('Serie (2021) - Temporada 1 | Calculando el nombre…')
+      await act(async () => { primera.resolver(LISTO) })
+    })
+
+    it('al volver atrás con un pack a medio comprobar se deja de seguir su progreso', async () => {
+      const parar = vi.fn()
+      m(seguirProgreso).mockImplementation(() => parar)
+      m(subidas.runUploadChecks).mockImplementation(async (_id, alcance) => (
+        alcance === 'environment' ? ENTORNO : new Promise(() => {})) as never)
+      await alResumen()
+      await esperar(() => lista()[1]?.endsWith('En cola'))
+      parar.mockClear()
+      await pulsar(boton('← Volver'))
+      expect(parar).toHaveBeenCalledTimes(1)
+    })
+
+    it('si una comprobación no llega, las que faltan dicen que se quedaron sin comprobar', async () => {
+      m(subidas.runUploadChecks).mockImplementation(async (id, alcance) => {
+        if (alcance === 'environment') return ENTORNO as never
+        if (id === 32) throw new Error('sin red')
+        return { ...LISTO, nombre: 'Serie (2020) S01 1080p WEB-DL-GRP' } as never
+      })
+      await alResumen()
+      await esperar(() => texto().includes('No se pudieron completar las comprobaciones'))
+      expect(lista()[1]).toBe('Serie (2021) - Temporada 2 | Sin comprobar')
+    })
+
+    it('un pack con nombre que no pasa sus comprobaciones se marca en su fila', async () => {
+      m(subidas.runUploadChecks).mockImplementation(async (id, alcance) => {
+        if (alcance === 'environment') return ENTORNO as never
+        return (id === 32
+          ? { ready: false, nombre: 'Serie (2020) S02 1080p WEB-DL-GRP', checks: [{ id: 'idioma', label: 'Idioma', status: 'fail', message: 'Sin castellano' }] }
+          : { ...LISTO, nombre: 'Serie (2020) S01 1080p WEB-DL-GRP' }) as never
+      })
+      await alResumen()
+      await esperar(() => texto().includes('✗ 1 de 2 no se puede subir'))
+      expect(lista()).toEqual([
+        'Serie (2021) - Temporada 1 | Serie (2020) S01 1080p WEB-DL-GRP',
+        'Serie (2021) - Temporada 2 | Serie (2020) S02 1080p WEB-DL-GRP | ✗ No se subirá',
       ])
     })
 

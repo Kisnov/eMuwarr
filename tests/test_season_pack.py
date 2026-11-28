@@ -886,6 +886,8 @@ def test_plan_stops_early_when_cancelled(isolated_db, tmp_path, monkeypatch):
     assert plan["errors"] == []          # not a failure, nothing to report
     # Stopped at the next boundary instead of grinding through all 6.
     assert len(built) == 2, built
+    # Y sin dejar su avance a medias: el asistente sigue el del plan siguiente desde antes de pedirlo.
+    assert sp.get_season_plan_progress(season_id) == {"done": 0, "total": 0, "current_title": None}
     conn.close()
 
 

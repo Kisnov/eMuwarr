@@ -382,10 +382,10 @@ export function useAsistente({ item, onClose: onCloseProp, onDone, onNavigate, p
     return row ? listDisplayTitle(row) : `#${id}`
   }
   const {
-    batchEnvChecks, batchContentChecks, batchChecksLoading, batchChecksIndex, batchViewId, setBatchViewId,
+    batchEnvChecks, batchContentChecks, batchChecksLoading, batchChecksIndex, batchProgreso, batchViewId, setBatchViewId,
     batchChecksError, repetir: repetirComprobacionesTanda, mergedChecksFor, olvidar: olvidarComprobacionesTanda,
   } = useComprobacionesTanda({
-    step, batchQueue, batchPhase, proveedorElegido, tracker: trackerPrincipal, trackerDe,
+    step, batchQueue, batchPhase, proveedorElegido, tracker: trackerPrincipal, trackerDe, sonPacks: !batchIsEpisodes,
     // Un pack da su nombre con lo editado a mano (no los capítulos, que lo calculan useNombresTanda).
     ajustesDe: id => batchIsEpisodes ? sourceEditado(id) : ajustesDeLaTanda(id),
   })
@@ -1311,7 +1311,7 @@ export function useAsistente({ item, onClose: onCloseProp, onDone, onNavigate, p
     trackersParaSubir, trackersElegidos, elegirTracker, destinos, destinoSubida, reglas, reglasDe,
     descripcion, escribirDescripcion, descripcionPorTracker, descripcionPropia, editarDescripcionDe,
     batchQueue, batchIsEpisodes, batchItemTitle, batchPhase, batchIndex, batchResults,
-    batchViewId, setBatchViewId, batchEnvChecks, batchContentChecks, batchChecksLoading, batchChecksIndex,
+    batchViewId, setBatchViewId, batchEnvChecks, batchContentChecks, batchChecksLoading, batchChecksIndex, batchProgreso,
     batchChecksError, repetirComprobacionesTanda, uploadAllSeasons, uploadAllEpisodes, nombresTanda,
     // Cerrar
     cerrarModal, confirmandoCierre, setConfirmandoCierre,

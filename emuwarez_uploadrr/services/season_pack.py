@@ -1054,6 +1054,12 @@ def build_season_pack_plan(
         }
     finally:
         _clear_season_plan_cancel(season_id)
+        # Un plan que no llegó al final (cancelado, o con un error) no deja su avance a medias: el asistente sigue
+        # el del siguiente desde antes de pedirlo, y leería ese 12/38 como suyo.
+        with _PLAN_LOCK:
+            avance = _PLAN_PROGRESS.get(season_id)
+            if avance and avance["done"] < avance["total"]:
+                del _PLAN_PROGRESS[season_id]
         if own:
             conn.close()
 
